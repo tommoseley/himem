@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23231" systemVersion="24E5086g" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="NO" userDefinedModelVersionIdentifier="">
+    <entity name="JournalEntry" representedClassName="JournalEntry" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+        <attribute name="content" attributeType="String"/>
+        <attribute name="inputType" attributeType="String" defaultValueString="typed"/>
+        <attribute name="audioFilePath" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="extractedEntities" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExtractedEntity" inverseName="entry" inverseEntity="ExtractedEntity"/>
+        <relationship name="mediaReferences" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MediaReference" inverseName="entry" inverseEntity="MediaReference"/>
+        <relationship name="processingTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ProcessingTask" inverseName="entry" inverseEntity="ProcessingTask"/>
+        <relationship name="inferenceSummary" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="InferenceSummary" inverseName="entry" inverseEntity="InferenceSummary"/>
+        <relationship name="topics" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Topic" inverseName="entries" inverseEntity="Topic"/>
+    </entity>
+    <entity name="ExtractedEntity" representedClassName="ExtractedEntity" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="entryId" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="entityType" attributeType="String"/>
+        <attribute name="value" attributeType="String"/>
+        <attribute name="confidenceScore" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="textRangeLocation" attributeType="Integer 32" defaultValueString="-1" usesScalarValueType="YES"/>
+        <attribute name="textRangeLength" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="processingMethod" attributeType="String" defaultValueString="local"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="extractedEntities" inverseEntity="JournalEntry"/>
+    </entity>
+    <entity name="ProcessingTask" representedClassName="ProcessingTask" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="entryId" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="taskType" attributeType="String" defaultValueString="entity_extraction"/>
+        <attribute name="status" attributeType="String" defaultValueString="pending"/>
+        <attribute name="progressDescription" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="processedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="errorMessage" optional="YES" attributeType="String"/>
+        <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="processingTasks" inverseEntity="JournalEntry"/>
+    </entity>
+    <entity name="InferenceSummary" representedClassName="InferenceSummary" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="entryId" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="summaryText" attributeType="String"/>
+        <attribute name="feedbackState" optional="YES" attributeType="String"/>
+        <attribute name="feedbackAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="userCorrection" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="inferenceSummary" inverseEntity="JournalEntry"/>
+    </entity>
+    <entity name="Topic" representedClassName="Topic" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="slug" attributeType="String"/>
+        <attribute name="inferredAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="entries" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="topics" inverseEntity="JournalEntry"/>
+    </entity>
+    <entity name="MediaReference" representedClassName="MediaReference" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="entryId" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="mediaType" attributeType="String"/>
+        <attribute name="osIdentifier" attributeType="String"/>
+        <attribute name="isAccessible" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="mediaReferences" inverseEntity="JournalEntry"/>
+    </entity>
+</model>

@@ -1,0 +1,499 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A100000001 /* MemoryStreamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000001; };
+		A100000002 /* JournalEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000002; };
+		A100000003 /* ExtractedEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000003; };
+		A100000004 /* ProcessingTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000004; };
+		A100000005 /* InferenceSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000005; };
+		A100000006 /* Topic.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000006; };
+		A100000007 /* MediaReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000007; };
+		A100000008 /* StorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000008; };
+		A100000009 /* ClaudeAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000009; };
+		A100000010 /* LocalEntityExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000010; };
+		A100000011 /* SearchEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000011; };
+		A100000012 /* SpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000012; };
+		A100000013 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000013; };
+		A100000014 /* ProcessingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000014; };
+		A100000015 /* DisplayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000015; };
+		A100000016 /* JournalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000016; };
+		A100000017 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000017; };
+		A100000018 /* JournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000018; };
+		A100000019 /* EntryCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000019; };
+		A100000020 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000020; };
+		A100000021 /* SiriShortcutBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000021; };
+		A100000022 /* TopicTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000022; };
+		A100000023 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000023; };
+		A100000024 /* MemoryStream.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = B100000024; };
+		A100000025 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000026; };
+		A100000026 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000027; };
+		A100000027 /* EntryEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028; };
+		A100000028 /* TopicApprovalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000029; };
+		A100000029 /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000030; };
+		A100000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000031; };
+		A100000031 /* HiMemShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000032; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B100000001 /* MemoryStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryStreamApp.swift; sourceTree = "<group>"; };
+		B100000002 /* JournalEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntry.swift; sourceTree = "<group>"; };
+		B100000003 /* ExtractedEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractedEntity.swift; sourceTree = "<group>"; };
+		B100000004 /* ProcessingTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingTask.swift; sourceTree = "<group>"; };
+		B100000005 /* InferenceSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSummary.swift; sourceTree = "<group>"; };
+		B100000006 /* Topic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Topic.swift; sourceTree = "<group>"; };
+		B100000007 /* MediaReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReference.swift; sourceTree = "<group>"; };
+		B100000008 /* StorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageService.swift; sourceTree = "<group>"; };
+		B100000009 /* ClaudeAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAPIService.swift; sourceTree = "<group>"; };
+		B100000010 /* LocalEntityExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalEntityExtractor.swift; sourceTree = "<group>"; };
+		B100000011 /* SearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchEngine.swift; sourceTree = "<group>"; };
+		B100000012 /* SpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechService.swift; sourceTree = "<group>"; };
+		B100000013 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
+		B100000014 /* ProcessingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingEngine.swift; sourceTree = "<group>"; };
+		B100000015 /* DisplayModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayModels.swift; sourceTree = "<group>"; };
+		B100000016 /* JournalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalViewModel.swift; sourceTree = "<group>"; };
+		B100000017 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
+		B100000018 /* JournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalView.swift; sourceTree = "<group>"; };
+		B100000019 /* EntryCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryCardView.swift; sourceTree = "<group>"; };
+		B100000020 /* InputBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBarView.swift; sourceTree = "<group>"; };
+		B100000021 /* SiriShortcutBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriShortcutBanner.swift; sourceTree = "<group>"; };
+		B100000022 /* TopicTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicTabBar.swift; sourceTree = "<group>"; };
+		B100000023 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		B100000025 /* MemoryStream.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = MemoryStream.xcdatamodel; sourceTree = "<group>"; };
+		B100000026 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		B100000027 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B100000028 /* EntryEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryEditorView.swift; sourceTree = "<group>"; };
+		B100000029 /* TopicApprovalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicApprovalService.swift; sourceTree = "<group>"; };
+		B100000030 /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
+		B100000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B100000032 /* HiMemShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiMemShortcuts.swift; sourceTree = "<group>"; };
+		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G100000001 /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				G100000002 /* MemoryStream */,
+				G100000099 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		G100000099 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				P100000001 /* MemoryStream.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		G100000002 /* MemoryStream */ = {
+			isa = PBXGroup;
+			children = (
+				G100000010 /* App */,
+				G100000011 /* Models */,
+				G100000012 /* Views */,
+				G100000013 /* ViewModels */,
+				G100000014 /* Services */,
+				B100000031 /* Assets.xcassets */,
+			);
+			path = MemoryStream;
+			sourceTree = "<group>";
+		};
+		G100000010 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				B100000001 /* MemoryStreamApp.swift */,
+				B100000032 /* HiMemShortcuts.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		G100000011 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B100000002 /* JournalEntry.swift */,
+				B100000003 /* ExtractedEntity.swift */,
+				B100000004 /* ProcessingTask.swift */,
+				B100000005 /* InferenceSummary.swift */,
+				B100000006 /* Topic.swift */,
+				B100000007 /* MediaReference.swift */,
+				B100000024 /* MemoryStream.xcdatamodeld */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		G100000012 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				G100000040 /* Journal */,
+				G100000041 /* Input */,
+				G100000042 /* Search */,
+				G100000043 /* Components */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		G100000040 /* Journal */ = {
+			isa = PBXGroup;
+			children = (
+				B100000018 /* JournalView.swift */,
+				B100000019 /* EntryCardView.swift */,
+				B100000028 /* EntryEditorView.swift */,
+			);
+			path = Journal;
+			sourceTree = "<group>";
+		};
+		G100000041 /* Input */ = {
+			isa = PBXGroup;
+			children = (
+				B100000020 /* InputBarView.swift */,
+			);
+			path = Input;
+			sourceTree = "<group>";
+		};
+		G100000042 /* Search */ = {
+			isa = PBXGroup;
+			children = (
+				B100000023 /* SearchView.swift */,
+			);
+			path = Search;
+			sourceTree = "<group>";
+		};
+		G100000043 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				B100000021 /* SiriShortcutBanner.swift */,
+				B100000022 /* TopicTabBar.swift */,
+				B100000027 /* SettingsView.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		G100000013 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				B100000015 /* DisplayModels.swift */,
+				B100000016 /* JournalViewModel.swift */,
+				B100000017 /* SearchViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		G100000014 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				G100000050 /* Storage */,
+				G100000051 /* AI */,
+				G100000052 /* Processing */,
+				G100000053 /* Network */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		G100000050 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				B100000008 /* StorageService.swift */,
+				B100000026 /* KeychainService.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		G100000051 /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				B100000009 /* ClaudeAPIService.swift */,
+				B100000010 /* LocalEntityExtractor.swift */,
+				B100000011 /* SearchEngine.swift */,
+				B100000012 /* SpeechService.swift */,
+				B100000030 /* AudioPlayerService.swift */,
+			);
+			path = AI;
+			sourceTree = "<group>";
+		};
+		G100000052 /* Processing */ = {
+			isa = PBXGroup;
+			children = (
+				B100000014 /* ProcessingEngine.swift */,
+				B100000029 /* TopicApprovalService.swift */,
+			);
+			path = Processing;
+			sourceTree = "<group>";
+		};
+		G100000053 /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				B100000013 /* ConnectivityMonitor.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		T100000001 /* MemoryStream */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C100000002 /* Build configuration list for PBXNativeTarget */;
+			buildPhases = (
+				S100000001 /* Sources */,
+				F100000001 /* Frameworks */,
+				R100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MemoryStream;
+			productName = MemoryStream;
+			productReference = P100000001 /* MemoryStream.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		PR10000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					T100000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = C100000001 /* Build configuration list for PBXProject */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = G100000001 /* Root */;
+			productRefGroup = G100000099 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				T100000001 /* MemoryStream */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		R100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A100000030 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		S100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A100000001 /* MemoryStreamApp.swift in Sources */,
+				A100000002 /* JournalEntry.swift in Sources */,
+				A100000003 /* ExtractedEntity.swift in Sources */,
+				A100000004 /* ProcessingTask.swift in Sources */,
+				A100000005 /* InferenceSummary.swift in Sources */,
+				A100000006 /* Topic.swift in Sources */,
+				A100000007 /* MediaReference.swift in Sources */,
+				A100000008 /* StorageService.swift in Sources */,
+				A100000009 /* ClaudeAPIService.swift in Sources */,
+				A100000010 /* LocalEntityExtractor.swift in Sources */,
+				A100000011 /* SearchEngine.swift in Sources */,
+				A100000012 /* SpeechService.swift in Sources */,
+				A100000013 /* ConnectivityMonitor.swift in Sources */,
+				A100000014 /* ProcessingEngine.swift in Sources */,
+				A100000015 /* DisplayModels.swift in Sources */,
+				A100000016 /* JournalViewModel.swift in Sources */,
+				A100000017 /* SearchViewModel.swift in Sources */,
+				A100000018 /* JournalView.swift in Sources */,
+				A100000019 /* EntryCardView.swift in Sources */,
+				A100000020 /* InputBarView.swift in Sources */,
+				A100000021 /* SiriShortcutBanner.swift in Sources */,
+				A100000022 /* TopicTabBar.swift in Sources */,
+				A100000023 /* SearchView.swift in Sources */,
+				A100000024 /* MemoryStream.xcdatamodeld in Sources */,
+				A100000025 /* KeychainService.swift in Sources */,
+				A100000026 /* SettingsView.swift in Sources */,
+				A100000027 /* EntryEditorView.swift in Sources */,
+				A100000028 /* TopicApprovalService.swift in Sources */,
+				A100000029 /* AudioPlayerService.swift in Sources */,
+				A100000031 /* HiMemShortcuts.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		BC10000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BC10000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_OPTIMIZATION_LEVEL = s;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		BC10000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = GSZN2G9HR3;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Hi Mem needs microphone access to capture voice journal entries.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Hi Mem uses speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.himem.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BC10000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = GSZN2G9HR3;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Hi Mem needs microphone access to capture voice journal entries.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Hi Mem uses speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.himem.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C100000001 /* Build configuration list for PBXProject */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC10000001 /* Debug */,
+				BC10000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C100000002 /* Build configuration list for PBXNativeTarget */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC10000003 /* Debug */,
+				BC10000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCVersionGroup section */
+		B100000024 /* MemoryStream.xcdatamodeld */ = {
+			isa = XCVersionGroup;
+			children = (
+				B100000025 /* MemoryStream.xcdatamodel */,
+			);
+			currentVersion = B100000025 /* MemoryStream.xcdatamodel */;
+			name = MemoryStream.xcdatamodeld;
+			path = MemoryStream.xcdatamodeld;
+			sourceTree = "<group>";
+			versionGroupType = wrapper.xcdatamodel;
+		};
+/* End XCVersionGroup section */
+
+	};
+	rootObject = PR10000001 /* Project object */;
+}
