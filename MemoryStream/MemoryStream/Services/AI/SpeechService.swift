@@ -16,7 +16,7 @@ final class SpeechService: ObservableObject {
     private var audioFile: AVAudioFile?
     private var currentRecordingURL: URL?
 
-    enum SpeechError: LocalizedError {
+    enum SpeechError: LocalizedError, Equatable {
         case notAuthorized
         case notAvailable
         case audioSessionFailed(String)
@@ -48,15 +48,24 @@ final class SpeechService: ObservableObject {
     // MARK: - Authorization
 
     func requestAuthorization() async -> Bool {
-        await withCheckedContinuation { continuation in
+        let speechGranted = await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { status in
                 continuation.resume(returning: status == .authorized)
             }
         }
+
+        let micGranted = await withCheckedContinuation { continuation in
+            AVAudioApplication.requestRecordPermission { granted in
+                continuation.resume(returning: granted)
+            }
+        }
+
+        return speechGranted && micGranted
     }
 
     var isAuthorized: Bool {
-        SFSpeechRecognizer.authorizationStatus() == .authorized
+        SFSpeechRecognizer.authorizationStatus() == .authorized &&
+        AVAudioApplication.shared.recordPermission == .granted
     }
 
     // MARK: - Recording

@@ -186,6 +186,7 @@ final class ProcessingEngine {
             if let task = entryInContext.latestProcessingTask {
                 task.status = ProcessingTask.Status.failed.rawValue
                 task.errorMessage = error.localizedDescription
+                task.progressDescription = error.localizedDescription
                 task.processedAt = Date()
             }
             try context.save()

@@ -3,14 +3,10 @@ import CoreData
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var apiKey: String = ""
-    @State private var showKey = false
-    @State private var saved = false
     @State private var topics: [Topic] = []
     @State private var newTopicName: String = ""
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
-    private let keychain = KeychainService.shared
     private let storage = StorageService.shared
 
     var body: some View {
@@ -53,68 +49,6 @@ struct SettingsView: View {
                         ? "Voice recordings are saved on device. You can play them back from entry cards and discard them in the edit screen."
                         : "Voice recordings are discarded after transcription. Only the text is kept.")
                 }
-
-                // MARK: - API Key
-                Section {
-                    HStack {
-                        if showKey {
-                            TextField("sk-ant-...", text: $apiKey)
-                                .font(.system(.caption, design: .monospaced))
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
-                        } else {
-                            SecureField("sk-ant-...", text: $apiKey)
-                                .font(.system(.caption, design: .monospaced))
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
-                        }
-
-                        Button(action: { showKey.toggle() }) {
-                            Image(systemName: showKey ? "eye.slash" : "eye")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } header: {
-                    Text("Anthropic API Key")
-                } footer: {
-                    Text("Stored in iOS Keychain on this device only.")
-                }
-
-                Section {
-                    Button(action: saveKey) {
-                        HStack {
-                            Text("Save Key")
-                            Spacer()
-                            if saved {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            }
-                        }
-                    }
-                    .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
-
-                    if keychain.retrieve(key: "anthropic_api_key") != nil {
-                        Button(role: .destructive, action: deleteKey) {
-                            Text("Remove Key")
-                        }
-                    }
-                }
-
-                Section {
-                    HStack {
-                        Text("API Status")
-                        Spacer()
-                        if keychain.retrieve(key: "anthropic_api_key") != nil {
-                            Text("Configured")
-                                .foregroundStyle(.green)
-                        } else {
-                            Text("Not configured")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } footer: {
-                    Text("Without an API key, the app uses local-only entity extraction. With a key, you get rich extraction, topic inference, and summaries.")
-                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -125,9 +59,6 @@ struct SettingsView: View {
             }
             .onAppear {
                 loadTopics()
-                if let existing = keychain.retrieve(key: "anthropic_api_key") {
-                    apiKey = existing
-                }
             }
         }
     }
@@ -166,25 +97,6 @@ struct SettingsView: View {
         } catch {
             print("Failed to delete topic: \(error)")
         }
-    }
-
-    // MARK: - API Key
-
-    private func saveKey() {
-        let trimmed = apiKey.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        let success = keychain.save(key: "anthropic_api_key", value: trimmed)
-        if success {
-            saved = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                saved = false
-            }
-        }
-    }
-
-    private func deleteKey() {
-        let _ = keychain.delete(key: "anthropic_api_key")
-        apiKey = ""
     }
 }
 

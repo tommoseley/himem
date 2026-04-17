@@ -72,6 +72,7 @@
 		B100000030 /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		B100000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B100000032 /* HiMemShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiMemShortcuts.swift; sourceTree = "<group>"; };
+		B100000033 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -111,6 +112,7 @@
 				G100000013 /* ViewModels */,
 				G100000014 /* Services */,
 				B100000031 /* Assets.xcassets */,
+				B100000033 /* Info.plist */,
 			);
 			path = MemoryStream;
 			sourceTree = "<group>";
@@ -407,6 +409,7 @@
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MemoryStream/Info.plist;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Hi Mem needs microphone access to capture voice journal entries.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Hi Mem uses speech recognition to convert your voice to text.";
 				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";

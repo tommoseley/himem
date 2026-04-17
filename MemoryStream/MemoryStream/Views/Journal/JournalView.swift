@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct JournalView: View {
     @StateObject private var viewModel = JournalViewModel()
@@ -9,6 +10,7 @@ struct JournalView: View {
     @State private var showSearch = false
     @State private var showSettings = false
     @State private var editingEntry: EntryDisplayModel? = nil
+    @State private var speechErrorMessage: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -137,6 +139,24 @@ struct JournalView: View {
         }
         .onAppear {
             Task { let _ = await speechService.requestAuthorization() }
+        }
+        .onChange(of: speechService.error) { _, error in
+            speechErrorMessage = error?.localizedDescription
+        }
+        .alert("Voice Recording Error", isPresented: Binding(
+            get: { speechErrorMessage != nil },
+            set: { if !$0 { speechErrorMessage = nil } }
+        )) {
+            Button("OK") { speechErrorMessage = nil }
+            if speechService.error == .notAuthorized {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            }
+        } message: {
+            Text(speechErrorMessage ?? "")
         }
     }
 
