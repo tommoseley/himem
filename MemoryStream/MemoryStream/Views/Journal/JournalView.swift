@@ -431,6 +431,19 @@ struct JournalFAB: View {
 
     private var isCountingDown: Bool { autoSaveProgress > 0 }
 
+    private var fabFill: Color {
+        if isRecording { return .red }
+        if showOptions { return Color(.systemGray2) }
+        return .orange
+    }
+
+    private var fabIcon: String {
+        if isRecording { return "stop.fill" }
+        if showOptions { return "xmark" }
+        if isCountingDown { return "hand.tap.fill" }
+        return "mic.fill"
+    }
+
     var body: some View {
         VStack(alignment: .trailing, spacing: 12) {
             if showOptions {
@@ -446,8 +459,9 @@ struct JournalFAB: View {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
                     onTextTap()
                 }
-                FABOption(icon: "xmark", label: "Cancel", color: Color(.systemGray2)) {
+                FABOption(icon: "mic.fill", label: "Audio", color: .orange) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
+                    onMicTap()
                 }
             }
 
@@ -462,16 +476,16 @@ struct JournalFAB: View {
 
                 ZStack(alignment: .topTrailing) {
                     Circle()
-                        .fill(isRecording ? Color.red : Color.orange)
+                        .fill(fabFill)
                         .frame(width: 60, height: 60)
                         .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
 
-                    Image(systemName: isRecording ? "stop.fill" : (isCountingDown ? "hand.tap.fill" : "mic.fill"))
+                    Image(systemName: fabIcon)
                         .font(.title3)
                         .foregroundStyle(.white)
                         .frame(width: 60, height: 60)
 
-                    if pendingMediaCount > 0 && !isRecording && !isCountingDown {
+                    if pendingMediaCount > 0 && !isRecording && !isCountingDown && !showOptions {
                         Text("\(pendingMediaCount)")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.white)
