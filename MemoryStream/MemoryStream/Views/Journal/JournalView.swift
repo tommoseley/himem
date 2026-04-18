@@ -454,7 +454,7 @@ struct JournalFAB: View {
                 Circle()
                     .trim(from: 0, to: autoSaveProgress)
                     .stroke(
-                        Color.white.opacity(0.9),
+                        Color.orange,
                         style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
                     )
                     .frame(width: 70, height: 70)
