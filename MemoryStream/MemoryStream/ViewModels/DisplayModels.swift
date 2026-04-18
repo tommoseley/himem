@@ -15,6 +15,7 @@ struct EntryDisplayModel: Identifiable {
     let audioFilePath: String?
     let inferenceSummary: String?
     let feedbackState: InferenceSummary.FeedbackState?
+    let mediaItems: [MediaDisplayItem]
 
     var timeString: String {
         let formatter = DateFormatter()
@@ -24,7 +25,12 @@ struct EntryDisplayModel: Identifiable {
 
     var displayStatus: DisplayStatus? {
         if let feedbackState {
-            return DisplayStatus(text: feedbackState.displayLabel, style: .confirmed)
+            let style: StatusBadge.BadgeStyle = switch feedbackState {
+            case .confirmed: .confirmed
+            case .edited: .edited
+            case .ignored: .ignored
+            }
+            return DisplayStatus(text: feedbackState.displayLabel, style: style)
         }
         guard let processingStatus else { return nil }
         switch processingStatus {
@@ -46,6 +52,16 @@ struct EntryDisplayModel: Identifiable {
 struct DisplayStatus {
     let text: String
     let style: StatusBadge.BadgeStyle
+}
+
+// MARK: - Media Display Model
+
+struct MediaDisplayItem: Identifiable {
+    let id: UUID
+    let localIdentifier: String
+    let mediaType: MediaReference.MediaType
+    let thumbnailCacheFilename: String?
+    let isAccessible: Bool
 }
 
 // MARK: - Tag Display Model

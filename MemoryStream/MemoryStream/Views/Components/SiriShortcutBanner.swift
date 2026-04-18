@@ -27,11 +27,11 @@ struct SiriShortcutBanner: View {
                     .clipShape(Capsule())
             }
 
-            Text("\"Tell Hi Mem that...\"")
+            Text("\"Capture in Hi Mem\"")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            Text("Capture a thought from your headphones or lock screen. The app saves it now and sorts it out after.")
+            Text("Say this to Siri from your headphones or lock screen. Siri will ask what you want to remember, then save it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)

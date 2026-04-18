@@ -2,6 +2,7 @@
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcworkspace/xcuserdata/
+**/*.xcuserstate
 DerivedData/
 *.moved-aside
 *.hmap

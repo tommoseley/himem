@@ -4,13 +4,16 @@ import UIKit
 struct JournalView: View {
     @StateObject private var viewModel = JournalViewModel()
     @StateObject private var speechService = SpeechService()
+    @StateObject private var cameraService = CameraService()
     @StateObject private var topicApproval = TopicApprovalService.shared
     @State private var inputText = ""
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @State private var showSearch = false
     @State private var showSettings = false
+    @State private var showCamera = false
     @State private var editingEntry: EntryDisplayModel? = nil
     @State private var speechErrorMessage: String? = nil
+    @State private var pendingMediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -96,12 +99,21 @@ struct JournalView: View {
             InputBarView(
                 text: $inputText,
                 isRecording: speechService.isRecording,
+                pendingMediaCount: pendingMediaCaptures.count,
                 onSave: { text in
-                    viewModel.saveEntry(content: text, inputType: .typed)
+                    let content = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "No text provided."
+                        : text
+                    let inputType: JournalEntry.InputType = pendingMediaCaptures.isEmpty ? .typed : .camera
+                    viewModel.saveEntry(content: content, inputType: inputType, mediaCaptures: pendingMediaCaptures)
                     inputText = ""
+                    pendingMediaCaptures = []
                 },
                 onMicTap: {
                     handleMicTap()
+                },
+                onCameraTap: {
+                    handleCameraTap()
                 }
             )
         }
@@ -137,8 +149,21 @@ struct JournalView: View {
                 Text("The AI wants to create a new topic: \"\(pending.name)\". Add it to your topics?")
             }
         }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPickerView(
+                onCapture: { result in
+                    handleCameraCapture(result)
+                },
+                onDismiss: {
+                    showCamera = false
+                }
+            )
+        }
         .onAppear {
-            Task { let _ = await speechService.requestAuthorization() }
+            Task {
+                let _ = await speechService.requestAuthorization()
+                await cameraService.requestAuthorization()
+            }
         }
         .onChange(of: speechService.error) { _, error in
             speechErrorMessage = error?.localizedDescription
@@ -158,6 +183,21 @@ struct JournalView: View {
         } message: {
             Text(speechErrorMessage ?? "")
         }
+        .alert("Camera Error", isPresented: Binding(
+            get: { cameraService.error != nil },
+            set: { if !$0 { cameraService.error = nil } }
+        )) {
+            Button("OK") { cameraService.error = nil }
+            if cameraService.error == .notAuthorized {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            }
+        } message: {
+            Text(cameraService.error?.localizedDescription ?? "")
+        }
     }
 
     private var filteredEntries: [EntryDisplayModel] {
@@ -165,6 +205,34 @@ struct JournalView: View {
             return viewModel.entries
         }
         return viewModel.entries.filter { $0.topicNames.contains(selected) }
+    }
+
+    private func handleCameraTap() {
+        guard cameraService.isAuthorized else {
+            cameraService.error = .notAuthorized
+            return
+        }
+        showCamera = true
+    }
+
+    private func handleCameraCapture(_ result: CameraPickerView.CaptureResult) {
+        showCamera = false
+        Task {
+            do {
+                switch result {
+                case .photo(let image):
+                    let identifier = try await cameraService.savePhoto(image)
+                    pendingMediaCaptures.append((localIdentifier: identifier, mediaType: .image))
+                case .video(let url):
+                    let identifier = try await cameraService.saveVideo(at: url)
+                    pendingMediaCaptures.append((localIdentifier: identifier, mediaType: .video))
+                }
+            } catch let error as CameraService.CameraError {
+                cameraService.error = error
+            } catch {
+                cameraService.error = .saveFailed(error.localizedDescription)
+            }
+        }
     }
 
     private func handleMicTap() {

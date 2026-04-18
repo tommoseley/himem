@@ -8,6 +8,8 @@ public class MediaReference: NSManagedObject, Identifiable {
     @NSManaged public var mediaType: String // "image", "voice", "video"
     @NSManaged public var osIdentifier: String
     @NSManaged public var isAccessible: Bool
+    @NSManaged public var createdAt: Date?
+    @NSManaged public var thumbnailCacheFilename: String?
     @NSManaged public var entry: JournalEntry?
 }
 

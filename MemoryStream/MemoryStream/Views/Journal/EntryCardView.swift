@@ -3,10 +3,28 @@ import SwiftUI
 struct EntryCardView: View {
     let entry: EntryDisplayModel
     var onFeedback: ((UUID, InferenceSummary.FeedbackState) -> Void)? = nil
+    @State private var showInferenceDetail = false
+    @State private var selectedMedia: MediaDisplayItem? = nil
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Title + metadata row
-            EntryHeaderRow(entry: entry)
+            EntryHeaderRow(entry: entry, onStatusTap: entry.feedbackState != nil ? {
+                showInferenceDetail = true
+            } : nil)
+
+            // Media strip
+            if !entry.mediaItems.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(entry.mediaItems) { item in
+                            MediaThumbnailView(item: item) {
+                                selectedMedia = item
+                            }
+                        }
+                    }
+                }
+            }
 
             // Topic chips
             if !entry.topicNames.isEmpty {
@@ -44,8 +62,8 @@ struct EntryCardView: View {
                 EntityTagsRow(tags: entry.tags)
             }
 
-            // Inference summary card
-            if let inference = entry.inferenceSummary {
+            // Inference summary card — only shown while pending
+            if let inference = entry.inferenceSummary, entry.feedbackState == nil {
                 InferenceCard(
                     summary: inference,
                     feedbackState: entry.feedbackState,
@@ -55,20 +73,34 @@ struct EntryCardView: View {
                 )
             }
 
-            // Voice playback
-            if let audioFile = entry.audioFilePath {
-                VoicePlaybackRow(filename: audioFile)
-            } else if entry.inputType == .siri || entry.inputType == .voiceInApp {
-                Text("Voice entry — audio was not saved.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .italic()
+            // Voice playback — on card only while inference is pending; moves to detail sheet after feedback
+            if entry.feedbackState == nil {
+                if let audioFile = entry.audioFilePath {
+                    VoicePlaybackRow(filename: audioFile)
+                } else if entry.inputType == .siri || entry.inputType == .voiceInApp {
+                    Text("Voice entry — audio was not saved.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .italic()
+                }
             }
         }
         .padding()
         .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
+        .sheet(isPresented: $showInferenceDetail) {
+            if let inference = entry.inferenceSummary, let feedbackState = entry.feedbackState {
+                InferenceDetailSheet(
+                    summary: inference,
+                    feedbackState: feedbackState,
+                    audioFilePath: entry.audioFilePath
+                )
+            }
+        }
+        .fullScreenCover(item: $selectedMedia) { item in
+            MediaViewerView(item: item)
+        }
     }
 }
 
@@ -76,6 +108,7 @@ struct EntryCardView: View {
 
 struct EntryHeaderRow: View {
     let entry: EntryDisplayModel
+    var onStatusTap: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -97,9 +130,15 @@ struct EntryHeaderRow: View {
 
                 Spacer()
 
-                // Status badge
                 if let status = entry.displayStatus {
-                    StatusBadge(text: status.text, style: status.style)
+                    if let onStatusTap {
+                        Button(action: onStatusTap) {
+                            StatusBadge(text: status.text, style: status.style)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        StatusBadge(text: status.text, style: status.style)
+                    }
                 }
             }
         }
@@ -116,12 +155,16 @@ struct StatusBadge: View {
         case processing
         case confirmed
         case failed
+        case edited
+        case ignored
 
         var foreground: Color {
             switch self {
             case .processing: return .orange
             case .confirmed: return .green
             case .failed: return .red
+            case .edited: return .blue
+            case .ignored: return Color(.secondaryLabel)
             }
         }
 
@@ -320,6 +363,108 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - Inference Detail Sheet
+
+struct InferenceDetailSheet: View {
+    let summary: String
+    let feedbackState: InferenceSummary.FeedbackState
+    var audioFilePath: String? = nil
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                // Voice playback — shown first since it's what drove the inference
+                if let audioFile = audioFilePath {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("VOICE ENTRY")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .tracking(0.5)
+                            .foregroundStyle(.secondary)
+
+                        VoicePlaybackRow(filename: audioFile)
+                            .padding(10)
+                            .background(Color(.tertiarySystemGroupedBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    Divider()
+                }
+
+                // What the AI inferred
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("WHAT THE APP INFERRED")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .tracking(0.5)
+                        .foregroundStyle(.secondary)
+
+                    Text(summary)
+                        .font(.body)
+                        .lineSpacing(4)
+                }
+
+                Divider()
+
+                // User's response
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("YOUR RESPONSE")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .tracking(0.5)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 8) {
+                        Image(systemName: feedbackState.iconName)
+                            .foregroundStyle(feedbackState.color)
+                        Text(feedbackState.responseLabel)
+                            .font(.subheadline)
+                            .foregroundStyle(feedbackState.color)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle("AI Inference")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
+extension InferenceSummary.FeedbackState {
+    var responseLabel: String {
+        switch self {
+        case .confirmed: return "You confirmed this inference was accurate."
+        case .edited:    return "You edited this inference."
+        case .ignored:   return "You dismissed this inference."
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .confirmed: return "checkmark.circle.fill"
+        case .edited:    return "pencil.circle.fill"
+        case .ignored:   return "xmark.circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .confirmed: return .green
+        case .edited:    return .blue
+        case .ignored:   return Color(.secondaryLabel)
+        }
+    }
 }
 
 // MARK: - Flow Layout

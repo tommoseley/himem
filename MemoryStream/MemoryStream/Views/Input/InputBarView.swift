@@ -3,8 +3,10 @@ import SwiftUI
 struct InputBarView: View {
     @Binding var text: String
     var isRecording: Bool = false
+    var pendingMediaCount: Int = 0
     let onSave: (String) -> Void
     let onMicTap: () -> Void
+    let onCameraTap: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,6 +22,28 @@ struct InputBarView: View {
                         .background(isRecording ? Color.red.opacity(0.12) : Color(.tertiarySystemGroupedBackground))
                         .clipShape(Circle())
                         .animation(.easeInOut(duration: 0.2), value: isRecording)
+                }
+
+                // Camera button
+                Button(action: onCameraTap) {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "camera")
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .frame(width: 36, height: 36)
+                            .background(Color(.tertiarySystemGroupedBackground))
+                            .clipShape(Circle())
+
+                        if pendingMediaCount > 0 {
+                            Text("\(pendingMediaCount)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 16, height: 16)
+                                .background(Color.blue)
+                                .clipShape(Circle())
+                                .offset(x: 4, y: -4)
+                        }
+                    }
                 }
 
                 // Text field
@@ -70,13 +94,13 @@ struct InputBarView: View {
     }
 
     private var canSave: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isRecording
+        (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingMediaCount > 0) && !isRecording
     }
 }
 
 #Preview {
     VStack {
         Spacer()
-        InputBarView(text: .constant(""), onSave: { _ in }, onMicTap: {})
+        InputBarView(text: .constant(""), onSave: { _ in }, onMicTap: {}, onCameraTap: {})
     }
 }

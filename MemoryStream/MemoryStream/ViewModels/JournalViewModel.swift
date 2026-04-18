@@ -38,7 +38,12 @@ class JournalViewModel: ObservableObject {
 
     // MARK: - Entry Creation
 
-    func saveEntry(content: String, inputType: JournalEntry.InputType, audioFilePath: String? = nil) {
+    func saveEntry(
+        content: String,
+        inputType: JournalEntry.InputType,
+        audioFilePath: String? = nil,
+        mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
+    ) {
         if useMockData {
             saveMockEntry(content: content, inputType: inputType)
             return
@@ -49,7 +54,31 @@ class JournalViewModel: ObservableObject {
             entry.audioFilePath = audioFilePath
             try storage.save(context: storage.viewContext)
             let _ = try storage.createProcessingTask(for: entry)
+
+            // Create MediaReference records for any captured media
+            var savedRefs: [MediaReference] = []
+            for capture in mediaCaptures {
+                let ref = try storage.createMediaReference(
+                    for: entry,
+                    localIdentifier: capture.localIdentifier,
+                    mediaType: capture.mediaType
+                )
+                savedRefs.append(ref)
+            }
+
             loadEntries()
+
+            // Cache thumbnails in background
+            if !savedRefs.isEmpty {
+                Task.detached {
+                    for ref in savedRefs {
+                        let filename = await ThumbnailService.shared.cacheThumbnail(for: ref.osIdentifier)
+                        if let filename {
+                            try? StorageService.shared.updateThumbnailFilename(ref, filename: filename)
+                        }
+                    }
+                }
+            }
 
             // Kick off background processing
             Task.detached { [processingEngine] in
@@ -177,7 +206,8 @@ class JournalViewModel: ObservableObject {
             topicNames: current.topicNames,
             audioFilePath: current.audioFilePath,
             inferenceSummary: current.inferenceSummary,
-            feedbackState: state
+            feedbackState: state,
+            mediaItems: current.mediaItems
         )
 
         if !useMockData {
@@ -245,7 +275,16 @@ class JournalViewModel: ObservableObject {
             topicNames: entry.topicsArray.map(\.name),
             audioFilePath: entry.audioFilePath,
             inferenceSummary: inference?.summaryText,
-            feedbackState: inference?.feedbackStateEnum
+            feedbackState: inference?.feedbackStateEnum,
+            mediaItems: entry.mediaReferencesArray.map { ref in
+                MediaDisplayItem(
+                    id: ref.id,
+                    localIdentifier: ref.osIdentifier,
+                    mediaType: ref.mediaTypeEnum,
+                    thumbnailCacheFilename: ref.thumbnailCacheFilename,
+                    isAccessible: ref.isAccessible
+                )
+            }
         )
     }
 
@@ -264,7 +303,8 @@ class JournalViewModel: ObservableObject {
             topicNames: [],
             audioFilePath: nil,
             inferenceSummary: nil,
-            feedbackState: nil
+            feedbackState: nil,
+            mediaItems: []
         )
         entries.insert(entry, at: 0)
     }
@@ -293,7 +333,8 @@ class JournalViewModel: ObservableObject {
                 topicNames: ["Garden"],
                 audioFilePath: nil,
                 inferenceSummary: "Saved immediately from Siri, linked to Bed 4, and flagged as both a plant-health note and a content opportunity.",
-                feedbackState: nil
+                feedbackState: nil,
+                mediaItems: []
             ),
             EntryDisplayModel(
                 id: UUID(),
@@ -307,7 +348,8 @@ class JournalViewModel: ObservableObject {
                 topicNames: ["Garden"],
                 audioFilePath: nil,
                 inferenceSummary: nil,
-                feedbackState: .confirmed
+                feedbackState: .confirmed,
+                mediaItems: []
             ),
         ]
     }

@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Hi Mem uses the camera to capture photos and videos for your journal entries.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Hi Mem saves your captured photos and videos to your photo library and reads them back to display in your entries.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSExceptionDomains</key>

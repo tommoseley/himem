@@ -38,6 +38,11 @@
 		A100000029 /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000030; };
 		A100000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000031; };
 		A100000031 /* HiMemShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000032; };
+		A100000032 /* CameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000034; };
+		A100000033 /* ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000035; };
+		A100000034 /* CameraPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000036; };
+		A100000035 /* MediaThumbnailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000037; };
+		A100000036 /* MediaViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000038; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -73,6 +78,11 @@
 		B100000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B100000032 /* HiMemShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiMemShortcuts.swift; sourceTree = "<group>"; };
 		B100000033 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B100000034 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
+		B100000035 /* ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailService.swift; sourceTree = "<group>"; };
+		B100000036 /* CameraPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPickerView.swift; sourceTree = "<group>"; };
+		B100000037 /* MediaThumbnailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaThumbnailView.swift; sourceTree = "<group>"; };
+		B100000038 /* MediaViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaViewerView.swift; sourceTree = "<group>"; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -157,6 +167,8 @@
 				B100000018 /* JournalView.swift */,
 				B100000019 /* EntryCardView.swift */,
 				B100000028 /* EntryEditorView.swift */,
+				B100000037 /* MediaThumbnailView.swift */,
+				B100000038 /* MediaViewerView.swift */,
 			);
 			path = Journal;
 			sourceTree = "<group>";
@@ -165,6 +177,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000020 /* InputBarView.swift */,
+				B100000036 /* CameraPickerView.swift */,
 			);
 			path = Input;
 			sourceTree = "<group>";
@@ -225,6 +238,8 @@
 				B100000011 /* SearchEngine.swift */,
 				B100000012 /* SpeechService.swift */,
 				B100000030 /* AudioPlayerService.swift */,
+				B100000034 /* CameraService.swift */,
+				B100000035 /* ThumbnailService.swift */,
 			);
 			path = AI;
 			sourceTree = "<group>";
@@ -345,6 +360,11 @@
 				A100000028 /* TopicApprovalService.swift in Sources */,
 				A100000029 /* AudioPlayerService.swift in Sources */,
 				A100000031 /* HiMemShortcuts.swift in Sources */,
+				A100000032 /* CameraService.swift in Sources */,
+				A100000033 /* ThumbnailService.swift in Sources */,
+				A100000034 /* CameraPickerView.swift in Sources */,
+				A100000035 /* MediaThumbnailView.swift in Sources */,
+				A100000036 /* MediaViewerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

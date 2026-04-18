@@ -12,6 +12,9 @@ final class StorageService {
 
     private init() {
         container = NSPersistentContainer(name: "MemoryStream")
+        let description = container.persistentStoreDescriptions.first!
+        description.shouldMigrateStoreAutomatically = true
+        description.shouldInferMappingModelAutomatically = true
         container.loadPersistentStores { _, error in
             if let error {
                 fatalError("Core Data failed to load: \(error.localizedDescription)")
@@ -112,6 +115,28 @@ final class StorageService {
         summary.feedbackState = state.rawValue
         summary.feedbackAt = Date()
         summary.userCorrection = correction
+        try save(context: ctx)
+    }
+
+    // MARK: - Media Reference Operations
+
+    func createMediaReference(for entry: JournalEntry, localIdentifier: String, mediaType: MediaReference.MediaType, context: NSManagedObjectContext? = nil) throws -> MediaReference {
+        let ctx = context ?? viewContext
+        let ref = MediaReference(context: ctx)
+        ref.id = UUID()
+        ref.entryId = entry.id
+        ref.osIdentifier = localIdentifier
+        ref.mediaType = mediaType.rawValue
+        ref.isAccessible = true
+        ref.createdAt = Date()
+        ref.entry = entry
+        try save(context: ctx)
+        return ref
+    }
+
+    func updateThumbnailFilename(_ ref: MediaReference, filename: String, context: NSManagedObjectContext? = nil) throws {
+        let ctx = context ?? viewContext
+        ref.thumbnailCacheFilename = filename
         try save(context: ctx)
     }
 

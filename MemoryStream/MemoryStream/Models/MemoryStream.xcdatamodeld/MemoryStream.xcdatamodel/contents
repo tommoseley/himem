@@ -59,6 +59,8 @@
         <attribute name="mediaType" attributeType="String"/>
         <attribute name="osIdentifier" attributeType="String"/>
         <attribute name="isAccessible" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="thumbnailCacheFilename" optional="YES" attributeType="String"/>
         <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="mediaReferences" inverseEntity="JournalEntry"/>
     </entity>
 </model>

@@ -64,7 +64,16 @@ class SearchViewModel: ObservableObject {
             topicNames: entry.topicsArray.map(\.name),
             audioFilePath: entry.audioFilePath,
             inferenceSummary: inference?.summaryText,
-            feedbackState: inference?.feedbackStateEnum
+            feedbackState: inference?.feedbackStateEnum,
+            mediaItems: entry.mediaReferencesArray.map { ref in
+                MediaDisplayItem(
+                    id: ref.id,
+                    localIdentifier: ref.osIdentifier,
+                    mediaType: ref.mediaTypeEnum,
+                    thumbnailCacheFilename: ref.thumbnailCacheFilename,
+                    isAccessible: ref.isAccessible
+                )
+            }
         )
     }
 }

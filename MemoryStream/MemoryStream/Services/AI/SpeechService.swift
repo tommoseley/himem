@@ -113,7 +113,14 @@ final class SpeechService: ObservableObject {
                 }
 
                 if let error {
-                    self.error = .recognitionFailed(error.localizedDescription)
+                    let nsError = error as NSError
+                    // Cancellation is not a user-facing error — it happens when the audio
+                    // session is interrupted (e.g. camera opens) or stopRecording() is called.
+                    let isCanceled = nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 203
+                        || nsError.code == NSUserCancelledError
+                    if !isCanceled {
+                        self.error = .recognitionFailed(error.localizedDescription)
+                    }
                     self.stopRecording()
                 }
 

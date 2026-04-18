@@ -23,12 +23,14 @@ extension JournalEntry {
         case siri = "siri"
         case voiceInApp = "voice_in_app"
         case typed = "typed"
+        case camera = "camera"
 
         var displayLabel: String {
             switch self {
             case .siri: return "Captured via Siri"
             case .voiceInApp: return "Voice in app"
             case .typed: return "Typed-in app"
+            case .camera: return "Photo / Video"
             }
         }
     }
@@ -42,6 +44,7 @@ extension JournalEntry {
         switch inputTypeEnum {
         case .siri, .voiceInApp: return "Hands-free capture"
         case .typed: return "Journal entry"
+        case .camera: return "Photo / Video capture"
         }
     }
 }
@@ -57,6 +60,11 @@ extension JournalEntry {
     var topicsArray: [Topic] {
         let set = topics as? Set<Topic> ?? []
         return set.sorted { $0.name < $1.name }
+    }
+
+    var mediaReferencesArray: [MediaReference] {
+        let set = mediaReferences as? Set<MediaReference> ?? []
+        return set.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
     }
 
     var latestProcessingTask: ProcessingTask? {
