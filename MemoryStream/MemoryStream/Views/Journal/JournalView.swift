@@ -275,7 +275,7 @@ struct JournalView: View {
 
     private func handleCameraCapture(_ result: CameraPickerView.CaptureResult) {
         showCamera = false
-        Task {
+        Task { @MainActor in
             do {
                 switch result {
                 case .photo(let image):
@@ -337,7 +337,7 @@ struct JournalView: View {
         withAnimation(.linear(duration: autoSaveDelay)) {
             autoSaveProgress = 1.0
         }
-        Task {
+        Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(autoSaveDelay * 1_000_000_000))
             guard isCountingDown else { return }
             commitAutoSave()
