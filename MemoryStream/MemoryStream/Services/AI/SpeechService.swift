@@ -15,6 +15,9 @@ final class SpeechService: ObservableObject {
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale.current)
     private var audioFile: AVAudioFile?
     private var currentRecordingURL: URL?
+    // Set before calling recognitionTask.cancel() so the callback can distinguish
+    // an intentional stop from a real failure (e.g. audio session interrupted).
+    private var isStoppingIntentionally = false
 
     enum SpeechError: LocalizedError, Equatable {
         case notAuthorized
@@ -113,12 +116,10 @@ final class SpeechService: ObservableObject {
                 }
 
                 if let error {
-                    let nsError = error as NSError
-                    // Cancellation is not a user-facing error — it happens when the audio
-                    // session is interrupted (e.g. camera opens) or stopRecording() is called.
-                    let isCanceled = nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 203
-                        || nsError.code == NSUserCancelledError
-                    if !isCanceled {
+                    if self.isStoppingIntentionally {
+                        // Error was triggered by our own cancel() call — not a real failure.
+                        self.isStoppingIntentionally = false
+                    } else {
                         self.error = .recognitionFailed(error.localizedDescription)
                     }
                     self.stopRecording()
@@ -164,6 +165,9 @@ final class SpeechService: ObservableObject {
         recognitionRequest?.endAudio()
         recognitionRequest = nil
 
+        // Flag must be set before cancel() — the callback Task runs on the same
+        // MainActor queue and will see this value when it executes.
+        isStoppingIntentionally = true
         recognitionTask?.cancel()
         recognitionTask = nil
 
