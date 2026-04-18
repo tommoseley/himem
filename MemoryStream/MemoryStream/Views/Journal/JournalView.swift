@@ -159,6 +159,43 @@ struct JournalView: View {
                 }
         }
 
+        // Live transcription card
+        if speechService.isRecording {
+            VStack {
+                Spacer()
+                HStack(alignment: .top, spacing: 10) {
+                    // Pulsing red dot
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+                        .padding(.top, 5)
+                        .opacity(speechService.transcribedText.isEmpty ? 1 : 0.7)
+
+                    if speechService.transcribedText.isEmpty {
+                        Text("Listening...")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .italic()
+                    } else {
+                        Text(speechService.transcribedText)
+                            .font(.subheadline)
+                            .lineSpacing(3)
+                            .frame(maxHeight: 120)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .shadow(color: .black.opacity(0.08), radius: 6, y: 3)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 90)
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: speechService.isRecording)
+        }
+
         // FAB
         JournalFAB(
             isRecording: speechService.isRecording,
