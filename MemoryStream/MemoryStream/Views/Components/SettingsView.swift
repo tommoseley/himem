@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var topics: [Topic] = []
     @State private var newTopicName: String = ""
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
+    @AppStorage("autoSaveDelay") private var autoSaveDelay: Double = 7
 
     private let storage = StorageService.shared
 
@@ -39,15 +40,31 @@ struct SettingsView: View {
                     Text("Topics are the top-level categories shown in the tab bar. When the AI suggests a new topic, you'll be asked to approve it first.")
                 }
 
-                // MARK: - Voice
+                // MARK: - Capture
                 Section {
-                    Toggle("Save voice entries", isOn: $saveVoiceEntries)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Auto-save delay")
+                            Spacer()
+                            Text(autoSaveDelay == 0 ? "Immediate" : "\(Int(autoSaveDelay))s")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Slider(value: $autoSaveDelay, in: 0...60, step: 1)
+                            .tint(.orange)
+                    }
+                    .padding(.vertical, 4)
+
+                    Toggle("Save voice recordings", isOn: $saveVoiceEntries)
                 } header: {
-                    Text("Voice")
+                    Text("Capture")
                 } footer: {
-                    Text(saveVoiceEntries
-                        ? "Voice recordings are saved on device. You can play them back from entry cards and discard them in the edit screen."
-                        : "Voice recordings are discarded after transcription. Only the text is kept.")
+                    Text(autoSaveDelay == 0
+                        ? "Entries save immediately after capture with no grace period."
+                        : "After recording or capturing media, entries auto-save after \(Int(autoSaveDelay)) seconds. Tap the mic button during the countdown to cancel and edit instead.")
+                        + Text(saveVoiceEntries
+                            ? " Voice recordings are saved on device."
+                            : " Voice recordings are discarded after transcription.")
                 }
             }
             .navigationTitle("Settings")

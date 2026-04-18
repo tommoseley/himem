@@ -7,6 +7,7 @@ struct JournalView: View {
     @StateObject private var cameraService = CameraService()
     @StateObject private var topicApproval = TopicApprovalService.shared
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
+    @AppStorage("autoSaveDelay") private var autoSaveDelay: Double = 7
     @State private var showSearch = false
     @State private var showSettings = false
     @State private var showCamera = false
@@ -16,6 +17,18 @@ struct JournalView: View {
     @State private var editingEntry: EntryDisplayModel? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var pendingMediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
+
+    // Auto-save countdown
+    @State private var autoSaveProgress: Double = 0   // 0 = idle, 0…1 = counting
+    @State private var isCountingDown = false
+    @State private var countdownIsForVoice = false
+    @State private var countdownVoiceText = ""
+    @State private var countdownVoiceAudioPath: String? = nil
+
+    // Text entry sheet context (set when opening sheet, from either long-press or cancelled countdown)
+    @State private var textEntryInitialText = ""
+    @State private var textEntryIsForVoice = false
+    @State private var textEntryVoiceAudioPath: String? = nil
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -117,9 +130,14 @@ struct JournalView: View {
         JournalFAB(
             isRecording: speechService.isRecording,
             pendingMediaCount: pendingMediaCaptures.count,
+            autoSaveProgress: autoSaveProgress,
             showOptions: $showFABOptions,
-            onMicTap: { handleMicTap() },
-            onTextTap: { showTextEntry = true },
+            onMicTap: { handleFABTap() },
+            onTextTap: {
+                textEntryInitialText = ""
+                textEntryIsForVoice = false
+                showTextEntry = true
+            },
             onPhotoTap: { cameraMode = .photo; handleCameraTap() },
             onVideoTap: { cameraMode = .video; handleCameraTap() }
         )
@@ -133,13 +151,27 @@ struct JournalView: View {
             SettingsView()
         }
         .sheet(isPresented: $showTextEntry) {
-            TextEntrySheet(pendingMediaCount: pendingMediaCaptures.count) { text in
+            TextEntrySheet(
+                initialText: textEntryInitialText,
+                pendingMediaCount: pendingMediaCaptures.count
+            ) { text in
                 let content = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? "No text provided."
                     : text
-                let inputType: JournalEntry.InputType = pendingMediaCaptures.isEmpty ? .typed : .camera
-                viewModel.saveEntry(content: content, inputType: inputType, mediaCaptures: pendingMediaCaptures)
-                pendingMediaCaptures = []
+                if textEntryIsForVoice {
+                    viewModel.saveEntry(
+                        content: content,
+                        inputType: .voiceInApp,
+                        audioFilePath: textEntryVoiceAudioPath
+                    )
+                    textEntryIsForVoice = false
+                    textEntryVoiceAudioPath = nil
+                } else {
+                    let inputType: JournalEntry.InputType = pendingMediaCaptures.isEmpty ? .typed : .camera
+                    viewModel.saveEntry(content: content, inputType: inputType, mediaCaptures: pendingMediaCaptures)
+                    pendingMediaCaptures = []
+                }
+                textEntryInitialText = ""
             }
         }
         .sheet(item: $editingEntry) { entry in
@@ -253,8 +285,8 @@ struct JournalView: View {
                     let identifier = try await cameraService.saveVideo(at: url)
                     pendingMediaCaptures.append((localIdentifier: identifier, mediaType: .video))
                 }
-                // Prompt immediately so the user can add text and save the capture
-                showTextEntry = true
+                countdownIsForVoice = false
+                startCountdown()
             } catch let error as CameraService.CameraError {
                 cameraService.error = error
             } catch {
@@ -263,23 +295,91 @@ struct JournalView: View {
         }
     }
 
+    private func handleFABTap() {
+        if isCountingDown {
+            // Cancel the countdown and open the text sheet so the user can review/edit
+            cancelCountdown(openSheet: true)
+        } else {
+            handleMicTap()
+        }
+    }
+
     private func handleMicTap() {
         if speechService.isRecording {
             speechService.stopRecording()
-            if !speechService.transcribedText.isEmpty {
-                let audioPath = saveVoiceEntries ? speechService.lastRecordingPath : nil
-                // Delete audio file if user doesn't want to save
-                if !saveVoiceEntries, let path = speechService.lastRecordingPath {
-                    AudioPlayerService.deleteAudio(filename: path)
-                }
-                viewModel.saveEntry(content: speechService.transcribedText, inputType: .voiceInApp, audioFilePath: audioPath)
-                speechService.transcribedText = ""
-                speechService.lastRecordingPath = nil
+            guard !speechService.transcribedText.isEmpty else { return }
+            let audioPath = saveVoiceEntries ? speechService.lastRecordingPath : nil
+            if !saveVoiceEntries, let path = speechService.lastRecordingPath {
+                AudioPlayerService.deleteAudio(filename: path)
             }
+            countdownVoiceText = speechService.transcribedText
+            countdownVoiceAudioPath = audioPath
+            countdownIsForVoice = true
+            speechService.transcribedText = ""
+            speechService.lastRecordingPath = nil
+            startCountdown()
         } else {
+            if isCountingDown { cancelCountdown(openSheet: false) }
             speechService.transcribedText = ""
             speechService.startRecording()
         }
+    }
+
+    // MARK: - Auto-save countdown
+
+    private func startCountdown() {
+        guard autoSaveDelay > 0 else {
+            commitAutoSave()
+            return
+        }
+        isCountingDown = true
+        autoSaveProgress = 0
+        withAnimation(.linear(duration: autoSaveDelay)) {
+            autoSaveProgress = 1.0
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(autoSaveDelay * 1_000_000_000))
+            guard isCountingDown else { return }
+            commitAutoSave()
+        }
+    }
+
+    private func commitAutoSave() {
+        isCountingDown = false
+        autoSaveProgress = 0
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        if countdownIsForVoice {
+            viewModel.saveEntry(
+                content: countdownVoiceText,
+                inputType: .voiceInApp,
+                audioFilePath: countdownVoiceAudioPath
+            )
+            countdownVoiceText = ""
+            countdownVoiceAudioPath = nil
+        } else {
+            let content = "No text provided."
+            viewModel.saveEntry(content: content, inputType: .camera, mediaCaptures: pendingMediaCaptures)
+            pendingMediaCaptures = []
+        }
+    }
+
+    private func cancelCountdown(openSheet: Bool) {
+        isCountingDown = false
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            autoSaveProgress = 0
+        }
+        guard openSheet else { return }
+        if countdownIsForVoice {
+            textEntryInitialText = countdownVoiceText
+            textEntryIsForVoice = true
+            textEntryVoiceAudioPath = countdownVoiceAudioPath
+            countdownVoiceText = ""
+            countdownVoiceAudioPath = nil
+        } else {
+            textEntryInitialText = ""
+            textEntryIsForVoice = false
+        }
+        showTextEntry = true
     }
 }
 
@@ -322,11 +422,14 @@ struct JournalHeaderView: View {
 struct JournalFAB: View {
     var isRecording: Bool
     var pendingMediaCount: Int
+    var autoSaveProgress: Double
     @Binding var showOptions: Bool
     let onMicTap: () -> Void
     let onTextTap: () -> Void
     let onPhotoTap: () -> Void
     let onVideoTap: () -> Void
+
+    private var isCountingDown: Bool { autoSaveProgress > 0 }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 14) {
@@ -345,45 +448,57 @@ struct JournalFAB: View {
                 })
             }
 
-            // Main button
-            Button(action: {
-                if showOptions {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
-                } else {
-                    onMicTap()
-                }
-            }) {
-                ZStack(alignment: .topTrailing) {
-                    Circle()
-                        .fill(isRecording ? Color.red : Color.orange)
-                        .frame(width: 60, height: 60)
-                        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+            // Main button + countdown ring
+            ZStack {
+                // Countdown ring — fills clockwise from 12 o'clock
+                Circle()
+                    .trim(from: 0, to: autoSaveProgress)
+                    .stroke(
+                        Color.white.opacity(0.9),
+                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                    )
+                    .frame(width: 70, height: 70)
+                    .rotationEffect(.degrees(-90))
 
-                    Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                        .frame(width: 60, height: 60)
+                Button(action: {
+                    if showOptions {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
+                    } else {
+                        onMicTap()
+                    }
+                }) {
+                    ZStack(alignment: .topTrailing) {
+                        Circle()
+                            .fill(isRecording ? Color.red : Color.orange)
+                            .frame(width: 60, height: 60)
+                            .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
 
-                    if pendingMediaCount > 0 && !isRecording {
-                        Text("\(pendingMediaCount)")
-                            .font(.system(size: 10, weight: .bold))
+                        Image(systemName: isRecording ? "stop.fill" : (isCountingDown ? "hand.tap.fill" : "mic.fill"))
+                            .font(.title3)
                             .foregroundStyle(.white)
-                            .frame(width: 18, height: 18)
-                            .background(Color.blue)
-                            .clipShape(Circle())
-                            .offset(x: 4, y: -4)
+                            .frame(width: 60, height: 60)
+
+                        if pendingMediaCount > 0 && !isRecording && !isCountingDown {
+                            Text("\(pendingMediaCount)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 18, height: 18)
+                                .background(Color.blue)
+                                .clipShape(Circle())
+                                .offset(x: 4, y: -4)
+                        }
                     }
                 }
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                        guard !isRecording && !isCountingDown else { return }
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                            showOptions = true
+                        }
+                    }
+                )
+                .animation(.easeInOut(duration: 0.2), value: isRecording)
             }
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.4).onEnded { _ in
-                    guard !isRecording else { return }
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        showOptions = true
-                    }
-                }
-            )
-            .animation(.easeInOut(duration: 0.2), value: isRecording)
         }
     }
 }

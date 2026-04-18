@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TextEntrySheet: View {
+    var initialText: String = ""
     let pendingMediaCount: Int
     let onSave: (String) -> Void
     @State private var text = ""
@@ -41,6 +42,7 @@ struct TextEntrySheet: View {
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && pendingMediaCount == 0)
                 }
             }
+            .onAppear { text = initialText }
         }
         .presentationDetents([.medium, .large])
     }
