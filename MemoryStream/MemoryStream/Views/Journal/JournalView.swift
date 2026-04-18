@@ -432,20 +432,23 @@ struct JournalFAB: View {
     private var isCountingDown: Bool { autoSaveProgress > 0 }
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 14) {
+        VStack(alignment: .trailing, spacing: 12) {
             if showOptions {
-                FABOption(icon: "video.fill", label: "Video", color: .purple, action: {
+                FABOption(icon: "video.fill", label: "Video", color: .purple) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
                     onVideoTap()
-                })
-                FABOption(icon: "camera.fill", label: "Photo", color: .blue, action: {
+                }
+                FABOption(icon: "camera.fill", label: "Photo", color: .blue) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
                     onPhotoTap()
-                })
-                FABOption(icon: "pencil", label: "Text", color: .green, action: {
+                }
+                FABOption(icon: "pencil", label: "Text", color: .green) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
                     onTextTap()
-                })
+                }
+                FABOption(icon: "xmark", label: "Cancel", color: Color(.systemGray2)) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
+                }
             }
 
             // Main button + countdown ring
@@ -453,43 +456,42 @@ struct JournalFAB: View {
                 // Countdown ring — fills clockwise from 12 o'clock
                 Circle()
                     .trim(from: 0, to: autoSaveProgress)
-                    .stroke(
-                        Color.orange,
-                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
-                    )
+                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
                     .frame(width: 70, height: 70)
                     .rotationEffect(.degrees(-90))
 
-                Button(action: {
+                ZStack(alignment: .topTrailing) {
+                    Circle()
+                        .fill(isRecording ? Color.red : Color.orange)
+                        .frame(width: 60, height: 60)
+                        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+
+                    Image(systemName: isRecording ? "stop.fill" : (isCountingDown ? "hand.tap.fill" : "mic.fill"))
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                        .frame(width: 60, height: 60)
+
+                    if pendingMediaCount > 0 && !isRecording && !isCountingDown {
+                        Text("\(pendingMediaCount)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 18, height: 18)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                            .offset(x: 4, y: -4)
+                    }
+                }
+                .contentShape(Circle())
+                // Long press and tap are mutually exclusive: highPriorityGesture wins when
+                // held ≥0.4s, preventing the tap from also firing on finger-lift.
+                .onTapGesture {
                     if showOptions {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
                     } else {
                         onMicTap()
                     }
-                }) {
-                    ZStack(alignment: .topTrailing) {
-                        Circle()
-                            .fill(isRecording ? Color.red : Color.orange)
-                            .frame(width: 60, height: 60)
-                            .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
-
-                        Image(systemName: isRecording ? "stop.fill" : (isCountingDown ? "hand.tap.fill" : "mic.fill"))
-                            .font(.title3)
-                            .foregroundStyle(.white)
-                            .frame(width: 60, height: 60)
-
-                        if pendingMediaCount > 0 && !isRecording && !isCountingDown {
-                            Text("\(pendingMediaCount)")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 18, height: 18)
-                                .background(Color.blue)
-                                .clipShape(Circle())
-                                .offset(x: 4, y: -4)
-                        }
-                    }
                 }
-                .simultaneousGesture(
+                .highPriorityGesture(
                     LongPressGesture(minimumDuration: 0.4).onEnded { _ in
                         guard !isRecording && !isCountingDown else { return }
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
@@ -511,26 +513,26 @@ struct FABOption: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Text(label)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundStyle(.primary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
                     .background(.background)
                     .clipShape(Capsule())
-                    .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
+                    .shadow(color: .black.opacity(0.1), radius: 3, y: 1)
 
                 Circle()
-                    .fill(color.opacity(0.15))
-                    .frame(width: 44, height: 44)
+                    .fill(color)
+                    .frame(width: 60, height: 60)
                     .overlay(
                         Image(systemName: icon)
-                            .font(.body)
-                            .foregroundStyle(color)
+                            .font(.title3)
+                            .foregroundStyle(.white)
                     )
-                    .shadow(color: color.opacity(0.2), radius: 4, y: 2)
+                    .shadow(color: color.opacity(0.35), radius: 5, y: 3)
             }
         }
         .buttonStyle(.plain)
