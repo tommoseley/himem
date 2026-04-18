@@ -8,13 +8,27 @@ struct CameraPickerView: UIViewControllerRepresentable {
         case video(URL)
     }
 
+    enum CaptureMode {
+        case photo, video, both
+    }
+
+    var captureMode: CaptureMode = .both
     var onCapture: (CaptureResult) -> Void
     var onDismiss: () -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
-        picker.mediaTypes = [UTType.image.identifier, UTType.movie.identifier]
+        switch captureMode {
+        case .photo:
+            picker.mediaTypes = [UTType.image.identifier]
+            picker.cameraCaptureMode = .photo
+        case .video:
+            picker.mediaTypes = [UTType.movie.identifier]
+            picker.cameraCaptureMode = .video
+        case .both:
+            picker.mediaTypes = [UTType.image.identifier, UTType.movie.identifier]
+        }
         picker.videoMaximumDuration = 120
         picker.delegate = context.coordinator
         return picker

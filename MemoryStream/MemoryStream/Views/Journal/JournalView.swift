@@ -6,16 +6,19 @@ struct JournalView: View {
     @StateObject private var speechService = SpeechService()
     @StateObject private var cameraService = CameraService()
     @StateObject private var topicApproval = TopicApprovalService.shared
-    @State private var inputText = ""
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @State private var showSearch = false
     @State private var showSettings = false
     @State private var showCamera = false
+    @State private var cameraMode: CameraPickerView.CaptureMode = .both
+    @State private var showTextEntry = false
+    @State private var showFABOptions = false
     @State private var editingEntry: EntryDisplayModel? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var pendingMediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
 
     var body: some View {
+        ZStack(alignment: .bottomTrailing) {
         VStack(spacing: 0) {
             JournalHeaderView(
                 onSearchTap: { showSearch = true },
@@ -93,36 +96,51 @@ struct JournalView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-
-            Spacer(minLength: 0)
-
-            InputBarView(
-                text: $inputText,
-                isRecording: speechService.isRecording,
-                pendingMediaCount: pendingMediaCaptures.count,
-                onSave: { text in
-                    let content = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ? "No text provided."
-                        : text
-                    let inputType: JournalEntry.InputType = pendingMediaCaptures.isEmpty ? .typed : .camera
-                    viewModel.saveEntry(content: content, inputType: inputType, mediaCaptures: pendingMediaCaptures)
-                    inputText = ""
-                    pendingMediaCaptures = []
-                },
-                onMicTap: {
-                    handleMicTap()
-                },
-                onCameraTap: {
-                    handleCameraTap()
-                }
-            )
+            .safeAreaInset(edge: .bottom) {
+                Color.clear.frame(height: 96)
+            }
         }
         .background(Color(.systemGroupedBackground))
+
+        // Dim overlay — tap outside to dismiss FAB options
+        if showFABOptions {
+            Color.black.opacity(0.25)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        showFABOptions = false
+                    }
+                }
+        }
+
+        // FAB
+        JournalFAB(
+            isRecording: speechService.isRecording,
+            pendingMediaCount: pendingMediaCaptures.count,
+            showOptions: $showFABOptions,
+            onMicTap: { handleMicTap() },
+            onTextTap: { showTextEntry = true },
+            onPhotoTap: { cameraMode = .photo; handleCameraTap() },
+            onVideoTap: { cameraMode = .video; handleCameraTap() }
+        )
+        .padding(.trailing, 20)
+        .padding(.bottom, 20)
+        } // ZStack
         .sheet(isPresented: $showSearch) {
             SearchView()
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+        .sheet(isPresented: $showTextEntry) {
+            TextEntrySheet(pendingMediaCount: pendingMediaCaptures.count) { text in
+                let content = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? "No text provided."
+                    : text
+                let inputType: JournalEntry.InputType = pendingMediaCaptures.isEmpty ? .typed : .camera
+                viewModel.saveEntry(content: content, inputType: inputType, mediaCaptures: pendingMediaCaptures)
+                pendingMediaCaptures = []
+            }
         }
         .sheet(item: $editingEntry) { entry in
             EntryEditorView(
@@ -151,6 +169,7 @@ struct JournalView: View {
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPickerView(
+                captureMode: cameraMode,
                 onCapture: { result in
                     handleCameraCapture(result)
                 },
@@ -286,6 +305,115 @@ struct JournalHeaderView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
+    }
+}
+
+// MARK: - FAB
+
+struct JournalFAB: View {
+    var isRecording: Bool
+    var pendingMediaCount: Int
+    @Binding var showOptions: Bool
+    let onMicTap: () -> Void
+    let onTextTap: () -> Void
+    let onPhotoTap: () -> Void
+    let onVideoTap: () -> Void
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 14) {
+            if showOptions {
+                FABOption(icon: "video.fill", label: "Video", color: .purple, action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
+                    onVideoTap()
+                })
+                FABOption(icon: "camera.fill", label: "Photo", color: .blue, action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
+                    onPhotoTap()
+                })
+                FABOption(icon: "pencil", label: "Text", color: .green, action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
+                    onTextTap()
+                })
+            }
+
+            // Main button
+            Button(action: {
+                if showOptions {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
+                } else {
+                    onMicTap()
+                }
+            }) {
+                ZStack(alignment: .topTrailing) {
+                    Circle()
+                        .fill(isRecording ? Color.red : Color.orange)
+                        .frame(width: 60, height: 60)
+                        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+
+                    Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                        .frame(width: 60, height: 60)
+
+                    if pendingMediaCount > 0 && !isRecording {
+                        Text("\(pendingMediaCount)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 18, height: 18)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                            .offset(x: 4, y: -4)
+                    }
+                }
+            }
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                    guard !isRecording else { return }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        showOptions = true
+                    }
+                }
+            )
+            .animation(.easeInOut(duration: 0.2), value: isRecording)
+        }
+    }
+}
+
+struct FABOption: View {
+    let icon: String
+    let label: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Text(label)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(.background)
+                    .clipShape(Capsule())
+                    .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
+
+                Circle()
+                    .fill(color.opacity(0.15))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Image(systemName: icon)
+                            .font(.body)
+                            .foregroundStyle(color)
+                    )
+                    .shadow(color: color.opacity(0.2), radius: 4, y: 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .transition(.asymmetric(
+            insertion: .move(edge: .bottom).combined(with: .opacity),
+            removal: .opacity
+        ))
     }
 }
 

@@ -1,106 +1,47 @@
 import SwiftUI
 
-struct InputBarView: View {
-    @Binding var text: String
-    var isRecording: Bool = false
-    var pendingMediaCount: Int = 0
+struct TextEntrySheet: View {
+    let pendingMediaCount: Int
     let onSave: (String) -> Void
-    let onMicTap: () -> Void
-    let onCameraTap: () -> Void
+    @State private var text = ""
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 0) {
-            Divider()
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 0) {
+                TextEditor(text: $text)
+                    .font(.body)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
 
-            HStack(spacing: 12) {
-                // Microphone button
-                Button(action: onMicTap) {
-                    Image(systemName: isRecording ? "mic.fill" : "mic")
-                        .font(.body)
-                        .foregroundStyle(isRecording ? .red : .primary)
-                        .frame(width: 36, height: 36)
-                        .background(isRecording ? Color.red.opacity(0.12) : Color(.tertiarySystemGroupedBackground))
-                        .clipShape(Circle())
-                        .animation(.easeInOut(duration: 0.2), value: isRecording)
-                }
-
-                // Camera button
-                Button(action: onCameraTap) {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "camera")
-                            .font(.body)
-                            .foregroundStyle(.primary)
-                            .frame(width: 36, height: 36)
-                            .background(Color(.tertiarySystemGroupedBackground))
-                            .clipShape(Circle())
-
-                        if pendingMediaCount > 0 {
-                            Text("\(pendingMediaCount)")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 16, height: 16)
-                                .background(Color.blue)
-                                .clipShape(Circle())
-                                .offset(x: 4, y: -4)
-                        }
+                if pendingMediaCount > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperclip")
+                            .font(.caption)
+                        Text("\(pendingMediaCount) media item\(pendingMediaCount == 1 ? "" : "s") attached")
+                            .font(.caption)
                     }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
                 }
-
-                // Text field
-                HStack {
-                    TextField("Tell me what happened...", text: $text)
-                        .font(.subheadline)
-                        .disabled(isRecording)
-
-                    if !isRecording {
-                        Text("Siri ready")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color(.tertiarySystemGroupedBackground))
-                            .clipShape(Capsule())
-                    } else {
-                        Text("Listening...")
-                            .font(.caption2)
-                            .foregroundStyle(.red)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.tertiarySystemGroupedBackground))
-                .clipShape(Capsule())
-
-                // Save button
-                Button(action: {
-                    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                    onSave(text)
-                }) {
-                    Text("Save entry")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(canSave ? Color.orange : Color(.tertiarySystemGroupedBackground))
-                        .foregroundStyle(canSave ? .white : .secondary)
-                        .clipShape(Capsule())
-                }
-                .disabled(!canSave)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 10)
-            .background(.background)
+            .navigationTitle("New Entry")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(text)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && pendingMediaCount == 0)
+                }
+            }
         }
-    }
-
-    private var canSave: Bool {
-        (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingMediaCount > 0) && !isRecording
-    }
-}
-
-#Preview {
-    VStack {
-        Spacer()
-        InputBarView(text: .constant(""), onSave: { _ in }, onMicTap: {}, onCameraTap: {})
+        .presentationDetents([.medium, .large])
     }
 }
