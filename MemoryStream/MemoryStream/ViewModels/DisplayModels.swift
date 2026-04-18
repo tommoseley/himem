@@ -1,5 +1,43 @@
 import Foundation
 
+// MARK: - Card Density
+
+enum CardDensity: String, CaseIterable {
+    case compact, standard, rich
+
+    var label: String {
+        switch self {
+        case .compact: return "Compact"
+        case .standard: return "Standard"
+        case .rich: return "Rich"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .compact: return "rectangle.compress.vertical"
+        case .standard: return "list.bullet.rectangle.portrait"
+        case .rich: return "rectangle.expand.vertical"
+        }
+    }
+
+    var next: CardDensity {
+        switch self {
+        case .compact: return .standard
+        case .standard: return .rich
+        case .rich: return .compact
+        }
+    }
+
+    var contentLineLimit: Int? {
+        switch self {
+        case .compact: return 2
+        case .standard: return 4
+        case .rich: return nil
+        }
+    }
+}
+
 // MARK: - Entry Display Model
 
 struct EntryDisplayModel: Identifiable {

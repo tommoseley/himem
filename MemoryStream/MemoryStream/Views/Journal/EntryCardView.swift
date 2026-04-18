@@ -2,14 +2,22 @@ import SwiftUI
 
 struct EntryCardView: View {
     let entry: EntryDisplayModel
+    var density: CardDensity = .standard
     var onFeedback: ((UUID, InferenceSummary.FeedbackState) -> Void)? = nil
     var onEntityTap: ((String) -> Void)? = nil
     @State private var showInferenceDetail = false
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var isContentExpanded = false
 
+    /// Tags that add information beyond what's already in the content text.
+    private var smartTags: [TagDisplayModel] {
+        entry.tags.filter { tag in
+            !entry.content.localizedCaseInsensitiveContains(tag.value)
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: density == .compact ? 8 : 12) {
             // Title + metadata row
             EntryHeaderRow(entry: entry, onStatusTap: entry.feedbackState != nil ? {
                 showInferenceDetail = true
@@ -17,11 +25,22 @@ struct EntryCardView: View {
 
             // Media strip
             if !entry.mediaItems.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(entry.mediaItems) { item in
-                            MediaThumbnailView(item: item) {
-                                selectedMedia = item
+                if density == .compact {
+                    // Compact: just an attachment indicator
+                    HStack(spacing: 4) {
+                        Image(systemName: "paperclip")
+                            .font(.caption)
+                        Text("\(entry.mediaItems.count) media")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.secondary)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(entry.mediaItems) { item in
+                                MediaThumbnailView(item: item) {
+                                    selectedMedia = item
+                                }
                             }
                         }
                     }
@@ -51,11 +70,11 @@ struct EntryCardView: View {
 
             // Content
             Text(entry.content)
-                .font(.body)
-                .lineSpacing(3)
-                .lineLimit(isContentExpanded ? nil : 4)
+                .font(density == .compact ? .subheadline : .body)
+                .lineSpacing(density == .compact ? 2 : 3)
+                .lineLimit(isContentExpanded ? nil : density.contentLineLimit)
 
-            if entry.content.count > 120 {
+            if density.contentLineLimit != nil && entry.content.count > 120 {
                 Button(isContentExpanded ? "Show less" : "Show more") {
                     withAnimation(.easeInOut(duration: 0.2)) { isContentExpanded.toggle() }
                 }
@@ -64,28 +83,46 @@ struct EntryCardView: View {
             }
 
             // Processing status card (when actively processing)
-            if let processingStatus = entry.processingStatus, processingStatus != .completed {
+            if density != .compact,
+               let processingStatus = entry.processingStatus, processingStatus != .completed {
                 ProcessingStatusCard(status: processingStatus, progressDescription: entry.progressDescription)
             }
 
-            // Entity tags
-            if !entry.tags.isEmpty {
-                EntityTagsRow(tags: entry.tags, onEntityTap: onEntityTap)
+            // Entity tags — smart filtered: hide tags whose value already appears in the content
+            if density != .compact && !smartTags.isEmpty {
+                EntityTagsRow(tags: smartTags, onEntityTap: onEntityTap)
             }
 
-            // Inference summary card — only shown while pending
-            if let inference = entry.inferenceSummary, entry.feedbackState == nil {
-                InferenceCard(
-                    summary: inference,
-                    feedbackState: entry.feedbackState,
-                    onFeedback: { state in
-                        onFeedback?(entry.id, state)
-                    }
-                )
+            // Inference summary card
+            if density == .rich {
+                // Rich: always show inference if available
+                if let inference = entry.inferenceSummary {
+                    InferenceCard(
+                        summary: inference,
+                        feedbackState: entry.feedbackState,
+                        onFeedback: { state in onFeedback?(entry.id, state) }
+                    )
+                }
+            } else if density == .standard {
+                // Standard: only show while pending
+                if let inference = entry.inferenceSummary, entry.feedbackState == nil {
+                    InferenceCard(
+                        summary: inference,
+                        feedbackState: entry.feedbackState,
+                        onFeedback: { state in onFeedback?(entry.id, state) }
+                    )
+                }
             }
+            // Compact: no inference card
 
-            // Voice playback — on card only while inference is pending; moves to detail sheet after feedback
-            if entry.feedbackState == nil {
+            // Voice playback
+            if density == .rich {
+                // Rich: always show voice playback if available
+                if let audioFile = entry.audioFilePath {
+                    VoicePlaybackRow(filename: audioFile)
+                }
+            } else if density == .standard && entry.feedbackState == nil {
+                // Standard: only while inference is pending
                 if let audioFile = entry.audioFilePath {
                     VoicePlaybackRow(filename: audioFile)
                 } else if entry.inputType == .siri || entry.inputType == .voiceInApp {
@@ -95,8 +132,9 @@ struct EntryCardView: View {
                         .italic()
                 }
             }
+            // Compact: no voice playback
         }
-        .padding()
+        .padding(density == .compact ? 12 : 16)
         .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.04), radius: 2, y: 1)

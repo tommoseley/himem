@@ -9,6 +9,7 @@ struct JournalView: View {
     @StateObject private var albumSync = AlbumSyncService.shared
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("autoSaveDelay") private var autoSaveDelay: Double = 7
+    @AppStorage("cardDensity") private var cardDensityRaw: String = CardDensity.standard.rawValue
     @State private var showSearch = false
     @State private var showSettings = false
     @State private var showCamera = false
@@ -32,11 +33,21 @@ struct JournalView: View {
     @State private var textEntryVoiceAudioPath: String? = nil
     @State private var entityFilter: String? = nil
 
+    private var cardDensity: CardDensity {
+        CardDensity(rawValue: cardDensityRaw) ?? .standard
+    }
+
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
         VStack(spacing: 0) {
             JournalHeaderView(
+                density: cardDensity,
                 onSearchTap: { showSearch = true },
+                onDensityTap: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        cardDensityRaw = cardDensity.next.rawValue
+                    }
+                },
                 onSettingsTap: { showSettings = true }
             )
 
@@ -104,6 +115,7 @@ struct JournalView: View {
                         ForEach(group.entries) { entry in
                             EntryCardView(
                                 entry: entry,
+                                density: cardDensity,
                                 onFeedback: { entryId, state in
                                     viewModel.submitFeedback(entryId: entryId, state: state)
                                 },
@@ -502,7 +514,9 @@ struct JournalView: View {
 // MARK: - Header
 
 struct JournalHeaderView: View {
+    var density: CardDensity = .standard
     let onSearchTap: () -> Void
+    let onDensityTap: () -> Void
     let onSettingsTap: () -> Void
 
     var body: some View {
@@ -520,6 +534,13 @@ struct JournalHeaderView: View {
                     .font(.body)
                     .foregroundStyle(.primary)
             }
+
+            Button(action: onDensityTap) {
+                Image(systemName: density.icon)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+            }
+            .padding(.leading, 8)
 
             Button(action: onSettingsTap) {
                 Image(systemName: "gearshape")
