@@ -91,7 +91,7 @@ class JournalViewModel: ObservableObject {
 
     // MARK: - Edit and Re-process
 
-    func editEntry(entryId: UUID, newContent: String, removedTagIds: Set<UUID> = [], discardAudio: Bool = false) {
+    func editEntry(entryId: UUID, newContent: String, removedTagIds: Set<UUID> = [], removedMediaIds: Set<UUID> = [], discardAudio: Bool = false) {
         guard !useMockData else { return }
 
         let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
@@ -114,6 +114,18 @@ class JournalViewModel: ObservableObject {
                 if let entities = entry.extractedEntities as? Set<ExtractedEntity> {
                     for entity in entities where removedTagIds.contains(entity.id) {
                         storage.viewContext.delete(entity)
+                    }
+                }
+            }
+
+            // Remove specific media references
+            if !removedMediaIds.isEmpty {
+                if let refs = entry.mediaReferences as? Set<MediaReference> {
+                    for ref in refs where removedMediaIds.contains(ref.id) {
+                        if let cacheFile = ref.thumbnailCacheFilename {
+                            ThumbnailService.shared.evictThumbnail(filename: cacheFile)
+                        }
+                        storage.viewContext.delete(ref)
                     }
                 }
             }

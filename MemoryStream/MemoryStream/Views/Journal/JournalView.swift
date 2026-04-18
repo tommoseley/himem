@@ -88,7 +88,7 @@ struct JournalView: View {
                         Button {
                             editingEntry = entry
                         } label: {
-                            Label("Edit", systemImage: "pencil")
+                            Label("View", systemImage: "eye")
                         }
                         .tint(.blue)
                     }
@@ -143,13 +143,20 @@ struct JournalView: View {
             }
         }
         .sheet(item: $editingEntry) { entry in
-            EntryEditorView(
+            EntryDetailView(
                 entryId: entry.id,
                 originalText: entry.content,
                 tags: entry.tags,
                 audioFilePath: entry.audioFilePath,
-                onSave: { entryId, newContent, removedTagIds, discardAudio in
-                    viewModel.editEntry(entryId: entryId, newContent: newContent, removedTagIds: removedTagIds, discardAudio: discardAudio)
+                mediaItems: entry.mediaItems,
+                onSave: { entryId, newContent, removedTagIds, removedMediaIds, discardAudio in
+                    viewModel.editEntry(
+                        entryId: entryId,
+                        newContent: newContent,
+                        removedTagIds: removedTagIds,
+                        removedMediaIds: removedMediaIds,
+                        discardAudio: discardAudio
+                    )
                 }
             )
         }
