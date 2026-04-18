@@ -52,6 +52,13 @@ Summary: Write as if explaining to the user what the app understood. Use "linked
 Only include entities with confidence >= 0.7. Be precise, not exhaustive.\
 """
 
+_CLEANUP_PROMPT = """\
+Fix grammar, spelling, and punctuation in this voice transcription. \
+Keep the meaning and tone identical. Return only the corrected text, nothing else.
+
+\"\"\"{text}\"\"\"\
+"""
+
 
 class AnalyzeRequest(BaseModel):
     text: str
@@ -68,6 +75,14 @@ class AnalyzeResponse(BaseModel):
     topics: list[str]
     summary: str
     title: str | None
+
+
+class CleanupRequest(BaseModel):
+    text: str
+
+
+class CleanupResponse(BaseModel):
+    text: str
 
 
 @app.get("/health")
@@ -124,3 +139,40 @@ async def analyze_entry(request: AnalyzeRequest) -> AnalyzeResponse:
         summary=data.get("summary", ""),
         title=data.get("title"),
     )
+
+
+@app.post("/himem/cleanup", response_model=CleanupResponse)
+async def cleanup_text(request: CleanupRequest) -> CleanupResponse:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+
+    body = {
+        "model": _MODEL,
+        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": _CLEANUP_PROMPT.format(text=request.text)}],
+    }
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": _API_VERSION,
+        "content-type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(_ANTHROPIC_URL, json=body, headers=headers)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Anthropic API timed out")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Request failed: {e}")
+
+    if resp.status_code != 200:
+        logger.error("Anthropic error %s: %s", resp.status_code, resp.text)
+        raise HTTPException(status_code=502, detail=f"Anthropic error {resp.status_code}")
+
+    corrected = ""
+    for block in resp.json().get("content", []):
+        if block.get("type") == "text":
+            corrected += block.get("text", "")
+
+    return CleanupResponse(text=corrected.strip())

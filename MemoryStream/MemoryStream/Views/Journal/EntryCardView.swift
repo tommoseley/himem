@@ -3,8 +3,10 @@ import SwiftUI
 struct EntryCardView: View {
     let entry: EntryDisplayModel
     var onFeedback: ((UUID, InferenceSummary.FeedbackState) -> Void)? = nil
+    var onEntityTap: ((String) -> Void)? = nil
     @State private var showInferenceDetail = false
     @State private var selectedMedia: MediaDisplayItem? = nil
+    @State private var isContentExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -51,6 +53,15 @@ struct EntryCardView: View {
             Text(entry.content)
                 .font(.body)
                 .lineSpacing(3)
+                .lineLimit(isContentExpanded ? nil : 4)
+
+            if entry.content.count > 120 {
+                Button(isContentExpanded ? "Show less" : "Show more") {
+                    withAnimation(.easeInOut(duration: 0.2)) { isContentExpanded.toggle() }
+                }
+                .font(.caption)
+                .foregroundStyle(.blue)
+            }
 
             // Processing status card (when actively processing)
             if let processingStatus = entry.processingStatus, processingStatus != .completed {
@@ -59,7 +70,7 @@ struct EntryCardView: View {
 
             // Entity tags
             if !entry.tags.isEmpty {
-                EntityTagsRow(tags: entry.tags)
+                EntityTagsRow(tags: entry.tags, onEntityTap: onEntityTap)
             }
 
             // Inference summary card — only shown while pending
@@ -224,17 +235,48 @@ struct ProcessingStatusCard: View {
 
 struct EntityTagsRow: View {
     let tags: [TagDisplayModel]
+    var onEntityTap: ((String) -> Void)? = nil
+    @State private var showAll = false
+
+    private var visibleTags: [TagDisplayModel] {
+        showAll ? tags : Array(tags.prefix(3))
+    }
+
+    private var hiddenCount: Int {
+        max(0, tags.count - 3)
+    }
 
     var body: some View {
         FlowLayout(spacing: 6) {
-            ForEach(tags) { tag in
-                Text(tag.value)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color(.tertiarySystemGroupedBackground))
-                    .clipShape(Capsule())
+            ForEach(visibleTags) { tag in
+                Button {
+                    onEntityTap?(tag.value)
+                } label: {
+                    Text(tag.value)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color(.tertiarySystemGroupedBackground))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if !showAll && hiddenCount > 0 {
+                Button {
+                    withAnimation { showAll = true }
+                } label: {
+                    Text("+\(hiddenCount)")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color(.tertiarySystemGroupedBackground))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
         }
     }

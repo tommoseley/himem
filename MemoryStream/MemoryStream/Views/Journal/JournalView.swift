@@ -30,6 +30,7 @@ struct JournalView: View {
     @State private var textEntryInitialText = ""
     @State private var textEntryIsForVoice = false
     @State private var textEntryVoiceAudioPath: String? = nil
+    @State private var entityFilter: String? = nil
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -41,13 +42,6 @@ struct JournalView: View {
 
             List {
                 Section {
-                    Text("Today")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-
                     SiriShortcutBanner()
                         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                         .listRowSeparator(.hidden)
@@ -60,9 +54,33 @@ struct JournalView: View {
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
+
+                    // Entity filter indicator
+                    if let filter = entityFilter {
+                        HStack(spacing: 8) {
+                            Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                                .foregroundStyle(.blue)
+                            Text(filter)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Button {
+                                withAnimation { entityFilter = nil }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    }
                 }
 
-                if filteredEntries.isEmpty {
+                if displayEntries.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "text.book.closed")
                             .font(.largeTitle)
@@ -70,7 +88,7 @@ struct JournalView: View {
                         Text("No entries yet")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Text("Type below or use Siri to capture your first thought.")
+                        Text("Tap the mic button to record, or hold it for more options.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .multilineTextAlignment(.center)
@@ -81,37 +99,51 @@ struct JournalView: View {
                     .listRowBackground(Color.clear)
                 }
 
-                ForEach(filteredEntries) { entry in
-                    EntryCardView(
-                        entry: entry,
-                        onFeedback: { entryId, state in
-                            viewModel.submitFeedback(entryId: entryId, state: state)
+                ForEach(groupedEntries, id: \.date) { group in
+                    Section {
+                        ForEach(group.entries) { entry in
+                            EntryCardView(
+                                entry: entry,
+                                onFeedback: { entryId, state in
+                                    viewModel.submitFeedback(entryId: entryId, state: state)
+                                },
+                                onEntityTap: { value in
+                                    withAnimation { entityFilter = value }
+                                }
+                            )
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    viewModel.deleteEntry(entryId: entry.id)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button {
+                                    editingEntry = entry
+                                } label: {
+                                    Label("View", systemImage: "eye")
+                                }
+                                .tint(.blue)
+                            }
                         }
-                    )
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            viewModel.deleteEntry(entryId: entry.id)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button {
-                            editingEntry = entry
-                        } label: {
-                            Label("View", systemImage: "eye")
-                        }
-                        .tint(.blue)
+                    } header: {
+                        Text(group.label)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.primary)
+                            .textCase(nil)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
                     }
                 }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .safeAreaInset(edge: .bottom) {
-                Color.clear.frame(height: 96)
+                Color.clear.frame(height: 110)
             }
         }
         .background(Color(.systemGroupedBackground))
@@ -273,11 +305,43 @@ struct JournalView: View {
         }
     }
 
-    private var filteredEntries: [EntryDisplayModel] {
-        guard let selected = viewModel.selectedTopic else {
-            return viewModel.entries
+    private var displayEntries: [EntryDisplayModel] {
+        var entries = viewModel.entries
+        if let selected = viewModel.selectedTopic {
+            entries = entries.filter { $0.topicNames.contains(selected) }
         }
-        return viewModel.entries.filter { $0.topicNames.contains(selected) }
+        if let filter = entityFilter {
+            entries = entries.filter { entry in
+                entry.tags.contains { $0.value.localizedCaseInsensitiveContains(filter) }
+            }
+        }
+        return entries
+    }
+
+    private struct DayGroup: Identifiable {
+        let date: Date
+        let label: String
+        let entries: [EntryDisplayModel]
+        var id: Date { date }
+    }
+
+    private var groupedEntries: [DayGroup] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: displayEntries) { entry in
+            calendar.startOfDay(for: entry.createdAt)
+        }
+        return grouped.sorted { $0.key > $1.key }.map { date, entries in
+            DayGroup(date: date, label: dateLabel(for: date), entries: entries)
+        }
+    }
+
+    private func dateLabel(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d"
+        return formatter.string(from: date)
     }
 
     private func handleCameraTap() {

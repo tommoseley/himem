@@ -34,8 +34,8 @@ struct TopicTab: View {
                 .fontWeight(isSelected ? .semibold : .regular)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .background(isSelected ? Color.primary : Color.clear)
-                .foregroundStyle(isSelected ? Color(.systemBackground) : .primary)
+                .background(isSelected ? Color.blue.opacity(0.12) : Color.clear)
+                .foregroundStyle(isSelected ? .blue : .primary)
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()

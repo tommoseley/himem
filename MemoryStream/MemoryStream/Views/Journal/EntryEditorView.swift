@@ -14,6 +14,7 @@ struct EntryDetailView: View {
     @State private var removedMediaIds: Set<UUID> = []
     @State private var discardAudio = false
     @State private var selectedMedia: MediaDisplayItem? = nil
+    @State private var isCleaningUp = false
 
     private var hasChanges: Bool {
         editedText != originalText
@@ -71,6 +72,31 @@ struct EntryDetailView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .scrollContentBackground(.hidden)
+
+                    // Clean up transcription
+                    HStack {
+                        Button {
+                            cleanUpTranscription()
+                        } label: {
+                            HStack(spacing: 6) {
+                                if isCleaningUp {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                } else {
+                                    Image(systemName: "wand.and.stars")
+                                }
+                                Text("Clean up text")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isCleaningUp)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
+
+                        Spacer()
+                    }
 
                     // Entity tags
                     if !tags.isEmpty {
@@ -199,6 +225,19 @@ struct EntryDetailView: View {
             return "Voice recording will be permanently deleted."
         }
         return "Edit text, tap media to view full-screen, or tap × to mark for removal."
+    }
+
+    private func cleanUpTranscription() {
+        isCleaningUp = true
+        Task {
+            do {
+                let cleaned = try await ClaudeAPIService.shared.cleanupTranscription(editedText)
+                editedText = cleaned
+            } catch {
+                print("Cleanup failed: \(error)")
+            }
+            isCleaningUp = false
+        }
     }
 }
 

@@ -18,6 +18,12 @@ struct EntryDisplayModel: Identifiable {
     let mediaItems: [MediaDisplayItem]
 
     var timeString: String {
+        let interval = Date().timeIntervalSince(createdAt)
+        if interval < 60 { return "Just now" }
+        if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "\(minutes) min ago"
+        }
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
         return formatter.string(from: createdAt)
