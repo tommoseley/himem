@@ -6,6 +6,7 @@ struct JournalView: View {
     @StateObject private var speechService = SpeechService()
     @StateObject private var cameraService = CameraService()
     @StateObject private var topicApproval = TopicApprovalService.shared
+    @StateObject private var albumSync = AlbumSyncService.shared
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("autoSaveDelay") private var autoSaveDelay: Double = 7
     @State private var showSearch = false
@@ -204,6 +205,20 @@ struct JournalView: View {
         } message: {
             if let pending = topicApproval.pendingTopic {
                 Text("The AI wants to create a new topic: \"\(pending.name)\". Add it to your topics?")
+            }
+        }
+        .alert(
+            "Photos Album",
+            isPresented: Binding(
+                get: { albumSync.pendingProposal != nil },
+                set: { if !$0 { albumSync.reject() } }
+            )
+        ) {
+            Button("Create Album") { albumSync.approve() }
+            Button("Not Now", role: .cancel) { albumSync.reject() }
+        } message: {
+            if let proposal = albumSync.pendingProposal {
+                Text("Add all media from \"\(proposal.topicName)\" entries to a \"\(proposal.topicName)\" Photos album? Future captures in this topic will be added automatically.")
             }
         }
         .fullScreenCover(isPresented: $showCamera) {

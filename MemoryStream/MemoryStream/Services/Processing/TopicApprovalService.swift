@@ -28,6 +28,17 @@ final class TopicApprovalService: ObservableObject {
             let entry = try storage.viewContext.existingObject(with: current.entryObjectID) as! JournalEntry
             entry.addToTopics(topic)
             try storage.save(context: storage.viewContext)
+
+            // If this entry has media, propose album sync for the new topic
+            let mediaIds = entry.mediaReferencesArray.map(\.osIdentifier)
+            if !mediaIds.isEmpty {
+                let albumSync = AlbumSyncService.shared
+                if albumSync.isAutoSyncEnabled(for: current.name) {
+                    albumSync.addNewMedia(topicName: current.name, identifiers: mediaIds)
+                } else {
+                    albumSync.proposeIfNeeded(topicName: current.name)
+                }
+            }
         } catch {
             print("Failed to approve topic: \(error)")
         }

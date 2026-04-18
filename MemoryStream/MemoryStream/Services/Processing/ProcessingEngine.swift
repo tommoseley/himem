@@ -86,6 +86,31 @@ final class ProcessingEngine {
                         }
                     }
 
+                    // Propose album sync for topics assigned to entries with media
+                    let mediaIdentifiers = entryInContext.mediaReferencesArray.map(\.osIdentifier)
+                    if !mediaIdentifiers.isEmpty {
+                        let assignedExisting = result.topics.filter { topicName in
+                            let slug = topicName.lowercased().replacingOccurrences(of: " ", with: "-")
+                            let req = NSFetchRequest<Topic>(entityName: "Topic")
+                            req.predicate = NSPredicate(format: "slug == %@", slug)
+                            req.fetchLimit = 1
+                            return (try? context.fetch(req).first) != nil
+                        }
+                        if !assignedExisting.isEmpty {
+                            let ids = mediaIdentifiers
+                            Task { @MainActor in
+                                let albumSync = AlbumSyncService.shared
+                                for name in assignedExisting {
+                                    if albumSync.isAutoSyncEnabled(for: name) {
+                                        albumSync.addNewMedia(topicName: name, identifiers: ids)
+                                    } else {
+                                        albumSync.proposeIfNeeded(topicName: name)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Store inference summary
                     let summary = InferenceSummary(context: context)
                     summary.id = UUID()
