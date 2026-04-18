@@ -253,6 +253,8 @@ struct JournalView: View {
                     let identifier = try await cameraService.saveVideo(at: url)
                     pendingMediaCaptures.append((localIdentifier: identifier, mediaType: .video))
                 }
+                // Prompt immediately so the user can add text and save the capture
+                showTextEntry = true
             } catch let error as CameraService.CameraError {
                 cameraService.error = error
             } catch {
