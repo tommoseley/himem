@@ -433,6 +433,7 @@ struct JournalView: View {
     }
 
     private func handleMicTap() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         if speechService.isRecording {
             speechService.stopRecording()
             guard !speechService.transcribedText.isEmpty else { return }
@@ -462,20 +463,23 @@ struct JournalView: View {
         }
         isCountingDown = true
         autoSaveProgress = 0
+        // Prepare the haptic engine now so it's warm when the ring completes
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.prepare()
         withAnimation(.linear(duration: autoSaveDelay)) {
             autoSaveProgress = 1.0
         }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(autoSaveDelay * 1_000_000_000))
             guard isCountingDown else { return }
-            commitAutoSave()
+            commitAutoSave(haptic: generator)
         }
     }
 
-    private func commitAutoSave() {
+    private func commitAutoSave(haptic: UIImpactFeedbackGenerator? = nil) {
         isCountingDown = false
         autoSaveProgress = 0
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        haptic?.impactOccurred()
         if countdownIsForVoice {
             viewModel.saveEntry(
                 content: countdownVoiceText,
@@ -645,6 +649,7 @@ struct JournalFAB: View {
                 .highPriorityGesture(
                     LongPressGesture(minimumDuration: 0.4).onEnded { _ in
                         guard !isRecording && !isCountingDown else { return }
+                        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                             showOptions = true
                         }
