@@ -179,8 +179,7 @@ struct JournalView: View {
             ComposerView(
                 composer: composer,
                 topics: viewModel.topics,
-                onCommit: { handleCommit() },
-                onCameraCapture: { result in handleCameraCapture(result) }
+                onCommit: { handleCommit() }
             )
         }
         .navigationDestination(item: $selectedEntry) { entry in
@@ -321,26 +320,6 @@ struct JournalView: View {
     }
 
     // MARK: - Composer handlers
-
-    private func handleCameraCapture(_ result: CameraPickerView.CaptureResult) {
-        composer.showCamera = false
-        Task { @MainActor in
-            do {
-                switch result {
-                case .photo(let image):
-                    let identifier = try await cameraService.savePhoto(image)
-                    composer.addMedia(localIdentifier: identifier, mediaType: .image)
-                case .video(let url):
-                    let identifier = try await cameraService.saveVideo(at: url)
-                    composer.addMedia(localIdentifier: identifier, mediaType: .video)
-                }
-            } catch let error as CameraService.CameraError {
-                cameraService.error = error
-            } catch {
-                cameraService.error = .saveFailed(error.localizedDescription)
-            }
-        }
-    }
 
     private func handleCommit() {
         let content = composer.commitContent

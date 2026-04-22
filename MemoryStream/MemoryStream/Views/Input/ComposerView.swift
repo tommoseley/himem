@@ -4,7 +4,6 @@ struct ComposerView: View {
     @ObservedObject var composer: ComposerViewModel
     let topics: [String]
     let onCommit: () -> Void
-    var onCameraCapture: ((CameraPickerView.CaptureResult) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var showTextEditor = false
 
@@ -255,7 +254,22 @@ struct ComposerView: View {
             CameraPickerView(
                 captureMode: .both,
                 onCapture: { result in
-                    onCameraCapture?(result)
+                    composer.showCamera = false
+                    Task { @MainActor in
+                        guard let camera = composer.cameraService else { return }
+                        do {
+                            switch result {
+                            case .photo(let image):
+                                let id = try await camera.savePhoto(image)
+                                composer.addMedia(localIdentifier: id, mediaType: .image)
+                            case .video(let url):
+                                let id = try await camera.saveVideo(at: url)
+                                composer.addMedia(localIdentifier: id, mediaType: .video)
+                            }
+                        } catch {
+                            print("Camera capture failed: \(error)")
+                        }
+                    }
                 },
                 onDismiss: { composer.showCamera = false }
             )
