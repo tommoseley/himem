@@ -4,6 +4,10 @@ import SwiftUI
 struct MemoryStreamApp: App {
     let storageService = StorageService.shared
 
+    init() {
+        TopicPaletteStore.shared.loadFromCoreData()
+    }
+
     var body: some Scene {
         WindowGroup {
             JournalView()

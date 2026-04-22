@@ -278,18 +278,16 @@ struct JournalView: View {
                 }
             )
         }
-        .alert(
-            "New Topic Suggested",
-            isPresented: Binding(
-                get: { topicApproval.pendingTopic != nil },
-                set: { if !$0 { topicApproval.reject() } }
-            )
-        ) {
-            Button("Add") { topicApproval.approve() }
-            Button("Not Now", role: .cancel) { topicApproval.reject() }
-        } message: {
+        .sheet(isPresented: Binding(
+            get: { topicApproval.pendingTopic != nil },
+            set: { if !$0 { topicApproval.reject() } }
+        )) {
             if let pending = topicApproval.pendingTopic {
-                Text("The AI wants to create a new topic: \"\(pending.name)\". Add it to your topics?")
+                TopicApprovalSheet(
+                    topicName: pending.name,
+                    onApprove: { paletteKey in topicApproval.approve(paletteKey: paletteKey) },
+                    onReject: { topicApproval.reject() }
+                )
             }
         }
         .alert(
@@ -699,6 +697,70 @@ struct FABOption: View {
             insertion: .move(edge: .bottom).combined(with: .opacity),
             removal: .opacity
         ))
+    }
+}
+
+// MARK: - Topic Approval Sheet
+
+struct TopicApprovalSheet: View {
+    let topicName: String
+    let onApprove: (String) -> Void
+    let onReject: () -> Void
+
+    @State private var selectedKey = Crucible.Color.topicPalette[0].key
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                VStack(spacing: 8) {
+                    Text("The AI suggests a new topic:")
+                        .font(.subheadline)
+                        .foregroundStyle(Crucible.Color.ink2)
+
+                    let hue = Crucible.Color.topicHue(forKey: selectedKey)
+                    Text(topicName)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(hue.bg)
+                        .foregroundStyle(hue.fg)
+                        .clipShape(Capsule())
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("CHOOSE A COLOR")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .tracking(0.5)
+                        .foregroundStyle(Crucible.Color.ink3)
+
+                    TopicColorPicker(selectedKey: $selectedKey)
+                }
+
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle("New Topic")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Not Now") {
+                        onReject()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        onApprove(selectedKey)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

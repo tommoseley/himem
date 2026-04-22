@@ -5,6 +5,8 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var topics: [Topic] = []
     @State private var newTopicName: String = ""
+    @State private var newTopicColorKey: String = Crucible.Color.topicPalette[0].key
+    @State private var showNewTopicSheet = false
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("autoSaveDelay") private var autoSaveDelay: Double = 7
 
@@ -16,7 +18,11 @@ struct SettingsView: View {
                 // MARK: - Topics
                 Section {
                     ForEach(topics) { topic in
-                        HStack {
+                        HStack(spacing: 10) {
+                            let hue = Crucible.Color.topicHue(for: topic.name)
+                            Circle()
+                                .fill(hue.fg)
+                                .frame(width: 10, height: 10)
                             Text(topic.name)
                             Spacer()
                             Text("\(topic.entryCount) entries")
@@ -26,13 +32,17 @@ struct SettingsView: View {
                     }
                     .onDelete(perform: deleteTopic)
 
-                    HStack {
-                        TextField("New topic...", text: $newTopicName)
-                        Button(action: addTopic) {
+                    Button {
+                        newTopicName = ""
+                        newTopicColorKey = Crucible.Color.topicPalette[0].key
+                        showNewTopicSheet = true
+                    } label: {
+                        HStack {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(Crucible.Color.accent)
+                            Text("New Topic")
+                                .foregroundStyle(Crucible.Color.accent)
                         }
-                        .disabled(newTopicName.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 } header: {
                     Text("Topics")
@@ -77,6 +87,15 @@ struct SettingsView: View {
             .onAppear {
                 loadTopics()
             }
+            .sheet(isPresented: $showNewTopicSheet) {
+                NewTopicSheet(
+                    name: $newTopicName,
+                    colorKey: $newTopicColorKey,
+                    onAdd: { name, colorKey in
+                        addTopic(name: name, colorKey: colorKey)
+                    }
+                )
+            }
         }
     }
 
@@ -91,12 +110,10 @@ struct SettingsView: View {
         }
     }
 
-    private func addTopic() {
-        let name = newTopicName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
+    private func addTopic(name: String, colorKey: String) {
         do {
-            let _ = try storage.findOrCreateTopic(name: name)
-            newTopicName = ""
+            let _ = try storage.findOrCreateTopic(name: name, paletteKey: colorKey)
+            TopicPaletteStore.shared.set(key: colorKey, for: name)
             loadTopics()
         } catch {
             print("Failed to add topic: \(error)")

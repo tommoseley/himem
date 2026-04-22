@@ -79,10 +79,20 @@ enum Crucible {
             TopicHue(key: "rose",  bg: SwiftUI.Color(hex: 0xF1DDDD), fg: SwiftUI.Color(hex: 0x8A3A3A)),
         ]
 
-        /// Deterministic hue for a topic name — hashes the name into the palette.
+        /// Returns the hue for a topic. Uses the stored paletteKey if one exists,
+        /// otherwise falls back to a deterministic hash of the name.
         static func topicHue(for name: String) -> TopicHue {
+            if let key = TopicPaletteStore.shared.key(for: name),
+               let hue = topicPalette.first(where: { $0.key == key }) {
+                return hue
+            }
             let index = abs(name.hashValue) % topicPalette.count
             return topicPalette[index]
+        }
+
+        /// Look up a hue by its palette key directly.
+        static func topicHue(forKey key: String) -> TopicHue {
+            topicPalette.first { $0.key == key } ?? topicPalette[0]
         }
 
         // Scrim
@@ -138,6 +148,67 @@ struct WarmShadow: ViewModifier {
         }
     }
 }
+
+// MARK: - Topic Palette Store
+
+/// In-memory cache of topic name → paletteKey, loaded from Core Data on app start.
+/// Views read this via Crucible.Color.topicHue(for:) without any plumbing.
+final class TopicPaletteStore {
+    static let shared = TopicPaletteStore()
+    private var map: [String: String] = [:]
+
+    func key(for topicName: String) -> String? { map[topicName] }
+
+    func set(key: String, for topicName: String) {
+        map[topicName] = key
+    }
+
+    func loadFromCoreData() {
+        let request = NSFetchRequest<Topic>(entityName: "Topic")
+        guard let topics = try? StorageService.shared.viewContext.fetch(request) else { return }
+        for topic in topics {
+            if let pk = topic.paletteKey {
+                map[topic.name] = pk
+            }
+        }
+    }
+}
+
+// MARK: - Topic Color Picker
+
+/// Reusable view showing the 8 palette hues as tappable circles.
+struct TopicColorPicker: View {
+    @Binding var selectedKey: String
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(Crucible.Color.topicPalette, id: \.key) { hue in
+                Button {
+                    selectedKey = hue.key
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(hue.bg)
+                            .frame(width: 44, height: 44)
+                        Circle()
+                            .fill(hue.fg)
+                            .frame(width: 24, height: 24)
+                        if selectedKey == hue.key {
+                            Circle()
+                                .stroke(hue.fg, lineWidth: 2.5)
+                                .frame(width: 44, height: 44)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+import CoreData
 
 // MARK: - Color hex initializer
 

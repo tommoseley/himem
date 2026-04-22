@@ -20,14 +20,17 @@ final class TopicApprovalService: ObservableObject {
         showNextIfNeeded()
     }
 
-    func approve() {
+    func approve(paletteKey: String) {
         guard let current = pendingTopic else { return }
         let storage = StorageService.shared
         do {
-            let topic = try storage.findOrCreateTopic(name: current.name)
+            let topic = try storage.findOrCreateTopic(name: current.name, paletteKey: paletteKey)
             let entry = try storage.viewContext.existingObject(with: current.entryObjectID) as! JournalEntry
             entry.addToTopics(topic)
             try storage.save(context: storage.viewContext)
+
+            // Update the in-memory palette cache
+            TopicPaletteStore.shared.set(key: paletteKey, for: current.name)
 
             // If this entry has media, propose album sync for the new topic
             let mediaIds = entry.mediaReferencesArray.map(\.osIdentifier)

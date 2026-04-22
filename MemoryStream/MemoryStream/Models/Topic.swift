@@ -7,6 +7,7 @@ public class Topic: NSManagedObject, Identifiable {
     @NSManaged public var name: String
     @NSManaged public var slug: String
     @NSManaged public var inferredAt: Date
+    @NSManaged public var paletteKey: String?
     @NSManaged public var entries: NSSet?
 }
 

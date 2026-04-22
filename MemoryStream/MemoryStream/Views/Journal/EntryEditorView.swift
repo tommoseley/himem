@@ -20,8 +20,9 @@ struct EntryDetailView: View {
     @State private var discardAudio = false
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var isCleaningUp = false
-    @State private var showNewTopicAlert = false
+    @State private var showNewTopicSheet = false
     @State private var newTopicName = ""
+    @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
 
     private var currentTopics: [String] {
         topicNames.filter { !removedTopics.contains($0) } + addedTopics.sorted()
@@ -169,7 +170,8 @@ struct EntryDetailView: View {
                                 if !availableToAdd.isEmpty { Divider() }
                                 Button {
                                     newTopicName = ""
-                                    showNewTopicAlert = true
+                                    newTopicColorKey = Crucible.Color.topicPalette[0].key
+                                    showNewTopicSheet = true
                                 } label: {
                                     Label("New Topic…", systemImage: "plus.circle")
                                 }
@@ -302,16 +304,16 @@ struct EntryDetailView: View {
         .fullScreenCover(item: $selectedMedia) { item in
             MediaViewerView(item: item)
         }
-        .alert("New Topic", isPresented: $showNewTopicAlert) {
-            TextField("Topic name", text: $newTopicName)
-            Button("Add") {
-                let name = newTopicName.trimmingCharacters(in: .whitespaces)
-                guard !name.isEmpty else { return }
-                addedTopics.insert(name)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Enter a name for the new topic.")
+        .sheet(isPresented: $showNewTopicSheet) {
+            NewTopicSheet(
+                name: $newTopicName,
+                colorKey: $newTopicColorKey,
+                onAdd: { name, colorKey in
+                    addedTopics.insert(name)
+                    // Store the color choice so chips render correctly before save
+                    TopicPaletteStore.shared.set(key: colorKey, for: name)
+                }
+            )
         }
     }
 
@@ -345,6 +347,72 @@ struct EntryDetailView: View {
             }
             isCleaningUp = false
         }
+    }
+}
+
+// MARK: - Editable Media Thumbnail
+
+// MARK: - New Topic Sheet
+
+struct NewTopicSheet: View {
+    @Binding var name: String
+    @Binding var colorKey: String
+    let onAdd: (String, String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                TextField("Topic name", text: $name)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
+
+                if !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let hue = Crucible.Color.topicHue(forKey: colorKey)
+                    Text(name.trimmingCharacters(in: .whitespaces))
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(hue.bg)
+                        .foregroundStyle(hue.fg)
+                        .clipShape(Capsule())
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("COLOR")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .tracking(0.5)
+                        .foregroundStyle(Crucible.Color.ink3)
+
+                    TopicColorPicker(selectedKey: $colorKey)
+                }
+
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle("New Topic")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        let trimmed = name.trimmingCharacters(in: .whitespaces)
+                        guard !trimmed.isEmpty else { return }
+                        onAdd(trimmed, colorKey)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

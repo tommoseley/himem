@@ -51,6 +51,7 @@
         <attribute name="name" attributeType="String"/>
         <attribute name="slug" attributeType="String"/>
         <attribute name="inferredAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="paletteKey" optional="YES" attributeType="String"/>
         <relationship name="entries" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="topics" inverseEntity="JournalEntry"/>
     </entity>
     <entity name="MediaReference" representedClassName="MediaReference" syncable="YES">

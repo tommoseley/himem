@@ -142,7 +142,7 @@ final class StorageService {
 
     // MARK: - Topic Operations
 
-    func findOrCreateTopic(name: String, context: NSManagedObjectContext? = nil) throws -> Topic {
+    func findOrCreateTopic(name: String, paletteKey: String? = nil, context: NSManagedObjectContext? = nil) throws -> Topic {
         let ctx = context ?? viewContext
         let slug = name.lowercased().replacingOccurrences(of: " ", with: "-")
 
@@ -159,6 +159,7 @@ final class StorageService {
         topic.name = name
         topic.slug = slug
         topic.inferredAt = Date()
+        topic.paletteKey = paletteKey
         try save(context: ctx)
         return topic
     }
