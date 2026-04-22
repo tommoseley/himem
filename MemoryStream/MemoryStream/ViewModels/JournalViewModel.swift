@@ -139,7 +139,8 @@ class JournalViewModel: ObservableObject {
                 }
             }
             for topicName in addedTopicNames {
-                if let topic = try? storage.findOrCreateTopic(name: topicName) {
+                let paletteKey = TopicPaletteStore.shared.key(for: topicName)
+                if let topic = try? storage.findOrCreateTopic(name: topicName, paletteKey: paletteKey) {
                     entry.addToTopics(topic)
                 }
             }
