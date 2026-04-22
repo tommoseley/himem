@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var newTopicColorKey: String = Crucible.Color.topicPalette[0].key
     @State private var showNewTopicSheet = false
     @State private var editingTopic: Topic? = nil
+    @State private var refreshID = UUID()
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("autoSaveDelay") private var autoSaveDelay: Double = 7
 
@@ -40,6 +41,7 @@ struct SettingsView: View {
                         }
                     }
                     .onDelete(perform: deleteTopic)
+                    .id(refreshID)
 
                     Button {
                         newTopicName = ""
@@ -148,6 +150,7 @@ struct SettingsView: View {
         do {
             try storage.save(context: storage.viewContext)
             loadTopics()
+            refreshID = UUID()
         } catch {
             print("Failed to update topic: \(error)")
         }

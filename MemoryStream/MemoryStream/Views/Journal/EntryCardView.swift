@@ -73,7 +73,7 @@ struct EntryCardView: View {
             Text(entry.content)
                 .font(density == .compact ? .subheadline : .body)
                 .lineSpacing(density == .compact ? 2 : 3)
-                .lineLimit(isContentExpanded ? nil : density.contentLineLimit)
+                .lineLimit(isContentExpanded && density != .compact ? nil : density.contentLineLimit)
 
             if density.contentLineLimit != nil && entry.content.count > 120 {
                 Button(isContentExpanded ? "Show less" : "Show more") {

@@ -67,6 +67,11 @@ struct MediaViewerView: View {
         }
 
         if item.mediaType == .video {
+            // Configure audio session for video playback
+            let audioSession = AVAudioSession.sharedInstance()
+            try? audioSession.setCategory(.playback, mode: .moviePlayback)
+            try? audioSession.setActive(true)
+
             let options = PHVideoRequestOptions()
             options.isNetworkAccessAllowed = true
             options.deliveryMode = .automatic
