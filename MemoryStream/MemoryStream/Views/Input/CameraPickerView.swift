@@ -23,18 +23,32 @@ struct CameraPickerView: UIViewControllerRepresentable {
         case .photo:
             picker.mediaTypes = [UTType.image.identifier]
             picker.cameraCaptureMode = .photo
+            picker.videoMaximumDuration = 0
         case .video:
             picker.mediaTypes = [UTType.movie.identifier]
             picker.cameraCaptureMode = .video
+            picker.videoMaximumDuration = 120
         case .both:
             picker.mediaTypes = [UTType.image.identifier, UTType.movie.identifier]
+            picker.videoMaximumDuration = 120
         }
-        picker.videoMaximumDuration = 120
         picker.delegate = context.coordinator
         return picker
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
+        // Re-enforce media types in case SwiftUI reuses the controller
+        switch captureMode {
+        case .photo:
+            uiViewController.mediaTypes = [UTType.image.identifier]
+            uiViewController.cameraCaptureMode = .photo
+        case .video:
+            uiViewController.mediaTypes = [UTType.movie.identifier]
+            uiViewController.cameraCaptureMode = .video
+        case .both:
+            uiViewController.mediaTypes = [UTType.image.identifier, UTType.movie.identifier]
+        }
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onCapture: onCapture, onDismiss: onDismiss)
