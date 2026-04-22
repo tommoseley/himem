@@ -4,6 +4,7 @@ struct ComposerView: View {
     @ObservedObject var composer: ComposerViewModel
     let topics: [String]
     let onCommit: () -> Void
+    var onCameraCapture: ((CameraPickerView.CaptureResult) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var showTextEditor = false
 
@@ -250,6 +251,15 @@ struct ComposerView: View {
         .background(Crucible.Color.paper)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
+        .fullScreenCover(isPresented: $composer.showCamera) {
+            CameraPickerView(
+                captureMode: .both,
+                onCapture: { result in
+                    onCameraCapture?(result)
+                },
+                onDismiss: { composer.showCamera = false }
+            )
+        }
     }
 
     private var activeToolbarType: String? {

@@ -398,18 +398,22 @@ struct InferenceCard: View {
                         Text("Edit")
                             .font(.caption)
                             .fontWeight(.medium)
+                            .foregroundStyle(Crucible.Color.ink)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .overlay(Capsule().stroke(Crucible.Color.hairline, lineWidth: 0.5))
+                            .background(Crucible.Color.sunk)
+                            .clipShape(Capsule())
                     }
 
                     Button(action: { onFeedback(.ignored) }) {
                         Text("Not this time")
                             .font(.caption)
                             .fontWeight(.medium)
+                            .foregroundStyle(Crucible.Color.ink2)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .overlay(Capsule().stroke(Crucible.Color.hairline, lineWidth: 0.5))
+                            .background(Crucible.Color.sunk)
+                            .clipShape(Capsule())
                     }
 
                     Spacer()

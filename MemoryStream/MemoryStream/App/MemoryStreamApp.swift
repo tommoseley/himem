@@ -12,6 +12,7 @@ struct MemoryStreamApp: App {
         WindowGroup {
             JournalView()
                 .environment(\.managedObjectContext, storageService.viewContext)
+                .preferredColorScheme(.light)
         }
     }
 }

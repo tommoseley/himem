@@ -176,7 +176,8 @@ struct JournalView: View {
             ComposerView(
                 composer: composer,
                 topics: viewModel.topics,
-                onCommit: { handleCommit() }
+                onCommit: { handleCommit() },
+                onCameraCapture: { result in handleCameraCapture(result) }
             )
         }
         .sheet(item: $editingEntry) { entry in
@@ -226,13 +227,6 @@ struct JournalView: View {
             if let proposal = albumSync.pendingProposal {
                 Text("Add all media from \"\(proposal.topicName)\" entries to a \"\(proposal.topicName)\" Photos album? Future captures in this topic will be added automatically.")
             }
-        }
-        .fullScreenCover(isPresented: $composer.showCamera) {
-            CameraPickerView(
-                captureMode: .both,
-                onCapture: { result in handleCameraCapture(result) },
-                onDismiss: { composer.showCamera = false }
-            )
         }
         .onAppear {
             Task {
