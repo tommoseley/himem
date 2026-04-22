@@ -60,6 +60,31 @@ enum Crucible {
             static let tint   = SwiftUI.Color(hex: 0xE6EEF8)
         }
 
+        // Topic palette — finite pool of hues users pick from when creating a Topic.
+        // Topics are user data, NEVER hard-coded. We only define the pool.
+        struct TopicHue {
+            let key: String
+            let bg: SwiftUI.Color
+            let fg: SwiftUI.Color
+        }
+
+        static let topicPalette: [TopicHue] = [
+            TopicHue(key: "ember", bg: SwiftUI.Color(hex: 0xFBEAE0), fg: SwiftUI.Color(hex: 0xA53A13)),
+            TopicHue(key: "moss",  bg: SwiftUI.Color(hex: 0xE0EADB), fg: SwiftUI.Color(hex: 0x3E6A2A)),
+            TopicHue(key: "tide",  bg: SwiftUI.Color(hex: 0xDCE7EE), fg: SwiftUI.Color(hex: 0x255A7A)),
+            TopicHue(key: "plum",  bg: SwiftUI.Color(hex: 0xEADDE8), fg: SwiftUI.Color(hex: 0x6B3567)),
+            TopicHue(key: "wheat", bg: SwiftUI.Color(hex: 0xEFE6CF), fg: SwiftUI.Color(hex: 0x7A5A10)),
+            TopicHue(key: "clay",  bg: SwiftUI.Color(hex: 0xEFDDD0), fg: SwiftUI.Color(hex: 0x8A4724)),
+            TopicHue(key: "slate", bg: SwiftUI.Color(hex: 0xDFE1E6), fg: SwiftUI.Color(hex: 0x3B4452)),
+            TopicHue(key: "rose",  bg: SwiftUI.Color(hex: 0xF1DDDD), fg: SwiftUI.Color(hex: 0x8A3A3A)),
+        ]
+
+        /// Deterministic hue for a topic name — hashes the name into the palette.
+        static func topicHue(for name: String) -> TopicHue {
+            let index = abs(name.hashValue) % topicPalette.count
+            return topicPalette[index]
+        }
+
         // Scrim
         static let scrim = SwiftUI.Color(red: 20/255, green: 18/255, blue: 15/255).opacity(0.36)
     }

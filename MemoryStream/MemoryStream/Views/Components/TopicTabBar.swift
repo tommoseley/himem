@@ -7,12 +7,16 @@ struct TopicTabBar: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                TopicTab(label: "All", isSelected: selected == nil) {
+                TopicTab(label: "All", isSelected: selected == nil, hue: nil) {
                     selected = nil
                 }
 
                 ForEach(topics, id: \.self) { topic in
-                    TopicTab(label: topic, isSelected: selected == topic) {
+                    TopicTab(
+                        label: topic,
+                        isSelected: selected == topic,
+                        hue: Crucible.Color.topicHue(for: topic)
+                    ) {
                         selected = topic
                     }
                 }
@@ -25,6 +29,7 @@ struct TopicTabBar: View {
 struct TopicTab: View {
     let label: String
     let isSelected: Bool
+    let hue: Crucible.Color.TopicHue?
     let action: () -> Void
 
     var body: some View {
@@ -34,8 +39,8 @@ struct TopicTab: View {
                 .fontWeight(isSelected ? .semibold : .regular)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .background(isSelected ? Crucible.Color.accentTint : Color.clear)
-                .foregroundStyle(isSelected ? Crucible.Color.accent : .primary)
+                .background(chipBackground)
+                .foregroundStyle(chipForeground)
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
@@ -44,9 +49,16 @@ struct TopicTab: View {
         }
         .buttonStyle(.plain)
     }
-}
 
-#Preview {
-    TopicTabBar(topics: ["Garden", "Combine", "Astro"], selected: .constant(nil))
-        .padding()
+    private var chipBackground: Color {
+        guard isSelected else { return .clear }
+        if let hue { return hue.bg }
+        return Crucible.Color.accentTint // "All" uses accent
+    }
+
+    private var chipForeground: Color {
+        guard isSelected else { return Crucible.Color.ink }
+        if let hue { return hue.fg }
+        return Crucible.Color.accentPressed
+    }
 }

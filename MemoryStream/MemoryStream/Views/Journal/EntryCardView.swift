@@ -47,17 +47,18 @@ struct EntryCardView: View {
                 }
             }
 
-            // Topic chips
+            // Topic chips — palette-colored
             if !entry.topicNames.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(entry.topicNames, id: \.self) { topic in
+                        let hue = Crucible.Color.topicHue(for: topic)
                         Text(topic)
                             .font(.caption2)
-                            .fontWeight(.medium)
+                            .fontWeight(.semibold)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(Crucible.Color.accentTint)
-                            .foregroundStyle(Crucible.Color.accent)
+                            .background(hue.bg)
+                            .foregroundStyle(hue.fg)
                             .clipShape(Capsule())
                     }
                 }
@@ -88,8 +89,8 @@ struct EntryCardView: View {
                 ProcessingStatusCard(status: processingStatus, progressDescription: entry.progressDescription)
             }
 
-            // Entity tags — smart filtered: hide tags whose value already appears in the content
-            if density != .compact && !smartTags.isEmpty {
+            // Entity tags — only visible in Rich mode (search-only in Standard/Compact)
+            if density == .rich && !smartTags.isEmpty {
                 EntityTagsRow(tags: smartTags, onEntityTap: onEntityTap)
             }
 
