@@ -125,6 +125,14 @@ struct JournalView: View {
                             }
                             .contentShape(Rectangle())
                             .onTapGesture { selectedEntry = entry }
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button {
+                                    selectedEntry = entry
+                                } label: {
+                                    Label("View", systemImage: "eye")
+                                }
+                                .tint(.blue)
+                            }
                         }
                     } header: {
                         Text(group.label)
