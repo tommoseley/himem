@@ -209,16 +209,22 @@ struct StatusBadge: View {
 
         var foreground: Color {
             switch self {
-            case .processing: return Crucible.Color.warning
-            case .confirmed: return Crucible.Color.success
-            case .failed: return Crucible.Color.danger
-            case .edited: return Crucible.Color.info
-            case .ignored: return Color(Crucible.Color.ink3)
+            case .processing: return Crucible.Color.Status.inferringFg
+            case .confirmed: return Crucible.Color.Status.confirmedFg
+            case .failed: return Crucible.Color.Status.failedFg
+            case .edited: return Crucible.Color.Status.editedFg
+            case .ignored: return Crucible.Color.Status.draftFg
             }
         }
 
         var background: Color {
-            foreground.opacity(0.12)
+            switch self {
+            case .processing: return Crucible.Color.Status.inferringBg
+            case .confirmed: return Crucible.Color.Status.confirmedBg
+            case .failed: return Crucible.Color.Status.failedBg
+            case .edited: return Crucible.Color.Status.editedBg
+            case .ignored: return Crucible.Color.Status.draftBg
+            }
         }
     }
 
@@ -329,29 +335,38 @@ struct InferenceCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("APP IS INFERRING")
-                .font(.caption2)
-                .fontWeight(.bold)
-                .tracking(0.5)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.caption2)
+                    .foregroundStyle(Crucible.Color.AI.base)
+                Text("APP IS INFERRING")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .tracking(0.5)
+                    .foregroundStyle(Crucible.Color.AI.base)
+            }
 
             Text(summary)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Crucible.Color.ink2)
                 .lineSpacing(2)
 
             if feedbackState == nil {
                 // Pending — show feedback buttons
                 HStack(spacing: 8) {
                     Button(action: { onFeedback(.confirmed) }) {
-                        Text("Looks right")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color(.label))
-                            .foregroundColor(Color(.systemBackground))
-                            .clipShape(Capsule())
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 10))
+                            Text("Confirm")
+                        }
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Crucible.Color.AI.base)
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
                     }
 
                     Button(action: { onFeedback(.edited) }) {
@@ -360,16 +375,16 @@ struct InferenceCard: View {
                             .fontWeight(.medium)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .overlay(Capsule().stroke(Color(.separator), lineWidth: 0.5))
+                            .overlay(Capsule().stroke(Crucible.Color.hairline, lineWidth: 0.5))
                     }
 
                     Button(action: { onFeedback(.ignored) }) {
-                        Text("Ignore")
+                        Text("Not this time")
                             .font(.caption)
                             .fontWeight(.medium)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .overlay(Capsule().stroke(Color(.separator), lineWidth: 0.5))
+                            .overlay(Capsule().stroke(Crucible.Color.hairline, lineWidth: 0.5))
                     }
 
                     Spacer()
@@ -377,10 +392,10 @@ struct InferenceCard: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Crucible.Color.sunk)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Crucible.Color.AI.tint)
+        .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.md))
     }
 }
 
@@ -540,9 +555,9 @@ extension InferenceSummary.FeedbackState {
 
     var color: Color {
         switch self {
-        case .confirmed: return Crucible.Color.success
-        case .edited:    return Crucible.Color.info
-        case .ignored:   return Color(Crucible.Color.ink3)
+        case .confirmed: return Crucible.Color.Status.confirmedFg
+        case .edited:    return Crucible.Color.Status.editedFg
+        case .ignored:   return Crucible.Color.Status.draftFg
         }
     }
 }

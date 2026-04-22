@@ -83,12 +83,14 @@ struct EntryDetailView: View {
                                     ProgressView()
                                         .scaleEffect(0.7)
                                 } else {
-                                    Image(systemName: "wand.and.stars")
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 12))
                                 }
                                 Text("Clean up text")
                             }
-                            .font(.caption)
-                            .foregroundStyle(.blue)
+                            .font(.footnote)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Crucible.Color.AI.base)
                         }
                         .buttonStyle(.plain)
                         .disabled(isCleaningUp)

@@ -36,6 +36,30 @@ enum Crucible {
         static let danger  = SwiftUI.Color(hex: 0xB8311E)
         static let info    = SwiftUI.Color(hex: 0x1E5C8E)
 
+        // Status — entry lifecycle chips (specific bg/fg pairs)
+        enum Status {
+            static let editedBg    = SwiftUI.Color(hex: 0xE6EEF8)
+            static let editedFg    = SwiftUI.Color(hex: 0x1E5C8E)
+            static let processedBg = SwiftUI.Color(hex: 0xDDEBE3)
+            static let processedFg = SwiftUI.Color(hex: 0x2F7D4F)
+            static let confirmedBg = SwiftUI.Color(hex: 0xDDEBE3)
+            static let confirmedFg = SwiftUI.Color(hex: 0x2F7D4F)
+            static let draftBg     = SwiftUI.Color(hex: 0xEEE9E0)
+            static let draftFg     = SwiftUI.Color(hex: 0x1A1612).opacity(0.64)
+            static let failedBg    = SwiftUI.Color(hex: 0xF6E1DD)
+            static let failedFg    = SwiftUI.Color(hex: 0xB8311E)
+            static let inferringBg = SwiftUI.Color(hex: 0xE6EEF8)
+            static let inferringFg = SwiftUI.Color(hex: 0x1E5C8E)
+        }
+
+        // AI — everything the model does wears this blue.
+        // Distinct from ember (user intent) and status.info (passive).
+        enum AI {
+            static let base   = SwiftUI.Color(hex: 0x1E5C8E)
+            static let strong = SwiftUI.Color(hex: 0x144674)
+            static let tint   = SwiftUI.Color(hex: 0xE6EEF8)
+        }
+
         // Scrim
         static let scrim = SwiftUI.Color(red: 20/255, green: 18/255, blue: 15/255).opacity(0.36)
     }
