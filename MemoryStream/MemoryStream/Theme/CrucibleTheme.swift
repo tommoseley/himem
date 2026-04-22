@@ -69,14 +69,26 @@ enum Crucible {
         }
 
         static let topicPalette: [TopicHue] = [
-            TopicHue(key: "ember", bg: SwiftUI.Color(hex: 0xFBEAE0), fg: SwiftUI.Color(hex: 0xA53A13)),
-            TopicHue(key: "moss",  bg: SwiftUI.Color(hex: 0xE0EADB), fg: SwiftUI.Color(hex: 0x3E6A2A)),
-            TopicHue(key: "tide",  bg: SwiftUI.Color(hex: 0xDCE7EE), fg: SwiftUI.Color(hex: 0x255A7A)),
-            TopicHue(key: "plum",  bg: SwiftUI.Color(hex: 0xEADDE8), fg: SwiftUI.Color(hex: 0x6B3567)),
-            TopicHue(key: "wheat", bg: SwiftUI.Color(hex: 0xEFE6CF), fg: SwiftUI.Color(hex: 0x7A5A10)),
-            TopicHue(key: "clay",  bg: SwiftUI.Color(hex: 0xEFDDD0), fg: SwiftUI.Color(hex: 0x8A4724)),
-            TopicHue(key: "slate", bg: SwiftUI.Color(hex: 0xDFE1E6), fg: SwiftUI.Color(hex: 0x3B4452)),
-            TopicHue(key: "rose",  bg: SwiftUI.Color(hex: 0xF1DDDD), fg: SwiftUI.Color(hex: 0x8A3A3A)),
+            // Row 1 · warms
+            TopicHue(key: "ember",      bg: SwiftUI.Color(hex: 0xFBEAE0), fg: SwiftUI.Color(hex: 0xA53A13)),
+            TopicHue(key: "terracotta", bg: SwiftUI.Color(hex: 0xF4DED0), fg: SwiftUI.Color(hex: 0x8A4724)),
+            TopicHue(key: "clay",       bg: SwiftUI.Color(hex: 0xEFDDD0), fg: SwiftUI.Color(hex: 0x7A3A1C)),
+            TopicHue(key: "amber",      bg: SwiftUI.Color(hex: 0xF3E4C3), fg: SwiftUI.Color(hex: 0x8A5A0E)),
+            // Row 2 · yellows & greens
+            TopicHue(key: "wheat",      bg: SwiftUI.Color(hex: 0xEFE6CF), fg: SwiftUI.Color(hex: 0x7A5A10)),
+            TopicHue(key: "sage",       bg: SwiftUI.Color(hex: 0xDFE7D9), fg: SwiftUI.Color(hex: 0x4A6A3A)),
+            TopicHue(key: "moss",       bg: SwiftUI.Color(hex: 0xE0EADB), fg: SwiftUI.Color(hex: 0x3E6A2A)),
+            TopicHue(key: "pine",       bg: SwiftUI.Color(hex: 0xD6E0D3), fg: SwiftUI.Color(hex: 0x284A1F)),
+            // Row 3 · blues
+            TopicHue(key: "sea",        bg: SwiftUI.Color(hex: 0xD6E5E3), fg: SwiftUI.Color(hex: 0x1F5C56)),
+            TopicHue(key: "tide",       bg: SwiftUI.Color(hex: 0xDCE7EE), fg: SwiftUI.Color(hex: 0x255A7A)),
+            TopicHue(key: "indigo",     bg: SwiftUI.Color(hex: 0xDCDFEE), fg: SwiftUI.Color(hex: 0x2E3E7C)),
+            TopicHue(key: "violet",     bg: SwiftUI.Color(hex: 0xE0DAEC), fg: SwiftUI.Color(hex: 0x4A3577)),
+            // Row 4 · purples, roses, neutrals
+            TopicHue(key: "plum",       bg: SwiftUI.Color(hex: 0xEADDE8), fg: SwiftUI.Color(hex: 0x6B3567)),
+            TopicHue(key: "rose",       bg: SwiftUI.Color(hex: 0xF1DDDD), fg: SwiftUI.Color(hex: 0x8A3A3A)),
+            TopicHue(key: "sand",       bg: SwiftUI.Color(hex: 0xE6E0D6), fg: SwiftUI.Color(hex: 0x5A4A30)),
+            TopicHue(key: "slate",      bg: SwiftUI.Color(hex: 0xDFE1E6), fg: SwiftUI.Color(hex: 0x3B4452)),
         ]
 
         /// Returns the hue for a topic. Uses the stored paletteKey if one exists,
@@ -176,14 +188,15 @@ final class TopicPaletteStore {
 
 // MARK: - Topic Color Picker
 
-/// Reusable view showing the 8 palette hues as tappable circles.
+/// Reusable view showing the 16 palette hues as tappable circles.
+/// Selection is a ring (not a check) — ring = selected, check = completed.
 struct TopicColorPicker: View {
     @Binding var selectedKey: String
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 4)
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 12) {
+        LazyVGrid(columns: columns, spacing: 14) {
             ForEach(Crucible.Color.topicPalette, id: \.key) { hue in
                 Button {
                     selectedKey = hue.key
@@ -191,20 +204,124 @@ struct TopicColorPicker: View {
                     ZStack {
                         Circle()
                             .fill(hue.bg)
-                            .frame(width: 44, height: 44)
-                        Circle()
-                            .fill(hue.fg)
-                            .frame(width: 24, height: 24)
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Circle()
+                                    .stroke(hue.fg.opacity(0.13), lineWidth: 1)
+                            )
                         if selectedKey == hue.key {
                             Circle()
-                                .stroke(hue.fg, lineWidth: 2.5)
-                                .frame(width: 44, height: 44)
+                                .stroke(hue.fg, lineWidth: 2)
+                                .frame(width: 50, height: 50)
                         }
                     }
+                    .frame(width: 50, height: 50)
                 }
                 .buttonStyle(.plain)
             }
         }
+    }
+}
+
+// MARK: - Topic Editor Sheet
+
+/// Edit an existing topic: rename, change color, or delete.
+struct TopicEditorSheet: View {
+    let topic: Topic
+    let onSave: (String, String) -> Void   // newName, newPaletteKey
+    let onDelete: () -> Void
+
+    @State private var name: String = ""
+    @State private var colorKey: String = ""
+    @State private var showDeleteConfirm = false
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                TextField("Topic name", text: $name)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
+
+                if !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let hue = Crucible.Color.topicHue(forKey: colorKey)
+                    Text(name.trimmingCharacters(in: .whitespaces))
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(hue.bg)
+                        .foregroundStyle(hue.fg)
+                        .clipShape(Capsule())
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("COLOR")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .tracking(0.5)
+                        .foregroundStyle(Crucible.Color.ink3)
+
+                    TopicColorPicker(selectedKey: $colorKey)
+                }
+
+                Spacer()
+
+                VStack(spacing: 4) {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Text("Delete Topic")
+                            .font(.footnote)
+                            .fontWeight(.semibold)
+                    }
+                    Text("\(topic.entryCount) entries will keep their text but lose this topic.")
+                        .font(.caption)
+                        .foregroundStyle(Crucible.Color.ink3)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.bottom, 8)
+            }
+            .padding(24)
+            .navigationTitle("Edit Topic")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let trimmed = name.trimmingCharacters(in: .whitespaces)
+                        guard !trimmed.isEmpty else { return }
+                        onSave(trimmed, colorKey)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(!hasChanges || name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .alert("Delete Topic?", isPresented: $showDeleteConfirm) {
+                Button("Delete", role: .destructive) {
+                    onDelete()
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("\(topic.entryCount) entries will keep their text but lose the \"\(topic.name)\" topic assignment.")
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .onAppear {
+            name = topic.name
+            colorKey = topic.paletteKey ?? Crucible.Color.topicHue(for: topic.name).key
+        }
+    }
+
+    private var hasChanges: Bool {
+        let currentKey = topic.paletteKey ?? Crucible.Color.topicHue(for: topic.name).key
+        return name.trimmingCharacters(in: .whitespaces) != topic.name || colorKey != currentKey
     }
 }
 

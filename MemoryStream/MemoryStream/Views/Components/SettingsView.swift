@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var newTopicName: String = ""
     @State private var newTopicColorKey: String = Crucible.Color.topicPalette[0].key
     @State private var showNewTopicSheet = false
+    @State private var editingTopic: Topic? = nil
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("autoSaveDelay") private var autoSaveDelay: Double = 7
 
@@ -18,16 +19,24 @@ struct SettingsView: View {
                 // MARK: - Topics
                 Section {
                     ForEach(topics) { topic in
-                        HStack(spacing: 10) {
-                            let hue = Crucible.Color.topicHue(for: topic.name)
-                            Circle()
-                                .fill(hue.fg)
-                                .frame(width: 10, height: 10)
-                            Text(topic.name)
-                            Spacer()
-                            Text("\(topic.entryCount) entries")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        Button {
+                            editingTopic = topic
+                        } label: {
+                            HStack(spacing: 10) {
+                                let hue = Crucible.Color.topicHue(for: topic.name)
+                                Circle()
+                                    .fill(hue.fg)
+                                    .frame(width: 10, height: 10)
+                                Text(topic.name)
+                                    .foregroundStyle(Crucible.Color.ink)
+                                Spacer()
+                                Text("\(topic.entryCount) \(topic.entryCount == 1 ? "entry" : "entries")")
+                                    .font(.caption)
+                                    .foregroundStyle(Crucible.Color.ink3)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundStyle(Crucible.Color.ink4)
+                            }
                         }
                     }
                     .onDelete(perform: deleteTopic)
@@ -96,6 +105,19 @@ struct SettingsView: View {
                     }
                 )
             }
+            .sheet(item: $editingTopic) { topic in
+                TopicEditorSheet(
+                    topic: topic,
+                    onSave: { newName, newColorKey in
+                        updateTopic(topic, name: newName, paletteKey: newColorKey)
+                    },
+                    onDelete: {
+                        storage.viewContext.delete(topic)
+                        try? storage.save(context: storage.viewContext)
+                        loadTopics()
+                    }
+                )
+            }
         }
     }
 
@@ -107,6 +129,19 @@ struct SettingsView: View {
             topics = try storage.viewContext.fetch(request)
         } catch {
             print("Failed to load topics: \(error)")
+        }
+    }
+
+    private func updateTopic(_ topic: Topic, name: String, paletteKey: String) {
+        topic.name = name
+        topic.slug = name.lowercased().replacingOccurrences(of: " ", with: "-")
+        topic.paletteKey = paletteKey
+        TopicPaletteStore.shared.set(key: paletteKey, for: name)
+        do {
+            try storage.save(context: storage.viewContext)
+            loadTopics()
+        } catch {
+            print("Failed to update topic: \(error)")
         }
     }
 
