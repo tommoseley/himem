@@ -263,12 +263,16 @@ struct JournalView: View {
                 tags: entry.tags,
                 audioFilePath: entry.audioFilePath,
                 mediaItems: entry.mediaItems,
-                onSave: { entryId, newContent, removedTagIds, removedMediaIds, discardAudio in
+                topicNames: entry.topicNames,
+                allTopics: viewModel.topics,
+                onSave: { entryId, newContent, removedTagIds, removedMediaIds, addedTopics, removedTopics, discardAudio in
                     viewModel.editEntry(
                         entryId: entryId,
                         newContent: newContent,
                         removedTagIds: removedTagIds,
                         removedMediaIds: removedMediaIds,
+                        addedTopicNames: addedTopics,
+                        removedTopicNames: removedTopics,
                         discardAudio: discardAudio
                     )
                 }

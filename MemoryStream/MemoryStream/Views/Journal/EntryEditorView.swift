@@ -6,20 +6,38 @@ struct EntryDetailView: View {
     let tags: [TagDisplayModel]
     let audioFilePath: String?
     let mediaItems: [MediaDisplayItem]
-    let onSave: (UUID, String, Set<UUID>, Set<UUID>, Bool) -> Void // entryId, text, removedTagIds, removedMediaIds, discardAudio
+    let topicNames: [String]
+    let allTopics: [String]
+    let onSave: (UUID, String, Set<UUID>, Set<UUID>, Set<String>, Set<String>, Bool) -> Void
+    // entryId, text, removedTagIds, removedMediaIds, addedTopics, removedTopics, discardAudio
 
     @Environment(\.dismiss) private var dismiss
     @State private var editedText = ""
     @State private var removedTagIds: Set<UUID> = []
     @State private var removedMediaIds: Set<UUID> = []
+    @State private var addedTopics: Set<String> = []
+    @State private var removedTopics: Set<String> = []
     @State private var discardAudio = false
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var isCleaningUp = false
+
+    private var currentTopics: [String] {
+        topicNames.filter { !removedTopics.contains($0) } + addedTopics.sorted()
+    }
+
+    private var availableToAdd: [String] {
+        allTopics.filter { topic in
+            !topicNames.contains(topic) && !addedTopics.contains(topic)
+            || removedTopics.contains(topic)
+        }
+    }
 
     private var hasChanges: Bool {
         editedText != originalText
             || !removedTagIds.isEmpty
             || !removedMediaIds.isEmpty
+            || !addedTopics.isEmpty
+            || !removedTopics.isEmpty
             || discardAudio
     }
 
@@ -99,6 +117,72 @@ struct EntryDetailView: View {
 
                         Spacer()
                     }
+
+                    // Topics
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("TOPICS")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .tracking(0.5)
+                            .foregroundStyle(Crucible.Color.ink3)
+
+                        FlowLayout(spacing: 6) {
+                            ForEach(currentTopics, id: \.self) { topic in
+                                HStack(spacing: 4) {
+                                    Text(topic)
+                                    Button {
+                                        if addedTopics.contains(topic) {
+                                            addedTopics.remove(topic)
+                                        } else {
+                                            removedTopics.insert(topic)
+                                        }
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 8, weight: .bold))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Crucible.Color.accentTint)
+                                .foregroundStyle(Crucible.Color.accent)
+                                .clipShape(Capsule())
+                            }
+
+                            // Add topic menu
+                            if !availableToAdd.isEmpty {
+                                Menu {
+                                    ForEach(availableToAdd, id: \.self) { topic in
+                                        Button(topic) {
+                                            if removedTopics.contains(topic) {
+                                                removedTopics.remove(topic)
+                                            } else {
+                                                addedTopics.insert(topic)
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 9, weight: .bold))
+                                        Text("Add")
+                                    }
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Crucible.Color.sunk)
+                                    .foregroundStyle(Crucible.Color.ink2)
+                                    .clipShape(Capsule())
+                                }
+                            }
+                        }
+                    }
+                    .padding()
 
                     // Entity tags
                     if !tags.isEmpty {
@@ -199,7 +283,7 @@ struct EntryDetailView: View {
                     Button("Save Changes") {
                         let trimmed = editedText.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmed.isEmpty else { return }
-                        onSave(entryId, trimmed, removedTagIds, removedMediaIds, discardAudio)
+                        onSave(entryId, trimmed, removedTagIds, removedMediaIds, addedTopics, removedTopics, discardAudio)
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -216,6 +300,9 @@ struct EntryDetailView: View {
     private var statusText: String {
         if editedText != originalText {
             return "Saving will update the entry and re-run AI processing."
+        }
+        if !addedTopics.isEmpty || !removedTopics.isEmpty {
+            return "Topic changes will be saved."
         }
         if !removedMediaIds.isEmpty {
             return "\(removedMediaIds.count) media item\(removedMediaIds.count == 1 ? "" : "s") will be removed on save."

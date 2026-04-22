@@ -91,7 +91,7 @@ class JournalViewModel: ObservableObject {
 
     // MARK: - Edit and Re-process
 
-    func editEntry(entryId: UUID, newContent: String, removedTagIds: Set<UUID> = [], removedMediaIds: Set<UUID> = [], discardAudio: Bool = false) {
+    func editEntry(entryId: UUID, newContent: String, removedTagIds: Set<UUID> = [], removedMediaIds: Set<UUID> = [], addedTopicNames: Set<String> = [], removedTopicNames: Set<String> = [], discardAudio: Bool = false) {
         guard !useMockData else { return }
 
         let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
@@ -127,6 +127,20 @@ class JournalViewModel: ObservableObject {
                         }
                         storage.viewContext.delete(ref)
                     }
+                }
+            }
+
+            // Add/remove topics
+            if !removedTopicNames.isEmpty {
+                if let topics = entry.topics as? Set<Topic> {
+                    for topic in topics where removedTopicNames.contains(topic.name) {
+                        entry.removeFromTopics(topic)
+                    }
+                }
+            }
+            for topicName in addedTopicNames {
+                if let topic = try? storage.findOrCreateTopic(name: topicName) {
+                    entry.addToTopics(topic)
                 }
             }
 
