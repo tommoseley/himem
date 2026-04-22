@@ -20,6 +20,8 @@ struct EntryDetailView: View {
     @State private var discardAudio = false
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var isCleaningUp = false
+    @State private var showNewTopicAlert = false
+    @State private var newTopicName = ""
 
     private var currentTopics: [String] {
         topicNames.filter { !removedTopics.contains($0) } + addedTopics.sorted()
@@ -154,31 +156,36 @@ struct EntryDetailView: View {
                             }
 
                             // Add topic menu
-                            if !availableToAdd.isEmpty {
-                                Menu {
-                                    ForEach(availableToAdd, id: \.self) { topic in
-                                        Button(topic) {
-                                            if removedTopics.contains(topic) {
-                                                removedTopics.remove(topic)
-                                            } else {
-                                                addedTopics.insert(topic)
-                                            }
+                            Menu {
+                                ForEach(availableToAdd, id: \.self) { topic in
+                                    Button(topic) {
+                                        if removedTopics.contains(topic) {
+                                            removedTopics.remove(topic)
+                                        } else {
+                                            addedTopics.insert(topic)
                                         }
                                     }
-                                } label: {
-                                    HStack(spacing: 3) {
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 9, weight: .bold))
-                                        Text("Add")
-                                    }
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(Crucible.Color.sunk)
-                                    .foregroundStyle(Crucible.Color.ink2)
-                                    .clipShape(Capsule())
                                 }
+                                if !availableToAdd.isEmpty { Divider() }
+                                Button {
+                                    newTopicName = ""
+                                    showNewTopicAlert = true
+                                } label: {
+                                    Label("New Topic…", systemImage: "plus.circle")
+                                }
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 9, weight: .bold))
+                                    Text("Add")
+                                }
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Crucible.Color.sunk)
+                                .foregroundStyle(Crucible.Color.ink2)
+                                .clipShape(Capsule())
                             }
                         }
                     }
@@ -294,6 +301,17 @@ struct EntryDetailView: View {
         .onAppear { editedText = originalText }
         .fullScreenCover(item: $selectedMedia) { item in
             MediaViewerView(item: item)
+        }
+        .alert("New Topic", isPresented: $showNewTopicAlert) {
+            TextField("Topic name", text: $newTopicName)
+            Button("Add") {
+                let name = newTopicName.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty else { return }
+                addedTopics.insert(name)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter a name for the new topic.")
         }
     }
 
