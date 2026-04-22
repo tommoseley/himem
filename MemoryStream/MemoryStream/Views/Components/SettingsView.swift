@@ -133,10 +133,18 @@ struct SettingsView: View {
     }
 
     private func updateTopic(_ topic: Topic, name: String, paletteKey: String) {
+        let oldName = topic.name
         topic.name = name
         topic.slug = name.lowercased().replacingOccurrences(of: " ", with: "-")
         topic.paletteKey = paletteKey
+
+        // Migrate string-keyed caches if name changed
         TopicPaletteStore.shared.set(key: paletteKey, for: name)
+        if oldName != name {
+            TopicPaletteStore.shared.remove(for: oldName)
+            AlbumSyncService.shared.migrateTopicName(from: oldName, to: name)
+        }
+
         do {
             try storage.save(context: storage.viewContext)
             loadTopics()

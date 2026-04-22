@@ -31,6 +31,18 @@ final class AlbumSyncService: ObservableObject {
         syncedTopics.contains(topicName)
     }
 
+    /// Migrate string-keyed caches when a topic is renamed.
+    func migrateTopicName(from oldName: String, to newName: String) {
+        if syncedTopics.contains(oldName) {
+            syncedTopics.remove(oldName)
+            syncedTopics.insert(newName)
+        }
+        if offeredTopics.contains(oldName) {
+            offeredTopics.remove(oldName)
+            offeredTopics.insert(newName)
+        }
+    }
+
     // MARK: - Propose / Approve / Reject
 
     func proposeIfNeeded(topicName: String) {

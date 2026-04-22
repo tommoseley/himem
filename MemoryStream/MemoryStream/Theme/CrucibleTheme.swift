@@ -175,6 +175,10 @@ final class TopicPaletteStore {
         map[topicName] = key
     }
 
+    func remove(for topicName: String) {
+        map.removeValue(forKey: topicName)
+    }
+
     func loadFromCoreData() {
         let request = NSFetchRequest<Topic>(entityName: "Topic")
         guard let topics = try? StorageService.shared.viewContext.fetch(request) else { return }
