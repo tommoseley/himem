@@ -42,7 +42,8 @@ class JournalViewModel: ObservableObject {
         content: String,
         inputType: JournalEntry.InputType,
         audioFilePath: String? = nil,
-        mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
+        mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = [],
+        topicName: String? = nil
     ) {
         if useMockData {
             saveMockEntry(content: content, inputType: inputType)
@@ -54,6 +55,14 @@ class JournalViewModel: ObservableObject {
             entry.audioFilePath = audioFilePath
             try storage.save(context: storage.viewContext)
             let _ = try storage.createProcessingTask(for: entry)
+
+            // Assign topic if provided
+            if let topicName {
+                let paletteKey = TopicPaletteStore.shared.key(for: topicName)
+                let topic = try storage.findOrCreateTopic(name: topicName, paletteKey: paletteKey)
+                entry.addToTopics(topic)
+                try storage.save(context: storage.viewContext)
+            }
 
             // Create MediaReference records for any captured media
             var savedRefs: [MediaReference] = []
@@ -190,6 +199,76 @@ class JournalViewModel: ObservableObject {
             }
         } catch {
             print("Failed to edit entry: \(error)")
+        }
+    }
+
+    // MARK: - Append to Existing Entry
+
+    func appendToEntry(entryId: UUID, additionalContent: String, audioFilePath: String? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []) {
+        guard !useMockData else { return }
+
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
+        request.fetchLimit = 1
+
+        do {
+            guard let entry = try storage.viewContext.fetch(request).first else { return }
+
+            // Append text content
+            let trimmed = additionalContent.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                entry.content = entry.content + "\n\n" + trimmed
+            }
+
+            // Set audio if provided
+            if let audioFilePath {
+                entry.audioFilePath = audioFilePath
+            }
+
+            // Create new MediaReference records
+            var savedRefs: [MediaReference] = []
+            for capture in mediaCaptures {
+                let ref = try storage.createMediaReference(
+                    for: entry,
+                    localIdentifier: capture.localIdentifier,
+                    mediaType: capture.mediaType
+                )
+                savedRefs.append(ref)
+            }
+
+            // Re-process with updated content
+            if let tasks = entry.processingTasks as? Set<ProcessingTask> {
+                for task in tasks { storage.viewContext.delete(task) }
+            }
+            if let entities = entry.extractedEntities as? Set<ExtractedEntity> {
+                for entity in entities { storage.viewContext.delete(entity) }
+            }
+            if let summary = entry.inferenceSummary {
+                storage.viewContext.delete(summary)
+            }
+
+            let _ = try storage.createProcessingTask(for: entry)
+            try storage.save(context: storage.viewContext)
+            loadEntries()
+
+            // Cache thumbnails in background
+            if !savedRefs.isEmpty {
+                Task.detached {
+                    for ref in savedRefs {
+                        let filename = await ThumbnailService.shared.cacheThumbnail(for: ref.osIdentifier)
+                        if let filename {
+                            try? StorageService.shared.updateThumbnailFilename(ref, filename: filename)
+                        }
+                    }
+                }
+            }
+
+            // Re-process
+            Task.detached { [processingEngine] in
+                await processingEngine.processEntry(entry)
+            }
+        } catch {
+            print("Failed to append to entry: \(error)")
         }
     }
 

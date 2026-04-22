@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MediaThumbnailView: View {
     let item: MediaDisplayItem
+    var size: CGFloat = 72
     var onTap: () -> Void
 
     @State private var thumbnail: UIImage? = nil
@@ -22,7 +23,7 @@ struct MediaThumbnailView: View {
                         ProgressView()
                     }
                 }
-                .frame(width: 72, height: 72)
+                .frame(width: size, height: size)
                 .background(Color(.tertiarySystemGroupedBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 

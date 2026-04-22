@@ -7,30 +7,13 @@ struct JournalView: View {
     @StateObject private var cameraService = CameraService()
     @StateObject private var topicApproval = TopicApprovalService.shared
     @StateObject private var albumSync = AlbumSyncService.shared
+    @StateObject private var composer = ComposerViewModel()
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
-    @AppStorage("autoSaveDelay") private var autoSaveDelay: Double = 7
     @AppStorage("cardDensity") private var cardDensityRaw: String = CardDensity.standard.rawValue
     @State private var showSearch = false
     @State private var showSettings = false
-    @State private var showCamera = false
-    @State private var cameraMode: CameraPickerView.CaptureMode = .both
-    @State private var showTextEntry = false
-    @State private var showFABOptions = false
     @State private var editingEntry: EntryDisplayModel? = nil
     @State private var speechErrorMessage: String? = nil
-    @State private var pendingMediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
-
-    // Auto-save countdown
-    @State private var autoSaveProgress: Double = 0   // 0 = idle, 0…1 = counting
-    @State private var isCountingDown = false
-    @State private var countdownIsForVoice = false
-    @State private var countdownVoiceText = ""
-    @State private var countdownVoiceAudioPath: String? = nil
-
-    // Text entry sheet context (set when opening sheet, from either long-press or cancelled countdown)
-    @State private var textEntryInitialText = ""
-    @State private var textEntryIsForVoice = false
-    @State private var textEntryVoiceAudioPath: String? = nil
     @State private var entityFilter: String? = nil
 
     private var cardDensity: CardDensity {
@@ -99,7 +82,7 @@ struct JournalView: View {
                         Text("No entries yet")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Text("Tap the mic button to record, or hold it for more options.")
+                        Text("Tap + to create a memory, or hold for hands-free voice.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .multilineTextAlignment(.center)
@@ -121,6 +104,12 @@ struct JournalView: View {
                                 },
                                 onEntityTap: { value in
                                     withAnimation { entityFilter = value }
+                                },
+                                onAppend: { entry in
+                                    composer.speechService = speechService
+                                    composer.cameraService = cameraService
+                                    composer.existingMedia = entry.mediaItems
+                                    composer.open(mode: .append(entryId: entry.id, title: entry.displayTitle))
                                 }
                             )
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
@@ -155,76 +144,25 @@ struct JournalView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .safeAreaInset(edge: .bottom) {
-                Color.clear.frame(height: 110)
+                Color.clear.frame(height: 90)
             }
         }
         .background(Crucible.Color.paper)
 
-        // Dim overlay — tap outside to dismiss FAB options
-        if showFABOptions {
-            Crucible.Color.scrim
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        showFABOptions = false
-                    }
-                }
+        // Composer FAB
+        ComposerFAB(isOpen: composer.isPresented) {
+            composer.speechService = speechService
+            composer.cameraService = cameraService
+            composer.open(mode: .new)
+        } onLongPress: {
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            composer.speechService = speechService
+            composer.cameraService = cameraService
+            composer.open(mode: .new, withRecording: true)
         }
+        .padding(.trailing, 14)
+        .padding(.bottom, 14)
 
-        // Live transcription card
-        if speechService.isRecording {
-            VStack {
-                Spacer()
-                HStack(alignment: .top, spacing: 10) {
-                    // Pulsing red dot
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 8, height: 8)
-                        .padding(.top, 5)
-                        .opacity(speechService.transcribedText.isEmpty ? 1 : 0.7)
-
-                    if speechService.transcribedText.isEmpty {
-                        Text("Listening...")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .italic()
-                    } else {
-                        Text(speechService.transcribedText)
-                            .font(.subheadline)
-                            .lineSpacing(3)
-                            .frame(maxHeight: 120)
-                    }
-                    Spacer()
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .shadow(color: .black.opacity(0.08), radius: 6, y: 3)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 90)
-            }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: speechService.isRecording)
-        }
-
-        // FAB
-        JournalFAB(
-            isRecording: speechService.isRecording,
-            pendingMediaCount: pendingMediaCaptures.count,
-            autoSaveProgress: autoSaveProgress,
-            showOptions: $showFABOptions,
-            onMicTap: { handleFABTap() },
-            onTextTap: {
-                textEntryInitialText = ""
-                textEntryIsForVoice = false
-                showTextEntry = true
-            },
-            onPhotoTap: { cameraMode = .photo; handleCameraTap() },
-            onVideoTap: { cameraMode = .video; handleCameraTap() }
-        )
-        .padding(.trailing, 20)
-        .padding(.bottom, 20)
         } // ZStack
         .sheet(isPresented: $showSearch) {
             SearchView()
@@ -232,29 +170,14 @@ struct JournalView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
-        .sheet(isPresented: $showTextEntry) {
-            TextEntrySheet(
-                initialText: textEntryInitialText,
-                pendingMediaCount: pendingMediaCaptures.count
-            ) { text in
-                let content = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? "No text provided."
-                    : text
-                if textEntryIsForVoice {
-                    viewModel.saveEntry(
-                        content: content,
-                        inputType: .voiceInApp,
-                        audioFilePath: textEntryVoiceAudioPath
-                    )
-                    textEntryIsForVoice = false
-                    textEntryVoiceAudioPath = nil
-                } else {
-                    let inputType: JournalEntry.InputType = pendingMediaCaptures.isEmpty ? .typed : .camera
-                    viewModel.saveEntry(content: content, inputType: inputType, mediaCaptures: pendingMediaCaptures)
-                    pendingMediaCaptures = []
-                }
-                textEntryInitialText = ""
-            }
+        .sheet(isPresented: $composer.isPresented, onDismiss: {
+            composer.close()
+        }) {
+            ComposerView(
+                composer: composer,
+                topics: viewModel.topics,
+                onCommit: { handleCommit() }
+            )
         }
         .sheet(item: $editingEntry) { entry in
             EntryDetailView(
@@ -304,15 +227,11 @@ struct JournalView: View {
                 Text("Add all media from \"\(proposal.topicName)\" entries to a \"\(proposal.topicName)\" Photos album? Future captures in this topic will be added automatically.")
             }
         }
-        .fullScreenCover(isPresented: $showCamera) {
+        .fullScreenCover(isPresented: $composer.showCamera) {
             CameraPickerView(
-                captureMode: cameraMode,
-                onCapture: { result in
-                    handleCameraCapture(result)
-                },
-                onDismiss: {
-                    showCamera = false
-                }
+                captureMode: .both,
+                onCapture: { result in handleCameraCapture(result) },
+                onDismiss: { composer.showCamera = false }
             )
         }
         .onAppear {
@@ -356,6 +275,8 @@ struct JournalView: View {
         }
     }
 
+    // MARK: - Data
+
     private var displayEntries: [EntryDisplayModel] {
         var entries = viewModel.entries
         if let selected = viewModel.selectedTopic {
@@ -395,28 +316,20 @@ struct JournalView: View {
         return formatter.string(from: date)
     }
 
-    private func handleCameraTap() {
-        guard cameraService.isAuthorized else {
-            cameraService.error = .notAuthorized
-            return
-        }
-        showCamera = true
-    }
+    // MARK: - Composer handlers
 
     private func handleCameraCapture(_ result: CameraPickerView.CaptureResult) {
-        showCamera = false
+        composer.showCamera = false
         Task { @MainActor in
             do {
                 switch result {
                 case .photo(let image):
                     let identifier = try await cameraService.savePhoto(image)
-                    pendingMediaCaptures.append((localIdentifier: identifier, mediaType: .image))
+                    composer.addMedia(localIdentifier: identifier, mediaType: .image)
                 case .video(let url):
                     let identifier = try await cameraService.saveVideo(at: url)
-                    pendingMediaCaptures.append((localIdentifier: identifier, mediaType: .video))
+                    composer.addMedia(localIdentifier: identifier, mediaType: .video)
                 }
-                countdownIsForVoice = false
-                startCountdown()
             } catch let error as CameraService.CameraError {
                 cameraService.error = error
             } catch {
@@ -425,95 +338,32 @@ struct JournalView: View {
         }
     }
 
-    private func handleFABTap() {
-        if isCountingDown {
-            // Cancel the countdown and open the text sheet so the user can review/edit
-            cancelCountdown(openSheet: true)
-        } else {
-            handleMicTap()
-        }
-    }
+    private func handleCommit() {
+        let content = composer.commitContent
+        let audioPath = composer.commitAudioPath
+        let media = composer.mediaCaptures
+        let topicName = composer.selectedTopicName
 
-    private func handleMicTap() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        if speechService.isRecording {
-            speechService.stopRecording()
-            guard !speechService.transcribedText.isEmpty else { return }
-            let audioPath = saveVoiceEntries ? speechService.lastRecordingPath : nil
-            if !saveVoiceEntries, let path = speechService.lastRecordingPath {
-                AudioPlayerService.deleteAudio(filename: path)
-            }
-            countdownVoiceText = speechService.transcribedText
-            countdownVoiceAudioPath = audioPath
-            countdownIsForVoice = true
-            speechService.transcribedText = ""
-            speechService.lastRecordingPath = nil
-            startCountdown()
-        } else {
-            if isCountingDown { cancelCountdown(openSheet: false) }
-            speechService.transcribedText = ""
-            speechService.startRecording()
-        }
-    }
-
-    // MARK: - Auto-save countdown
-
-    private func startCountdown() {
-        guard autoSaveDelay > 0 else {
-            commitAutoSave()
-            return
-        }
-        isCountingDown = true
-        autoSaveProgress = 0
-        // Prepare the haptic engine now so it's warm when the ring completes
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.prepare()
-        withAnimation(.linear(duration: autoSaveDelay)) {
-            autoSaveProgress = 1.0
-        }
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(autoSaveDelay * 1_000_000_000))
-            guard isCountingDown else { return }
-            commitAutoSave(haptic: generator)
-        }
-    }
-
-    private func commitAutoSave(haptic: UIImpactFeedbackGenerator? = nil) {
-        isCountingDown = false
-        autoSaveProgress = 0
-        haptic?.impactOccurred()
-        if countdownIsForVoice {
+        switch composer.mode {
+        case .new:
             viewModel.saveEntry(
-                content: countdownVoiceText,
-                inputType: .voiceInApp,
-                audioFilePath: countdownVoiceAudioPath
+                content: content,
+                inputType: .composed,
+                audioFilePath: audioPath,
+                mediaCaptures: media,
+                topicName: topicName
             )
-            countdownVoiceText = ""
-            countdownVoiceAudioPath = nil
-        } else {
-            let content = "No text provided."
-            viewModel.saveEntry(content: content, inputType: .camera, mediaCaptures: pendingMediaCaptures)
-            pendingMediaCaptures = []
-        }
-    }
 
-    private func cancelCountdown(openSheet: Bool) {
-        isCountingDown = false
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            autoSaveProgress = 0
+        case .append(let entryId, _):
+            viewModel.appendToEntry(
+                entryId: entryId,
+                additionalContent: content == "No text provided." ? "" : content,
+                audioFilePath: audioPath,
+                mediaCaptures: media
+            )
         }
-        guard openSheet else { return }
-        if countdownIsForVoice {
-            textEntryInitialText = countdownVoiceText
-            textEntryIsForVoice = true
-            textEntryVoiceAudioPath = countdownVoiceAudioPath
-            countdownVoiceText = ""
-            countdownVoiceAudioPath = nil
-        } else {
-            textEntryInitialText = ""
-            textEntryIsForVoice = false
-        }
-        showTextEntry = true
+
+        composer.reset()
     }
 }
 
@@ -559,144 +409,33 @@ struct JournalHeaderView: View {
     }
 }
 
-// MARK: - FAB
+// MARK: - Composer FAB
 
-struct JournalFAB: View {
-    var isRecording: Bool
-    var pendingMediaCount: Int
-    var autoSaveProgress: Double
-    @Binding var showOptions: Bool
-    let onMicTap: () -> Void
-    let onTextTap: () -> Void
-    let onPhotoTap: () -> Void
-    let onVideoTap: () -> Void
-
-    private var isCountingDown: Bool { autoSaveProgress > 0 }
-
-    private var fabFill: Color {
-        if isRecording { return Crucible.Color.danger }
-        if showOptions { return Crucible.Color.accentPressed }
-        return Crucible.Color.accent
-    }
-
-    private var fabIcon: String {
-        if isRecording { return "stop.fill" }
-        if showOptions { return "xmark" }
-        if isCountingDown { return "hand.tap.fill" }
-        return "mic.fill"
-    }
+struct ComposerFAB: View {
+    let isOpen: Bool
+    let onTap: () -> Void
+    let onLongPress: () -> Void
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 12) {
-            if showOptions {
-                FABOption(icon: "video.fill", label: "Video", color: Crucible.Color.captureVideo) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
-                    onVideoTap()
-                }
-                FABOption(icon: "camera.fill", label: "Photo", color: Crucible.Color.capturePhoto) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
-                    onPhotoTap()
-                }
-                FABOption(icon: "pencil", label: "Text", color: Crucible.Color.captureText) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
-                    onTextTap()
-                }
-                FABOption(icon: "mic.fill", label: "Audio", color: Crucible.Color.captureAudio) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
-                    onMicTap()
-                }
-            }
+        ZStack {
+            Circle()
+                .fill(isOpen ? Crucible.Color.accentPressed : Crucible.Color.accent)
+                .frame(width: 56, height: 56)
+                .shadow(color: Color(red: 40/255, green: 25/255, blue: 15/255).opacity(0.22), radius: 10, y: 4)
 
-            // Main button + countdown ring
-            ZStack {
-                // Countdown ring — fills clockwise from 12 o'clock
-                Circle()
-                    .trim(from: 0, to: autoSaveProgress)
-                    .stroke(Crucible.Color.accent, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
-                    .frame(width: 70, height: 70)
-                    .rotationEffect(.degrees(-90))
-
-                ZStack(alignment: .topTrailing) {
-                    Circle()
-                        .fill(fabFill)
-                        .frame(width: 60, height: 60)
-                        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
-
-                    Image(systemName: fabIcon)
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                        .frame(width: 60, height: 60)
-
-                    if pendingMediaCount > 0 && !isRecording && !isCountingDown && !showOptions {
-                        Text("\(pendingMediaCount)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 18, height: 18)
-                            .background(Crucible.Color.info)
-                            .clipShape(Circle())
-                            .offset(x: 4, y: -4)
-                    }
-                }
-                .contentShape(Circle())
-                // Long press and tap are mutually exclusive: highPriorityGesture wins when
-                // held ≥0.4s, preventing the tap from also firing on finger-lift.
-                .onTapGesture {
-                    if showOptions {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
-                    } else {
-                        onMicTap()
-                    }
-                }
-                .highPriorityGesture(
-                    LongPressGesture(minimumDuration: 0.4).onEnded { _ in
-                        guard !isRecording && !isCountingDown else { return }
-                        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                            showOptions = true
-                        }
-                    }
-                )
-                .animation(.easeInOut(duration: 0.2), value: isRecording)
-            }
+            Image(systemName: isOpen ? "xmark" : "plus")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.white)
+                .rotationEffect(.degrees(isOpen ? 90 : 0))
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isOpen)
         }
-    }
-}
-
-struct FABOption: View {
-    let icon: String
-    let label: String
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Text(label)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(.background)
-                    .clipShape(Capsule())
-                    .shadow(color: .black.opacity(0.1), radius: 3, y: 1)
-
-                Circle()
-                    .fill(color)
-                    .frame(width: 60, height: 60)
-                    .overlay(
-                        Image(systemName: icon)
-                            .font(.title3)
-                            .foregroundStyle(.white)
-                    )
-                    .shadow(color: color.opacity(0.35), radius: 5, y: 3)
+        .contentShape(Circle())
+        .onTapGesture { onTap() }
+        .highPriorityGesture(
+            LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                onLongPress()
             }
-        }
-        .buttonStyle(.plain)
-        .transition(.asymmetric(
-            insertion: .move(edge: .bottom).combined(with: .opacity),
-            removal: .opacity
-        ))
+        )
     }
 }
 

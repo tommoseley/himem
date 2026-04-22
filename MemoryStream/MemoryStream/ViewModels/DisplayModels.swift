@@ -68,6 +68,10 @@ struct EntryDisplayModel: Identifiable {
     }
 
     var displayStatus: DisplayStatus? {
+        // Siri entries show "Captured" until the user has interacted
+        if inputType == .siri && feedbackState == nil && processingStatus == .completed {
+            return DisplayStatus(text: "Captured", style: .captured)
+        }
         if let feedbackState {
             let style: StatusBadge.BadgeStyle = switch feedbackState {
             case .confirmed: .confirmed

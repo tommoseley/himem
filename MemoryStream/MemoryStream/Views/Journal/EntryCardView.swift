@@ -5,6 +5,7 @@ struct EntryCardView: View {
     var density: CardDensity = .standard
     var onFeedback: ((UUID, InferenceSummary.FeedbackState) -> Void)? = nil
     var onEntityTap: ((String) -> Void)? = nil
+    var onAppend: ((EntryDisplayModel) -> Void)? = nil
     @State private var showInferenceDetail = false
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var isContentExpanded = false
@@ -134,6 +135,24 @@ struct EntryCardView: View {
                 }
             }
             // Compact: no voice playback
+
+            // Append button
+            if let onAppend, density != .compact {
+                HStack {
+                    Spacer()
+                    Button {
+                        onAppend(entry)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.ink3)
+                            .frame(width: 28, height: 28)
+                            .background(Crucible.Color.sunk)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(density == .compact ? Crucible.Space.md : Crucible.Space.lg)
         .background(Crucible.Color.card)
@@ -207,6 +226,7 @@ struct StatusBadge: View {
         case failed
         case edited
         case ignored
+        case captured
 
         var foreground: Color {
             switch self {
@@ -215,6 +235,7 @@ struct StatusBadge: View {
             case .failed: return Crucible.Color.Status.failedFg
             case .edited: return Crucible.Color.Status.editedFg
             case .ignored: return Crucible.Color.Status.draftFg
+            case .captured: return Crucible.Color.Status.capturedFg
             }
         }
 
@@ -225,6 +246,7 @@ struct StatusBadge: View {
             case .failed: return Crucible.Color.Status.failedBg
             case .edited: return Crucible.Color.Status.editedBg
             case .ignored: return Crucible.Color.Status.draftBg
+            case .captured: return Crucible.Color.Status.capturedBg
             }
         }
     }

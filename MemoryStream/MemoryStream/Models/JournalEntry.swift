@@ -24,13 +24,15 @@ extension JournalEntry {
         case voiceInApp = "voice_in_app"
         case typed = "typed"
         case camera = "camera"
+        case composed = "composed"
 
         var displayLabel: String {
             switch self {
             case .siri: return "Captured via Siri"
             case .voiceInApp: return "Voice in app"
-            case .typed: return "Typed-in app"
+            case .typed: return "Typed"
             case .camera: return "Photo / Video"
+            case .composed: return "Composed"
             }
         }
     }
@@ -45,6 +47,7 @@ extension JournalEntry {
         case .siri, .voiceInApp: return "Hands-free capture"
         case .typed: return "Journal entry"
         case .camera: return "Photo / Video capture"
+        case .composed: return "Memory"
         }
     }
 }

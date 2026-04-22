@@ -50,6 +50,17 @@ enum Crucible {
             static let failedFg    = SwiftUI.Color(hex: 0xB8311E)
             static let inferringBg = SwiftUI.Color(hex: 0xE6EEF8)
             static let inferringFg = SwiftUI.Color(hex: 0x1E5C8E)
+            static let capturedBg  = SwiftUI.Color(hex: 0xEFE6D4)
+            static let capturedFg  = SwiftUI.Color(hex: 0x7A5A10)
+        }
+
+        // Media type dots — used on entry cards and inside the Composer
+        // to honestly represent which kinds of media are attached.
+        enum Media {
+            static let audio = captureAudio   // ochre
+            static let text  = captureText    // field green
+            static let photo = capturePhoto   // signal blue
+            static let video = captureVideo   // memory magenta
         }
 
         // AI — everything the model does wears this blue.

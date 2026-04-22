@@ -37,6 +37,8 @@
 		A100000028 /* TopicApprovalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000029; };
 		A100000039 /* AlbumSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000041; };
 		A100000040 /* CrucibleTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000042; };
+		A100000041 /* ComposerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000043; };
+		A100000042 /* ComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000044; };
 		A100000029 /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000030; };
 		A100000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000031; };
 		A100000031 /* HiMemShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000032; };
@@ -78,6 +80,8 @@
 		B100000029 /* TopicApprovalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicApprovalService.swift; sourceTree = "<group>"; };
 		B100000041 /* AlbumSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumSyncService.swift; sourceTree = "<group>"; };
 		B100000042 /* CrucibleTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrucibleTheme.swift; sourceTree = "<group>"; };
+		B100000043 /* ComposerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerViewModel.swift; sourceTree = "<group>"; };
+		B100000044 /* ComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerView.swift; sourceTree = "<group>"; };
 		B100000030 /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		B100000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B100000032 /* HiMemShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiMemShortcuts.swift; sourceTree = "<group>"; };
@@ -183,6 +187,7 @@
 			children = (
 				B100000020 /* InputBarView.swift */,
 				B100000036 /* CameraPickerView.swift */,
+				B100000044 /* ComposerView.swift */,
 			);
 			path = Input;
 			sourceTree = "<group>";
@@ -211,6 +216,7 @@
 				B100000015 /* DisplayModels.swift */,
 				B100000016 /* JournalViewModel.swift */,
 				B100000017 /* SearchViewModel.swift */,
+				B100000043 /* ComposerViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -374,6 +380,8 @@
 				A100000028 /* TopicApprovalService.swift in Sources */,
 				A100000039 /* AlbumSyncService.swift in Sources */,
 				A100000040 /* CrucibleTheme.swift in Sources */,
+				A100000041 /* ComposerViewModel.swift in Sources */,
+				A100000042 /* ComposerView.swift in Sources */,
 				A100000029 /* AudioPlayerService.swift in Sources */,
 				A100000031 /* HiMemShortcuts.swift in Sources */,
 				A100000032 /* CameraService.swift in Sources */,
