@@ -251,10 +251,15 @@ struct ComposerView: View {
         .background(Crucible.Color.paper)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
-        // Camera is presented from JournalView (root) to avoid
-        // sheet-within-fullScreenCover SwiftUI conflicts.
-        // ComposerView sets composer.showCamera = true;
-        // JournalView observes it and presents the camera.
+        .sheet(isPresented: $composer.showCamera) {
+            CameraPickerView(
+                captureMode: .both,
+                onCapture: { result in
+                    onCameraCapture?(result)
+                },
+                onDismiss: { composer.showCamera = false }
+            )
+        }
     }
 
     private var activeToolbarType: String? {
