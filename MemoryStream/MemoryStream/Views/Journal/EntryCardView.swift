@@ -73,6 +73,7 @@ struct EntryCardView: View {
             // Content
             Text(entry.content)
                 .font(density == .compact ? .subheadline : .body)
+                .foregroundStyle(Crucible.Color.ink)
                 .lineSpacing(density == .compact ? 2 : 3)
                 .lineLimit(isContentExpanded && density != .compact ? nil : density.contentLineLimit)
 
@@ -183,11 +184,12 @@ struct EntryHeaderRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(entry.displayTitle)
                 .font(.headline)
+                .foregroundStyle(Crucible.Color.ink)
 
             HStack(spacing: 6) {
                 Text(entry.timeString)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Crucible.Color.ink2)
 
                 Circle()
                     .fill(Color(.separator))
@@ -195,7 +197,7 @@ struct EntryHeaderRow: View {
 
                 Text(entry.inputType.displayLabel)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Crucible.Color.ink2)
 
                 Spacer()
 
