@@ -358,7 +358,7 @@ private struct ToolbarButton: View {
 
 // MARK: - Attachment Row
 
-private struct AttachmentRow<Content: View, Actions: View>: View {
+struct AttachmentRow<Content: View, Actions: View>: View {
     let color: Color
     let icon: String
     let label: String

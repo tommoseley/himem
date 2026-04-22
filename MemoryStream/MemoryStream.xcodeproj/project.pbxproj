@@ -34,6 +34,7 @@
 		A100000025 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000026; };
 		A100000026 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000027; };
 		A100000027 /* EntryEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028; };
+		A100000045 /* EntryExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000045; };
 		A100000028 /* TopicApprovalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000029; };
 		A100000039 /* AlbumSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000041; };
 		A100000040 /* CrucibleTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000042; };
@@ -77,6 +78,7 @@
 		B100000026 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B100000027 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B100000028 /* EntryEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryEditorView.swift; sourceTree = "<group>"; };
+		B100000045 /* EntryExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryExpandedView.swift; sourceTree = "<group>"; };
 		B100000029 /* TopicApprovalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicApprovalService.swift; sourceTree = "<group>"; };
 		B100000041 /* AlbumSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumSyncService.swift; sourceTree = "<group>"; };
 		B100000042 /* CrucibleTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrucibleTheme.swift; sourceTree = "<group>"; };
@@ -176,6 +178,7 @@
 				B100000018 /* JournalView.swift */,
 				B100000019 /* EntryCardView.swift */,
 				B100000028 /* EntryEditorView.swift */,
+				B100000045 /* EntryExpandedView.swift */,
 				B100000037 /* MediaThumbnailView.swift */,
 				B100000038 /* MediaViewerView.swift */,
 			);
@@ -377,6 +380,7 @@
 				A100000025 /* KeychainService.swift in Sources */,
 				A100000026 /* SettingsView.swift in Sources */,
 				A100000027 /* EntryEditorView.swift in Sources */,
+				A100000045 /* EntryExpandedView.swift in Sources */,
 				A100000028 /* TopicApprovalService.swift in Sources */,
 				A100000039 /* AlbumSyncService.swift in Sources */,
 				A100000040 /* CrucibleTheme.swift in Sources */,

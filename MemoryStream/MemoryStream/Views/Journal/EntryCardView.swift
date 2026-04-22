@@ -24,27 +24,24 @@ struct EntryCardView: View {
                 showInferenceDetail = true
             } : nil)
 
-            // Media strip
-            if !entry.mediaItems.isEmpty {
-                if density == .compact {
-                    // Compact: just an attachment indicator
-                    HStack(spacing: 4) {
-                        Image(systemName: "paperclip")
-                            .font(.caption)
-                        Text("\(entry.mediaItems.count) media")
-                            .font(.caption)
+            // Media dot strip
+            if entry.hasAudio || !entry.mediaItems.isEmpty {
+                HStack(spacing: 6) {
+                    if entry.hasAudio {
+                        Circle().fill(Crucible.Color.Media.audio).frame(width: 8, height: 8)
                     }
-                    .foregroundStyle(.secondary)
-                } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(entry.mediaItems) { item in
-                                MediaThumbnailView(item: item) {
-                                    selectedMedia = item
-                                }
-                            }
-                        }
+                    ForEach(entry.mediaItems) { item in
+                        Circle()
+                            .fill(item.mediaType == .video ? Crucible.Color.Media.video : Crucible.Color.Media.photo)
+                            .frame(width: 8, height: 8)
                     }
+                    if let summary = entry.mediaSummary {
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(Crucible.Color.ink3)
+                            .padding(.leading, 4)
+                    }
+                    Spacer()
                 }
             }
 

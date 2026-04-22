@@ -95,6 +95,25 @@ struct EntryDisplayModel: Identifiable {
             return DisplayStatus(text: "Failed", style: .failed)
         }
     }
+
+    var mediaSummary: String? {
+        var parts: [String] = []
+        if audioFilePath != nil { parts.append("1 audio") }
+        let photoCount = mediaItems.filter { $0.mediaType == .image }.count
+        let videoCount = mediaItems.filter { $0.mediaType == .video }.count
+        if photoCount > 0 { parts.append("\(photoCount) photo\(photoCount == 1 ? "" : "s")") }
+        if videoCount > 0 { parts.append("\(videoCount) video\(videoCount == 1 ? "" : "s")") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    var hasAudio: Bool { audioFilePath != nil }
+    var photoCount: Int { mediaItems.filter { $0.mediaType == .image }.count }
+    var videoCount: Int { mediaItems.filter { $0.mediaType == .video }.count }
+}
+
+extension EntryDisplayModel: Hashable {
+    static func == (lhs: EntryDisplayModel, rhs: EntryDisplayModel) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
 struct DisplayStatus {

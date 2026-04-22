@@ -12,7 +12,7 @@ struct JournalView: View {
     @AppStorage("cardDensity") private var cardDensityRaw: String = CardDensity.standard.rawValue
     @State private var showSearch = false
     @State private var showSettings = false
-    @State private var editingEntry: EntryDisplayModel? = nil
+    @State private var selectedEntry: EntryDisplayModel? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var entityFilter: String? = nil
 
@@ -21,6 +21,7 @@ struct JournalView: View {
     }
 
     var body: some View {
+        NavigationStack {
         ZStack(alignment: .bottomTrailing) {
         VStack(spacing: 0) {
             JournalHeaderView(
@@ -122,14 +123,8 @@ struct JournalView: View {
                                     Label("Delete", systemImage: "trash")
                                 }
                             }
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button {
-                                    editingEntry = entry
-                                } label: {
-                                    Label("View", systemImage: "eye")
-                                }
-                                .tint(.blue)
-                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedEntry = entry }
                         }
                     } header: {
                         Text(group.label)
@@ -180,14 +175,10 @@ struct JournalView: View {
                 onCameraCapture: { result in handleCameraCapture(result) }
             )
         }
-        .sheet(item: $editingEntry) { entry in
-            EntryDetailView(
-                entryId: entry.id,
-                originalText: entry.content,
-                tags: entry.tags,
-                audioFilePath: entry.audioFilePath,
-                mediaItems: entry.mediaItems,
-                topicNames: entry.topicNames,
+        .navigationDestination(item: $selectedEntry) { entry in
+            EntryExpandedView(
+                entry: entry,
+                backLabel: dateLabel(for: entry.createdAt),
                 allTopics: viewModel.topics,
                 onSave: { entryId, newContent, removedTagIds, removedMediaIds, addedTopics, removedTopics, discardAudio in
                     viewModel.editEntry(
@@ -199,6 +190,15 @@ struct JournalView: View {
                         removedTopicNames: removedTopics,
                         discardAudio: discardAudio
                     )
+                },
+                onFeedback: { entryId, state in
+                    viewModel.submitFeedback(entryId: entryId, state: state)
+                },
+                onAppend: { entry in
+                    composer.speechService = speechService
+                    composer.cameraService = cameraService
+                    composer.existingMedia = entry.mediaItems
+                    composer.open(mode: .append(entryId: entry.id, title: entry.displayTitle))
                 }
             )
         }
@@ -267,6 +267,8 @@ struct JournalView: View {
         } message: {
             Text(cameraService.error?.localizedDescription ?? "")
         }
+        .navigationBarHidden(true)
+        } // NavigationStack
     }
 
     // MARK: - Data
