@@ -56,8 +56,8 @@ struct EntryCardView: View {
                             .fontWeight(.medium)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(Color.blue.opacity(0.1))
-                            .foregroundStyle(.blue)
+                            .background(Crucible.Color.accentTint)
+                            .foregroundStyle(Crucible.Color.accent)
                             .clipShape(Capsule())
                     }
                 }
@@ -65,7 +65,7 @@ struct EntryCardView: View {
 
             // Divider
             Rectangle()
-                .fill(Color(.separator).opacity(0.3))
+                .fill(Crucible.Color.hairline)
                 .frame(height: 0.5)
 
             // Content
@@ -134,10 +134,10 @@ struct EntryCardView: View {
             }
             // Compact: no voice playback
         }
-        .padding(density == .compact ? 12 : 16)
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
+        .padding(density == .compact ? Crucible.Space.md : Crucible.Space.lg)
+        .background(Crucible.Color.card)
+        .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.xl))
+        .modifier(WarmShadow(level: 1))
         .sheet(isPresented: $showInferenceDetail) {
             if let inference = entry.inferenceSummary, let feedbackState = entry.feedbackState {
                 InferenceDetailSheet(
@@ -209,11 +209,11 @@ struct StatusBadge: View {
 
         var foreground: Color {
             switch self {
-            case .processing: return .orange
-            case .confirmed: return .green
-            case .failed: return .red
-            case .edited: return .blue
-            case .ignored: return Color(.secondaryLabel)
+            case .processing: return Crucible.Color.warning
+            case .confirmed: return Crucible.Color.success
+            case .failed: return Crucible.Color.danger
+            case .edited: return Crucible.Color.info
+            case .ignored: return Color(Crucible.Color.ink3)
             }
         }
 
@@ -264,8 +264,8 @@ struct ProcessingStatusCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.tertiarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Crucible.Color.sunk)
+        .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.sm))
     }
 }
 
@@ -295,7 +295,7 @@ struct EntityTagsRow: View {
                         .fontWeight(.medium)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(Color(.tertiarySystemGroupedBackground))
+                        .background(Crucible.Color.sunk)
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -311,7 +311,7 @@ struct EntityTagsRow: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(Color(.tertiarySystemGroupedBackground))
+                        .background(Crucible.Color.sunk)
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -379,7 +379,7 @@ struct InferenceCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.tertiarySystemGroupedBackground))
+        .background(Crucible.Color.sunk)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -467,7 +467,7 @@ struct InferenceDetailSheet: View {
 
                         VoicePlaybackRow(filename: audioFile)
                             .padding(10)
-                            .background(Color(.tertiarySystemGroupedBackground))
+                            .background(Crucible.Color.sunk)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
 
@@ -540,9 +540,9 @@ extension InferenceSummary.FeedbackState {
 
     var color: Color {
         switch self {
-        case .confirmed: return .green
-        case .edited:    return .blue
-        case .ignored:   return Color(.secondaryLabel)
+        case .confirmed: return Crucible.Color.success
+        case .edited:    return Crucible.Color.info
+        case .ignored:   return Color(Crucible.Color.ink3)
         }
     }
 }

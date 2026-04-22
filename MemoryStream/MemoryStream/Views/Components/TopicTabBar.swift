@@ -34,12 +34,12 @@ struct TopicTab: View {
                 .fontWeight(isSelected ? .semibold : .regular)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .background(isSelected ? Color.blue.opacity(0.12) : Color.clear)
-                .foregroundStyle(isSelected ? .blue : .primary)
+                .background(isSelected ? Crucible.Color.accentTint : Color.clear)
+                .foregroundStyle(isSelected ? Crucible.Color.accent : .primary)
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(isSelected ? Color.clear : Color(.separator), lineWidth: 0.5)
+                        .stroke(isSelected ? Color.clear : Crucible.Color.divider, lineWidth: 0.5)
                 )
         }
         .buttonStyle(.plain)

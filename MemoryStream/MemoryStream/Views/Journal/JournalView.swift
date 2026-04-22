@@ -70,7 +70,7 @@ struct JournalView: View {
                     if let filter = entityFilter {
                         HStack(spacing: 8) {
                             Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(Crucible.Color.accent)
                             Text(filter)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
@@ -158,11 +158,11 @@ struct JournalView: View {
                 Color.clear.frame(height: 110)
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Crucible.Color.paper)
 
         // Dim overlay — tap outside to dismiss FAB options
         if showFABOptions {
-            Color.black.opacity(0.25)
+            Crucible.Color.scrim
                 .ignoresSafeArea()
                 .onTapGesture {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
@@ -526,10 +526,9 @@ struct JournalHeaderView: View {
     var body: some View {
         HStack {
             Text("HI MEM")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .tracking(1.5)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 11, weight: .bold))
+                .tracking(2.0)
+                .foregroundStyle(Crucible.Color.ink3)
 
             Spacer()
 
@@ -573,9 +572,9 @@ struct JournalFAB: View {
     private var isCountingDown: Bool { autoSaveProgress > 0 }
 
     private var fabFill: Color {
-        if isRecording { return .red }
-        if showOptions { return Color(.systemGray2) }
-        return .orange
+        if isRecording { return Crucible.Color.danger }
+        if showOptions { return Crucible.Color.accentPressed }
+        return Crucible.Color.accent
     }
 
     private var fabIcon: String {
@@ -588,19 +587,19 @@ struct JournalFAB: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 12) {
             if showOptions {
-                FABOption(icon: "video.fill", label: "Video", color: .purple) {
+                FABOption(icon: "video.fill", label: "Video", color: Crucible.Color.captureVideo) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
                     onVideoTap()
                 }
-                FABOption(icon: "camera.fill", label: "Photo", color: .blue) {
+                FABOption(icon: "camera.fill", label: "Photo", color: Crucible.Color.capturePhoto) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
                     onPhotoTap()
                 }
-                FABOption(icon: "pencil", label: "Text", color: .green) {
+                FABOption(icon: "pencil", label: "Text", color: Crucible.Color.captureText) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
                     onTextTap()
                 }
-                FABOption(icon: "mic.fill", label: "Audio", color: .orange) {
+                FABOption(icon: "mic.fill", label: "Audio", color: Crucible.Color.captureAudio) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { showOptions = false }
                     onMicTap()
                 }
@@ -611,7 +610,7 @@ struct JournalFAB: View {
                 // Countdown ring — fills clockwise from 12 o'clock
                 Circle()
                     .trim(from: 0, to: autoSaveProgress)
-                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                    .stroke(Crucible.Color.accent, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
                     .frame(width: 70, height: 70)
                     .rotationEffect(.degrees(-90))
 
@@ -631,7 +630,7 @@ struct JournalFAB: View {
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 18, height: 18)
-                            .background(Color.blue)
+                            .background(Crucible.Color.info)
                             .clipShape(Circle())
                             .offset(x: 4, y: -4)
                     }
