@@ -47,7 +47,8 @@ Rules for entity values:
 - next_action must be clearly actionable — suitable to add to a reminders list as-is.
 - Do not quote or echo full sentences from the entry as entity values.
 
-Topic: A high-level category this entry belongs to (e.g., "Garden", "Work", "Health", "Finance"). One or two words max.
+Topic: A high-level category this entry belongs to. One or two words max.
+{existing_topics_block}
 Summary: Write as if explaining to the user what the app understood. Use "linked to...", "flagged as...", "identified as...".
 Only include entities with confidence >= 0.7. Be precise, not exhaustive.\
 """
@@ -62,6 +63,7 @@ Keep the meaning and tone identical. Return only the corrected text, nothing els
 
 class AnalyzeRequest(BaseModel):
     text: str
+    existing_topics: list[str] = []
 
 
 class EntityResult(BaseModel):
@@ -97,10 +99,24 @@ async def analyze_entry(request: AnalyzeRequest) -> AnalyzeResponse:
     if not api_key:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
+    if request.existing_topics:
+        topics_list = ", ".join(f'"{t}"' for t in request.existing_topics)
+        topics_block = (
+            f"The user already has these topics: [{topics_list}]. "
+            "STRONGLY prefer assigning to one of these existing topics. "
+            "Only suggest a new topic if the entry clearly doesn't fit any existing one. "
+            "Match semantically — e.g. if 'Photography' exists, do NOT suggest 'Photo' or 'Photos'."
+        )
+    else:
+        topics_block = 'Suggest a short topic name (e.g., "Garden", "Work", "Health").'
+
     body = {
         "model": _MODEL,
         "max_tokens": 1024,
-        "messages": [{"role": "user", "content": _PROMPT.format(text=request.text)}],
+        "messages": [{"role": "user", "content": _PROMPT.format(
+            text=request.text,
+            existing_topics_block=topics_block,
+        )}],
     }
     headers = {
         "x-api-key": api_key,

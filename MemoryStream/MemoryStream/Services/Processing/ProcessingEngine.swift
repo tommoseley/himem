@@ -40,7 +40,14 @@ final class ProcessingEngine {
 
     private func processWithCloud(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async {
         do {
-            let result = try await claudeAPI.analyzeEntry(content)
+            // Fetch existing topic names so the AI prefers them over inventing new ones
+            let existingTopics: [String] = await context.perform {
+                let request = NSFetchRequest<Topic>(entityName: "Topic")
+                let topics = (try? context.fetch(request)) ?? []
+                return topics.map(\.name)
+            }
+
+            let result = try await claudeAPI.analyzeEntry(content, existingTopics: existingTopics)
 
             await context.perform { [self] in
                 do {

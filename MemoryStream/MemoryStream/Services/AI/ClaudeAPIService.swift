@@ -26,13 +26,16 @@ final class ClaudeAPIService {
 
     // MARK: - Analyze
 
-    func analyzeEntry(_ text: String) async throws -> AnalysisResult {
+    func analyzeEntry(_ text: String, existingTopics: [String] = []) async throws -> AnalysisResult {
         var request = URLRequest(url: analyzeURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
 
-        let body = ["text": text]
+        var body: [String: Any] = ["text": text]
+        if !existingTopics.isEmpty {
+            body["existing_topics"] = existingTopics
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, httpResponse) = try await URLSession.shared.data(for: request)
