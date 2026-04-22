@@ -33,7 +33,7 @@
 		A100000024 /* MemoryStream.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = B100000024; };
 		A100000025 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000026; };
 		A100000026 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000027; };
-		A100000027 /* EntryEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028; };
+		A100000027 /* NewTopicSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028; };
 		A100000045 /* EntryExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000045; };
 		A100000028 /* TopicApprovalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000029; };
 		A100000039 /* AlbumSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000041; };
@@ -77,7 +77,7 @@
 		B100000025 /* MemoryStream.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = MemoryStream.xcdatamodel; sourceTree = "<group>"; };
 		B100000026 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B100000027 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		B100000028 /* EntryEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryEditorView.swift; sourceTree = "<group>"; };
+		B100000028 /* NewTopicSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTopicSheet.swift; sourceTree = "<group>"; };
 		B100000045 /* EntryExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryExpandedView.swift; sourceTree = "<group>"; };
 		B100000029 /* TopicApprovalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicApprovalService.swift; sourceTree = "<group>"; };
 		B100000041 /* AlbumSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumSyncService.swift; sourceTree = "<group>"; };
@@ -177,7 +177,6 @@
 			children = (
 				B100000018 /* JournalView.swift */,
 				B100000019 /* EntryCardView.swift */,
-				B100000028 /* EntryEditorView.swift */,
 				B100000045 /* EntryExpandedView.swift */,
 				B100000037 /* MediaThumbnailView.swift */,
 				B100000038 /* MediaViewerView.swift */,
@@ -209,6 +208,7 @@
 				B100000021 /* SiriShortcutBanner.swift */,
 				B100000022 /* TopicTabBar.swift */,
 				B100000027 /* SettingsView.swift */,
+				B100000028 /* NewTopicSheet.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -379,7 +379,7 @@
 				A100000024 /* MemoryStream.xcdatamodeld in Sources */,
 				A100000025 /* KeychainService.swift in Sources */,
 				A100000026 /* SettingsView.swift in Sources */,
-				A100000027 /* EntryEditorView.swift in Sources */,
+				A100000027 /* NewTopicSheet.swift in Sources */,
 				A100000045 /* EntryExpandedView.swift in Sources */,
 				A100000028 /* TopicApprovalService.swift in Sources */,
 				A100000039 /* AlbumSyncService.swift in Sources */,
