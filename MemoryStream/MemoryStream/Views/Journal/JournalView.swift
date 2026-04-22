@@ -236,6 +236,13 @@ struct JournalView: View {
                 Text("Add all media from \"\(proposal.topicName)\" entries to a \"\(proposal.topicName)\" Photos album? Future captures in this topic will be added automatically.")
             }
         }
+        .fullScreenCover(isPresented: $composer.showCamera) {
+            CameraPickerView(
+                captureMode: .both,
+                onCapture: { result in handleCameraCapture(result) },
+                onDismiss: { composer.showCamera = false }
+            )
+        }
         .onAppear {
             Task {
                 let _ = await speechService.requestAuthorization()
