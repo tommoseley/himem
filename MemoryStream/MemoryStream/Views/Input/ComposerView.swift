@@ -153,7 +153,7 @@ struct ComposerView: View {
 
                     // Media tile grid
                     if !composer.mediaCaptures.isEmpty {
-                        let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+                        let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
                         LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(Array(composer.mediaCaptures.enumerated()), id: \.offset) { index, capture in
                                 MediaTile(
@@ -438,7 +438,9 @@ struct AttachmentRow<Content: View, Actions: View>: View {
 
 // MARK: - Media Tile
 
-/// Square tile with corner fold in the media color. Replaces full-width rows.
+/// Square tile — the thumbnail IS the type identifier.
+/// Photos and videos show themselves (no fold, no label).
+/// Audio and text get a quieted placeholder + small corner fold in the media color.
 /// Tap to view, press-and-hold for context menu.
 struct MediaTile: View {
     let localIdentifier: String
@@ -446,12 +448,9 @@ struct MediaTile: View {
     var onRemove: (() -> Void)? = nil
     @State private var thumbnail: UIImage? = nil
 
-    private var foldColor: Color {
-        switch mediaType {
-        case .image: return Crucible.Color.Media.photo
-        case .video: return Crucible.Color.Media.video
-        case .voice: return Crucible.Color.Media.audio
-        }
+    /// Only audio and text get a fold — photos/videos carry their own visual
+    private var needsFold: Bool {
+        mediaType == .voice
     }
 
     var body: some View {
@@ -459,8 +458,8 @@ struct MediaTile: View {
             // Tile content
             Group {
                 if mediaType == .voice {
-                    // Audio tile: waveform
-                    VStack(spacing: 6) {
+                    // Audio: quieted waveform on white
+                    VStack(spacing: 5) {
                         HStack(spacing: 2) {
                             ForEach(0..<10, id: \.self) { i in
                                 RoundedRectangle(cornerRadius: 1)
@@ -468,11 +467,13 @@ struct MediaTile: View {
                                     .frame(width: 2.5, height: CGFloat(6 + (i % 5) * 4))
                             }
                         }
-                        .frame(height: 24)
+                        .frame(height: 20)
+                        .opacity(0.55)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Crucible.Color.card)
                 } else if let thumbnail {
+                    // Photo/video: the image IS the tile
                     Image(uiImage: thumbnail)
                         .resizable()
                         .scaledToFill()
@@ -481,25 +482,28 @@ struct MediaTile: View {
                 }
             }
             .aspectRatio(1, contentMode: .fill)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 10)
                     .stroke(Crucible.Color.hairline, lineWidth: 1)
             )
 
-            // Corner fold
-            Triangle()
-                .fill(foldColor.opacity(0.92))
-                .frame(width: 18, height: 18)
+            // Corner fold — only for audio and text (no native visual)
+            if needsFold {
+                CornerFold(color: Crucible.Color.Media.audio)
+            }
 
-            // Video play button
+            // Video play chevron (centered, small)
             if mediaType == .video {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(.black.opacity(0.5))
-                    .clipShape(Circle())
+                Circle()
+                    .fill(Color.white.opacity(0.92))
+                    .frame(width: 24, height: 24)
+                    .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+                    .overlay(
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 8))
+                            .foregroundStyle(Crucible.Color.ink)
+                    )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -520,15 +524,21 @@ struct MediaTile: View {
     }
 }
 
-/// Triangle shape for the corner fold
-private struct Triangle: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { p in
-            p.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-            p.closeSubpath()
+/// 12pt corner fold in the media color, top-right. Only used on audio & text tiles.
+private struct CornerFold: View {
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            let path = Path { p in
+                p.move(to: CGPoint(x: size.width, y: 0))
+                p.addLine(to: CGPoint(x: size.width, y: size.height))
+                p.addLine(to: CGPoint(x: 0, y: 0))
+                p.closeSubpath()
+            }
+            context.fill(path, with: .color(color.opacity(0.8)))
         }
+        .frame(width: 12, height: 12)
     }
 }
 

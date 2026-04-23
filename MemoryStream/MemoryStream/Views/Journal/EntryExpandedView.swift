@@ -226,7 +226,7 @@ struct EntryExpandedView: View {
 
                 // Media tile grid
                 if entry.hasAudio || !entry.mediaItems.isEmpty {
-                    let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+                    let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
                     LazyVGrid(columns: columns, spacing: 8) {
                         // Audio tile
                         if let audioFile = entry.audioFilePath, !discardAudio {
@@ -784,7 +784,7 @@ private struct PendingStagingSection: View {
 
             // Media tile grid
             if !media.isEmpty {
-                let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+                let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
                 LazyVGrid(columns: columns, spacing: 8) {
                     ForEach(Array(media.enumerated()), id: \.offset) { index, item in
                         MediaTile(
