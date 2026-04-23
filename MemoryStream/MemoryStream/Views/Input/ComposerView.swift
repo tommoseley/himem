@@ -50,130 +50,131 @@ struct ComposerView: View {
             )
             .padding(.horizontal, 14)
 
-            // Work area — list of attachments
+            // Work area
             ScrollView {
-                VStack(spacing: 8) {
-                    // Active recording row
+                VStack(alignment: .leading, spacing: 12) {
+                    // Active recording indicator
                     if composer.isRecording {
-                        AttachmentRow(
-                            color: Crucible.Color.Media.audio,
-                            icon: "mic",
-                            label: "Recording",
-                            meta: formatDuration(composer.recordingDuration),
-                            emphasized: true
-                        ) {
-                            HStack(spacing: 10) {
-                                // Waveform bars
-                                HStack(spacing: 2) {
-                                    ForEach(0..<16, id: \.self) { i in
-                                        RoundedRectangle(cornerRadius: 1)
-                                            .fill(Crucible.Color.Media.audio)
-                                            .frame(width: 2.5, height: CGFloat.random(in: 4...20))
-                                    }
-                                }
-                                .frame(height: 22)
-
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Crucible.Color.Media.audio)
-                                        .frame(width: 6, height: 6)
-                                    Text("LIVE")
-                                        .font(.caption2)
-                                        .fontWeight(.bold)
-                                        .foregroundStyle(Crucible.Color.Media.audio)
-                                }
-                            }
-                        } actions: {
-                            // Stop button
+                        HStack(spacing: 10) {
                             Button {
                                 composer.stopRecording()
                             } label: {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(.white)
-                                    .frame(width: 8, height: 8)
-                                    .frame(width: 24, height: 24)
-                                    .background(Crucible.Color.Media.audio)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                ZStack {
+                                    Circle()
+                                        .fill(Crucible.Color.Media.audio)
+                                        .frame(width: 28, height: 28)
+                                        .shadow(color: Crucible.Color.Media.audio.opacity(0.3), radius: 6)
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(.white)
+                                        .frame(width: 10, height: 10)
+                                }
                             }
                             .buttonStyle(.plain)
+
+                            HStack(spacing: 2) {
+                                ForEach(0..<16, id: \.self) { i in
+                                    RoundedRectangle(cornerRadius: 1)
+                                        .fill(Crucible.Color.Media.audio)
+                                        .frame(width: 2.5, height: CGFloat.random(in: 4...20))
+                                }
+                            }
+                            .frame(height: 22)
+
+                            HStack(spacing: 4) {
+                                Circle().fill(Crucible.Color.Media.audio).frame(width: 6, height: 6)
+                                Text("LIVE")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(Crucible.Color.Media.audio)
+                            }
+
+                            Spacer()
+
+                            Text(formatDuration(composer.recordingDuration))
+                                .font(.caption)
+                                .monospacedDigit()
+                                .foregroundStyle(Crucible.Color.ink3)
                         }
+                        .padding(12)
+                        .background(Crucible.Color.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Crucible.Color.Media.audio.opacity(0.33), lineWidth: 1)
+                        )
                     }
 
-                    // Live transcript (current recording only)
+                    // Live transcript
                     if composer.isRecording && !composer.transcribedText.isEmpty {
-                        AttachmentRow(
-                            color: Crucible.Color.Media.text,
-                            icon: "pencil",
-                            label: "Live transcript"
-                        ) {
-                            Text(composer.transcribedText)
-                                .font(.footnote)
-                                .italic()
-                                .foregroundStyle(Crucible.Color.ink)
-                                .lineSpacing(3)
-                        }
+                        Text(composer.transcribedText)
+                            .font(.footnote)
+                            .italic()
+                            .foregroundStyle(Crucible.Color.ink)
+                            .lineSpacing(3)
+                            .padding(.horizontal, 4)
                     }
 
-                    // Staged transcripts (one per completed recording)
+                    // Staged transcripts (body text, not tiles)
                     ForEach(Array(composer.pendingTranscripts.enumerated()), id: \.offset) { index, transcript in
-                        AttachmentRow(
-                            color: Crucible.Color.Media.text,
-                            icon: "pencil",
-                            label: "Transcript"
-                        ) {
+                        HStack(alignment: .top) {
                             Text(transcript)
                                 .font(.footnote)
                                 .italic()
                                 .foregroundStyle(Crucible.Color.ink)
                                 .lineSpacing(3)
-                        } actions: {
+                            Spacer()
                             Button {
                                 composer.pendingTranscripts.remove(at: index)
                             } label: {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Crucible.Color.ink3)
-                                    .frame(width: 24, height: 24)
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(Crucible.Color.ink4)
                             }
                             .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, 4)
                     }
 
-                    // Text note row
+                    // Text note
                     if showTextEditor || !composer.textContent.isEmpty {
-                        AttachmentRow(
-                            color: Crucible.Color.Media.text,
-                            icon: "pencil",
-                            label: "Note"
-                        ) {
-                            TextEditor(text: $composer.textContent)
-                                .font(.footnote)
-                                .foregroundStyle(Crucible.Color.ink)
-                                .frame(minHeight: 44)
-                                .scrollContentBackground(.hidden)
-                        }
+                        TextEditor(text: $composer.textContent)
+                            .font(.footnote)
+                            .foregroundStyle(Crucible.Color.ink)
+                            .frame(minHeight: 44)
+                            .scrollContentBackground(.hidden)
+                            .padding(8)
+                            .background(Crucible.Color.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Crucible.Color.hairline, lineWidth: 1)
+                            )
                     }
 
-                    // Media rows (photo, video, voice)
-                    ForEach(Array(composer.mediaCaptures.enumerated()), id: \.offset) { index, capture in
-                        AttachmentRow(
-                            color: mediaColor(for: capture.mediaType),
-                            icon: mediaIcon(for: capture.mediaType),
-                            label: mediaLabel(for: capture.mediaType)
-                        ) {
-                            if capture.mediaType == .voice {
-                                VoicePlaybackRow(filename: capture.localIdentifier)
-                            } else {
-                                ComposerThumb(localIdentifier: capture.localIdentifier, isVideo: capture.mediaType == .video)
+                    // Media tile grid
+                    if !composer.mediaCaptures.isEmpty {
+                        let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+                        LazyVGrid(columns: columns, spacing: 8) {
+                            ForEach(Array(composer.mediaCaptures.enumerated()), id: \.offset) { index, capture in
+                                MediaTile(
+                                    localIdentifier: capture.localIdentifier,
+                                    mediaType: capture.mediaType,
+                                    onRemove: { composer.removeMedia(at: index) }
+                                )
                             }
-                        } actions: {
+
+                            // Add tile
                             Button {
-                                composer.removeMedia(at: index)
+                                composer.showCamera = true
                             } label: {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Crucible.Color.ink3)
-                                    .frame(width: 24, height: 24)
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Crucible.Color.divider, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .overlay(
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 18))
+                                            .foregroundStyle(Crucible.Color.ink3)
+                                    )
                             }
                             .buttonStyle(.plain)
                         }
@@ -288,29 +289,6 @@ struct ComposerView: View {
         return String(format: "%d:%02d", m, s)
     }
 
-    private func mediaColor(for type: MediaReference.MediaType) -> Color {
-        switch type {
-        case .image: return Crucible.Color.Media.photo
-        case .video: return Crucible.Color.Media.video
-        case .voice: return Crucible.Color.Media.audio
-        }
-    }
-
-    private func mediaIcon(for type: MediaReference.MediaType) -> String {
-        switch type {
-        case .image: return "camera"
-        case .video: return "video"
-        case .voice: return "mic"
-        }
-    }
-
-    private func mediaLabel(for type: MediaReference.MediaType) -> String {
-        switch type {
-        case .image: return "Photo"
-        case .video: return "Video"
-        case .voice: return "Audio"
-        }
-    }
 }
 
 // MARK: - Media Toolbar
@@ -458,43 +436,98 @@ struct AttachmentRow<Content: View, Actions: View>: View {
     }
 }
 
-// MARK: - Composer Thumbnail
+// MARK: - Media Tile
 
-private struct ComposerThumb: View {
+/// Square tile with corner fold in the media color. Replaces full-width rows.
+/// Tap to view, press-and-hold for context menu.
+struct MediaTile: View {
     let localIdentifier: String
-    let isVideo: Bool
+    let mediaType: MediaReference.MediaType
+    var onRemove: (() -> Void)? = nil
     @State private var thumbnail: UIImage? = nil
 
+    private var foldColor: Color {
+        switch mediaType {
+        case .image: return Crucible.Color.Media.photo
+        case .video: return Crucible.Color.Media.video
+        case .voice: return Crucible.Color.Media.audio
+        }
+    }
+
     var body: some View {
-        ZStack {
-            if let thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Crucible.Color.sunk
+        ZStack(alignment: .topTrailing) {
+            // Tile content
+            Group {
+                if mediaType == .voice {
+                    // Audio tile: waveform
+                    VStack(spacing: 6) {
+                        HStack(spacing: 2) {
+                            ForEach(0..<10, id: \.self) { i in
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(Crucible.Color.Media.audio)
+                                    .frame(width: 2.5, height: CGFloat(6 + (i % 5) * 4))
+                            }
+                        }
+                        .frame(height: 24)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Crucible.Color.card)
+                } else if let thumbnail {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Crucible.Color.sunk
+                }
+            }
+            .aspectRatio(1, contentMode: .fill)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Crucible.Color.hairline, lineWidth: 1)
+            )
+
+            // Corner fold
+            Triangle()
+                .fill(foldColor.opacity(0.92))
+                .frame(width: 18, height: 18)
+
+            // Video play button
+            if mediaType == .video {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(.black.opacity(0.5))
+                    .clipShape(Circle())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(width: 52, height: 40)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(Crucible.Color.hairline, lineWidth: 1)
-        )
-        .overlay {
-            if isVideo {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(.black.opacity(0.4))
-                    .clipShape(Circle())
+        .aspectRatio(1, contentMode: .fit)
+        .contextMenu {
+            if let onRemove {
+                Button(role: .destructive) { onRemove() } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
         .task {
+            guard mediaType != .voice else { return }
             if let cached = await ThumbnailService.shared.cacheThumbnail(for: localIdentifier) {
                 thumbnail = ThumbnailService.shared.cachedThumbnail(filename: cached)
             }
+        }
+    }
+}
+
+/// Triangle shape for the corner fold
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { p in
+            p.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+            p.closeSubpath()
         }
     }
 }
