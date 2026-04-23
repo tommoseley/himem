@@ -462,6 +462,7 @@ struct MediaTile: View {
     var onRemove: (() -> Void)? = nil
     var onTap: (() -> Void)? = nil
     @State private var thumbnail: UIImage? = nil
+    @StateObject private var player = AudioPlayerService.shared
 
     /// Only audio and text get a fold — photos/videos carry their own visual
     private var needsFold: Bool {
@@ -473,17 +474,23 @@ struct MediaTile: View {
             // Tile content
             Group {
                 if mediaType == .voice {
-                    // Audio: quieted waveform on white
+                    // Audio: quieted waveform on white, tap to play
+                    let isPlaying = player.isPlaying && player.currentFile == localIdentifier
                     VStack(spacing: 5) {
                         HStack(spacing: 2) {
                             ForEach(0..<10, id: \.self) { i in
                                 RoundedRectangle(cornerRadius: 1)
-                                    .fill(Crucible.Color.Media.audio)
+                                    .fill(isPlaying ? Crucible.Color.Media.audio : Crucible.Color.Media.audio.opacity(0.55))
                                     .frame(width: 2.5, height: CGFloat(6 + (i % 5) * 4))
                             }
                         }
                         .frame(height: 20)
-                        .opacity(0.55)
+
+                        if isPlaying {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Crucible.Color.Media.audio)
+                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Crucible.Color.card)
@@ -527,7 +534,18 @@ struct MediaTile: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .onTapGesture { onTap?() }
+        .onTapGesture {
+            if mediaType == .voice {
+                // Audio: toggle playback inline
+                if player.isPlaying && player.currentFile == localIdentifier {
+                    player.stop()
+                } else {
+                    player.play(filename: localIdentifier)
+                }
+            } else {
+                onTap?()
+            }
+        }
         .contextMenu {
             if let onRemove {
                 Button(role: .destructive) { onRemove() } label: {

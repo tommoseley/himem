@@ -98,15 +98,16 @@ struct EntryDisplayModel: Identifiable {
 
     var mediaSummary: String? {
         var parts: [String] = []
-        if audioFilePath != nil { parts.append("1 audio") }
+        let audioCount = (audioFilePath != nil ? 1 : 0) + mediaItems.filter { $0.mediaType == .voice }.count
         let photoCount = mediaItems.filter { $0.mediaType == .image }.count
         let videoCount = mediaItems.filter { $0.mediaType == .video }.count
+        if audioCount > 0 { parts.append("\(audioCount) audio") }
         if photoCount > 0 { parts.append("\(photoCount) photo\(photoCount == 1 ? "" : "s")") }
         if videoCount > 0 { parts.append("\(videoCount) video\(videoCount == 1 ? "" : "s")") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    var hasAudio: Bool { audioFilePath != nil }
+    var hasAudio: Bool { audioFilePath != nil || mediaItems.contains { $0.mediaType == .voice } }
     var photoCount: Int { mediaItems.filter { $0.mediaType == .image }.count }
     var videoCount: Int { mediaItems.filter { $0.mediaType == .video }.count }
 }

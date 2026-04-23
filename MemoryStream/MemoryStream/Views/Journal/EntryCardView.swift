@@ -11,6 +11,14 @@ struct EntryCardView: View {
     @State private var isContentExpanded = false
 
     /// Tags that add information beyond what's already in the content text.
+    private func dotColor(for type: MediaReference.MediaType) -> Color {
+        switch type {
+        case .image: return Crucible.Color.Media.photo
+        case .video: return Crucible.Color.Media.video
+        case .voice: return Crucible.Color.Media.audio
+        }
+    }
+
     private var smartTags: [TagDisplayModel] {
         entry.tags.filter { tag in
             !entry.content.localizedCaseInsensitiveContains(tag.value)
@@ -27,12 +35,12 @@ struct EntryCardView: View {
             // Media dot strip
             if entry.hasAudio || !entry.mediaItems.isEmpty {
                 HStack(spacing: 6) {
-                    if entry.hasAudio {
+                    if entry.audioFilePath != nil {
                         Circle().fill(Crucible.Color.Media.audio).frame(width: 8, height: 8)
                     }
                     ForEach(entry.mediaItems) { item in
                         Circle()
-                            .fill(item.mediaType == .video ? Crucible.Color.Media.video : Crucible.Color.Media.photo)
+                            .fill(dotColor(for: item.mediaType))
                             .frame(width: 8, height: 8)
                     }
                     if let summary = entry.mediaSummary {
