@@ -474,14 +474,18 @@ struct MediaTile: View {
                     .background(Crucible.Color.card)
                 } else if let thumbnail {
                     // Photo/video: the image IS the tile
-                    Image(uiImage: thumbnail)
-                        .resizable()
-                        .scaledToFill()
+                    GeometryReader { geo in
+                        Image(uiImage: thumbnail)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: geo.size.width, height: geo.size.width)
+                    }
                 } else {
                     Crucible.Color.sunk
                 }
             }
-            .aspectRatio(1, contentMode: .fill)
+            .aspectRatio(1, contentMode: .fit)
+            .clipped()
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
