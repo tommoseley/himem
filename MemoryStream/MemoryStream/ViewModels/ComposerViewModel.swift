@@ -2,28 +2,25 @@ import Foundation
 import SwiftUI
 import Combine
 
-/// Owns all state for a single Composer session — new memory or append to existing.
+/// Owns all state for a single new-memory composition.
 /// JournalView creates this once and presents ComposerView when isPresented is true.
+/// Appending to existing entries is handled inline on EntryExpandedView, not here.
 @MainActor
 class ComposerViewModel: ObservableObject {
-
-    enum Mode: Equatable {
-        case new
-        case append(entryId: UUID, title: String)
-    }
 
     // MARK: - Published state
 
     @Published var isPresented = false
-    @Published var mode: Mode = .new
     @Published var textContent = ""
     @Published var mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
+    @Published var pendingTranscripts: [String] = []
     @Published var selectedTopicName: String? = nil
     @Published var showCamera = false
     @Published var recordingDuration: TimeInterval = 0
-
-    /// Existing media shown dimmed in append mode
-    @Published var existingMedia: [MediaDisplayItem] = []
+    /// Set true by the view while a recording is active and the stop transition
+    /// still needs to stage the captured audio + transcript. Cleared once the
+    /// stop has been processed.
+    @Published var pendingAudioAppend = false
 
     // MARK: - Service references (set by JournalView)
 
@@ -36,25 +33,11 @@ class ComposerViewModel: ObservableObject {
 
     // MARK: - Computed
 
-    var headerTitle: String {
-        switch mode {
-        case .new: return "New memory"
-        case .append(_, let title): return title
-        }
-    }
+    var headerTitle: String { "New memory" }
 
-    var isAppendMode: Bool {
-        if case .append = mode { return true }
-        return false
-    }
+    var commitButtonTitle: String { "Commit memory" }
 
-    var commitButtonTitle: String {
-        isAppendMode ? "Attach to memory" : "Commit memory"
-    }
-
-    var commitButtonIcon: String {
-        isAppendMode ? "plus" : "checkmark"
-    }
+    var commitButtonIcon: String { "checkmark" }
 
     var isRecording: Bool {
         speechService?.isRecording ?? false
@@ -65,15 +48,15 @@ class ComposerViewModel: ObservableObject {
     }
 
     var canCommit: Bool {
-        !textContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard !isRecording else { return false }
+        return !textContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !mediaCaptures.isEmpty
-            || !transcribedText.isEmpty
+            || !pendingTranscripts.isEmpty
     }
 
     // MARK: - Lifecycle
 
-    func open(mode: Mode, withRecording: Bool = false) {
-        self.mode = mode
+    func open(withRecording: Bool = false) {
         isPresented = true
         if withRecording {
             startRecording()
@@ -91,10 +74,10 @@ class ComposerViewModel: ObservableObject {
     func reset() {
         textContent = ""
         mediaCaptures = []
+        pendingTranscripts = []
         selectedTopicName = nil
-        existingMedia = []
         recordingDuration = 0
-        mode = .new
+        pendingAudioAppend = false
         speechService?.transcribedText = ""
         speechService?.lastRecordingPath = nil
     }
@@ -104,6 +87,8 @@ class ComposerViewModel: ObservableObject {
     func startRecording() {
         guard let speech = speechService else { return }
         speech.transcribedText = ""
+        speech.lastRecordingPath = nil
+        pendingAudioAppend = true
         speech.startRecording()
         recordingDuration = 0
         startDurationTimer()
@@ -135,27 +120,16 @@ class ComposerViewModel: ObservableObject {
 
     // MARK: - Commit data
 
-    /// The content to save — combines typed text and voice transcript.
+    /// The content to save — typed text + concatenated voice transcripts.
+    /// Assembled once per commit, per the "one inference per commit" rule.
     var commitContent: String {
         let typed = textContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        let voice = transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = ([typed] + pendingTranscripts)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
 
-        if !typed.isEmpty && !voice.isEmpty {
-            return typed + "\n\n" + voice
-        }
-        if !typed.isEmpty { return typed }
-        if !voice.isEmpty { return voice }
-        return "No text provided."
-    }
-
-    var commitAudioPath: String? {
-        guard let speech = speechService else { return nil }
-        let saveVoice = UserDefaults.standard.bool(forKey: "saveVoiceEntries")
-        if saveVoice { return speech.lastRecordingPath }
-        if let path = speech.lastRecordingPath {
-            AudioPlayerService.deleteAudio(filename: path)
-        }
-        return nil
+        if parts.isEmpty { return "No text provided." }
+        return parts.joined(separator: "\n\n")
     }
 
     // MARK: - Duration timer

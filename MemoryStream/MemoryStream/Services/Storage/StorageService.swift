@@ -24,6 +24,21 @@ final class StorageService {
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
 
+    /// Test-only initializer: in-memory Core Data store with no disk persistence.
+    init(inMemory: Bool) {
+        precondition(inMemory, "Use .shared for on-disk storage")
+        container = NSPersistentContainer(name: "MemoryStream")
+        let description = NSPersistentStoreDescription()
+        description.type = NSInMemoryStoreType
+        container.persistentStoreDescriptions = [description]
+        container.loadPersistentStores { _, error in
+            if let error {
+                fatalError("In-memory Core Data failed to load: \(error.localizedDescription)")
+            }
+        }
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+    }
+
     func backgroundContext() -> NSManagedObjectContext {
         let context = container.newBackgroundContext()
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy

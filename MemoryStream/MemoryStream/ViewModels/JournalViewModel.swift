@@ -9,18 +9,27 @@ class JournalViewModel: ObservableObject {
     @Published var topics: [String] = []
     @Published var selectedTopic: String? = nil
 
-    private let storage = StorageService.shared
-    private let processingEngine = ProcessingEngine.shared
+    private let storage: StorageService
+    private let processingEngine: ProcessingEngine?
     private var contextObserver: AnyCancellable?
     private var useMockData = false
 
-    init() {
+    init(storage: StorageService = .shared, processingEngine: ProcessingEngine? = .shared) {
+        self.storage = storage
+        self.processingEngine = processingEngine
         if useMockData {
             loadMockData()
         } else {
             observeStorageChanges()
             loadEntries()
         }
+    }
+
+    /// Live lookup by id. Use this in views that need to re-render after the
+    /// underlying entry changes; snapshot values captured at navigation time
+    /// will not reflect subsequent appends.
+    func currentEntry(id: UUID) -> EntryDisplayModel? {
+        entries.first { $0.id == id }
     }
 
     // MARK: - Observe Core Data Changes
@@ -77,20 +86,23 @@ class JournalViewModel: ObservableObject {
 
             loadEntries()
 
+            guard let processingEngine else { return }
+
             // Cache thumbnails in background
             if !savedRefs.isEmpty {
+                let storage = self.storage
                 Task.detached {
                     for ref in savedRefs {
                         let filename = await ThumbnailService.shared.cacheThumbnail(for: ref.osIdentifier)
                         if let filename {
-                            try? StorageService.shared.updateThumbnailFilename(ref, filename: filename)
+                            try? storage.updateThumbnailFilename(ref, filename: filename)
                         }
                     }
                 }
             }
 
             // Kick off background processing
-            Task.detached { [processingEngine] in
+            Task.detached {
                 await processingEngine.processEntry(entry)
             }
         } catch {
@@ -189,8 +201,10 @@ class JournalViewModel: ObservableObject {
                 loadEntries()
 
                 // Re-process
-                Task.detached { [processingEngine] in
-                    await processingEngine.processEntry(entry)
+                if let processingEngine {
+                    Task.detached {
+                        await processingEngine.processEntry(entry)
+                    }
                 }
             } else {
                 // Tags-only change, no re-processing needed
@@ -251,20 +265,23 @@ class JournalViewModel: ObservableObject {
             try storage.save(context: storage.viewContext)
             loadEntries()
 
+            guard let processingEngine else { return }
+
             // Cache thumbnails in background
             if !savedRefs.isEmpty {
+                let storage = self.storage
                 Task.detached {
                     for ref in savedRefs {
                         let filename = await ThumbnailService.shared.cacheThumbnail(for: ref.osIdentifier)
                         if let filename {
-                            try? StorageService.shared.updateThumbnailFilename(ref, filename: filename)
+                            try? storage.updateThumbnailFilename(ref, filename: filename)
                         }
                     }
                 }
             }
 
             // Re-process
-            Task.detached { [processingEngine] in
+            Task.detached {
                 await processingEngine.processEntry(entry)
             }
         } catch {

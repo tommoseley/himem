@@ -12,7 +12,7 @@ struct JournalView: View {
     @AppStorage("cardDensity") private var cardDensityRaw: String = CardDensity.standard.rawValue
     @State private var showSearch = false
     @State private var showSettings = false
-    @State private var selectedEntry: EntryDisplayModel? = nil
+    @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var entityFilter: String? = nil
 
@@ -107,10 +107,7 @@ struct JournalView: View {
                                     withAnimation { entityFilter = value }
                                 },
                                 onAppend: { entry in
-                                    composer.speechService = speechService
-                                    composer.cameraService = cameraService
-                                    composer.existingMedia = entry.mediaItems
-                                    composer.open(mode: .append(entryId: entry.id, title: entry.displayTitle))
+                                    selectedEntryId = entry.id
                                 }
                             )
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
@@ -124,10 +121,10 @@ struct JournalView: View {
                                 }
                             }
                             .contentShape(Rectangle())
-                            .onTapGesture { selectedEntry = entry }
+                            .onTapGesture { selectedEntryId = entry.id }
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 Button {
-                                    selectedEntry = entry
+                                    selectedEntryId = entry.id
                                 } label: {
                                     Label("View", systemImage: "eye")
                                 }
@@ -156,12 +153,12 @@ struct JournalView: View {
         ComposerFAB(isOpen: composer.isPresented) {
             composer.speechService = speechService
             composer.cameraService = cameraService
-            composer.open(mode: .new)
+            composer.open()
         } onLongPress: {
             UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
             composer.speechService = speechService
             composer.cameraService = cameraService
-            composer.open(mode: .new, withRecording: true)
+            composer.open(withRecording: true)
         }
         .padding(.trailing, 14)
         .padding(.bottom, 14)
@@ -178,36 +175,42 @@ struct JournalView: View {
         }) {
             ComposerView(
                 composer: composer,
+                speechService: speechService,
                 topics: viewModel.topics,
                 onCommit: { handleCommit() }
             )
         }
-        .navigationDestination(item: $selectedEntry) { entry in
-            EntryExpandedView(
-                entry: entry,
-                backLabel: dateLabel(for: entry.createdAt),
-                allTopics: viewModel.topics,
-                onSave: { entryId, newContent, removedTagIds, removedMediaIds, addedTopics, removedTopics, discardAudio in
-                    viewModel.editEntry(
-                        entryId: entryId,
-                        newContent: newContent,
-                        removedTagIds: removedTagIds,
-                        removedMediaIds: removedMediaIds,
-                        addedTopicNames: addedTopics,
-                        removedTopicNames: removedTopics,
-                        discardAudio: discardAudio
-                    )
-                },
-                onFeedback: { entryId, state in
-                    viewModel.submitFeedback(entryId: entryId, state: state)
-                },
-                onAppend: { entry in
-                    composer.speechService = speechService
-                    composer.cameraService = cameraService
-                    composer.existingMedia = entry.mediaItems
-                    composer.open(mode: .append(entryId: entry.id, title: entry.displayTitle))
-                }
-            )
+        .navigationDestination(item: $selectedEntryId) { entryId in
+            if let entry = viewModel.currentEntry(id: entryId) {
+                EntryExpandedView(
+                    entry: entry,
+                    backLabel: dateLabel(for: entry.createdAt),
+                    allTopics: viewModel.topics,
+                    cameraService: cameraService,
+                    speechService: speechService,
+                    onSave: { entryId, newContent, removedTagIds, removedMediaIds, addedTopics, removedTopics, discardAudio in
+                        viewModel.editEntry(
+                            entryId: entryId,
+                            newContent: newContent,
+                            removedTagIds: removedTagIds,
+                            removedMediaIds: removedMediaIds,
+                            addedTopicNames: addedTopics,
+                            removedTopicNames: removedTopics,
+                            discardAudio: discardAudio
+                        )
+                    },
+                    onFeedback: { entryId, state in
+                        viewModel.submitFeedback(entryId: entryId, state: state)
+                    },
+                    onCommit: { entryId, additionalContent, mediaCaptures in
+                        viewModel.appendToEntry(
+                            entryId: entryId,
+                            additionalContent: additionalContent,
+                            mediaCaptures: mediaCaptures
+                        )
+                    }
+                )
+            }
         }
         .sheet(isPresented: Binding(
             get: { topicApproval.pendingTopic != nil },
@@ -322,30 +325,12 @@ struct JournalView: View {
     // MARK: - Composer handlers
 
     private func handleCommit() {
-        let content = composer.commitContent
-        let audioPath = composer.commitAudioPath
-        let media = composer.mediaCaptures
-        let topicName = composer.selectedTopicName
-
-        switch composer.mode {
-        case .new:
-            viewModel.saveEntry(
-                content: content,
-                inputType: .composed,
-                audioFilePath: audioPath,
-                mediaCaptures: media,
-                topicName: topicName
-            )
-
-        case .append(let entryId, _):
-            viewModel.appendToEntry(
-                entryId: entryId,
-                additionalContent: content == "No text provided." ? "" : content,
-                audioFilePath: audioPath,
-                mediaCaptures: media
-            )
-        }
-
+        viewModel.saveEntry(
+            content: composer.commitContent,
+            inputType: .composed,
+            mediaCaptures: composer.mediaCaptures,
+            topicName: composer.selectedTopicName
+        )
         composer.reset()
     }
 }

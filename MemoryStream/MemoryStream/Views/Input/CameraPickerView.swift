@@ -66,8 +66,6 @@ struct CameraPickerView: UIViewControllerRepresentable {
         }
 
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            picker.dismiss(animated: true)
-
             if let image = info[.originalImage] as? UIImage {
                 onCapture(.photo(image))
             } else if let videoURL = info[.mediaURL] as? URL {
@@ -76,7 +74,6 @@ struct CameraPickerView: UIViewControllerRepresentable {
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true)
             onDismiss()
         }
     }

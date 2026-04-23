@@ -2,10 +2,12 @@ import SwiftUI
 
 struct ComposerView: View {
     @ObservedObject var composer: ComposerViewModel
+    @ObservedObject var speechService: SpeechService
     let topics: [String]
     let onCommit: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var showTextEditor = false
+    @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,19 +20,10 @@ struct ComposerView: View {
 
             // Header — title + close only
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    if composer.isAppendMode {
-                        Text("ADDING TO")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .tracking(0.5)
-                            .foregroundStyle(Crucible.Color.ink3)
-                    }
-                    Text(composer.headerTitle)
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundStyle(Crucible.Color.ink)
-                }
+                Text(composer.headerTitle)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundStyle(Crucible.Color.ink)
                 Spacer()
                 Button {
                     dismiss()
@@ -60,39 +53,6 @@ struct ComposerView: View {
             // Work area — list of attachments
             ScrollView {
                 VStack(spacing: 8) {
-                    // Existing media (append mode)
-                    if composer.isAppendMode && !composer.existingMedia.isEmpty {
-                        Text("ALREADY ATTACHED")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .tracking(0.5)
-                            .foregroundStyle(Crucible.Color.ink3)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 4)
-
-                        ForEach(composer.existingMedia) { item in
-                            AttachmentRow(
-                                color: item.mediaType == .video ? Crucible.Color.Media.video : Crucible.Color.Media.photo,
-                                icon: item.mediaType == .video ? "video" : "camera",
-                                label: item.mediaType == .video ? "Video" : "Photo",
-                                emphasized: false
-                            ) {
-                                MediaThumbnailView(item: item, size: 48) {}
-                            }
-                            .opacity(0.7)
-                        }
-
-                        if !composer.mediaCaptures.isEmpty || composer.isRecording || !composer.transcribedText.isEmpty {
-                            Text("NEW")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .tracking(0.5)
-                                .foregroundStyle(Crucible.Color.ink3)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.top, 8)
-                        }
-                    }
-
                     // Active recording row
                     if composer.isRecording {
                         AttachmentRow(
@@ -137,37 +97,45 @@ struct ComposerView: View {
                             }
                             .buttonStyle(.plain)
                         }
-                    } else if composer.recordingDuration > 0 {
-                        // Completed recording
-                        AttachmentRow(
-                            color: Crucible.Color.Media.audio,
-                            icon: "mic",
-                            label: "Audio",
-                            meta: formatDuration(composer.recordingDuration)
-                        ) {
-                            HStack(spacing: 2) {
-                                ForEach(0..<16, id: \.self) { i in
-                                    RoundedRectangle(cornerRadius: 1)
-                                        .fill(Crucible.Color.Media.audio.opacity(0.6))
-                                        .frame(width: 2.5, height: CGFloat(4 + (i % 5) * 3))
-                                }
-                            }
-                            .frame(height: 18)
-                        }
                     }
 
-                    // Transcript row (auto-generated from voice)
-                    if !composer.transcribedText.isEmpty {
+                    // Live transcript (current recording only)
+                    if composer.isRecording && !composer.transcribedText.isEmpty {
                         AttachmentRow(
                             color: Crucible.Color.Media.text,
                             icon: "pencil",
-                            label: "Transcript"
+                            label: "Live transcript"
                         ) {
                             Text(composer.transcribedText)
                                 .font(.footnote)
                                 .italic()
                                 .foregroundStyle(Crucible.Color.ink)
                                 .lineSpacing(3)
+                        }
+                    }
+
+                    // Staged transcripts (one per completed recording)
+                    ForEach(Array(composer.pendingTranscripts.enumerated()), id: \.offset) { index, transcript in
+                        AttachmentRow(
+                            color: Crucible.Color.Media.text,
+                            icon: "pencil",
+                            label: "Transcript"
+                        ) {
+                            Text(transcript)
+                                .font(.footnote)
+                                .italic()
+                                .foregroundStyle(Crucible.Color.ink)
+                                .lineSpacing(3)
+                        } actions: {
+                            Button {
+                                composer.pendingTranscripts.remove(at: index)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Crucible.Color.ink3)
+                                    .frame(width: 24, height: 24)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
 
@@ -186,15 +154,18 @@ struct ComposerView: View {
                         }
                     }
 
-                    // Media rows
+                    // Media rows (photo, video, voice)
                     ForEach(Array(composer.mediaCaptures.enumerated()), id: \.offset) { index, capture in
-                        let isVideo = capture.mediaType == .video
                         AttachmentRow(
-                            color: isVideo ? Crucible.Color.Media.video : Crucible.Color.Media.photo,
-                            icon: isVideo ? "video" : "camera",
-                            label: isVideo ? "Video" : "Photo"
+                            color: mediaColor(for: capture.mediaType),
+                            icon: mediaIcon(for: capture.mediaType),
+                            label: mediaLabel(for: capture.mediaType)
                         ) {
-                            ComposerThumb(localIdentifier: capture.localIdentifier, isVideo: isVideo)
+                            if capture.mediaType == .voice {
+                                VoicePlaybackRow(filename: capture.localIdentifier)
+                            } else {
+                                ComposerThumb(localIdentifier: capture.localIdentifier, isVideo: capture.mediaType == .video)
+                            }
                         } actions: {
                             Button {
                                 composer.removeMedia(at: index)
@@ -274,6 +245,27 @@ struct ComposerView: View {
                 onDismiss: { composer.showCamera = false }
             )
         }
+        .onChange(of: speechService.isRecording) { wasRecording, isRecording in
+            guard wasRecording, !isRecording else { return }
+            guard composer.pendingAudioAppend else { return }
+            composer.pendingAudioAppend = false
+
+            let transcript = speechService.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let path = speechService.lastRecordingPath {
+                if saveVoiceEntries {
+                    composer.mediaCaptures.append((localIdentifier: path, mediaType: .voice))
+                    if !transcript.isEmpty { composer.pendingTranscripts.append(transcript) }
+                } else {
+                    // Primary audio discarded by user preference; derived transcript still retained.
+                    AudioPlayerService.deleteAudio(filename: path)
+                    if !transcript.isEmpty { composer.pendingTranscripts.append(transcript) }
+                }
+            } else if !transcript.isEmpty {
+                composer.pendingTranscripts.append(transcript)
+            }
+            speechService.transcribedText = ""
+            speechService.lastRecordingPath = nil
+        }
     }
 
     private var activeToolbarType: String? {
@@ -284,8 +276,8 @@ struct ComposerView: View {
 
     private var itemCount: Int {
         var count = composer.mediaCaptures.count
-        if composer.recordingDuration > 0 || composer.isRecording { count += 1 }
-        if !composer.transcribedText.isEmpty { count += 1 }
+        count += composer.pendingTranscripts.count
+        if composer.isRecording { count += 1 }
         if !composer.textContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
         return count
     }
@@ -294,6 +286,30 @@ struct ComposerView: View {
         let m = Int(seconds) / 60
         let s = Int(seconds) % 60
         return String(format: "%d:%02d", m, s)
+    }
+
+    private func mediaColor(for type: MediaReference.MediaType) -> Color {
+        switch type {
+        case .image: return Crucible.Color.Media.photo
+        case .video: return Crucible.Color.Media.video
+        case .voice: return Crucible.Color.Media.audio
+        }
+    }
+
+    private func mediaIcon(for type: MediaReference.MediaType) -> String {
+        switch type {
+        case .image: return "camera"
+        case .video: return "video"
+        case .voice: return "mic"
+        }
+    }
+
+    private func mediaLabel(for type: MediaReference.MediaType) -> String {
+        switch type {
+        case .image: return "Photo"
+        case .video: return "Video"
+        case .voice: return "Audio"
+        }
     }
 }
 
