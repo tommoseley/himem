@@ -224,64 +224,27 @@ struct EntryExpandedView: View {
                     )
                 }
 
-                // Media rows
+                // Media tile grid
                 if entry.hasAudio || !entry.mediaItems.isEmpty {
-                    VStack(spacing: 8) {
-                        // Audio row
+                    let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+                    LazyVGrid(columns: columns, spacing: 8) {
+                        // Audio tile
                         if let audioFile = entry.audioFilePath, !discardAudio {
-                            AttachmentRow(
-                                color: Crucible.Color.Media.audio,
-                                icon: "mic",
-                                label: "Audio"
-                            ) {
-                                VoicePlaybackRow(filename: audioFile)
-                            } actions: {
-                                if mode == .editing {
-                                    Menu {
-                                        Button(role: .destructive) {
-                                            discardAudio = true
-                                        } label: {
-                                            Label("Remove audio", systemImage: "trash")
-                                        }
-                                    } label: {
-                                        Image(systemName: "ellipsis")
-                                            .font(.caption)
-                                            .foregroundStyle(Crucible.Color.ink3)
-                                            .frame(width: 24, height: 24)
-                                    }
-                                }
-                            }
+                            MediaTile(
+                                localIdentifier: audioFile,
+                                mediaType: .voice,
+                                onRemove: mode == .editing ? { discardAudio = true } : nil
+                            )
                         }
 
-                        // Photo/video/voice rows
+                        // Photo/video/voice tiles
                         ForEach(entry.mediaItems) { item in
                             if !removedMediaIds.contains(item.id) {
-                                AttachmentRow(
-                                    color: attachmentColor(for: item.mediaType),
-                                    icon: attachmentIcon(for: item.mediaType),
-                                    label: attachmentLabel(for: item.mediaType)
-                                ) {
-                                    if item.mediaType == .voice {
-                                        VoicePlaybackRow(filename: item.localIdentifier)
-                                    } else {
-                                        MediaThumbnailView(item: item, size: 52) {}
-                                    }
-                                } actions: {
-                                    if mode == .editing {
-                                        Menu {
-                                            Button(role: .destructive) {
-                                                removedMediaIds.insert(item.id)
-                                            } label: {
-                                                Label("Remove", systemImage: "trash")
-                                            }
-                                        } label: {
-                                            Image(systemName: "ellipsis")
-                                                .font(.caption)
-                                                .foregroundStyle(Crucible.Color.ink3)
-                                                .frame(width: 24, height: 24)
-                                        }
-                                    }
-                                }
+                                MediaTile(
+                                    localIdentifier: item.localIdentifier,
+                                    mediaType: item.mediaType,
+                                    onRemove: mode == .editing ? { removedMediaIds.insert(item.id) } : nil
+                                )
                             }
                         }
                     }
@@ -773,47 +736,30 @@ private struct PendingStagingSection: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if isRecording {
-                AttachmentRow(
-                    color: Crucible.Color.Media.audio,
-                    icon: "mic",
-                    label: "Recording",
-                    emphasized: true
-                ) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(Crucible.Color.Media.audio)
-                            .frame(width: 6, height: 6)
-                        Text("LIVE")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(Crucible.Color.Media.audio)
-                    }
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Crucible.Color.Media.audio)
+                        .frame(width: 8, height: 8)
+                    Text("Recording...")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Crucible.Color.Media.audio)
                 }
             }
 
-            ForEach(Array(media.enumerated()), id: \.offset) { index, item in
-                PendingMediaRow(item: item) { onRemoveMedia(index) }
-            }
-
+            // Transcripts (body text, not tiles)
             ForEach(Array(transcripts.enumerated()), id: \.offset) { index, transcript in
-                AttachmentRow(
-                    color: Crucible.Color.Media.text,
-                    icon: "pencil",
-                    label: "Transcript"
-                ) {
+                HStack(alignment: .top) {
                     Text(transcript)
                         .font(.footnote)
                         .italic()
                         .foregroundStyle(Crucible.Color.ink)
                         .lineSpacing(3)
-                } actions: {
-                    Button {
-                        onRemoveTranscript(index)
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Crucible.Color.ink3)
-                            .frame(width: 24, height: 24)
+                    Spacer()
+                    Button { onRemoveTranscript(index) } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Crucible.Color.ink4)
                     }
                     .buttonStyle(.plain)
                 }
@@ -821,23 +767,32 @@ private struct PendingStagingSection: View {
 
             let trimmedTyped = typedText.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedTyped.isEmpty {
-                AttachmentRow(
-                    color: Crucible.Color.Media.text,
-                    icon: "pencil",
-                    label: "Note"
-                ) {
+                HStack(alignment: .top) {
                     Text(trimmedTyped)
                         .font(.footnote)
                         .foregroundStyle(Crucible.Color.ink)
                         .lineSpacing(3)
-                } actions: {
+                    Spacer()
                     Button(action: onClearTypedText) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Crucible.Color.ink3)
-                            .frame(width: 24, height: 24)
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Crucible.Color.ink4)
                     }
                     .buttonStyle(.plain)
+                }
+            }
+
+            // Media tile grid
+            if !media.isEmpty {
+                let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+                LazyVGrid(columns: columns, spacing: 8) {
+                    ForEach(Array(media.enumerated()), id: \.offset) { index, item in
+                        MediaTile(
+                            localIdentifier: item.localIdentifier,
+                            mediaType: item.mediaType,
+                            onRemove: { onRemoveMedia(index) }
+                        )
+                    }
                 }
             }
         }
@@ -845,89 +800,7 @@ private struct PendingStagingSection: View {
     }
 }
 
-private struct PendingMediaRow: View {
-    let item: (localIdentifier: String, mediaType: MediaReference.MediaType)
-    let onRemove: () -> Void
-
-    var body: some View {
-        let color: Color = {
-            switch item.mediaType {
-            case .image: return Crucible.Color.Media.photo
-            case .video: return Crucible.Color.Media.video
-            case .voice: return Crucible.Color.Media.audio
-            }
-        }()
-        let icon: String = {
-            switch item.mediaType {
-            case .image: return "camera"
-            case .video: return "video"
-            case .voice: return "mic"
-            }
-        }()
-        let label: String = {
-            switch item.mediaType {
-            case .image: return "Photo"
-            case .video: return "Video"
-            case .voice: return "Audio"
-            }
-        }()
-
-        AttachmentRow(color: color, icon: icon, label: label) {
-            if item.mediaType == .voice {
-                VoicePlaybackRow(filename: item.localIdentifier)
-            } else {
-                PendingMediaThumbnail(localIdentifier: item.localIdentifier, isVideo: item.mediaType == .video)
-            }
-        } actions: {
-            Button(action: onRemove) {
-                Image(systemName: "trash")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Crucible.Color.ink3)
-                    .frame(width: 24, height: 24)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-}
-
-private struct PendingMediaThumbnail: View {
-    let localIdentifier: String
-    let isVideo: Bool
-    @State private var thumbnail: UIImage? = nil
-
-    var body: some View {
-        ZStack {
-            if let thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Crucible.Color.sunk
-            }
-        }
-        .frame(width: 52, height: 40)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(Crucible.Color.hairline, lineWidth: 1)
-        )
-        .overlay {
-            if isVideo {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(.black.opacity(0.4))
-                    .clipShape(Circle())
-            }
-        }
-        .task {
-            if let cached = await ThumbnailService.shared.cacheThumbnail(for: localIdentifier) {
-                thumbnail = ThumbnailService.shared.cachedThumbnail(filename: cached)
-            }
-        }
-    }
-}
+// PendingMediaRow and PendingMediaThumbnail retired — replaced by MediaTile grid
 
 // MARK: - Commit Footer
 
