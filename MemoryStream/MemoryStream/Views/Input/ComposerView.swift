@@ -7,6 +7,7 @@ struct ComposerView: View {
     let onCommit: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var showTextEditor = false
+    @State private var selectedMedia: MediaDisplayItem? = nil
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
     var body: some View {
@@ -159,7 +160,17 @@ struct ComposerView: View {
                                 MediaTile(
                                     localIdentifier: capture.localIdentifier,
                                     mediaType: capture.mediaType,
-                                    onRemove: { composer.removeMedia(at: index) }
+                                    onRemove: { composer.removeMedia(at: index) },
+                                    onTap: {
+                                        guard capture.mediaType != .voice else { return }
+                                        selectedMedia = MediaDisplayItem(
+                                            id: UUID(),
+                                            localIdentifier: capture.localIdentifier,
+                                            mediaType: capture.mediaType,
+                                            thumbnailCacheFilename: nil,
+                                            isAccessible: true
+                                        )
+                                    }
                                 )
                             }
 
@@ -245,6 +256,9 @@ struct ComposerView: View {
                 },
                 onDismiss: { composer.showCamera = false }
             )
+        }
+        .fullScreenCover(item: $selectedMedia) { item in
+            MediaViewerView(item: item)
         }
         .onChange(of: speechService.isRecording) { wasRecording, isRecording in
             guard wasRecording, !isRecording else { return }
@@ -446,6 +460,7 @@ struct MediaTile: View {
     let localIdentifier: String
     let mediaType: MediaReference.MediaType
     var onRemove: (() -> Void)? = nil
+    var onTap: (() -> Void)? = nil
     @State private var thumbnail: UIImage? = nil
 
     /// Only audio and text get a fold — photos/videos carry their own visual
@@ -512,6 +527,7 @@ struct MediaTile: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
+        .onTapGesture { onTap?() }
         .contextMenu {
             if let onRemove {
                 Button(role: .destructive) { onRemove() } label: {

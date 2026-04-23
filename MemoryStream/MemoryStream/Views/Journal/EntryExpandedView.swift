@@ -42,6 +42,7 @@ struct EntryExpandedView: View {
     @State private var discardAudio = false
     @State private var isCleaningUp = false
     @State private var mentionsExpanded = false
+    @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
 
@@ -243,7 +244,8 @@ struct EntryExpandedView: View {
                                 MediaTile(
                                     localIdentifier: item.localIdentifier,
                                     mediaType: item.mediaType,
-                                    onRemove: mode == .editing ? { removedMediaIds.insert(item.id) } : nil
+                                    onRemove: mode == .editing ? { removedMediaIds.insert(item.id) } : nil,
+                                    onTap: { selectedMedia = item }
                                 )
                             }
                         }
@@ -399,6 +401,9 @@ struct EntryExpandedView: View {
         .onAppear {
             editedTitle = entry.displayTitle
             editedText = entry.content
+        }
+        .fullScreenCover(item: $selectedMedia) { item in
+            MediaViewerView(item: item)
         }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
