@@ -73,7 +73,8 @@ class SearchViewModel: ObservableObject {
                     thumbnailCacheFilename: ref.thumbnailCacheFilename,
                     isAccessible: ref.isAccessible
                 )
-            }
+            },
+            recycledAt: entry.recycledAt
         )
     }
 }

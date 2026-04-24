@@ -2,8 +2,10 @@ import SwiftUI
 import CoreData
 
 struct SettingsView: View {
+    var viewModel: JournalViewModel? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var topics: [Topic] = []
+    @State private var showRecycleBin = false
     @State private var newTopicName: String = ""
     @State private var newTopicColorKey: String = Crucible.Color.topicPalette[0].key
     @State private var showNewTopicSheet = false
@@ -61,6 +63,40 @@ struct SettingsView: View {
                     Text("Topics are the top-level categories shown in the tab bar. When the AI suggests a new topic, you'll be asked to approve it first.")
                 }
 
+                // MARK: - Data Management
+                if let viewModel {
+                    Section {
+                        Button {
+                            showRecycleBin = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(Crucible.Color.ink2)
+                                Text("Recycle Bin")
+                                    .foregroundStyle(Crucible.Color.ink)
+                                Spacer()
+                                let count = viewModel.loadRecycledEntries().count
+                                if count > 0 {
+                                    Text("\(count)")
+                                        .font(.caption)
+                                        .foregroundStyle(Crucible.Color.ink3)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 2)
+                                        .background(Crucible.Color.sunk)
+                                        .clipShape(Capsule())
+                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundStyle(Crucible.Color.ink4)
+                            }
+                        }
+                    } header: {
+                        Text("Data Management")
+                    } footer: {
+                        Text("Recycled memories are kept for 30 days before automatic deletion.")
+                    }
+                }
+
                 // MARK: - Voice
                 Section {
                     Toggle("Save voice recordings", isOn: $saveVoiceEntries)
@@ -81,6 +117,11 @@ struct SettingsView: View {
             }
             .onAppear {
                 loadTopics()
+            }
+            .sheet(isPresented: $showRecycleBin) {
+                if let viewModel {
+                    RecycleBinView(viewModel: viewModel)
+                }
             }
             .sheet(isPresented: $showNewTopicSheet) {
                 NewTopicSheet(

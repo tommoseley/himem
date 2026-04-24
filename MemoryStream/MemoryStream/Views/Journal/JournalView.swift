@@ -168,7 +168,7 @@ struct JournalView: View {
             SearchView()
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView()
+            SettingsView(viewModel: viewModel)
         }
         .sheet(isPresented: $composer.isPresented, onDismiss: {
             composer.close()
@@ -213,8 +213,7 @@ struct JournalView: View {
                         viewModel.deleteEntry(entryId: entryId)
                     },
                     onRecycle: { entryId in
-                        // TODO: implement soft delete / recycle bin
-                        viewModel.deleteEntry(entryId: entryId)
+                        viewModel.recycleEntry(entryId: entryId)
                     }
                 )
             }

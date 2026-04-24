@@ -9,6 +9,8 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var inputType: String // "siri", "voice_in_app", "typed"
     @NSManaged public var audioFilePath: String?
     @NSManaged public var createdAt: Date
+    @NSManaged public var isRecycled: Bool
+    @NSManaged public var recycledAt: Date?
     @NSManaged public var extractedEntities: NSSet?
     @NSManaged public var mediaReferences: NSSet?
     @NSManaged public var processingTasks: NSSet?
@@ -81,6 +83,7 @@ extension JournalEntry {
 extension JournalEntry {
     static func fetchAllChronological() -> NSFetchRequest<JournalEntry> {
         let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "isRecycled == NO OR isRecycled == nil")
         request.sortDescriptors = [NSSortDescriptor(keyPath: \JournalEntry.createdAt, ascending: false)]
         return request
     }

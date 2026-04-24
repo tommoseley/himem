@@ -289,25 +289,85 @@ class JournalViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Delete
+    // MARK: - Delete / Recycle
 
     func deleteEntry(entryId: UUID) {
-        // Optimistic UI removal
         entries.removeAll { $0.id == entryId }
-
-        if !useMockData {
-            let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
-            request.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
-            request.fetchLimit = 1
-            do {
-                if let entry = try storage.viewContext.fetch(request).first {
-                    storage.viewContext.delete(entry)
-                    try storage.save(context: storage.viewContext)
-                }
-            } catch {
-                print("Failed to delete entry: \(error)")
-                loadEntries() // Reload to restore state on failure
+        guard !useMockData else { return }
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
+        request.fetchLimit = 1
+        do {
+            if let entry = try storage.viewContext.fetch(request).first {
+                storage.viewContext.delete(entry)
+                try storage.save(context: storage.viewContext)
             }
+        } catch {
+            print("Failed to delete entry: \(error)")
+            loadEntries()
+        }
+    }
+
+    func recycleEntry(entryId: UUID) {
+        entries.removeAll { $0.id == entryId }
+        guard !useMockData else { return }
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
+        request.fetchLimit = 1
+        do {
+            if let entry = try storage.viewContext.fetch(request).first {
+                entry.isRecycled = true
+                entry.recycledAt = Date()
+                try storage.save(context: storage.viewContext)
+            }
+        } catch {
+            print("Failed to recycle entry: \(error)")
+            loadEntries()
+        }
+    }
+
+    func restoreEntry(entryId: UUID) {
+        guard !useMockData else { return }
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
+        request.fetchLimit = 1
+        do {
+            if let entry = try storage.viewContext.fetch(request).first {
+                entry.isRecycled = false
+                entry.recycledAt = nil
+                try storage.save(context: storage.viewContext)
+                loadEntries()
+            }
+        } catch {
+            print("Failed to restore entry: \(error)")
+        }
+    }
+
+    func loadRecycledEntries() -> [EntryDisplayModel] {
+        guard !useMockData else { return [] }
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "isRecycled == YES")
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \JournalEntry.recycledAt, ascending: false)]
+        do {
+            return try storage.viewContext.fetch(request).map { mapToDisplayModel($0) }
+        } catch {
+            print("Failed to load recycled entries: \(error)")
+            return []
+        }
+    }
+
+    func emptyRecycleBin() {
+        guard !useMockData else { return }
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "isRecycled == YES")
+        do {
+            let entries = try storage.viewContext.fetch(request)
+            for entry in entries {
+                storage.viewContext.delete(entry)
+            }
+            try storage.save(context: storage.viewContext)
+        } catch {
+            print("Failed to empty recycle bin: \(error)")
         }
     }
 
@@ -330,7 +390,8 @@ class JournalViewModel: ObservableObject {
             audioFilePath: current.audioFilePath,
             inferenceSummary: current.inferenceSummary,
             feedbackState: state,
-            mediaItems: current.mediaItems
+            mediaItems: current.mediaItems,
+            recycledAt: current.recycledAt
         )
 
         if !useMockData {
@@ -407,7 +468,8 @@ class JournalViewModel: ObservableObject {
                     thumbnailCacheFilename: ref.thumbnailCacheFilename,
                     isAccessible: ref.isAccessible
                 )
-            }
+            },
+            recycledAt: entry.recycledAt
         )
     }
 
@@ -427,7 +489,8 @@ class JournalViewModel: ObservableObject {
             audioFilePath: nil,
             inferenceSummary: nil,
             feedbackState: nil,
-            mediaItems: []
+            mediaItems: [],
+            recycledAt: nil
         )
         entries.insert(entry, at: 0)
     }
@@ -457,7 +520,8 @@ class JournalViewModel: ObservableObject {
                 audioFilePath: nil,
                 inferenceSummary: "Saved immediately from Siri, linked to Bed 4, and flagged as both a plant-health note and a content opportunity.",
                 feedbackState: nil,
-                mediaItems: []
+                mediaItems: [],
+            recycledAt: nil
             ),
             EntryDisplayModel(
                 id: UUID(),
@@ -472,7 +536,8 @@ class JournalViewModel: ObservableObject {
                 audioFilePath: nil,
                 inferenceSummary: nil,
                 feedbackState: .confirmed,
-                mediaItems: []
+                mediaItems: [],
+            recycledAt: nil
             ),
         ]
     }

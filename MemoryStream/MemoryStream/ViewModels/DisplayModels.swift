@@ -54,6 +54,7 @@ struct EntryDisplayModel: Identifiable {
     let inferenceSummary: String?
     let feedbackState: InferenceSummary.FeedbackState?
     let mediaItems: [MediaDisplayItem]
+    let recycledAt: Date?
 
     var timeString: String {
         let interval = Date().timeIntervalSince(createdAt)

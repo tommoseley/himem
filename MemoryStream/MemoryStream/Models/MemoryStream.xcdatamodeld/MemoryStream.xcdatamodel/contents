@@ -7,6 +7,8 @@
         <attribute name="inputType" attributeType="String" defaultValueString="typed"/>
         <attribute name="audioFilePath" optional="YES" attributeType="String"/>
         <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isRecycled" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="recycledAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="extractedEntities" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExtractedEntity" inverseName="entry" inverseEntity="ExtractedEntity"/>
         <relationship name="mediaReferences" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MediaReference" inverseName="entry" inverseEntity="MediaReference"/>
         <relationship name="processingTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ProcessingTask" inverseName="entry" inverseEntity="ProcessingTask"/>
