@@ -123,42 +123,7 @@ struct EntryCardView: View {
             }
             // Compact: no inference card
 
-            // Voice playback
-            if density == .rich {
-                // Rich: always show voice playback if available
-                if let audioFile = entry.audioFilePath {
-                    VoicePlaybackRow(filename: audioFile)
-                }
-            } else if density == .standard && entry.feedbackState == nil {
-                // Standard: only while inference is pending
-                if let audioFile = entry.audioFilePath {
-                    VoicePlaybackRow(filename: audioFile)
-                } else if entry.inputType == .siri || entry.inputType == .voiceInApp {
-                    Text("Voice entry — audio was not saved.")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .italic()
-                }
-            }
-            // Compact: no voice playback
-
-            // Append button
-            if let onAppend, density != .compact {
-                HStack {
-                    Spacer()
-                    Button {
-                        onAppend(entry)
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Crucible.Color.ink3)
-                            .frame(width: 28, height: 28)
-                            .background(Crucible.Color.sunk)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            // Voice playback and append moved to expanded view
         }
         .padding(density == .compact ? Crucible.Space.md : Crucible.Space.lg)
         .background(Crucible.Color.card)
