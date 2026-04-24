@@ -12,6 +12,7 @@ struct ProjectDetailView: View {
     @State private var editedName = ""
     @State private var editedPurpose = ""
     @State private var selectedEntryId: UUID? = nil
+    @State private var topicFilter: String? = nil
 
     private let storage = StorageService.shared
 
@@ -37,6 +38,10 @@ struct ProjectDetailView: View {
                             .background(Crucible.Color.paper)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
+                        Text("A video? A post? An idea?")
+                            .font(.caption)
+                            .foregroundStyle(Crucible.Color.ink4)
+                            .padding(.leading, 4)
                     }
                 } else {
                     Text(project?.name ?? "")
@@ -51,28 +56,43 @@ struct ProjectDetailView: View {
                     }
                 }
 
-                // Topic pills from project entries
+                // Topic pills from project entries (tap to filter)
                 if let proj = project, !proj.topicNames.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(proj.topicNames, id: \.self) { topic in
-                            let hue = Crucible.Color.topicHue(for: topic)
-                            HStack(spacing: 3) {
-                                Circle().fill(hue.fg).frame(width: 6, height: 6)
-                                Text(topic)
-                                    .font(.caption2)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(hue.fg)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(proj.topicNames, id: \.self) { topic in
+                                let hue = Crucible.Color.topicHue(for: topic)
+                                Button {
+                                    if topicFilter == topic {
+                                        topicFilter = nil
+                                    } else {
+                                        topicFilter = topic
+                                    }
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Circle().fill(hue.fg).frame(width: 6, height: 6)
+                                        Text(topic)
+                                            .font(.caption2)
+                                            .fontWeight(.semibold)
+                                            .foregroundStyle(hue.fg)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(topicFilter == topic ? hue.bg : hue.bg.opacity(0.5))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(topicFilter == topic ? hue.fg.opacity(0.3) : .clear, lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(hue.bg)
-                            .clipShape(Capsule())
                         }
                     }
                 }
 
                 // Memory count
-                Text("\(entries.count) memor\(entries.count == 1 ? "y" : "ies")")
+                let displayCount = topicFilter == nil ? entries.count : entries.filter { $0.topicNames.contains(topicFilter!) }.count
+                Text("\(displayCount) memor\(displayCount == 1 ? "y" : "ies")")
                     .font(.caption)
                     .foregroundStyle(Crucible.Color.ink3)
 
@@ -93,7 +113,8 @@ struct ProjectDetailView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 24)
                 } else {
-                    ForEach(entries) { entry in
+                    let filtered = topicFilter == nil ? entries : entries.filter { $0.topicNames.contains(topicFilter!) }
+                    ForEach(filtered) { entry in
                         EntryCardView(
                             entry: entry,
                             density: .standard,

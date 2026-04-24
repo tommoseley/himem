@@ -123,7 +123,7 @@ private struct NewProjectSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     TextField("What are you building toward?", text: $purpose)
                         .font(.subheadline)
                         .foregroundStyle(Crucible.Color.ink)
@@ -131,6 +131,10 @@ private struct NewProjectSheet: View {
                         .background(Crucible.Color.paper)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
+                    Text("A video? A post? An idea?")
+                        .font(.caption)
+                        .foregroundStyle(Crucible.Color.ink4)
+                        .padding(.leading, 4)
                 }
 
                 Spacer()
