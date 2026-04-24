@@ -16,6 +16,7 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var processingTasks: NSSet?
     @NSManaged public var inferenceSummary: InferenceSummary?
     @NSManaged public var topics: NSSet?
+    @NSManaged public var projects: NSSet?
 }
 
 // MARK: - Input Type

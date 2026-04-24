@@ -14,6 +14,7 @@
         <relationship name="processingTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ProcessingTask" inverseName="entry" inverseEntity="ProcessingTask"/>
         <relationship name="inferenceSummary" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="InferenceSummary" inverseName="entry" inverseEntity="InferenceSummary"/>
         <relationship name="topics" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Topic" inverseName="entries" inverseEntity="Topic"/>
+        <relationship name="projects" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Project" inverseName="entries" inverseEntity="Project"/>
     </entity>
     <entity name="ExtractedEntity" representedClassName="ExtractedEntity" syncable="YES">
         <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
@@ -55,6 +56,14 @@
         <attribute name="inferredAt" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="paletteKey" optional="YES" attributeType="String"/>
         <relationship name="entries" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="topics" inverseEntity="JournalEntry"/>
+    </entity>
+    <entity name="Project" representedClassName="Project" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="purpose" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="updatedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="entries" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="projects" inverseEntity="JournalEntry"/>
     </entity>
     <entity name="MediaReference" representedClassName="MediaReference" syncable="YES">
         <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>

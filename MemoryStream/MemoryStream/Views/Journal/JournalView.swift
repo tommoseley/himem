@@ -8,8 +8,15 @@ struct JournalView: View {
     @StateObject private var topicApproval = TopicApprovalService.shared
     @StateObject private var albumSync = AlbumSyncService.shared
     @StateObject private var composer = ComposerViewModel()
+    @StateObject private var projectVM = ProjectViewModel()
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("cardDensity") private var cardDensityRaw: String = CardDensity.standard.rawValue
+    @State private var viewMode: ViewMode = .memories
+
+    enum ViewMode: String, CaseIterable {
+        case memories = "Memories"
+        case projects = "Projects"
+    }
     @State private var showSearch = false
     @State private var showSettings = false
     @State private var selectedEntryId: UUID? = nil
@@ -27,6 +34,7 @@ struct JournalView: View {
         ZStack(alignment: .bottomTrailing) {
         VStack(spacing: 0) {
             JournalHeaderView(
+                viewMode: $viewMode,
                 density: cardDensity,
                 onSearchTap: { showSearch = true },
                 onDensityTap: {
@@ -78,7 +86,18 @@ struct JournalView: View {
 
                 }
 
-                if displayEntries.isEmpty {
+                if viewMode == .projects {
+                    // Projects list (filtered by topic)
+                    ProjectListView(
+                        projectVM: projectVM,
+                        selectedTopic: viewModel.selectedTopic
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
+
+                if viewMode == .memories && displayEntries.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "text.book.closed")
                             .font(.largeTitle)
@@ -97,6 +116,7 @@ struct JournalView: View {
                     .listRowBackground(Color.clear)
                 }
 
+                if viewMode == .memories {
                 ForEach(groupedEntries, id: \.date) { group in
                     Section {
                         ForEach(group.entries) { entry in
@@ -173,6 +193,7 @@ struct JournalView: View {
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                 }
+                } // if viewMode == .memories
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -416,6 +437,7 @@ struct JournalView: View {
 // MARK: - Header
 
 struct JournalHeaderView: View {
+    @Binding var viewMode: JournalView.ViewMode
     var density: CardDensity = .standard
     let onSearchTap: () -> Void
     let onDensityTap: () -> Void
@@ -427,6 +449,15 @@ struct JournalHeaderView: View {
                 .font(.system(size: 11, weight: .bold))
                 .tracking(2.0)
                 .foregroundStyle(Crucible.Color.ink3)
+
+            // Segmented toggle
+            Picker("", selection: $viewMode) {
+                ForEach(JournalView.ViewMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 180)
 
             Spacer()
 

@@ -36,6 +36,11 @@
 		A100000027 /* NewTopicSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028 /* NewTopicSheet.swift */; };
 		A100000046 /* RecycleBinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000046; };
 		A100000047 /* PhotoLibraryPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000047; };
+		A100000048 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000048; };
+		A100000049 /* ProjectViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000049; };
+		A100000050 /* ProjectCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000050; };
+		A100000051 /* ProjectListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000051; };
+		A100000052 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000052; };
 		A100000028 /* TopicApprovalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000029 /* TopicApprovalService.swift */; };
 		A100000029 /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000030 /* AudioPlayerService.swift */; };
 		A100000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000031 /* Assets.xcassets */; };
@@ -92,6 +97,11 @@
 		B100000028 /* NewTopicSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTopicSheet.swift; sourceTree = "<group>"; };
 		B100000046 /* RecycleBinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecycleBinView.swift; sourceTree = "<group>"; };
 		B100000047 /* PhotoLibraryPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryPicker.swift; sourceTree = "<group>"; };
+		B100000048 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
+		B100000049 /* ProjectViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectViewModel.swift; sourceTree = "<group>"; };
+		B100000050 /* ProjectCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCardView.swift; sourceTree = "<group>"; };
+		B100000051 /* ProjectListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectListView.swift; sourceTree = "<group>"; };
+		B100000052 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
 		B100000029 /* TopicApprovalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicApprovalService.swift; sourceTree = "<group>"; };
 		B100000030 /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		B100000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -175,6 +185,7 @@
 				B100000005 /* InferenceSummary.swift */,
 				B100000006 /* Topic.swift */,
 				B100000007 /* MediaReference.swift */,
+				B100000048 /* Project.swift */,
 				B100000024 /* MemoryStream.xcdatamodeld */,
 			);
 			path = Models;
@@ -186,6 +197,7 @@
 				G100000040 /* Journal */,
 				G100000041 /* Input */,
 				G100000042 /* Search */,
+				G100000061 /* Projects */,
 				G100000043 /* Components */,
 			);
 			path = Views;
@@ -198,6 +210,7 @@
 				B100000016 /* JournalViewModel.swift */,
 				B100000017 /* SearchViewModel.swift */,
 				B100000043 /* ComposerViewModel.swift */,
+				B100000049 /* ProjectViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -295,6 +308,16 @@
 				B100000013 /* ConnectivityMonitor.swift */,
 			);
 			path = Network;
+			sourceTree = "<group>";
+		};
+		G100000061 /* Projects */ = {
+			isa = PBXGroup;
+			children = (
+				B100000050 /* ProjectCardView.swift */,
+				B100000051 /* ProjectListView.swift */,
+				B100000052 /* ProjectDetailView.swift */,
+			);
+			path = Projects;
 			sourceTree = "<group>";
 		};
 		G100000060 /* Theme */ = {
@@ -454,6 +477,11 @@
 				A100000027 /* NewTopicSheet.swift in Sources */,
 				A100000046 /* RecycleBinView.swift in Sources */,
 				A100000047 /* PhotoLibraryPicker.swift in Sources */,
+				A100000048 /* Project.swift in Sources */,
+				A100000049 /* ProjectViewModel.swift in Sources */,
+				A100000050 /* ProjectCardView.swift in Sources */,
+				A100000051 /* ProjectListView.swift in Sources */,
+				A100000052 /* ProjectDetailView.swift in Sources */,
 				A100000045 /* EntryExpandedView.swift in Sources */,
 				A100000028 /* TopicApprovalService.swift in Sources */,
 				A100000039 /* AlbumSyncService.swift in Sources */,

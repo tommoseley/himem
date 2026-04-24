@@ -155,6 +155,20 @@ final class StorageService {
         try save(context: ctx)
     }
 
+    // MARK: - Project Operations
+
+    func createProject(name: String, purpose: String? = nil, context: NSManagedObjectContext? = nil) throws -> Project {
+        let ctx = context ?? viewContext
+        let project = Project(context: ctx)
+        project.id = UUID()
+        project.name = name
+        project.purpose = purpose
+        project.createdAt = Date()
+        project.updatedAt = Date()
+        try save(context: ctx)
+        return project
+    }
+
     // MARK: - Topic Operations
 
     func findOrCreateTopic(name: String, paletteKey: String? = nil, context: NSManagedObjectContext? = nil) throws -> Topic {
