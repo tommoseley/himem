@@ -72,7 +72,7 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "trash")
                                     .foregroundStyle(Crucible.Color.ink2)
-                                Text("Recycle Bin")
+                                Text("Recently Deleted")
                                     .foregroundStyle(Crucible.Color.ink)
                                 Spacer()
                                 let count = viewModel.loadRecycledEntries().count
@@ -93,7 +93,7 @@ struct SettingsView: View {
                     } header: {
                         Text("Data Management")
                     } footer: {
-                        Text("Recycled memories are kept for 30 days before automatic deletion.")
+                        Text("Deleted memories are kept for 30 days before permanent removal.")
                     }
                 }
 

@@ -453,14 +453,14 @@ struct EntryExpandedView: View {
         .fullScreenCover(item: $selectedMedia) { item in
             MediaViewerView(item: item)
         }
-        .alert("Move to Recycle Bin?", isPresented: $showDeleteConfirmation) {
-            Button("Move to Bin", role: .destructive) {
+        .alert("Move to Recently Deleted?", isPresented: $showDeleteConfirmation) {
+            Button("Move to Recently Deleted", role: .destructive) {
                 onRecycle?(entry.id)
                 dismiss()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This memory will be moved to the Recycle Bin. You can restore it from Settings.")
+            Text("This memory will be moved to the Recently Deleted. You can restore it from Settings.")
         }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {

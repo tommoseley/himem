@@ -14,7 +14,7 @@ struct RecycleBinView: View {
                         Image(systemName: "trash")
                             .font(.system(size: 40))
                             .foregroundStyle(Crucible.Color.ink4)
-                        Text("Recycle bin is empty")
+                        Text("Recently Deleted is empty")
                             .font(.subheadline)
                             .foregroundStyle(Crucible.Color.ink3)
                     }
@@ -39,7 +39,7 @@ struct RecycleBinView: View {
                 }
             }
             .background(Crucible.Color.paper)
-            .navigationTitle("Recycle Bin")
+            .navigationTitle("Recently Deleted")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -54,7 +54,7 @@ struct RecycleBinView: View {
                     }
                 }
             }
-            .confirmationDialog("Empty Recycle Bin?", isPresented: $showEmptyConfirm, titleVisibility: .visible) {
+            .confirmationDialog("Empty Recently Deleted?", isPresented: $showEmptyConfirm, titleVisibility: .visible) {
                 Button("Delete All Forever", role: .destructive) {
                     viewModel.emptyRecycleBin()
                     recycledEntries = []
@@ -141,7 +141,7 @@ private struct GhostCard: View {
             // Actions
             HStack(spacing: 12) {
                 if let recycledAt = entry.recycledAt {
-                    Text("Recycled \(recycledAt, style: .date)")
+                    Text("Deleted \(recycledAt, style: .date)")
                         .font(.caption)
                         .foregroundStyle(Crucible.Color.ink4)
                 }

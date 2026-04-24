@@ -161,7 +161,7 @@ struct JournalView: View {
                         if recycledCount > 0 {
                             Text("·")
                                 .foregroundStyle(Crucible.Color.ink4)
-                            Text("\(recycledCount) in Recycle Bin")
+                            Text("\(recycledCount) in Recently Deleted")
                                 .font(.caption)
                                 .foregroundStyle(Crucible.Color.ink4)
                         }
@@ -201,7 +201,7 @@ struct JournalView: View {
             VStack {
                 Spacer()
                 HStack(spacing: 12) {
-                    Text("Moved to Recycle Bin")
+                    Text("Moved to Recently Deleted")
                         .font(.subheadline)
                         .foregroundStyle(.white)
                     Spacer()
