@@ -208,6 +208,13 @@ struct JournalView: View {
                             additionalContent: additionalContent,
                             mediaCaptures: mediaCaptures
                         )
+                    },
+                    onDelete: { entryId in
+                        viewModel.deleteEntry(entryId: entryId)
+                    },
+                    onRecycle: { entryId in
+                        // TODO: implement soft delete / recycle bin
+                        viewModel.deleteEntry(entryId: entryId)
                     }
                 )
             }

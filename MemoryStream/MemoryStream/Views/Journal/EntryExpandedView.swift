@@ -28,6 +28,8 @@ struct EntryExpandedView: View {
     /// additionalContent: typed text + concatenated transcripts.
     /// mediaCaptures: staged photo/video/voice assets.
     var onCommit: ((UUID, String, [(localIdentifier: String, mediaType: MediaReference.MediaType)]) -> Void)? = nil
+    var onDelete: ((UUID) -> Void)? = nil
+    var onRecycle: ((UUID) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var mode: EntryViewMode = .reading
@@ -43,6 +45,7 @@ struct EntryExpandedView: View {
     @State private var isCleaningUp = false
     @State private var mentionsExpanded = false
     @State private var selectedMedia: MediaDisplayItem? = nil
+    @State private var showDeleteConfirmation = false
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
 
@@ -396,10 +399,17 @@ struct EntryExpandedView: View {
                         .foregroundStyle(Crucible.Color.accent)
                         .disabled(!hasChanges)
                 } else {
-                    Button { enterEditing() } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 15))
-                            .foregroundStyle(Crucible.Color.ink2)
+                    HStack(spacing: 16) {
+                        Button { showDeleteConfirmation = true } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Crucible.Color.ink3)
+                        }
+                        Button { enterEditing() } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Crucible.Color.ink2)
+                        }
                     }
                 }
             }
@@ -410,6 +420,19 @@ struct EntryExpandedView: View {
         }
         .fullScreenCover(item: $selectedMedia) { item in
             MediaViewerView(item: item)
+        }
+        .confirmationDialog("Delete this memory?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+            Button("Move to Recycle Bin", role: .destructive) {
+                onRecycle?(entry.id)
+                dismiss()
+            }
+            Button("Delete Forever", role: .destructive) {
+                onDelete?(entry.id)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This memory has \(entry.mediaItems.count) media items and \(entry.tags.count) mentions.")
         }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
