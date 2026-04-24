@@ -426,10 +426,15 @@ struct EntryExpandedView: View {
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 if mode == .editing {
-                    Button("Done") { commitEdits() }
-                        .fontWeight(.bold)
-                        .foregroundStyle(Crucible.Color.accent)
-                        .disabled(!hasChanges)
+                    Button("Done") {
+                        if hasChanges {
+                            commitEdits()
+                        } else {
+                            withAnimation(.easeInOut(duration: 0.2)) { mode = .reading }
+                        }
+                    }
+                    .fontWeight(.bold)
+                    .foregroundStyle(Crucible.Color.accent)
                 } else {
                     HStack(spacing: 16) {
                         Button { showDeleteConfirmation = true } label: {
