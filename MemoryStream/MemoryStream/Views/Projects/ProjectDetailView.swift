@@ -30,12 +30,7 @@ struct ProjectDetailView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("WHY THIS PROJECT?")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .tracking(0.5)
-                            .foregroundStyle(Crucible.Color.ink3)
-                        TextField("Intent", text: $editedPurpose)
+                        TextField("What are you building toward?", text: $editedPurpose)
                             .font(.subheadline)
                             .foregroundStyle(Crucible.Color.ink)
                             .padding(10)
