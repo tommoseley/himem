@@ -7,11 +7,13 @@ enum EntryViewMode {
 private enum ExpandedSheet: Identifiable {
     case camera(CameraPickerView.CaptureMode)
     case newTopic
+    case photoPicker
 
     var id: String {
         switch self {
         case .camera: return "camera"
         case .newTopic: return "newTopic"
+        case .photoPicker: return "photoPicker"
         }
     }
 }
@@ -228,7 +230,7 @@ struct EntryExpandedView: View {
                 }
 
                 // Media tile grid
-                if entry.hasAudio || !entry.mediaItems.isEmpty {
+                if entry.hasAudio || !entry.mediaItems.isEmpty || mode == .editing {
                     let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
                     LazyVGrid(columns: columns, spacing: 8) {
                         // Audio tile
@@ -236,7 +238,7 @@ struct EntryExpandedView: View {
                             MediaTile(
                                 localIdentifier: audioFile,
                                 mediaType: .voice,
-                                onRemove: mode == .editing ? { discardAudio = true } : nil
+                                onRemove: { discardAudio = true; if mode != .editing { enterEditing() } }
                             )
                         }
 
@@ -246,9 +248,34 @@ struct EntryExpandedView: View {
                                 MediaTile(
                                     localIdentifier: item.localIdentifier,
                                     mediaType: item.mediaType,
-                                    onRemove: mode == .editing ? { removedMediaIds.insert(item.id) } : nil,
+                                    onRemove: { removedMediaIds.insert(item.id); if mode != .editing { enterEditing() } },
                                     onTap: { selectedMedia = item }
                                 )
+                            }
+                        }
+
+                        // Add tile
+                        if mode == .editing {
+                            Menu {
+                                Button {
+                                    activeSheet = .camera(.both)
+                                } label: {
+                                    Label("Take Photo or Video", systemImage: "camera")
+                                }
+                                Button {
+                                    activeSheet = .photoPicker
+                                } label: {
+                                    Label("Choose from Library", systemImage: "photo.on.rectangle")
+                                }
+                            } label: {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Crucible.Color.divider, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .overlay(
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 18))
+                                            .foregroundStyle(Crucible.Color.ink3)
+                                    )
                             }
                         }
                     }
@@ -462,6 +489,13 @@ struct EntryExpandedView: View {
                         TopicPaletteStore.shared.set(key: colorKey, for: name)
                     }
                 )
+            case .photoPicker:
+                PhotoLibraryPicker { identifiers in
+                    for id in identifiers {
+                        pendingMedia.append((localIdentifier: id, mediaType: .image))
+                    }
+                    activeSheet = nil
+                }
             }
         }
         .onChange(of: speechService.isRecording) { wasRecording, isRecording in

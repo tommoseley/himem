@@ -532,6 +532,21 @@ struct MediaTile: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+
+            // Remove button (top-left × badge)
+            if let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 20, height: 20)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(4)
+            }
         }
         .aspectRatio(1, contentMode: .fit)
         .onTapGesture {
