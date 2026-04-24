@@ -76,28 +76,6 @@ struct JournalView: View {
                         .listRowBackground(Color.clear)
                     }
 
-                    // Topic summary with recycled count
-                    if let topic = viewModel.selectedTopic {
-                        let recycledCount = viewModel.recycledCountForTopic(topic)
-                        HStack {
-                            Text("\(displayEntries.count) memor\(displayEntries.count == 1 ? "y" : "ies")")
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink2)
-                            if recycledCount > 0 {
-                                Text("·")
-                                    .foregroundStyle(Crucible.Color.ink4)
-                                Text("\(recycledCount) in Recycle Bin")
-                                    .font(.caption)
-                                    .foregroundStyle(Crucible.Color.ink3)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 4)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                    }
                 }
 
                 if displayEntries.isEmpty {
@@ -166,6 +144,34 @@ struct JournalView: View {
                             .textCase(nil)
                             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
                     }
+                }
+
+                // Summary with recycled count (below all entries)
+                if !displayEntries.isEmpty || viewModel.selectedTopic != nil {
+                    let recycledCount: Int = {
+                        if let topic = viewModel.selectedTopic {
+                            return viewModel.recycledCountForTopic(topic)
+                        }
+                        return viewModel.loadRecycledEntries().count
+                    }()
+                    HStack {
+                        Text("\(displayEntries.count) memor\(displayEntries.count == 1 ? "y" : "ies")")
+                            .font(.caption)
+                            .foregroundStyle(Crucible.Color.ink3)
+                        if recycledCount > 0 {
+                            Text("·")
+                                .foregroundStyle(Crucible.Color.ink4)
+                            Text("\(recycledCount) in Recycle Bin")
+                                .font(.caption)
+                                .foregroundStyle(Crucible.Color.ink4)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             }
             .listStyle(.plain)
