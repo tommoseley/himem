@@ -47,9 +47,24 @@ final class AlbumSyncService: ObservableObject {
 
     func proposeIfNeeded(topicName: String) {
         guard !offeredTopics.contains(topicName) else { return }
+
+        // If the album already exists in Photos, skip the prompt and auto-enable sync
+        if albumAlreadyExists(named: topicName) {
+            offeredTopics.insert(topicName)
+            syncedTopics.insert(topicName)
+            return
+        }
+
         offeredTopics.insert(topicName)
         queue.append(PendingProposal(topicName: topicName))
         showNextIfNeeded()
+    }
+
+    private func albumAlreadyExists(named name: String) -> Bool {
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.predicate = NSPredicate(format: "title = %@", name)
+        let collections = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: fetchOptions)
+        return collections.count > 0
     }
 
     func approve() {
