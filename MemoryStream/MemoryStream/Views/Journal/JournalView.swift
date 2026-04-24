@@ -15,6 +15,8 @@ struct JournalView: View {
     @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var entityFilter: String? = nil
+    @State private var undoEntry: EntryDisplayModel? = nil
+    @State private var showUndo = false
 
     private var cardDensity: CardDensity {
         CardDensity(rawValue: cardDensityRaw) ?? .standard
@@ -114,6 +116,16 @@ struct JournalView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                // Full swipe = instant recycle (safe, recoverable)
+                                Button {
+                                    viewModel.recycleEntry(entryId: entry.id)
+                                    showUndoToast(for: entry)
+                                } label: {
+                                    Label("Recycle", systemImage: "arrow.uturn.left")
+                                }
+                                .tint(Crucible.Color.warning)
+
+                                // Partial swipe also shows permanent delete
                                 Button(role: .destructive) {
                                     viewModel.deleteEntry(entryId: entry.id)
                                 } label: {
@@ -162,6 +174,36 @@ struct JournalView: View {
         }
         .padding(.trailing, 14)
         .padding(.bottom, 14)
+
+        // Undo toast
+        if showUndo, let entry = undoEntry {
+            VStack {
+                Spacer()
+                HStack(spacing: 12) {
+                    Text("Moved to Recycle Bin")
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Button {
+                        viewModel.restoreEntry(entryId: entry.id)
+                        withAnimation { showUndo = false }
+                    } label: {
+                        Text("Undo")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundStyle(Crucible.Color.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Crucible.Color.ink)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 100)
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
 
         } // ZStack
         .sheet(isPresented: $showSearch) {
@@ -326,6 +368,18 @@ struct JournalView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d"
         return formatter.string(from: date)
+    }
+
+    // MARK: - Undo toast
+
+    private func showUndoToast(for entry: EntryDisplayModel) {
+        undoEntry = entry
+        withAnimation(.spring(response: 0.3)) { showUndo = true }
+        // Auto-dismiss after 5 seconds
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            withAnimation { showUndo = false }
+        }
     }
 
     // MARK: - Composer handlers
