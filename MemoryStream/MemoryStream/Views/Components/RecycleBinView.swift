@@ -140,6 +140,11 @@ private struct GhostCard: View {
 
             // Actions
             HStack(spacing: 12) {
+                if let recycledAt = entry.recycledAt {
+                    Text("Recycled \(recycledAt, style: .date)")
+                        .font(.caption)
+                        .foregroundStyle(Crucible.Color.ink4)
+                }
                 Spacer()
                 Button {
                     onRestore()
