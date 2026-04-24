@@ -31,6 +31,8 @@ struct EntryExpandedView: View {
     /// mediaCaptures: staged photo/video/voice assets.
     var onCommit: ((UUID, String, [(localIdentifier: String, mediaType: MediaReference.MediaType)]) -> Void)? = nil
     var onRecycle: ((UUID) -> Void)? = nil
+    var onAddToProject: ((UUID, UUID) -> Void)? = nil  // entryId, projectId
+    var availableProjects: [ProjectDisplayModel] = []
 
     @Environment(\.dismiss) private var dismiss
     @State private var mode: EntryViewMode = .reading
@@ -441,6 +443,21 @@ struct EntryExpandedView: View {
                             Image(systemName: "trash")
                                 .font(.system(size: 15))
                                 .foregroundStyle(Crucible.Color.ink3)
+                        }
+                        if !availableProjects.isEmpty {
+                            Menu {
+                                ForEach(availableProjects) { project in
+                                    Button {
+                                        onAddToProject?(entry.id, project.id)
+                                    } label: {
+                                        Label(project.name, systemImage: "folder")
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "folder.badge.plus")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(Crucible.Color.ink2)
+                            }
                         }
                         Button { enterEditing() } label: {
                             Image(systemName: "pencil")

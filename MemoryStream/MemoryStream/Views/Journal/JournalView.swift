@@ -295,7 +295,11 @@ struct JournalView: View {
                     },
                     onRecycle: { entryId in
                         viewModel.recycleEntry(entryId: entryId)
-                    }
+                    },
+                    onAddToProject: { entryId, projectId in
+                        projectVM.addMemory(entryId: entryId, toProjectId: projectId)
+                    },
+                    availableProjects: projectVM.projects
                 )
             }
         }
@@ -444,13 +448,8 @@ struct JournalHeaderView: View {
     let onSettingsTap: () -> Void
 
     var body: some View {
-        HStack {
-            Text("HI MEM")
-                .font(.system(size: 11, weight: .bold))
-                .tracking(2.0)
-                .foregroundStyle(Crucible.Color.ink3)
-
-            // Segmented toggle
+        ZStack {
+            // Center: segmented toggle
             Picker("", selection: $viewMode) {
                 ForEach(JournalView.ViewMode.allCases, id: \.self) { mode in
                     Text(mode.rawValue).tag(mode)
@@ -459,27 +458,39 @@ struct JournalHeaderView: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 180)
 
-            Spacer()
-
-            Button(action: onSearchTap) {
-                Image(systemName: "magnifyingglass")
-                    .font(.body)
-                    .foregroundStyle(.primary)
+            // Left: HI MEM
+            HStack {
+                Text("HI MEM")
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(2.0)
+                    .foregroundStyle(Crucible.Color.ink3)
+                Spacer()
             }
 
-            Button(action: onDensityTap) {
-                Image(systemName: density.icon)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-            }
-            .padding(.leading, 8)
+            // Right: icons
+            HStack {
+                Spacer()
 
-            Button(action: onSettingsTap) {
-                Image(systemName: "gearshape")
-                    .font(.body)
-                    .foregroundStyle(.primary)
+                Button(action: onSearchTap) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                }
+
+                Button(action: onDensityTap) {
+                    Image(systemName: density.icon)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                }
+                .padding(.leading, 8)
+
+                Button(action: onSettingsTap) {
+                    Image(systemName: "gearshape")
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                }
+                .padding(.leading, 8)
             }
-            .padding(.leading, 8)
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
