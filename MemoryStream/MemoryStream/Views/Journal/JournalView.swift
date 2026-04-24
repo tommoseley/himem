@@ -45,59 +45,48 @@ struct JournalView: View {
                 onSettingsTap: { showSettings = true }
             )
 
-            List {
-                Section {
-                    SiriShortcutBanner()
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+            // Topic bar (shared across both modes)
+            TopicTabBar(
+                topics: viewModel.topics,
+                selected: $viewModel.selectedTopic
+            )
+            .padding(.vertical, 4)
 
-                    TopicTabBar(
-                        topics: viewModel.topics,
-                        selected: $viewModel.selectedTopic
-                    )
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-
-                    // Entity filter indicator
-                    if let filter = entityFilter {
-                        HStack(spacing: 8) {
-                            Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                                .foregroundStyle(Crucible.Color.accent)
-                            Text(filter)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            Spacer()
-                            Button {
-                                withAnimation { entityFilter = nil }
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+            // Entity filter indicator
+            if let filter = entityFilter, viewMode == .memories {
+                HStack(spacing: 8) {
+                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                        .foregroundStyle(Crucible.Color.accent)
+                    Text(filter)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                    Button {
+                        withAnimation { entityFilter = nil }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
                     }
-
+                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
+            }
 
-                if viewMode == .projects {
-                    // Projects list (filtered by topic)
-                    ProjectListView(
-                        projectVM: projectVM,
-                        selectedTopic: viewModel.selectedTopic
-                    )
-                    .listRowInsets(EdgeInsets())
+            if viewMode == .projects {
+                ProjectListView(
+                    projectVM: projectVM,
+                    selectedTopic: viewModel.selectedTopic
+                )
+            } else {
+
+            List {
+                SiriShortcutBanner()
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
-                }
 
-                if viewMode == .memories && displayEntries.isEmpty {
+                if displayEntries.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "text.book.closed")
                             .font(.largeTitle)
@@ -200,6 +189,7 @@ struct JournalView: View {
             .safeAreaInset(edge: .bottom) {
                 Color.clear.frame(height: 90)
             }
+            } // else (memories mode)
         }
         .background(Crucible.Color.paper)
 
