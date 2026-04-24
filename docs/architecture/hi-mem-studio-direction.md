@@ -161,12 +161,7 @@ Phase 3: Studio iPad layout
          → split view, project/draft entities, drag-to-project
          → transformation actions in toolbar
 
-Phase 4: Web (if/when needed)
-         → auth layer (Sign in with Apple or custom)
-         → CloudKit JS or custom API
-         → thumbnail-only media (full-res stays on-device)
-
-Phase 5: Watch
+Phase 4: Watch
          → CloudKit companion, Siri complication
          → capture-only (no Studio on Watch)
 ```
@@ -182,8 +177,10 @@ Phase 5: Watch
 | Watch | **No** | Paired via iPhone | Medium |
 | Web | **Yes** | Sign in with Apple or custom | High |
 
-**Recommendation:** Ship iPhone + iPad first (zero auth work).
-Web is a separate decision with separate infrastructure.
+**Recommendation:** Ship iPhone + iPad (zero auth work).
+Web may never be needed — iPad covers the workbench use case
+with keyboard, Apple Pencil, split view, and drag-and-drop.
+Don't build web infrastructure speculatively.
 
 ---
 
