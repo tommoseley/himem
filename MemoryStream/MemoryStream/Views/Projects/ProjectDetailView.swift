@@ -6,6 +6,7 @@ import CoreData
 struct ProjectDetailView: View {
     let projectId: UUID
     @ObservedObject var projectVM: ProjectViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var project: Project?
     @State private var entries: [EntryDisplayModel] = []
     @State private var isEditing = false
@@ -150,7 +151,7 @@ struct ProjectDetailView: View {
                     .foregroundStyle(Crucible.Color.accent)
                 } else {
                     Button {
-                        // Default back
+                        dismiss()
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
