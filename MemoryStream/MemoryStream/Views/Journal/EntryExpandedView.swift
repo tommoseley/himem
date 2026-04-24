@@ -355,10 +355,10 @@ struct EntryExpandedView: View {
                 // Media toolbar — always visible
                 HStack(spacing: 4) {
                     ToolbarIcon(kind: .photo, icon: "camera", label: "Photo", isActive: false) {
-                        activeSheet = .camera(.both)
+                        activeSheet = .camera(.photo)
                     }
-                    ToolbarIcon(kind: .photo, icon: "photo.on.rectangle", label: "Attach", isActive: false) {
-                        activeSheet = .photoPicker
+                    ToolbarIcon(kind: .video, icon: "video", label: "Video", isActive: false) {
+                        activeSheet = .camera(.video)
                     }
                     ToolbarIcon(
                         kind: .audio,
@@ -370,6 +370,16 @@ struct EntryExpandedView: View {
                     }
                     ToolbarIcon(kind: .text, icon: "pencil", label: "Text", isActive: false) {
                         showTextAppender = true
+                    }
+
+                    // Separator
+                    Rectangle()
+                        .fill(Crucible.Color.divider)
+                        .frame(width: 1, height: 28)
+                        .padding(.horizontal, 2)
+
+                    ToolbarIcon(kind: .photo, icon: "photo.on.rectangle", label: "Attach", isActive: false) {
+                        activeSheet = .photoPicker
                     }
                 }
                 .padding(4)
