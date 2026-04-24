@@ -254,30 +254,6 @@ struct EntryExpandedView: View {
                             }
                         }
 
-                        // Add tile
-                        if mode == .editing {
-                            Menu {
-                                Button {
-                                    activeSheet = .camera(.both)
-                                } label: {
-                                    Label("Take Photo or Video", systemImage: "camera")
-                                }
-                                Button {
-                                    activeSheet = .photoPicker
-                                } label: {
-                                    Label("Choose from Library", systemImage: "photo.on.rectangle")
-                                }
-                            } label: {
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Crucible.Color.divider, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
-                                    .aspectRatio(1, contentMode: .fit)
-                                    .overlay(
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 18))
-                                            .foregroundStyle(Crucible.Color.ink3)
-                                    )
-                            }
-                        }
                     }
                 }
 
@@ -357,14 +333,6 @@ struct EntryExpandedView: View {
                         )
                     }
 
-                    InlineAddToolbar(
-                        isRecording: speechService.isRecording,
-                        onPhotoTap: { activeSheet = .camera(.photo) },
-                        onVideoTap: { activeSheet = .camera(.video) },
-                        onAudioTap: toggleAudioRecording,
-                        onTextTap: { showTextAppender = true }
-                    )
-
                     if showTextAppender {
                         InlineTextAppender(
                             text: $pendingTypedText,
@@ -383,6 +351,34 @@ struct EntryExpandedView: View {
                         )
                     }
                 }
+
+                // Media toolbar — always visible
+                HStack(spacing: 4) {
+                    ToolbarIcon(kind: .photo, icon: "camera", label: "Photo", isActive: false) {
+                        activeSheet = .camera(.both)
+                    }
+                    ToolbarIcon(kind: .photo, icon: "photo.on.rectangle", label: "Attach", isActive: false) {
+                        activeSheet = .photoPicker
+                    }
+                    ToolbarIcon(
+                        kind: .audio,
+                        icon: speechService.isRecording ? "stop.fill" : "mic",
+                        label: speechService.isRecording ? "Stop" : "Audio",
+                        isActive: speechService.isRecording
+                    ) {
+                        toggleAudioRecording()
+                    }
+                    ToolbarIcon(kind: .text, icon: "pencil", label: "Text", isActive: false) {
+                        showTextAppender = true
+                    }
+                }
+                .padding(4)
+                .background(Crucible.Color.sunk)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Crucible.Color.hairline, lineWidth: 1)
+                )
             }
             .padding(16)
         }
