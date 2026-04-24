@@ -395,6 +395,12 @@ struct EntryExpandedView: View {
                         .fontWeight(.bold)
                         .foregroundStyle(Crucible.Color.accent)
                         .disabled(!hasChanges)
+                } else {
+                    Button { enterEditing() } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Crucible.Color.ink2)
+                    }
                 }
             }
         }
