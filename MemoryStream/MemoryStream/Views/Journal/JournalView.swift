@@ -75,6 +75,29 @@ struct JournalView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                     }
+
+                    // Topic summary with recycled count
+                    if let topic = viewModel.selectedTopic {
+                        let recycledCount = viewModel.recycledCountForTopic(topic)
+                        HStack {
+                            Text("\(displayEntries.count) memor\(displayEntries.count == 1 ? "y" : "ies")")
+                                .font(.caption)
+                                .foregroundStyle(Crucible.Color.ink2)
+                            if recycledCount > 0 {
+                                Text("·")
+                                    .foregroundStyle(Crucible.Color.ink4)
+                                Text("\(recycledCount) in Recycle Bin")
+                                    .font(.caption)
+                                    .foregroundStyle(Crucible.Color.ink3)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    }
                 }
 
                 if displayEntries.isEmpty {

@@ -356,6 +356,13 @@ class JournalViewModel: ObservableObject {
         }
     }
 
+    func recycledCountForTopic(_ topicName: String) -> Int {
+        guard !useMockData else { return 0 }
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "isRecycled == YES AND ANY topics.name == %@", topicName)
+        return (try? storage.viewContext.count(for: request)) ?? 0
+    }
+
     func emptyRecycleBin() {
         guard !useMockData else { return }
         let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
