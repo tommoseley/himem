@@ -116,21 +116,13 @@ struct JournalView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                // Full swipe = instant recycle (safe, recoverable)
                                 Button {
                                     viewModel.recycleEntry(entryId: entry.id)
                                     showUndoToast(for: entry)
                                 } label: {
-                                    Label("Recycle", systemImage: "arrow.uturn.left")
+                                    Label("Remove", systemImage: "tray.and.arrow.down")
                                 }
-                                .tint(Crucible.Color.warning)
-
-                                // Partial swipe also shows permanent delete
-                                Button(role: .destructive) {
-                                    viewModel.deleteEntry(entryId: entry.id)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+                                .tint(Color(.systemGray))
                             }
                             .contentShape(Rectangle())
                             .onTapGesture { selectedEntryId = entry.id }
@@ -250,9 +242,6 @@ struct JournalView: View {
                             additionalContent: additionalContent,
                             mediaCaptures: mediaCaptures
                         )
-                    },
-                    onDelete: { entryId in
-                        viewModel.deleteEntry(entryId: entryId)
                     },
                     onRecycle: { entryId in
                         viewModel.recycleEntry(entryId: entryId)

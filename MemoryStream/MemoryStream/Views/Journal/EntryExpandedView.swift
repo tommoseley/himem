@@ -28,7 +28,6 @@ struct EntryExpandedView: View {
     /// additionalContent: typed text + concatenated transcripts.
     /// mediaCaptures: staged photo/video/voice assets.
     var onCommit: ((UUID, String, [(localIdentifier: String, mediaType: MediaReference.MediaType)]) -> Void)? = nil
-    var onDelete: ((UUID) -> Void)? = nil
     var onRecycle: ((UUID) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
@@ -421,18 +420,14 @@ struct EntryExpandedView: View {
         .fullScreenCover(item: $selectedMedia) { item in
             MediaViewerView(item: item)
         }
-        .confirmationDialog("Delete this memory?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
-            Button("Move to Recycle Bin", role: .destructive) {
+        .alert("Move to Recycle Bin?", isPresented: $showDeleteConfirmation) {
+            Button("Move to Bin", role: .destructive) {
                 onRecycle?(entry.id)
-                dismiss()
-            }
-            Button("Delete Forever", role: .destructive) {
-                onDelete?(entry.id)
                 dismiss()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This memory has \(entry.mediaItems.count) media items and \(entry.tags.count) mentions.")
+            Text("This memory will be moved to the Recycle Bin. You can restore it from Settings.")
         }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
