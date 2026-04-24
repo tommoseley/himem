@@ -253,58 +253,58 @@ struct TopicEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                TextField("Topic name", text: $name)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .padding(12)
-                    .background(Crucible.Color.paper)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
-                    .padding(.top, 8)
-
-                if !name.trimmingCharacters(in: .whitespaces).isEmpty {
-                    let hue = Crucible.Color.topicHue(forKey: colorKey)
-                    Text(name.trimmingCharacters(in: .whitespaces))
-                        .font(.caption)
+            ScrollView {
+                VStack(spacing: 20) {
+                    TextField("Topic name", text: $name)
+                        .font(.title3)
                         .fontWeight(.semibold)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(hue.bg)
-                        .foregroundStyle(hue.fg)
-                        .clipShape(Capsule())
-                }
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Crucible.Color.ink)
+                        .padding(12)
+                        .background(Crucible.Color.paper)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("COLOR")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .tracking(0.5)
-                        .foregroundStyle(Crucible.Color.ink3)
-
-                    TopicColorPicker(selectedKey: $colorKey)
-                }
-
-                Spacer()
-
-                VStack(spacing: 4) {
-                    Button(role: .destructive) {
-                        showDeleteConfirm = true
-                    } label: {
-                        Text("Delete Topic")
-                            .font(.footnote)
+                    if !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                        let hue = Crucible.Color.topicHue(forKey: colorKey)
+                        Text(name.trimmingCharacters(in: .whitespaces))
+                            .font(.caption)
                             .fontWeight(.semibold)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(hue.bg)
+                            .foregroundStyle(hue.fg)
+                            .clipShape(Capsule())
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("COLOR")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .tracking(0.5)
+                            .foregroundStyle(Crucible.Color.ink3)
+
+                        TopicColorPicker(selectedKey: $colorKey)
+                    }
+
+                    VStack(spacing: 4) {
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Text("Delete Topic")
+                                .font(.footnote)
+                                .fontWeight(.semibold)
                     }
                     Text("\(topic.entryCount) entries will keep their text but lose this topic.")
                         .font(.caption)
                         .foregroundStyle(Crucible.Color.ink3)
                         .multilineTextAlignment(.center)
                 }
+                .padding(.top, 16)
                 .padding(.bottom, 8)
+                }
+                .padding(24)
             }
-            .padding(24)
             .navigationTitle("Edit Topic")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
