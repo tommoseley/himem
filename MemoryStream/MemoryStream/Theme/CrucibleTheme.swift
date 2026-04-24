@@ -258,6 +258,11 @@ struct TopicEditorSheet: View {
                     .font(.title3)
                     .fontWeight(.semibold)
                     .multilineTextAlignment(.center)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .padding(12)
+                    .background(Crucible.Color.paper)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
                     .padding(.top, 8)
 
                 if !name.trimmingCharacters(in: .whitespaces).isEmpty {
