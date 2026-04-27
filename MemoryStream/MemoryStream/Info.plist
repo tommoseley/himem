@@ -6,16 +6,5 @@
 	<string>Hi Mem uses the camera to capture photos and videos for your journal entries.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Hi Mem saves your captured photos and videos to your photo library and reads them back to display in your entries.</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>44.210.125.40</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
-		</dict>
-	</dict>
 </dict>
 </plist>

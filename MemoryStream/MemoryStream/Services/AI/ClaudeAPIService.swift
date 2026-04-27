@@ -3,7 +3,7 @@ import Foundation
 final class ClaudeAPIService {
     static let shared = ClaudeAPIService()
 
-    private let analyzeURL = URL(string: "http://44.210.125.40/himem/analyze")!
+    private let analyzeURL = URL(string: "https://api.thecombine.ai/himem/analyze")!
 
     // MARK: - Types
 
@@ -55,7 +55,7 @@ final class ClaudeAPIService {
     // MARK: - Cleanup
 
     func cleanupTranscription(_ text: String) async throws -> String {
-        let cleanupURL = URL(string: "http://44.210.125.40/himem/cleanup")!
+        let cleanupURL = URL(string: "https://api.thecombine.ai/himem/cleanup")!
 
         var request = URLRequest(url: cleanupURL)
         request.httpMethod = "POST"
