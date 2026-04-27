@@ -15,16 +15,30 @@ final class StorageService {
         let description = container.persistentStoreDescriptions.first!
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
-        // CloudKit container — uses the app's default iCloud container
+
+        // CloudKit sync — requires the iCloud container to be registered
+        // in the Apple Developer portal. If not available, Core Data still
+        // works locally; sync just won't happen until the container exists.
         description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
             containerIdentifier: "iCloud.com.himem.app"
         )
-        // Track history for CloudKit sync
         description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
         description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-        container.loadPersistentStores { _, error in
+
+        container.loadPersistentStores { storeDescription, error in
             if let error {
-                fatalError("Core Data failed to load: \(error.localizedDescription)")
+                // Don't crash — CloudKit may not be available (e.g. no iCloud account,
+                // container not yet created). Log and continue with local-only storage.
+                print("⚠️ Core Data store failed to load: \(error.localizedDescription)")
+                print("⚠️ CloudKit sync may not be available. Local storage will still work.")
+
+                // Retry without CloudKit if the initial load failed
+                storeDescription.cloudKitContainerOptions = nil
+                self.container.loadPersistentStores { _, retryError in
+                    if let retryError {
+                        fatalError("Core Data failed to load even without CloudKit: \(retryError.localizedDescription)")
+                    }
+                }
             }
         }
         container.viewContext.automaticallyMergesChangesFromParent = true
