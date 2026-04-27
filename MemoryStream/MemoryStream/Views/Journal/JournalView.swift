@@ -418,13 +418,18 @@ struct JournalView: View {
     // MARK: - Composer handlers
 
     private func handleCommit() {
-        viewModel.saveEntry(
-            content: composer.commitContent,
-            inputType: .composed,
-            mediaCaptures: composer.mediaCaptures,
-            topicName: composer.selectedTopicName
-        )
+        // Snapshot the data before any dismiss/reset clears it
+        let content = composer.commitContent
+        let media = composer.mediaCaptures
+        let topic = composer.selectedTopicName
         composer.reset()
+
+        viewModel.saveEntry(
+            content: content,
+            inputType: .composed,
+            mediaCaptures: media,
+            topicName: topic
+        )
     }
 }
 

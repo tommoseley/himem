@@ -64,6 +64,7 @@ class ComposerViewModel: ObservableObject {
     }
 
     func close() {
+        guard isPresented else { return }
         if isRecording {
             speechService?.stopRecording()
         }
