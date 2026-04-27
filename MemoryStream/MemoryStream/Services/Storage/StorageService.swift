@@ -15,23 +15,32 @@ final class StorageService {
         let description = container.persistentStoreDescriptions.first!
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
-
-        // CloudKit sync — enabled when iCloud container is available.
-        // History tracking is required even without CloudKit for future migration.
         description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
         description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
 
-        // Try CloudKit first, fall back to local-only
+        // Try with CloudKit
         description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
             containerIdentifier: "iCloud.com.himem.app"
         )
 
+        var loadError: Error?
         container.loadPersistentStores { _, error in
-            if let error {
-                print("⚠️ Core Data + CloudKit failed: \(error.localizedDescription)")
-                print("⚠️ Falling back to local-only storage.")
+            loadError = error
+        }
+
+        // If CloudKit failed, retry without it — local-only fallback
+        if loadError != nil {
+            print("⚠️ CloudKit store failed: \(loadError!.localizedDescription)")
+            print("⚠️ Retrying without CloudKit (local-only).")
+            description.cloudKitContainerOptions = nil
+            container.persistentStoreDescriptions = [description]
+            container.loadPersistentStores { _, error in
+                if let error {
+                    fatalError("Core Data failed to load even without CloudKit: \(error.localizedDescription)")
+                }
             }
         }
+
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
