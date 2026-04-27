@@ -210,8 +210,13 @@ struct ComposerView: View {
 
                 // Commit button
                 Button(action: {
-                    onCommit()
+                    let commitAction = onCommit
                     dismiss()
+                    // Delay commit slightly so the sheet finishes dismissing
+                    // before Core Data writes trigger view updates
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        commitAction()
+                    }
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: composer.commitButtonIcon)
