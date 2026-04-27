@@ -16,29 +16,20 @@ final class StorageService {
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
 
-        // CloudKit sync — requires the iCloud container to be registered
-        // in the Apple Developer portal. If not available, Core Data still
-        // works locally; sync just won't happen until the container exists.
-        description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
-            containerIdentifier: "iCloud.com.himem.app"
-        )
+        // CloudKit sync — enabled when iCloud container is available.
+        // History tracking is required even without CloudKit for future migration.
         description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
         description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
 
-        container.loadPersistentStores { storeDescription, error in
-            if let error {
-                // Don't crash — CloudKit may not be available (e.g. no iCloud account,
-                // container not yet created). Log and continue with local-only storage.
-                print("⚠️ Core Data store failed to load: \(error.localizedDescription)")
-                print("⚠️ CloudKit sync may not be available. Local storage will still work.")
+        // Try CloudKit first, fall back to local-only
+        description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
+            containerIdentifier: "iCloud.com.himem.app"
+        )
 
-                // Retry without CloudKit if the initial load failed
-                storeDescription.cloudKitContainerOptions = nil
-                self.container.loadPersistentStores { _, retryError in
-                    if let retryError {
-                        fatalError("Core Data failed to load even without CloudKit: \(retryError.localizedDescription)")
-                    }
-                }
+        container.loadPersistentStores { _, error in
+            if let error {
+                print("⚠️ Core Data + CloudKit failed: \(error.localizedDescription)")
+                print("⚠️ Falling back to local-only storage.")
             }
         }
         container.viewContext.automaticallyMergesChangesFromParent = true
