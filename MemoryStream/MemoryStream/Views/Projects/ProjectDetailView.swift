@@ -14,6 +14,7 @@ struct ProjectDetailView: View {
     @State private var editedPurpose = ""
     @State private var selectedEntryId: UUID? = nil
     @State private var topicFilter: String? = nil
+    @State private var showShareSheet = false
 
     private let storage = StorageService.shared
 
@@ -174,18 +175,53 @@ struct ProjectDetailView: View {
                     .fontWeight(.bold)
                     .foregroundStyle(Crucible.Color.accent)
                 } else {
-                    Button { isEditing = true } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 15))
-                            .foregroundStyle(Crucible.Color.ink2)
+                    HStack(spacing: 16) {
+                        Button { showShareSheet = true } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Crucible.Color.ink2)
+                        }
+                        Button { isEditing = true } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Crucible.Color.ink2)
+                        }
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            let composed = composeProjectText()
+            ShareSheet(items: [composed])
         }
         .onAppear {
             loadProject()
             loadProjectEntries()
         }
+    }
+
+    private func composeProjectText() -> String {
+        var lines: [String] = []
+
+        // Header
+        if let project {
+            lines.append(project.name.uppercased())
+            if let purpose = project.purpose, !purpose.isEmpty {
+                lines.append(purpose)
+            }
+            lines.append("")
+        }
+
+        // Entries — clean content only, no UI metadata
+        for entry in entries {
+            lines.append("---")
+            lines.append("")
+            lines.append(entry.displayTitle)
+            lines.append(entry.content)
+            lines.append("")
+        }
+
+        return lines.joined(separator: "\n")
     }
 
     private func loadProject() {

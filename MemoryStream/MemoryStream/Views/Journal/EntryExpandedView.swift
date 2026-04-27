@@ -49,6 +49,7 @@ struct EntryExpandedView: View {
     @State private var mentionsExpanded = false
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var showDeleteConfirmation = false
+    @State private var showShareSheet = false
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
 
@@ -459,6 +460,11 @@ struct EntryExpandedView: View {
                                     .foregroundStyle(Crucible.Color.ink2)
                             }
                         }
+                        Button { showShareSheet = true } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Crucible.Color.ink2)
+                        }
                         Button { enterEditing() } label: {
                             Image(systemName: "pencil")
                                 .font(.system(size: 15))
@@ -474,6 +480,10 @@ struct EntryExpandedView: View {
         }
         .fullScreenCover(item: $selectedMedia) { item in
             MediaViewerView(item: item)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            let composed = "\(entry.displayTitle)\n\n\(entry.content)"
+            ShareSheet(items: [composed])
         }
         .alert("Move to Recently Deleted?", isPresented: $showDeleteConfirmation) {
             Button("Move to Recently Deleted", role: .destructive) {
