@@ -418,18 +418,23 @@ struct JournalView: View {
     // MARK: - Composer handlers
 
     private func handleCommit() {
-        // Snapshot the data before any dismiss/reset clears it
+        // Snapshot the data before dismiss/reset clears it
         let content = composer.commitContent
         let media = composer.mediaCaptures
         let topic = composer.selectedTopicName
         composer.reset()
 
-        viewModel.saveEntry(
-            content: content,
-            inputType: .composed,
-            mediaCaptures: media,
-            topicName: topic
-        )
+        // Defer save to next run loop — lets the sheet fully dismiss
+        // before Core Data writes trigger CloudKit sync + view updates
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+            viewModel.saveEntry(
+                content: content,
+                inputType: .composed,
+                mediaCaptures: media,
+                topicName: topic
+            )
+        }
     }
 }
 
