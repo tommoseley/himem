@@ -6,5 +6,9 @@
 	<string>Hi Mem uses the camera to capture photos and videos for your journal entries.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Hi Mem saves your captured photos and videos to your photo library and reads them back to display in your entries.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>
