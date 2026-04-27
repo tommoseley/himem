@@ -4,17 +4,24 @@ import CoreData
 final class StorageService {
     static let shared = StorageService()
 
-    let container: NSPersistentContainer
+    let container: NSPersistentCloudKitContainer
 
     var viewContext: NSManagedObjectContext {
         container.viewContext
     }
 
     private init() {
-        container = NSPersistentContainer(name: "MemoryStream")
+        container = NSPersistentCloudKitContainer(name: "MemoryStream")
         let description = container.persistentStoreDescriptions.first!
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
+        // CloudKit container — uses the app's default iCloud container
+        description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
+            containerIdentifier: "iCloud.com.himem.app"
+        )
+        // Track history for CloudKit sync
+        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
         container.loadPersistentStores { _, error in
             if let error {
                 fatalError("Core Data failed to load: \(error.localizedDescription)")
@@ -27,9 +34,10 @@ final class StorageService {
     /// Test-only initializer: in-memory Core Data store with no disk persistence.
     init(inMemory: Bool) {
         precondition(inMemory, "Use .shared for on-disk storage")
-        container = NSPersistentContainer(name: "MemoryStream")
+        container = NSPersistentCloudKitContainer(name: "MemoryStream")
         let description = NSPersistentStoreDescription()
         description.type = NSInMemoryStoreType
+        // No CloudKit options for in-memory test store
         container.persistentStoreDescriptions = [description]
         container.loadPersistentStores { _, error in
             if let error {
