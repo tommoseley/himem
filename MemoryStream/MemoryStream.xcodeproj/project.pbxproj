@@ -26,7 +26,6 @@
 		A100000017 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000017 /* SearchViewModel.swift */; };
 		A100000018 /* JournalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000018 /* JournalView.swift */; };
 		A100000019 /* EntryCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000019 /* EntryCardView.swift */; };
-		A100000020 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000020 /* InputBarView.swift */; };
 		A100000021 /* SiriShortcutBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000021 /* SiriShortcutBanner.swift */; };
 		A100000022 /* TopicTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000022 /* TopicTabBar.swift */; };
 		A100000023 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000023 /* SearchView.swift */; };
@@ -91,7 +90,6 @@
 		B100000017 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
 		B100000018 /* JournalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalView.swift; sourceTree = "<group>"; };
 		B100000019 /* EntryCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryCardView.swift; sourceTree = "<group>"; };
-		B100000020 /* InputBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBarView.swift; sourceTree = "<group>"; };
 		B100000021 /* SiriShortcutBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriShortcutBanner.swift; sourceTree = "<group>"; };
 		B100000022 /* TopicTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicTabBar.swift; sourceTree = "<group>"; };
 		B100000023 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
@@ -252,7 +250,6 @@
 		G100000041 /* Input */ = {
 			isa = PBXGroup;
 			children = (
-				B100000020 /* InputBarView.swift */,
 				B100000036 /* CameraPickerView.swift */,
 				B100000044 /* ComposerView.swift */,
 				B100000047 /* PhotoLibraryPicker.swift */,
@@ -481,7 +478,6 @@
 				A100000017 /* SearchViewModel.swift in Sources */,
 				A100000018 /* JournalView.swift in Sources */,
 				A100000019 /* EntryCardView.swift in Sources */,
-				A100000020 /* InputBarView.swift in Sources */,
 				A100000021 /* SiriShortcutBanner.swift in Sources */,
 				A100000022 /* TopicTabBar.swift in Sources */,
 				A100000023 /* SearchView.swift in Sources */,
