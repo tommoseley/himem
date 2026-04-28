@@ -89,8 +89,8 @@ final class ClaudeAPIService {
             switch self {
             case .invalidResponse:
                 return "Invalid response from server."
-            case .httpError(let code, let body):
-                return "Server error \(code): \(body)"
+            case .httpError(let code, _):
+                return "Processing failed (status \(code)). Please try again later."
             }
         }
     }
