@@ -583,9 +583,9 @@
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Hi Mem needs microphone access to capture voice journal entries.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Hi Mem uses speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Memory Stream";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Memory Stream needs microphone access to capture voice journal entries.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Memory Stream uses speech recognition to convert your voice to text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
@@ -614,9 +614,9 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Hi Mem needs microphone access to capture voice journal entries.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Hi Mem uses speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Memory Stream";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Memory Stream needs microphone access to capture voice journal entries.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Memory Stream uses speech recognition to convert your voice to text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
