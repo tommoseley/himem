@@ -24,8 +24,8 @@ extension InferenceSummary {
         var displayLabel: String {
             switch self {
             case .confirmed: return "Confirmed"
-            case .edited: return "Edited"
-            case .ignored: return "Ignored"
+            case .edited: return "Adjusted"
+            case .ignored: return "Dismissed"
             }
         }
     }

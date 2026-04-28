@@ -357,12 +357,6 @@ struct EntryExpandedView: View {
 
                 // Media toolbar — always visible
                 HStack(spacing: 4) {
-                    ToolbarIcon(kind: .photo, icon: "camera", label: "Photo", isActive: false) {
-                        activeSheet = .camera(.photo)
-                    }
-                    ToolbarIcon(kind: .video, icon: "video", label: "Video", isActive: false) {
-                        activeSheet = .camera(.video)
-                    }
                     ToolbarIcon(
                         kind: .audio,
                         icon: speechService.isRecording ? "stop.fill" : "mic",
@@ -373,6 +367,12 @@ struct EntryExpandedView: View {
                     }
                     ToolbarIcon(kind: .text, icon: "pencil", label: "Text", isActive: false) {
                         showTextAppender = true
+                    }
+                    ToolbarIcon(kind: .photo, icon: "camera", label: "Photo", isActive: false) {
+                        activeSheet = .camera(.photo)
+                    }
+                    ToolbarIcon(kind: .video, icon: "video", label: "Video", isActive: false) {
+                        activeSheet = .camera(.video)
                     }
 
                     // Separator
@@ -705,8 +705,6 @@ private struct InlineAddToolbar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            ToolbarIcon(kind: .photo, icon: "camera", label: "Photo", isActive: false, action: onPhotoTap)
-            ToolbarIcon(kind: .video, icon: "video", label: "Video", isActive: false, action: onVideoTap)
             ToolbarIcon(
                 kind: .audio,
                 icon: isRecording ? "stop.fill" : "mic",
@@ -715,6 +713,8 @@ private struct InlineAddToolbar: View {
                 action: onAudioTap
             )
             ToolbarIcon(kind: .text, icon: "pencil", label: "Text", isActive: false, action: onTextTap)
+            ToolbarIcon(kind: .photo, icon: "camera", label: "Photo", isActive: false, action: onPhotoTap)
+            ToolbarIcon(kind: .video, icon: "video", label: "Video", isActive: false, action: onVideoTap)
         }
         .padding(4)
         .background(Crucible.Color.sunk)

@@ -346,7 +346,22 @@ struct InferenceCard: View {
                 .foregroundStyle(Crucible.Color.ink2)
                 .lineSpacing(2)
 
-            if feedbackState == nil {
+            if let state = feedbackState {
+                // Resolved — show status pill
+                HStack(spacing: 6) {
+                    Image(systemName: state.iconName)
+                        .font(.system(size: 10))
+                        .foregroundStyle(state.color)
+                    Text(state.pillLabel)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundStyle(state.color)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(state.color.opacity(0.1))
+                .clipShape(Capsule())
+            } else {
                 // Pending — show feedback buttons
                 HStack(spacing: 8) {
                     Button(action: { onFeedback(.confirmed) }) {
@@ -365,7 +380,7 @@ struct InferenceCard: View {
                     }
 
                     Button(action: { onFeedback(.edited) }) {
-                        Text("Edit")
+                        Text("Adjust")
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundStyle(Crucible.Color.ink)
@@ -539,8 +554,16 @@ extension InferenceSummary.FeedbackState {
     var responseLabel: String {
         switch self {
         case .confirmed: return "You confirmed this inference was accurate."
-        case .edited:    return "You edited this inference."
+        case .edited:    return "You adjusted this inference."
         case .ignored:   return "You dismissed this inference."
+        }
+    }
+
+    var pillLabel: String {
+        switch self {
+        case .confirmed: return "Confirmed"
+        case .edited:    return "Adjusted"
+        case .ignored:   return "Dismissed"
         }
     }
 
