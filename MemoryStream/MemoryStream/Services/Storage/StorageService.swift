@@ -1,5 +1,6 @@
 import Foundation
 import CoreData
+import CloudKit
 
 final class StorageService {
     static let shared = StorageService()
@@ -24,13 +25,29 @@ final class StorageService {
         )
 
         var loadError: Error?
-        container.loadPersistentStores { _, error in
-            loadError = error
+        container.loadPersistentStores { storeDescription, error in
+            if let error {
+                loadError = error
+            } else {
+                print("✅ Core Data store loaded successfully")
+                print("✅ Store URL: \(storeDescription.url?.absoluteString ?? "unknown")")
+                print("✅ CloudKit container: \(storeDescription.cloudKitContainerOptions?.containerIdentifier ?? "none")")
+            }
         }
 
         // If CloudKit failed, retry without it — local-only fallback
-        if loadError != nil {
-            print("⚠️ CloudKit store failed: \(loadError!.localizedDescription)")
+        if let error = loadError {
+            let nsError = error as NSError
+            print("⚠️ CloudKit store failed: \(nsError)")
+            print("⚠️ Domain: \(nsError.domain), Code: \(nsError.code)")
+            print("⚠️ Description: \(nsError.localizedDescription)")
+            if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                print("⚠️ Underlying: \(underlying)")
+                if let ck = underlying.userInfo[NSUnderlyingErrorKey] as? NSError {
+                    print("⚠️ CloudKit error: \(ck)")
+                }
+            }
+            print("⚠️ Full userInfo: \(nsError.userInfo)")
             print("⚠️ Retrying without CloudKit (local-only).")
             description.cloudKitContainerOptions = nil
             container.persistentStoreDescriptions = [description]
@@ -43,6 +60,25 @@ final class StorageService {
 
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+
+        // Initialize CloudKit schema on first run — required for sync to work
+        #if DEBUG
+        do {
+            try container.initializeCloudKitSchema(options: [])
+            print("✅ CloudKit schema initialized")
+        } catch {
+            print("⚠️ CloudKit schema init failed: \(error)")
+        }
+        #endif
+
+        // Listen for remote changes from other devices
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name.NSPersistentStoreRemoteChange,
+            object: container.persistentStoreCoordinator,
+            queue: .main
+        ) { _ in
+            // Remote change received — viewContext auto-merges
+        }
     }
 
     /// Test-only initializer: in-memory Core Data store with no disk persistence.
