@@ -8,14 +8,20 @@ struct CreateEntryIntent: AppIntent {
     static var description: IntentDescription = "Save a journal entry to Hi Mem"
     static var openAppWhenRun: Bool = false
 
-    @Parameter(title: "What happened?", requestValueDialog: "What do you want to remember?")
-    var text: String
+    @Parameter(title: "What happened?")
+    var text: String?
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let storage = StorageService.shared
+        let content: String
+        if let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            content = text
+        } else {
+            content = try await $text.requestValue("What do you want to remember?")
+        }
 
+        let storage = StorageService.shared
         let entry = try storage.createEntry(
-            content: text,
+            content: content,
             inputType: .siri
         )
         let _ = try storage.createProcessingTask(for: entry)
