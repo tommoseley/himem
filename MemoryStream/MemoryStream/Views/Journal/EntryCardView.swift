@@ -4,6 +4,7 @@ struct EntryCardView: View {
     let entry: EntryDisplayModel
     var density: CardDensity = .standard
     var onFeedback: ((UUID, InferenceSummary.FeedbackState) -> Void)? = nil
+    var onAdjust: ((UUID, String) -> Void)? = nil
     var onEntityTap: ((String) -> Void)? = nil
     var onAppend: ((EntryDisplayModel) -> Void)? = nil
     @State private var showInferenceDetail = false
@@ -108,7 +109,8 @@ struct EntryCardView: View {
                     InferenceCard(
                         summary: inference,
                         feedbackState: entry.feedbackState,
-                        onFeedback: { state in onFeedback?(entry.id, state) }
+                        onFeedback: { state in onFeedback?(entry.id, state) },
+                        onAdjust: { correction in onAdjust?(entry.id, correction) }
                     )
                 }
             } else if density == .standard {
@@ -117,7 +119,8 @@ struct EntryCardView: View {
                     InferenceCard(
                         summary: inference,
                         feedbackState: entry.feedbackState,
-                        onFeedback: { state in onFeedback?(entry.id, state) }
+                        onFeedback: { state in onFeedback?(entry.id, state) },
+                        onAdjust: { correction in onAdjust?(entry.id, correction) }
                     )
                 }
             }
@@ -327,6 +330,9 @@ struct InferenceCard: View {
     let summary: String
     let feedbackState: InferenceSummary.FeedbackState?
     let onFeedback: (InferenceSummary.FeedbackState) -> Void
+    var onAdjust: ((String) -> Void)? = nil
+
+    @State private var showAdjustSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -379,7 +385,7 @@ struct InferenceCard: View {
                         .clipShape(Capsule())
                     }
 
-                    Button(action: { onFeedback(.edited) }) {
+                    Button(action: { showAdjustSheet = true }) {
                         Text("Adjust")
                             .font(.caption)
                             .fontWeight(.medium)
@@ -410,6 +416,70 @@ struct InferenceCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Crucible.Color.AI.tint)
         .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.md))
+        .sheet(isPresented: $showAdjustSheet) {
+            AdjustInferenceSheet(summary: summary) { correction in
+                onAdjust?(correction)
+                onFeedback(.edited)
+            }
+        }
+    }
+}
+
+// MARK: - Adjust Inference Sheet
+
+struct AdjustInferenceSheet: View {
+    let summary: String
+    let onSave: (String) -> Void
+
+    @State private var editedSummary: String = ""
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("ADJUST INFERENCE")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .tracking(0.5)
+                    .foregroundStyle(.secondary)
+
+                Text("Edit what the app inferred. Your correction helps improve future results.")
+                    .font(.caption)
+                    .foregroundStyle(Crucible.Color.ink2)
+
+                TextEditor(text: $editedSummary)
+                    .font(.body)
+                    .lineSpacing(4)
+                    .padding(12)
+                    .frame(minHeight: 120)
+                    .background(Crucible.Color.sunk)
+                    .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.md))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Crucible.Radius.md)
+                            .stroke(Crucible.Color.hairline, lineWidth: 1)
+                    )
+
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle("Review & Adjust")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(editedSummary)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(editedSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .onAppear { editedSummary = summary }
+        .presentationDetents([.medium])
     }
 }
 

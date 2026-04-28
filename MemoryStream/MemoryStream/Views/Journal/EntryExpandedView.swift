@@ -26,6 +26,7 @@ struct EntryExpandedView: View {
     @ObservedObject var speechService: SpeechService
     let onSave: (UUID, String, Set<UUID>, Set<UUID>, Set<String>, Set<String>, Bool) -> Void
     var onFeedback: ((UUID, InferenceSummary.FeedbackState) -> Void)? = nil
+    var onAdjust: ((UUID, String) -> Void)? = nil
     /// One-shot commit of a batch of appends. Fires at most once per session.
     /// additionalContent: typed text + concatenated transcripts.
     /// mediaCaptures: staged photo/video/voice assets.
@@ -228,7 +229,8 @@ struct EntryExpandedView: View {
                     InferenceCard(
                         summary: inference,
                         feedbackState: entry.feedbackState,
-                        onFeedback: { state in onFeedback?(entry.id, state) }
+                        onFeedback: { state in onFeedback?(entry.id, state) },
+                        onAdjust: { correction in onAdjust?(entry.id, correction) }
                     )
                 }
 

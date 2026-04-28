@@ -115,6 +115,9 @@ struct JournalView: View {
                                 onFeedback: { entryId, state in
                                     viewModel.submitFeedback(entryId: entryId, state: state)
                                 },
+                                onAdjust: { entryId, correction in
+                                    viewModel.submitFeedback(entryId: entryId, state: .edited, correction: correction)
+                                },
                                 onEntityTap: { value in
                                     withAnimation { viewModel.entityFilter = value }
                                 },
@@ -301,6 +304,9 @@ struct JournalView: View {
                     },
                     onFeedback: { entryId, state in
                         viewModel.submitFeedback(entryId: entryId, state: state)
+                    },
+                    onAdjust: { entryId, correction in
+                        viewModel.submitFeedback(entryId: entryId, state: .edited, correction: correction)
                     },
                     onCommit: { entryId, additionalContent, mediaCaptures in
                         viewModel.appendToEntry(
