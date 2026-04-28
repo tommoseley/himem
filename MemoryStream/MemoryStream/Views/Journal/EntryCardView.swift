@@ -420,7 +420,6 @@ struct InferenceCard: View {
         .sheet(isPresented: $showAdjustSheet) {
             AdjustInferenceSheet(summary: summary) { correction in
                 onAdjust?(correction)
-                onFeedback(.edited)
             }
         }
     }
