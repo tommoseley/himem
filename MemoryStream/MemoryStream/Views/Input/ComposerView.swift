@@ -44,7 +44,14 @@ struct ComposerView: View {
             // Media toolbar — four first-class entry points
             ComposerToolbar(
                 activeType: activeToolbarType,
-                onAudioTap: { composer.toggleRecording() },
+                onAudioTap: {
+                    if speechService.isRecording {
+                        composer.stopRecording()
+                        speechService.stopRecording()
+                    } else {
+                        composer.startRecording()
+                    }
+                },
                 onTextTap: { showTextEditor = true },
                 onPhotoTap: { composer.showCamera = true },
                 onVideoTap: { composer.showCamera = true }
@@ -59,6 +66,10 @@ struct ComposerView: View {
                         HStack(spacing: 10) {
                             Button {
                                 composer.stopRecording()
+                                // Belt-and-suspenders: ensure speech stops
+                                if speechService.isRecording {
+                                    speechService.stopRecording()
+                                }
                             } label: {
                                 ZStack {
                                     Circle()
