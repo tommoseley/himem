@@ -112,6 +112,7 @@ class JournalViewModel: ObservableObject {
         )
 
         lifecycle.submitFeedback(entryId: entryId, state: state, correction: correction)
+        loadEntries()
     }
 
     // MARK: - Derived State
