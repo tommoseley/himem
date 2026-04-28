@@ -219,6 +219,7 @@ struct ComposerView: View {
                 }
                 .padding(.horizontal, 14)
 
+
                 // Commit button
                 Button(action: {
                     onCommit()
@@ -301,10 +302,10 @@ struct ComposerView: View {
     }
 
     private var canCommit: Bool {
-        guard !speechService.isRecording else { return false }
-        return !composer.textContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !composer.textContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !composer.mediaCaptures.isEmpty
             || !composer.pendingTranscripts.isEmpty
+            || !speechService.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var itemCount: Int {
