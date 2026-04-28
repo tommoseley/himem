@@ -9,6 +9,7 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var inputType: String // "siri", "voice_in_app", "typed"
     @NSManaged public var audioFilePath: String?
     @NSManaged public var createdAt: Date
+    @NSManaged public var sourceDevice: String?
     @NSManaged public var isRecycled: Bool
     @NSManaged public var recycledAt: Date?
     @NSManaged public var extractedEntities: NSSet?
@@ -42,6 +43,16 @@ extension JournalEntry {
 
     var inputTypeEnum: InputType {
         InputType(rawValue: inputType) ?? .typed
+    }
+
+    enum SourceDevice: String {
+        case phone = "phone"
+        case watch = "watch"
+        case mac = "mac"
+    }
+
+    var sourceDeviceEnum: SourceDevice {
+        SourceDevice(rawValue: sourceDevice ?? "phone") ?? .phone
     }
 
     var displayTitle: String {

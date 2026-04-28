@@ -110,12 +110,13 @@ final class StorageService {
 
     // MARK: - Journal Entry Operations
 
-    func createEntry(content: String, inputType: JournalEntry.InputType, title: String? = nil, context: NSManagedObjectContext? = nil) throws -> JournalEntry {
+    func createEntry(content: String, inputType: JournalEntry.InputType, sourceDevice: JournalEntry.SourceDevice = .phone, title: String? = nil, context: NSManagedObjectContext? = nil) throws -> JournalEntry {
         let ctx = context ?? viewContext
         let entry = JournalEntry(context: ctx)
         entry.id = UUID()
         entry.content = content
         entry.inputType = inputType.rawValue
+        entry.sourceDevice = sourceDevice.rawValue
         entry.title = title
         entry.createdAt = Date()
         try save(context: ctx)

@@ -36,9 +36,11 @@ struct HiMemShortcuts: AppShortcutsProvider {
             intent: CreateEntryIntent(),
             phrases: [
                 "Capture in \(.applicationName)",
+                "Tell \(.applicationName)",
                 "Log in \(.applicationName)",
                 "Save to \(.applicationName)",
                 "Remember in \(.applicationName)",
+                "Note in \(.applicationName)",
                 "New entry in \(.applicationName)",
             ],
             shortTitle: "Capture a thought",
