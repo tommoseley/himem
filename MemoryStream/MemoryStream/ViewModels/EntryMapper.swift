@@ -27,6 +27,7 @@ enum EntryMapper {
             audioFilePath: entry.audioFilePath,
             inferenceSummary: inference?.summaryText,
             feedbackState: inference?.feedbackStateEnum,
+            userCorrection: inference?.userCorrection,
             mediaItems: entry.mediaReferencesArray.map { ref in
                 MediaDisplayItem(
                     id: ref.id,

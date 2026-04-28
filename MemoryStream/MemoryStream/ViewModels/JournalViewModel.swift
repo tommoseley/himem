@@ -107,6 +107,7 @@ class JournalViewModel: ObservableObject {
             processingStatus: current.processingStatus, progressDescription: current.progressDescription,
             tags: current.tags, topicNames: current.topicNames, audioFilePath: current.audioFilePath,
             inferenceSummary: current.inferenceSummary, feedbackState: state,
+            userCorrection: correction ?? current.userCorrection,
             mediaItems: current.mediaItems, recycledAt: current.recycledAt
         )
 

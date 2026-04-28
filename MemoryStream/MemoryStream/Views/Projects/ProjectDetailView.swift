@@ -252,6 +252,7 @@ struct ProjectDetailView: View {
                 audioFilePath: entry.audioFilePath,
                 inferenceSummary: inference?.summaryText,
                 feedbackState: inference?.feedbackStateEnum,
+                userCorrection: inference?.userCorrection,
                 mediaItems: entry.mediaReferencesArray.map { ref in
                     MediaDisplayItem(id: ref.id, localIdentifier: ref.osIdentifier, mediaType: ref.mediaTypeEnum, thumbnailCacheFilename: ref.thumbnailCacheFilename, isAccessible: ref.isAccessible)
                 },

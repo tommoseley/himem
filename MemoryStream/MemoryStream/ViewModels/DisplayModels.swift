@@ -53,6 +53,7 @@ struct EntryDisplayModel: Identifiable {
     let audioFilePath: String?
     let inferenceSummary: String?
     let feedbackState: InferenceSummary.FeedbackState?
+    let userCorrection: String?
     let mediaItems: [MediaDisplayItem]
     let recycledAt: Date?
 

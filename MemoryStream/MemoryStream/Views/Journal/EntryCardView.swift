@@ -137,6 +137,7 @@ struct EntryCardView: View {
                 InferenceDetailSheet(
                     summary: inference,
                     feedbackState: feedbackState,
+                    userCorrection: entry.userCorrection,
                     audioFilePath: entry.audioFilePath
                 )
             }
@@ -549,6 +550,7 @@ struct ShareSheet: UIViewControllerRepresentable {
 struct InferenceDetailSheet: View {
     let summary: String
     let feedbackState: InferenceSummary.FeedbackState
+    var userCorrection: String? = nil
     var audioFilePath: String? = nil
     @Environment(\.dismiss) private var dismiss
 
@@ -584,6 +586,23 @@ struct InferenceDetailSheet: View {
                     Text(summary)
                         .font(.body)
                         .lineSpacing(4)
+                        .strikethrough(feedbackState == .edited, color: .secondary.opacity(0.5))
+                        .foregroundStyle(feedbackState == .edited ? .secondary : .primary)
+                }
+
+                // User's adjusted version
+                if let correction = userCorrection, feedbackState == .edited {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("YOUR ADJUSTMENT")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .tracking(0.5)
+                            .foregroundStyle(Crucible.Color.Status.editedFg)
+
+                        Text(correction)
+                            .font(.body)
+                            .lineSpacing(4)
+                    }
                 }
 
                 Divider()
