@@ -55,7 +55,7 @@ struct ComposerView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     // Active recording indicator
-                    if composer.isRecording {
+                    if speechService.isRecording {
                         HStack(spacing: 10) {
                             Button {
                                 composer.stopRecording()
@@ -106,7 +106,7 @@ struct ComposerView: View {
                     }
 
                     // Live transcript
-                    if composer.isRecording && !composer.transcribedText.isEmpty {
+                    if speechService.isRecording && !speechService.transcribedText.isEmpty {
                         Text(composer.transcribedText)
                             .font(.footnote)
                             .italic()
@@ -221,11 +221,11 @@ struct ComposerView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(composer.canCommit ? Crucible.Color.accent : Crucible.Color.sunk)
-                    .foregroundStyle(composer.canCommit ? .white : Crucible.Color.ink3)
+                    .background(canCommit ? Crucible.Color.accent : Crucible.Color.sunk)
+                    .foregroundStyle(canCommit ? .white : Crucible.Color.ink3)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
-                .disabled(!composer.canCommit)
+                .disabled(!canCommit)
                 .padding(.horizontal, 14)
                 .padding(.bottom, 16)
             }
@@ -284,15 +284,22 @@ struct ComposerView: View {
     }
 
     private var activeToolbarType: String? {
-        if composer.isRecording { return "audio" }
+        if speechService.isRecording { return "audio" }
         if showTextEditor || !composer.textContent.isEmpty { return "text" }
         return nil
+    }
+
+    private var canCommit: Bool {
+        guard !speechService.isRecording else { return false }
+        return !composer.textContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !composer.mediaCaptures.isEmpty
+            || !composer.pendingTranscripts.isEmpty
     }
 
     private var itemCount: Int {
         var count = composer.mediaCaptures.count
         count += composer.pendingTranscripts.count
-        if composer.isRecording { count += 1 }
+        if speechService.isRecording { count += 1 }
         if !composer.textContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
         return count
     }
