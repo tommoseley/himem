@@ -8,15 +8,28 @@ class JournalViewModel: ObservableObject {
     @Published var entries: [EntryDisplayModel] = []
     @Published var topics: [String] = []
     @Published var selectedTopic: String? = nil
+    @Published var entityFilter: String? = nil
+    @Published private(set) var filteredEntries: [EntryDisplayModel] = []
+    @Published private(set) var groupedEntries: [DayGroup] = []
+    @Published private(set) var recycledCount: Int = 0
+
+    struct DayGroup: Identifiable {
+        let date: Date
+        let label: String
+        let entries: [EntryDisplayModel]
+        var id: Date { date }
+    }
 
     private let storage: StorageService
     private let lifecycle: EntryLifecycleService
     private var contextObserver: AnyCancellable?
+    private var recomputeCancellables = Set<AnyCancellable>()
 
     init(storage: StorageService = .shared, processingEngine: ProcessingEngine? = .shared) {
         self.storage = storage
         self.lifecycle = EntryLifecycleService(storage: storage, processingEngine: processingEngine)
         observeStorageChanges()
+        observeFilterInputs()
         loadEntries()
     }
 
@@ -44,28 +57,32 @@ class JournalViewModel: ObservableObject {
 
     func saveEntry(content: String, inputType: JournalEntry.InputType, audioFilePath: String? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = [], topicName: String? = nil) {
         lifecycle.save(content: content, inputType: inputType, audioFilePath: audioFilePath, mediaCaptures: mediaCaptures, topicName: topicName)
+        loadEntries()
     }
 
     func editEntry(entryId: UUID, newContent: String, removedTagIds: Set<UUID> = [], removedMediaIds: Set<UUID> = [], addedTopicNames: Set<String> = [], removedTopicNames: Set<String> = [], discardAudio: Bool = false) {
         lifecycle.edit(entryId: entryId, newContent: newContent, removedTagIds: removedTagIds, removedMediaIds: removedMediaIds, addedTopicNames: addedTopicNames, removedTopicNames: removedTopicNames, discardAudio: discardAudio)
+        loadEntries()
     }
 
     func appendToEntry(entryId: UUID, additionalContent: String, audioFilePath: String? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []) {
         lifecycle.append(entryId: entryId, additionalContent: additionalContent, audioFilePath: audioFilePath, mediaCaptures: mediaCaptures)
+        loadEntries()
     }
 
     func deleteEntry(entryId: UUID) {
-        entries.removeAll { $0.id == entryId }
         lifecycle.delete(entryId: entryId)
+        loadEntries()
     }
 
     func recycleEntry(entryId: UUID) {
-        entries.removeAll { $0.id == entryId }
         lifecycle.recycle(entryId: entryId)
+        loadEntries()
     }
 
     func restoreEntry(entryId: UUID) {
         lifecycle.restore(entryId: entryId)
+        loadEntries()
     }
 
     func loadRecycledEntries() -> [EntryDisplayModel] {
@@ -94,6 +111,59 @@ class JournalViewModel: ObservableObject {
         )
 
         lifecycle.submitFeedback(entryId: entryId, state: state, correction: correction)
+    }
+
+    // MARK: - Derived State
+
+    private func observeFilterInputs() {
+        // Recompute filtered/grouped whenever entries, selectedTopic, or entityFilter change
+        Publishers.CombineLatest3($entries, $selectedTopic, $entityFilter)
+            .debounce(for: .milliseconds(16), scheduler: RunLoop.main)
+            .sink { [weak self] entries, topic, filter in
+                self?.recomputeFiltered(entries: entries, topic: topic, filter: filter)
+            }
+            .store(in: &recomputeCancellables)
+    }
+
+    private func recomputeFiltered(entries: [EntryDisplayModel], topic: String?, filter: String?) {
+        var result = entries
+        if let topic {
+            result = result.filter { $0.topicNames.contains(topic) }
+        }
+        if let filter, !filter.isEmpty {
+            result = result.filter { entry in
+                entry.tags.contains { $0.value.localizedCaseInsensitiveContains(filter) }
+            }
+        }
+        filteredEntries = result
+        recomputeGrouped(from: result)
+        recomputeRecycledCount(topic: topic)
+    }
+
+    private func recomputeGrouped(from entries: [EntryDisplayModel]) {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: entries) { entry in
+            calendar.startOfDay(for: entry.createdAt)
+        }
+        groupedEntries = grouped.sorted { $0.key > $1.key }.map { date, entries in
+            DayGroup(date: date, label: Self.dateLabel(for: date, calendar: calendar), entries: entries)
+        }
+    }
+
+    private func recomputeRecycledCount(topic: String?) {
+        if let topic {
+            recycledCount = lifecycle.recycledCountForTopic(topic)
+        } else {
+            recycledCount = lifecycle.loadRecycledEntries().count
+        }
+    }
+
+    private static func dateLabel(for date: Date, calendar: Calendar) -> String {
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d"
+        return formatter.string(from: date)
     }
 
     // MARK: - Load from Core Data

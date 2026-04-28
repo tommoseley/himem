@@ -22,7 +22,6 @@ struct JournalView: View {
     @State private var showSettings = false
     @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
-    @State private var entityFilter: String? = nil
     @State private var undoEntry: EntryDisplayModel? = nil
     @State private var showUndo = false
 
@@ -54,7 +53,7 @@ struct JournalView: View {
             .padding(.vertical, 4)
 
             // Entity filter indicator
-            if let filter = entityFilter, viewMode == .memories {
+            if let filter = viewModel.entityFilter, viewMode == .memories {
                 HStack(spacing: 8) {
                     Image(systemName: "line.3.horizontal.decrease.circle.fill")
                         .foregroundStyle(Crucible.Color.accent)
@@ -63,7 +62,7 @@ struct JournalView: View {
                         .fontWeight(.medium)
                     Spacer()
                     Button {
-                        withAnimation { entityFilter = nil }
+                        withAnimation { viewModel.entityFilter = nil }
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
@@ -87,7 +86,7 @@ struct JournalView: View {
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
 
-                if displayEntries.isEmpty {
+                if viewModel.filteredEntries.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "text.book.closed")
                             .font(.largeTitle)
@@ -107,7 +106,7 @@ struct JournalView: View {
                 }
 
                 if viewMode == .memories {
-                ForEach(groupedEntries, id: \.date) { group in
+                ForEach(viewModel.groupedEntries) { group in
                     Section {
                         ForEach(group.entries) { entry in
                             EntryCardView(
@@ -117,7 +116,7 @@ struct JournalView: View {
                                     viewModel.submitFeedback(entryId: entryId, state: state)
                                 },
                                 onEntityTap: { value in
-                                    withAnimation { entityFilter = value }
+                                    withAnimation { viewModel.entityFilter = value }
                                 },
                                 onAppend: { entry in
                                     selectedEntryId = entry.id
@@ -157,21 +156,15 @@ struct JournalView: View {
                 }
 
                 // Summary with recycled count (below all entries)
-                if !displayEntries.isEmpty || viewModel.selectedTopic != nil {
-                    let recycledCount: Int = {
-                        if let topic = viewModel.selectedTopic {
-                            return viewModel.recycledCountForTopic(topic)
-                        }
-                        return viewModel.loadRecycledEntries().count
-                    }()
+                if !viewModel.filteredEntries.isEmpty || viewModel.selectedTopic != nil {
                     HStack {
-                        Text("\(displayEntries.count) memor\(displayEntries.count == 1 ? "y" : "ies")")
+                        Text("\(viewModel.filteredEntries.count) memor\(viewModel.filteredEntries.count == 1 ? "y" : "ies")")
                             .font(.caption)
                             .foregroundStyle(Crucible.Color.ink3)
-                        if recycledCount > 0 {
+                        if viewModel.recycledCount > 0 {
                             Text("·")
                                 .foregroundStyle(Crucible.Color.ink4)
-                            Text("\(recycledCount) in Recently Deleted")
+                            Text("\(viewModel.recycledCount) in Recently Deleted")
                                 .font(.caption)
                                 .foregroundStyle(Crucible.Color.ink4)
                         }
@@ -395,37 +388,6 @@ struct JournalView: View {
         } // NavigationStack
     }
 
-    // MARK: - Data
-
-    private var displayEntries: [EntryDisplayModel] {
-        var entries = viewModel.entries
-        if let selected = viewModel.selectedTopic {
-            entries = entries.filter { $0.topicNames.contains(selected) }
-        }
-        if let filter = entityFilter {
-            entries = entries.filter { entry in
-                entry.tags.contains { $0.value.localizedCaseInsensitiveContains(filter) }
-            }
-        }
-        return entries
-    }
-
-    private struct DayGroup: Identifiable {
-        let date: Date
-        let label: String
-        let entries: [EntryDisplayModel]
-        var id: Date { date }
-    }
-
-    private var groupedEntries: [DayGroup] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: displayEntries) { entry in
-            calendar.startOfDay(for: entry.createdAt)
-        }
-        return grouped.sorted { $0.key > $1.key }.map { date, entries in
-            DayGroup(date: date, label: dateLabel(for: date), entries: entries)
-        }
-    }
 
     private func dateLabel(for date: Date) -> String {
         let calendar = Calendar.current

@@ -64,6 +64,7 @@ final class SearchEngine {
         let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         request.predicate = NSPredicate(format: "content CONTAINS[cd] %@ OR title CONTAINS[cd] %@", text, text)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \JournalEntry.createdAt, ascending: false)]
+        request.fetchLimit = 100
 
         let entries = try context.fetch(request)
         return entries.map { entry in
@@ -83,6 +84,7 @@ final class SearchEngine {
         } else {
             request.predicate = NSPredicate(format: "entityType IN %@ AND value CONTAINS[cd] %@", typeStrings, text)
         }
+        request.fetchLimit = 200
 
         let entities = try context.fetch(request)
         return entities.compactMap { entity in
@@ -102,6 +104,7 @@ final class SearchEngine {
         let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         request.predicate = NSPredicate(format: "ANY topics.slug == %@", slug)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \JournalEntry.createdAt, ascending: false)]
+        request.fetchLimit = 100
 
         let entries = try context.fetch(request)
         return entries.map { entry in

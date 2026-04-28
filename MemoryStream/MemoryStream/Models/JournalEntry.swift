@@ -82,10 +82,11 @@ extension JournalEntry {
 // MARK: - Fetch Requests
 
 extension JournalEntry {
-    static func fetchAllChronological() -> NSFetchRequest<JournalEntry> {
+    static func fetchAllChronological(limit: Int = 500) -> NSFetchRequest<JournalEntry> {
         let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         request.predicate = NSPredicate(format: "isRecycled == NO OR isRecycled == nil")
         request.sortDescriptors = [NSSortDescriptor(keyPath: \JournalEntry.createdAt, ascending: false)]
+        request.fetchLimit = limit
         return request
     }
 
