@@ -1,4 +1,5 @@
 import SwiftUI
+import AppIntents
 
 @main
 struct MemoryStreamApp: App {
@@ -6,6 +7,7 @@ struct MemoryStreamApp: App {
 
     init() {
         TopicPaletteStore.shared.loadFromCoreData()
+        HiMemShortcuts.updateAppShortcutParameters()
     }
 
     var body: some Scene {
