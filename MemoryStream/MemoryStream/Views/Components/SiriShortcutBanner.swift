@@ -39,11 +39,11 @@ struct SiriShortcutBanner: View {
                     .buttonStyle(.plain)
                 }
 
-                Text("\"Tell Memory Stream that...\"")
+                Text("\"Capture in Memory Stream\"")
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
-                Text("Say this to Siri followed by what you want to remember. It'll be saved and inferred automatically.")
+                Text("Say this to Siri from your headphones or lock screen. Siri will ask what you want to remember, then save and infer it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
