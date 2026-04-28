@@ -9,6 +9,7 @@ struct JournalView: View {
     @StateObject private var albumSync = AlbumSyncService.shared
     @StateObject private var composer = ComposerViewModel()
     @StateObject private var projectVM = ProjectViewModel()
+    @StateObject private var errorState = ErrorState.shared
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("cardDensity") private var cardDensityRaw: String = CardDensity.standard.rawValue
     @State private var viewMode: ViewMode = .memories
@@ -206,6 +207,38 @@ struct JournalView: View {
         }
         .padding(.trailing, 14)
         .padding(.bottom, 14)
+
+        // Error banner
+        if let error = errorState.current {
+            VStack {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Crucible.Color.danger)
+                    Text(error.errorDescription ?? "Something went wrong")
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                    Spacer()
+                    Button {
+                        errorState.dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Crucible.Color.ink)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 16)
+                Spacer()
+            }
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .animation(.spring(response: 0.3), value: errorState.current?.id)
+        }
 
         // Undo toast
         if showUndo, let entry = undoEntry {

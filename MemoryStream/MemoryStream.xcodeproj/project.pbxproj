@@ -36,6 +36,10 @@
 		A100000027 /* NewTopicSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028 /* NewTopicSheet.swift */; };
 		A100000046 /* RecycleBinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000046; };
 		A100000047 /* PhotoLibraryPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000047; };
+		A100000054 /* ErrorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000054; };
+		A100000055 /* TopicSlugHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000055; };
+		A100000057 /* EntryLifecycleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000057; };
+		A100000056 /* EntryMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000056; };
 		A100000048 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000048; };
 		A100000049 /* ProjectViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000049; };
 		A100000050 /* ProjectCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000050; };
@@ -97,6 +101,10 @@
 		B100000028 /* NewTopicSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTopicSheet.swift; sourceTree = "<group>"; };
 		B100000046 /* RecycleBinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecycleBinView.swift; sourceTree = "<group>"; };
 		B100000047 /* PhotoLibraryPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryPicker.swift; sourceTree = "<group>"; };
+		B100000054 /* ErrorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorService.swift; sourceTree = "<group>"; };
+		B100000055 /* TopicSlugHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicSlugHelper.swift; sourceTree = "<group>"; };
+		B100000057 /* EntryLifecycleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryLifecycleService.swift; sourceTree = "<group>"; };
+		B100000056 /* EntryMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryMapper.swift; sourceTree = "<group>"; };
 		B100000048 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
 		B100000053 /* MemoryStream.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MemoryStream.entitlements; sourceTree = "<group>"; };
 		B100000049 /* ProjectViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectViewModel.swift; sourceTree = "<group>"; };
@@ -213,6 +221,7 @@
 				B100000017 /* SearchViewModel.swift */,
 				B100000043 /* ComposerViewModel.swift */,
 				B100000049 /* ProjectViewModel.swift */,
+				B100000056 /* EntryMapper.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -276,6 +285,9 @@
 			children = (
 				B100000008 /* StorageService.swift */,
 				B100000026 /* KeychainService.swift */,
+				B100000054 /* ErrorService.swift */,
+				B100000055 /* TopicSlugHelper.swift */,
+				B100000057 /* EntryLifecycleService.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -479,6 +491,10 @@
 				A100000027 /* NewTopicSheet.swift in Sources */,
 				A100000046 /* RecycleBinView.swift in Sources */,
 				A100000047 /* PhotoLibraryPicker.swift in Sources */,
+				A100000054 /* ErrorService.swift in Sources */,
+				A100000055 /* TopicSlugHelper.swift in Sources */,
+				A100000057 /* EntryLifecycleService.swift in Sources */,
+				A100000056 /* EntryMapper.swift in Sources */,
 				A100000048 /* Project.swift in Sources */,
 				A100000049 /* ProjectViewModel.swift in Sources */,
 				A100000050 /* ProjectCardView.swift in Sources */,

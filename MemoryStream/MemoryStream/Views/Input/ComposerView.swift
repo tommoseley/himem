@@ -266,7 +266,7 @@ struct ComposerView: View {
                                 composer.addMedia(localIdentifier: id, mediaType: .video)
                             }
                         } catch {
-                            print("Camera capture failed: \(error)")
+                            ErrorState.shared.report(.mediaError(error.localizedDescription))
                         }
                     }
                 },

@@ -1,0 +1,289 @@
+import Foundation
+import CoreData
+
+/// Extracted from JournalViewModel — handles all entry CRUD operations.
+/// JournalViewModel becomes a thin orchestrator that calls this service
+/// and updates @Published state.
+@MainActor
+final class EntryLifecycleService {
+    private let storage: StorageService
+    private let processingEngine: ProcessingEngine?
+
+    init(storage: StorageService = .shared, processingEngine: ProcessingEngine? = .shared) {
+        self.storage = storage
+        self.processingEngine = processingEngine
+    }
+
+    // MARK: - Create
+
+    func save(
+        content: String,
+        inputType: JournalEntry.InputType,
+        audioFilePath: String? = nil,
+        mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = [],
+        topicName: String? = nil
+    ) {
+        do {
+            let entry = try storage.createEntry(content: content, inputType: inputType)
+            entry.audioFilePath = audioFilePath
+            try storage.save(context: storage.viewContext)
+            let _ = try storage.createProcessingTask(for: entry)
+
+            if let topicName {
+                let paletteKey = TopicPaletteStore.shared.key(for: topicName)
+                let topic = try storage.findOrCreateTopic(name: topicName, paletteKey: paletteKey)
+                entry.addToTopics(topic)
+                try storage.save(context: storage.viewContext)
+            }
+
+            let savedRefs = try createMediaReferences(for: entry, mediaCaptures: mediaCaptures)
+            cacheThumbnails(for: savedRefs)
+            processEntry(entry)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    // MARK: - Edit
+
+    func edit(
+        entryId: UUID,
+        newContent: String,
+        removedTagIds: Set<UUID> = [],
+        removedMediaIds: Set<UUID> = [],
+        addedTopicNames: Set<String> = [],
+        removedTopicNames: Set<String> = [],
+        discardAudio: Bool = false
+    ) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            let textChanged = entry.content != newContent
+
+            if discardAudio, let audioPath = entry.audioFilePath {
+                AudioPlayerService.deleteAudio(filename: audioPath)
+                entry.audioFilePath = nil
+            }
+
+            removeEntities(from: entry, ids: removedTagIds)
+            removeMedia(from: entry, ids: removedMediaIds)
+            removeTopics(from: entry, names: removedTopicNames)
+            addTopics(to: entry, names: addedTopicNames)
+
+            if textChanged {
+                entry.content = newContent
+                clearForReprocessing(entry)
+                let _ = try storage.createProcessingTask(for: entry)
+                try storage.save(context: storage.viewContext)
+                processEntry(entry)
+            } else {
+                try storage.save(context: storage.viewContext)
+            }
+        } catch {
+            ErrorState.shared.report(.editFailed(error.localizedDescription))
+        }
+    }
+
+    // MARK: - Append
+
+    func append(
+        entryId: UUID,
+        additionalContent: String,
+        audioFilePath: String? = nil,
+        mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
+    ) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+
+            let trimmed = additionalContent.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                entry.content = entry.content + "\n\n" + trimmed
+            }
+
+            if let audioFilePath {
+                entry.audioFilePath = audioFilePath
+            }
+
+            let savedRefs = try createMediaReferences(for: entry, mediaCaptures: mediaCaptures)
+            clearForReprocessing(entry)
+            let _ = try storage.createProcessingTask(for: entry)
+            try storage.save(context: storage.viewContext)
+            cacheThumbnails(for: savedRefs)
+            processEntry(entry)
+        } catch {
+            ErrorState.shared.report(.editFailed(error.localizedDescription))
+        }
+    }
+
+    // MARK: - Delete / Recycle
+
+    func delete(entryId: UUID) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            storage.viewContext.delete(entry)
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    func recycle(entryId: UUID) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            entry.isRecycled = true
+            entry.recycledAt = Date()
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    func restore(entryId: UUID) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            entry.isRecycled = false
+            entry.recycledAt = nil
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    func emptyRecycleBin() {
+        do {
+            let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+            request.predicate = NSPredicate(format: "isRecycled == YES")
+            let entries = try storage.viewContext.fetch(request)
+            for entry in entries {
+                storage.viewContext.delete(entry)
+            }
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    // MARK: - Feedback
+
+    func submitFeedback(entryId: UUID, state: InferenceSummary.FeedbackState, correction: String? = nil) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            guard let summary = entry.inferenceSummary else { return }
+            try storage.updateFeedback(summary, state: state, correction: correction)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    // MARK: - Queries
+
+    func loadRecycledEntries() -> [EntryDisplayModel] {
+        do {
+            let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+            request.predicate = NSPredicate(format: "isRecycled == YES")
+            request.sortDescriptors = [NSSortDescriptor(keyPath: \JournalEntry.recycledAt, ascending: false)]
+            return try storage.viewContext.fetch(request).map { EntryMapper.mapToDisplayModel($0) }
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+            return []
+        }
+    }
+
+    func recycledCountForTopic(_ topicName: String) -> Int {
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "isRecycled == YES AND ANY topics.name == %@", topicName)
+        return (try? storage.viewContext.count(for: request)) ?? 0
+    }
+
+    // MARK: - Private Helpers
+
+    private func fetchEntry(id: UUID) throws -> JournalEntry? {
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
+        return try storage.viewContext.fetch(request).first
+    }
+
+    private func createMediaReferences(
+        for entry: JournalEntry,
+        mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)]
+    ) throws -> [MediaReference] {
+        var refs: [MediaReference] = []
+        for capture in mediaCaptures {
+            let ref = try storage.createMediaReference(
+                for: entry,
+                localIdentifier: capture.localIdentifier,
+                mediaType: capture.mediaType
+            )
+            refs.append(ref)
+        }
+        return refs
+    }
+
+    private func cacheThumbnails(for refs: [MediaReference]) {
+        guard !refs.isEmpty else { return }
+        let storage = self.storage
+        Task.detached {
+            for ref in refs {
+                let filename = await ThumbnailService.shared.cacheThumbnail(for: ref.osIdentifier)
+                if let filename {
+                    try? storage.updateThumbnailFilename(ref, filename: filename)
+                }
+            }
+        }
+    }
+
+    private func processEntry(_ entry: JournalEntry) {
+        guard let processingEngine else { return }
+        Task.detached {
+            await processingEngine.processEntry(entry)
+        }
+    }
+
+    private func removeEntities(from entry: JournalEntry, ids: Set<UUID>) {
+        guard !ids.isEmpty, let entities = entry.extractedEntities as? Set<ExtractedEntity> else { return }
+        for entity in entities where ids.contains(entity.id) {
+            storage.viewContext.delete(entity)
+        }
+    }
+
+    private func removeMedia(from entry: JournalEntry, ids: Set<UUID>) {
+        guard !ids.isEmpty, let refs = entry.mediaReferences as? Set<MediaReference> else { return }
+        for ref in refs where ids.contains(ref.id) {
+            if let cacheFile = ref.thumbnailCacheFilename {
+                ThumbnailService.shared.evictThumbnail(filename: cacheFile)
+            }
+            storage.viewContext.delete(ref)
+        }
+    }
+
+    private func removeTopics(from entry: JournalEntry, names: Set<String>) {
+        guard !names.isEmpty, let topics = entry.topics as? Set<Topic> else { return }
+        for topic in topics where names.contains(topic.name) {
+            entry.removeFromTopics(topic)
+        }
+    }
+
+    private func addTopics(to entry: JournalEntry, names: Set<String>) {
+        for topicName in names {
+            let paletteKey = TopicPaletteStore.shared.key(for: topicName)
+            if let topic = try? storage.findOrCreateTopic(name: topicName, paletteKey: paletteKey) {
+                entry.addToTopics(topic)
+            }
+        }
+    }
+
+    private func clearForReprocessing(_ entry: JournalEntry) {
+        if let entities = entry.extractedEntities as? Set<ExtractedEntity> {
+            for entity in entities { storage.viewContext.delete(entity) }
+        }
+        if let summary = entry.inferenceSummary {
+            storage.viewContext.delete(summary)
+        }
+        if let topics = entry.topics as? Set<Topic> {
+            for topic in topics { entry.removeFromTopics(topic) }
+        }
+        if let tasks = entry.processingTasks as? Set<ProcessingTask> {
+            for task in tasks { storage.viewContext.delete(task) }
+        }
+    }
+}

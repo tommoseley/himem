@@ -512,7 +512,7 @@ struct EntryExpandedView: View {
                                     pendingMedia.append((localIdentifier: id, mediaType: .video))
                                 }
                             } catch {
-                                print("Inline capture failed: \(error)")
+                                ErrorState.shared.report(.mediaError(error.localizedDescription))
                             }
                         }
                     },
@@ -681,7 +681,7 @@ struct EntryExpandedView: View {
                 let cleaned = try await ClaudeAPIService.shared.cleanupTranscription(editedText)
                 editedText = cleaned
             } catch {
-                print("Cleanup failed: \(error)")
+                ErrorState.shared.report(.processingFailed(error.localizedDescription))
             }
             isCleaningUp = false
         }

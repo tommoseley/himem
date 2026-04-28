@@ -25,7 +25,7 @@ final class ProcessingEngine {
                 task.progressDescription = "Raw note saved. The app is extracting entities and content intent."
                 try context.save()
             } catch {
-                print("Failed to mark as processing: \(error)")
+                Task { @MainActor in ErrorState.shared.report(.processingFailed(error.localizedDescription)) }
             }
         }
 
@@ -51,93 +51,13 @@ final class ProcessingEngine {
 
             await context.perform { [self] in
                 do {
-                    let entryInContext = try context.existingObject(with: objectID) as! JournalEntry
-
-                    // Store extracted entities
-                    for entityResult in result.entities {
-                        guard let type = ExtractedEntity.EntityType(rawValue: entityResult.type) else { continue }
-                        let entity = ExtractedEntity(context: context)
-                        entity.id = UUID()
-                        entity.entryId = entryInContext.id
-                        entity.entityType = type.rawValue
-                        entity.value = entityResult.value
-                        entity.confidenceScore = entityResult.confidence
-                        entity.processingMethod = "cloud"
-                        entity.createdAt = Date()
-                        entity.entry = entryInContext
-                    }
-
-                    // Assign existing topics, queue new ones for approval
-                    var newTopicNames: [String] = []
-                    for topicName in result.topics {
-                        let slug = topicName.lowercased().replacingOccurrences(of: " ", with: "-")
-                        let request = NSFetchRequest<Topic>(entityName: "Topic")
-                        request.predicate = NSPredicate(format: "slug == %@", slug)
-                        request.fetchLimit = 1
-
-                        if let existing = try context.fetch(request).first {
-                            entryInContext.addToTopics(existing)
-                        } else {
-                            newTopicNames.append(topicName)
-                        }
-                    }
-
-                    // Queue new topics for user approval on main thread
-                    if !newTopicNames.isEmpty {
-                        let entryObjID = objectID
-                        Task { @MainActor in
-                            let approval = TopicApprovalService.shared
-                            for name in newTopicNames {
-                                approval.suggest(name: name, entryObjectID: entryObjID)
-                            }
-                        }
-                    }
-
-                    // Propose album sync for topics assigned to entries with media
-                    let mediaIdentifiers = entryInContext.mediaReferencesArray.map(\.osIdentifier)
-                    if !mediaIdentifiers.isEmpty {
-                        let assignedExisting = result.topics.filter { topicName in
-                            let slug = topicName.lowercased().replacingOccurrences(of: " ", with: "-")
-                            let req = NSFetchRequest<Topic>(entityName: "Topic")
-                            req.predicate = NSPredicate(format: "slug == %@", slug)
-                            req.fetchLimit = 1
-                            return (try? context.fetch(req).first) != nil
-                        }
-                        if !assignedExisting.isEmpty {
-                            let ids = mediaIdentifiers
-                            Task { @MainActor in
-                                let albumSync = AlbumSyncService.shared
-                                for name in assignedExisting {
-                                    if albumSync.isAutoSyncEnabled(for: name) {
-                                        albumSync.addNewMedia(topicName: name, identifiers: ids)
-                                    } else {
-                                        albumSync.proposeIfNeeded(topicName: name)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Store inference summary
-                    let summary = InferenceSummary(context: context)
-                    summary.id = UUID()
-                    summary.entryId = entryInContext.id
-                    summary.summaryText = result.summary
-                    summary.createdAt = Date()
-                    summary.entry = entryInContext
-
-                    // Update title if provided
-                    if let title = result.title {
-                        entryInContext.title = title
-                    }
-
-                    // Mark task completed
-                    if let task = entryInContext.latestProcessingTask {
-                        task.status = ProcessingTask.Status.completed.rawValue
-                        task.progressDescription = nil
-                        task.processedAt = Date()
-                    }
-
+                    let entry = try context.existingObject(with: objectID) as! JournalEntry
+                    storeEntities(from: result, for: entry, in: context)
+                    let newTopics = assignTopics(from: result, for: entry, in: context)
+                    queueNewTopics(newTopics, entryObjectID: objectID)
+                    checkAlbumSync(for: entry, topics: result.topics, context: context)
+                    storeInference(from: result, for: entry, in: context)
+                    markCompleted(entry)
                     try context.save()
                 } catch {
                     self.markFailed(objectID: objectID, error: error, context: context)
@@ -206,11 +126,94 @@ final class ProcessingEngine {
                 await processEntry(entry)
             }
         } catch {
-            print("Failed to fetch pending tasks: \(error)")
+            Task { @MainActor in ErrorState.shared.report(.processingFailed(error.localizedDescription)) }
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Cloud Processing Helpers
+
+    private func storeEntities(from result: ClaudeAPIService.AnalysisResult, for entry: JournalEntry, in context: NSManagedObjectContext) {
+        for entityResult in result.entities {
+            guard let type = ExtractedEntity.EntityType(rawValue: entityResult.type) else { continue }
+            let entity = ExtractedEntity(context: context)
+            entity.id = UUID()
+            entity.entryId = entry.id
+            entity.entityType = type.rawValue
+            entity.value = entityResult.value
+            entity.confidenceScore = entityResult.confidence
+            entity.processingMethod = "cloud"
+            entity.createdAt = Date()
+            entity.entry = entry
+        }
+    }
+
+    /// Returns names of topics that need user approval (don't exist yet).
+    private func assignTopics(from result: ClaudeAPIService.AnalysisResult, for entry: JournalEntry, in context: NSManagedObjectContext) -> [String] {
+        var newTopicNames: [String] = []
+        for topicName in result.topics {
+            let slug = TopicSlugHelper.slugify(topicName)
+            let request = NSFetchRequest<Topic>(entityName: "Topic")
+            request.predicate = NSPredicate(format: "slug == %@", slug)
+            request.fetchLimit = 1
+            if let existing = try? context.fetch(request).first {
+                entry.addToTopics(existing)
+            } else {
+                newTopicNames.append(topicName)
+            }
+        }
+        return newTopicNames
+    }
+
+    private func queueNewTopics(_ names: [String], entryObjectID: NSManagedObjectID) {
+        guard !names.isEmpty else { return }
+        Task { @MainActor in
+            for name in names {
+                TopicApprovalService.shared.suggest(name: name, entryObjectID: entryObjectID)
+            }
+        }
+    }
+
+    private func checkAlbumSync(for entry: JournalEntry, topics: [String], context: NSManagedObjectContext) {
+        let mediaIds = entry.mediaReferencesArray.map(\.osIdentifier)
+        guard !mediaIds.isEmpty else { return }
+        let existingTopics = topics.filter { topicName in
+            let slug = TopicSlugHelper.slugify(topicName)
+            let req = NSFetchRequest<Topic>(entityName: "Topic")
+            req.predicate = NSPredicate(format: "slug == %@", slug)
+            req.fetchLimit = 1
+            return (try? context.fetch(req).first) != nil
+        }
+        guard !existingTopics.isEmpty else { return }
+        Task { @MainActor in
+            for name in existingTopics {
+                if AlbumSyncService.shared.isAutoSyncEnabled(for: name) {
+                    AlbumSyncService.shared.addNewMedia(topicName: name, identifiers: mediaIds)
+                } else {
+                    AlbumSyncService.shared.proposeIfNeeded(topicName: name)
+                }
+            }
+        }
+    }
+
+    private func storeInference(from result: ClaudeAPIService.AnalysisResult, for entry: JournalEntry, in context: NSManagedObjectContext) {
+        let summary = InferenceSummary(context: context)
+        summary.id = UUID()
+        summary.entryId = entry.id
+        summary.summaryText = result.summary
+        summary.createdAt = Date()
+        summary.entry = entry
+        if let title = result.title {
+            entry.title = title
+        }
+    }
+
+    private func markCompleted(_ entry: JournalEntry) {
+        if let task = entry.latestProcessingTask {
+            task.status = ProcessingTask.Status.completed.rawValue
+            task.progressDescription = nil
+            task.processedAt = Date()
+        }
+    }
 
     private func markFailed(objectID: NSManagedObjectID, error: Error, context: NSManagedObjectContext) {
         do {
@@ -223,7 +226,7 @@ final class ProcessingEngine {
             }
             try context.save()
         } catch {
-            print("Failed to mark task as failed: \(error)")
+            Task { @MainActor in ErrorState.shared.report(.processingFailed(error.localizedDescription)) }
         }
     }
 }

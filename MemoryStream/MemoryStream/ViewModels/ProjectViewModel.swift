@@ -33,7 +33,7 @@ class ProjectViewModel: ObservableObject {
             let fetched = try storage.viewContext.fetch(request)
             projects = fetched.map { mapToDisplayModel($0) }
         } catch {
-            print("Failed to load projects: \(error)")
+            ErrorState.shared.report(.projectError(error.localizedDescription))
         }
     }
 
@@ -42,7 +42,7 @@ class ProjectViewModel: ObservableObject {
             let _ = try storage.createProject(name: name, purpose: purpose)
             loadProjects()
         } catch {
-            print("Failed to create project: \(error)")
+            ErrorState.shared.report(.projectError(error.localizedDescription))
         }
     }
 
@@ -57,7 +57,7 @@ class ProjectViewModel: ObservableObject {
                 loadProjects()
             }
         } catch {
-            print("Failed to delete project: \(error)")
+            ErrorState.shared.report(.projectError(error.localizedDescription))
         }
     }
 
@@ -74,7 +74,7 @@ class ProjectViewModel: ObservableObject {
                 loadProjects()
             }
         } catch {
-            print("Failed to update project: \(error)")
+            ErrorState.shared.report(.projectError(error.localizedDescription))
         }
     }
 
@@ -93,7 +93,7 @@ class ProjectViewModel: ObservableObject {
             try storage.save(context: storage.viewContext)
             loadProjects()
         } catch {
-            print("Failed to add memory to project: \(error)")
+            ErrorState.shared.report(.projectError(error.localizedDescription))
         }
     }
 
@@ -112,7 +112,7 @@ class ProjectViewModel: ObservableObject {
             try storage.save(context: storage.viewContext)
             loadProjects()
         } catch {
-            print("Failed to remove memory from project: \(error)")
+            ErrorState.shared.report(.projectError(error.localizedDescription))
         }
     }
 

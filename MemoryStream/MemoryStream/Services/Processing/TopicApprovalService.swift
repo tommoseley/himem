@@ -43,7 +43,7 @@ final class TopicApprovalService: ObservableObject {
                 }
             }
         } catch {
-            print("Failed to approve topic: \(error)")
+            ErrorState.shared.report(.topicError(error.localizedDescription))
         }
         pendingTopic = nil
         showNextIfNeeded()

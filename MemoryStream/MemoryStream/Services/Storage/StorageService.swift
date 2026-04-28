@@ -231,7 +231,7 @@ final class StorageService {
 
     func findOrCreateTopic(name: String, paletteKey: String? = nil, context: NSManagedObjectContext? = nil) throws -> Topic {
         let ctx = context ?? viewContext
-        let slug = name.lowercased().replacingOccurrences(of: " ", with: "-")
+        let slug = TopicSlugHelper.slugify(name)
 
         let request = NSFetchRequest<Topic>(entityName: "Topic")
         request.predicate = NSPredicate(format: "slug == %@", slug)

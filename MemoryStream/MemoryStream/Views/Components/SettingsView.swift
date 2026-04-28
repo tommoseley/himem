@@ -155,14 +155,14 @@ struct SettingsView: View {
         do {
             topics = try storage.viewContext.fetch(request)
         } catch {
-            print("Failed to load topics: \(error)")
+            ErrorState.shared.report(.topicError(error.localizedDescription))
         }
     }
 
     private func updateTopic(_ topic: Topic, name: String, paletteKey: String) {
         let oldName = topic.name
         topic.name = name
-        topic.slug = name.lowercased().replacingOccurrences(of: " ", with: "-")
+        topic.slug = TopicSlugHelper.slugify(name)
         topic.paletteKey = paletteKey
 
         // Migrate string-keyed caches if name changed
@@ -177,7 +177,7 @@ struct SettingsView: View {
             loadTopics()
             refreshID = UUID()
         } catch {
-            print("Failed to update topic: \(error)")
+            ErrorState.shared.report(.topicError(error.localizedDescription))
         }
     }
 
@@ -187,7 +187,7 @@ struct SettingsView: View {
             TopicPaletteStore.shared.set(key: colorKey, for: name)
             loadTopics()
         } catch {
-            print("Failed to add topic: \(error)")
+            ErrorState.shared.report(.topicError(error.localizedDescription))
         }
     }
 
@@ -200,7 +200,7 @@ struct SettingsView: View {
             try storage.save(context: storage.viewContext)
             loadTopics()
         } catch {
-            print("Failed to delete topic: \(error)")
+            ErrorState.shared.report(.topicError(error.localizedDescription))
         }
     }
 }
