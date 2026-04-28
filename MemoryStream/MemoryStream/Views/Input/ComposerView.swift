@@ -27,6 +27,10 @@ struct ComposerView: View {
                     .foregroundStyle(Crucible.Color.ink)
                 Spacer()
                 Button {
+                    if speechService.isRecording {
+                        speechService.stopRecording()
+                    }
+                    composer.reset()
                     dismiss()
                 } label: {
                     Image(systemName: "xmark")

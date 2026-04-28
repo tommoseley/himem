@@ -64,8 +64,7 @@ class ComposerViewModel: ObservableObject {
     }
 
     func close() {
-        guard isPresented else { return }
-        if isRecording {
+        if speechService?.isRecording == true {
             speechService?.stopRecording()
         }
         stopDurationTimer()
