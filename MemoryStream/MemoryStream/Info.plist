@@ -3,15 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Hi Mem uses the camera to capture photos and videos for your journal entries.</string>
+	<string>Memory Stream uses the camera to capture photos and videos as part of your journal entries.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Hi Mem needs microphone access to capture voice journal entries.</string>
+	<string>Memory Stream uses the microphone to record voice notes and the audio for video entries.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Hi Mem reads photos and videos from your library to attach to your journal entries.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Hi Mem saves captured photos and videos to your photo library.</string>
+	<string>Memory Stream saves photos and videos you capture to your photo library and lets you attach existing photos to journal entries.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Hi Mem uses speech recognition to convert your voice to text.</string>
+	<string>Memory Stream uses speech recognition to convert your voice to text.</string>
 	<key>UIApplicationShortcutItems</key>
 	<array>
 		<dict>
