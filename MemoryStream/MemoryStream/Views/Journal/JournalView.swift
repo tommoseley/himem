@@ -10,6 +10,7 @@ struct JournalView: View {
     @StateObject private var composer = ComposerViewModel()
     @StateObject private var projectVM = ProjectViewModel()
     @StateObject private var errorState = ErrorState.shared
+    @EnvironmentObject private var quickAction: QuickActionState
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("cardDensity") private var cardDensityRaw: String = CardDensity.standard.rawValue
     @State private var viewMode: ViewMode = .memories
@@ -391,6 +392,22 @@ struct JournalView: View {
             Text(cameraService.error?.localizedDescription ?? "")
         }
         .navigationBarHidden(true)
+        .onChange(of: quickAction.pendingAction) { _, action in
+            guard let action else { return }
+            quickAction.pendingAction = nil
+            switch action {
+            case "com.himem.app.voice-capture":
+                composer.speechService = speechService
+                composer.cameraService = cameraService
+                composer.open(withRecording: true)
+            case "com.himem.app.new-entry":
+                composer.speechService = speechService
+                composer.cameraService = cameraService
+                composer.open()
+            default:
+                break
+            }
+        }
         } // NavigationStack
     }
 

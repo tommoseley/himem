@@ -3,9 +3,28 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Hi Mem uses the camera to capture photos and videos for your journal entries.</string>
+	<string>Memory Stream uses the camera to capture photos and videos for your journal entries.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Hi Mem saves your captured photos and videos to your photo library and reads them back to display in your entries.</string>
+	<string>Memory Stream saves your captured photos and videos to your photo library and reads them back to display in your entries.</string>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.himem.app.voice-capture</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Voice Capture</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>mic.fill</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.himem.app.new-entry</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>New Memory</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>plus</string>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
