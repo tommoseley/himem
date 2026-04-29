@@ -82,10 +82,6 @@ struct JournalView: View {
             } else {
 
             List {
-                SiriShortcutBanner()
-                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
 
                 if viewModel.filteredEntries.isEmpty {
                     VStack(spacing: 12) {
