@@ -10,20 +10,10 @@ final class QuickActionState: ObservableObject {
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         application.registerForRemoteNotifications()
-        print("🔄 [SYNC] Registered for remote notifications")
         return true
     }
 
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        print("🔄 [SYNC] Got APNs device token (\(deviceToken.count) bytes)")
-    }
-
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("🔄 [SYNC] APNs registration FAILED: \(error.localizedDescription)")
-    }
-
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-        print("🔄 [SYNC] Remote notification received: \(userInfo)")
         completionHandler(.newData)
     }
 

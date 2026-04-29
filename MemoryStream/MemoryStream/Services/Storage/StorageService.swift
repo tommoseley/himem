@@ -25,30 +25,12 @@ final class StorageService {
         )
 
         var loadError: Error?
-        container.loadPersistentStores { storeDescription, error in
-            if let error {
-                loadError = error
-            } else {
-                print("✅ Core Data store loaded successfully")
-                print("✅ Store URL: \(storeDescription.url?.absoluteString ?? "unknown")")
-                print("✅ CloudKit container: \(storeDescription.cloudKitContainerOptions?.containerIdentifier ?? "none")")
-            }
+        container.loadPersistentStores { _, error in
+            if let error { loadError = error }
         }
 
         // If CloudKit failed, retry without it — local-only fallback
-        if let error = loadError {
-            let nsError = error as NSError
-            print("⚠️ CloudKit store failed: \(nsError)")
-            print("⚠️ Domain: \(nsError.domain), Code: \(nsError.code)")
-            print("⚠️ Description: \(nsError.localizedDescription)")
-            if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
-                print("⚠️ Underlying: \(underlying)")
-                if let ck = underlying.userInfo[NSUnderlyingErrorKey] as? NSError {
-                    print("⚠️ CloudKit error: \(ck)")
-                }
-            }
-            print("⚠️ Full userInfo: \(nsError.userInfo)")
-            print("⚠️ Retrying without CloudKit (local-only).")
+        if loadError != nil {
             description.cloudKitContainerOptions = nil
             container.persistentStoreDescriptions = [description]
             container.loadPersistentStores { _, error in
@@ -61,14 +43,8 @@ final class StorageService {
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
 
-        // Initialize CloudKit schema on first run — required for sync to work
         #if DEBUG
-        do {
-            try container.initializeCloudKitSchema(options: [])
-            print("✅ CloudKit schema initialized")
-        } catch {
-            print("⚠️ CloudKit schema init failed: \(error)")
-        }
+        try? container.initializeCloudKitSchema(options: [])
         #endif
 
         // Listen for remote changes from other devices
@@ -77,98 +53,9 @@ final class StorageService {
             object: container.persistentStoreCoordinator,
             queue: .main
         ) { [weak self] _ in
-            print("🔄 [SYNC] NSPersistentStoreRemoteChange received")
             self?.viewContext.perform {
                 self?.viewContext.refreshAllObjects()
             }
-        }
-
-        // CloudKit container event diagnostics
-        NotificationCenter.default.addObserver(
-            forName: NSPersistentCloudKitContainer.eventChangedNotification,
-            object: container,
-            queue: .main
-        ) { note in
-            guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
-                as? NSPersistentCloudKitContainer.Event else { return }
-            let typeNames = ["setup", "import", "export"]
-            let typeName = event.type.rawValue < typeNames.count ? typeNames[event.type.rawValue] : "\(event.type.rawValue)"
-            print("☁️ [CK] type=\(typeName) succeeded=\(event.succeeded) error=\(event.error?.localizedDescription ?? "nil")")
-        }
-
-        // Ensure CloudKit database subscription exists for push notifications
-        ensureCloudKitSubscription()
-    }
-
-    /// Manually create the CKDatabaseSubscription if the container's setup phase
-    /// didn't run (e.g. due to BGTaskScheduler failures on iPad).
-    private func ensureCloudKitSubscription() {
-        let ckContainer = CKContainer(identifier: "iCloud.com.himem.app")
-        let db = ckContainer.privateCloudDatabase
-        let subscriptionID = "com.apple.coredata.cloudkit.private.subscription"
-
-        // Check if subscription already exists
-        db.fetch(withSubscriptionID: subscriptionID) { subscription, error in
-            if subscription != nil {
-                print("☁️ [CK] Subscription already exists")
-                return
-            }
-
-            // Create it
-            let newSub = CKDatabaseSubscription(subscriptionID: subscriptionID)
-            let notifInfo = CKSubscription.NotificationInfo()
-            notifInfo.shouldSendContentAvailable = true
-            newSub.notificationInfo = notifInfo
-
-            db.save(newSub) { saved, error in
-                if let saved {
-                    print("☁️ [CK] Created subscription: \(saved.subscriptionID)")
-                } else if let error {
-                    print("☁️ [CK] Failed to create subscription: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-
-    /// Force CloudKit to re-sync by removing and re-adding the persistent store.
-    /// This replicates what happens on app launch — the container re-initializes
-    /// its CloudKit sync pipeline and imports pending changes.
-    func forceCloudKitResync() {
-        let coordinator = container.persistentStoreCoordinator
-        guard let store = coordinator.persistentStores.first else {
-            print("⚠️ [SYNC] No persistent store to resync")
-            return
-        }
-        let storeURL = store.url
-        let storeType = store.type
-
-        do {
-            // Remove the store (keeps the SQLite file, just disconnects)
-            try coordinator.remove(store)
-            print("🔄 [SYNC] Removed persistent store for resync")
-
-            // Re-add with CloudKit options — triggers full sync pipeline
-            let description = NSPersistentStoreDescription(url: storeURL!)
-            description.type = storeType
-            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-            description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
-                containerIdentifier: "iCloud.com.himem.app"
-            )
-
-            container.persistentStoreDescriptions = [description]
-            container.loadPersistentStores { _, error in
-                if let error {
-                    print("⚠️ [SYNC] Resync store load failed: \(error.localizedDescription)")
-                } else {
-                    print("✅ [SYNC] Resync store loaded — CloudKit import should trigger")
-                }
-            }
-
-            container.viewContext.automaticallyMergesChangesFromParent = true
-            container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-        } catch {
-            print("⚠️ [SYNC] Resync failed: \(error.localizedDescription)")
         }
     }
 

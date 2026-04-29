@@ -36,13 +36,8 @@ class JournalViewModel: ObservableObject {
     }
 
     func refresh() {
-        print("🔄 [SYNC] Pull-to-refresh triggered — forcing CloudKit resync")
-        storage.forceCloudKitResync()
-        // Give the import pipeline a moment to process, then reload
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-            self?.storage.viewContext.reset()
-            self?.loadEntries()
-        }
+        storage.viewContext.refreshAllObjects()
+        loadEntries()
     }
 
     /// Live lookup by id. Use this in views that need to re-render after the
@@ -61,7 +56,6 @@ class JournalViewModel: ObservableObject {
         )
         .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
         .sink { [weak self] _ in
-            print("🔄 [SYNC] NSManagedObjectContextObjectsDidChange fired")
             self?.loadEntries()
         }
     }
@@ -71,7 +65,6 @@ class JournalViewModel: ObservableObject {
             for: UIApplication.willEnterForegroundNotification
         )
         .sink { [weak self] _ in
-            print("🔄 [SYNC] App entering foreground — refreshing")
             self?.refresh()
         }
     }
@@ -197,12 +190,9 @@ class JournalViewModel: ObservableObject {
         let request = JournalEntry.fetchAllChronological()
         do {
             let journalEntries = try storage.viewContext.fetch(request)
-            let firstContent = journalEntries.first?.content.prefix(40) ?? "none"
-            print("🔄 [SYNC] loadEntries: \(journalEntries.count) entries, first: \"\(firstContent)\"")
             entries = journalEntries.map { mapToDisplayModel($0) }
             loadTopics()
         } catch {
-            print("🔄 [SYNC] loadEntries FAILED: \(error.localizedDescription)")
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }
     }
