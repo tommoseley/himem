@@ -84,6 +84,21 @@ final class StorageService {
         }
     }
 
+    /// Poke CloudKit to check for remote changes. NSPersistentCloudKitContainer
+    /// doesn't expose a "fetch now" API, but fetching zone changes via CKDatabase
+    /// triggers the import pipeline which then fires NSPersistentStoreRemoteChange.
+    func triggerCloudKitSync() {
+        let ckContainer = CKContainer(identifier: "iCloud.com.himem.app")
+        let zone = CKRecordZone(zoneName: "com.apple.coredata.cloudkit.zone")
+        let config = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
+        let op = CKFetchRecordZoneChangesOperation(recordZoneIDs: [zone.zoneID], configurationsByRecordZoneID: [zone.zoneID: config])
+        op.fetchAllChanges = true
+        op.recordZoneChangeTokensUpdatedBlock = { _, _, _ in }
+        op.recordZoneFetchResultBlock = { _, _ in }
+        op.fetchRecordZoneChangesResultBlock = { _ in }
+        ckContainer.privateCloudDatabase.add(op)
+    }
+
     /// Test-only initializer: in-memory Core Data store with no disk persistence.
     init(inMemory: Bool) {
         precondition(inMemory, "Use .shared for on-disk storage")
