@@ -37,8 +37,7 @@ class JournalViewModel: ObservableObject {
     }
 
     func refresh() {
-        storage.triggerCloudKitSync()
-        storage.viewContext.refreshAllObjects()
+        storage.viewContext.reset()
         loadEntries()
     }
 
@@ -88,8 +87,7 @@ class JournalViewModel: ObservableObject {
         syncPollTimer = Timer.publish(every: 15, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                self?.storage.triggerCloudKitSync()
-                self?.storage.viewContext.refreshAllObjects()
+                self?.storage.viewContext.reset()
                 self?.loadEntries()
             }
     }
