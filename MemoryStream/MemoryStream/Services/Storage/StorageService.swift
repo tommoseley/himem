@@ -76,8 +76,11 @@ final class StorageService {
             forName: NSNotification.Name.NSPersistentStoreRemoteChange,
             object: container.persistentStoreCoordinator,
             queue: .main
-        ) { _ in
-            // Remote change received — viewContext auto-merges
+        ) { [weak self] _ in
+            // Force the viewContext to re-fetch so ObjectsDidChange fires
+            self?.viewContext.perform {
+                self?.viewContext.refreshAllObjects()
+            }
         }
     }
 

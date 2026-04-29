@@ -82,7 +82,6 @@ struct JournalView: View {
             } else {
 
             List {
-
                 if viewModel.filteredEntries.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "text.book.closed")
@@ -180,6 +179,7 @@ struct JournalView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .refreshable { viewModel.refresh() }
             .safeAreaInset(edge: .bottom) {
                 Color.clear.frame(height: 90)
             }

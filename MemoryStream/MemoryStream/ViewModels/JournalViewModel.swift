@@ -23,13 +23,20 @@ class JournalViewModel: ObservableObject {
     private let storage: StorageService
     private let lifecycle: EntryLifecycleService
     private var contextObserver: AnyCancellable?
+    private var foregroundObserver: AnyCancellable?
     private var recomputeCancellables = Set<AnyCancellable>()
 
     init(storage: StorageService = .shared, processingEngine: ProcessingEngine? = .shared) {
         self.storage = storage
         self.lifecycle = EntryLifecycleService(storage: storage, processingEngine: processingEngine)
         observeStorageChanges()
+        observeForeground()
         observeFilterInputs()
+        loadEntries()
+    }
+
+    func refresh() {
+        storage.viewContext.refreshAllObjects()
         loadEntries()
     }
 
@@ -48,6 +55,15 @@ class JournalViewModel: ObservableObject {
             object: storage.viewContext
         )
         .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
+        .sink { [weak self] _ in
+            self?.loadEntries()
+        }
+    }
+
+    private func observeForeground() {
+        foregroundObserver = NotificationCenter.default.publisher(
+            for: UIApplication.willEnterForegroundNotification
+        )
         .sink { [weak self] _ in
             self?.loadEntries()
         }
