@@ -4,8 +4,12 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Hi Mem uses the camera to capture photos and videos for your journal entries.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Hi Mem needs microphone access to capture voice journal entries.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Hi Mem saves your captured photos and videos to your photo library and reads them back to display in your entries.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Hi Mem uses speech recognition to convert your voice to text.</string>
 	<key>UIApplicationShortcutItems</key>
 	<array>
 		<dict>
