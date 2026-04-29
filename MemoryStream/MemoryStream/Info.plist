@@ -7,7 +7,9 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Hi Mem needs microphone access to capture voice journal entries.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Hi Mem saves your captured photos and videos to your photo library and reads them back to display in your entries.</string>
+	<string>Hi Mem reads photos and videos from your library to attach to your journal entries.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Hi Mem saves captured photos and videos to your photo library.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Hi Mem uses speech recognition to convert your voice to text.</string>
 	<key>UIApplicationShortcutItems</key>
