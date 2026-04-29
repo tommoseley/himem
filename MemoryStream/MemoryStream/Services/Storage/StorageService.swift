@@ -77,7 +77,7 @@ final class StorageService {
             object: container.persistentStoreCoordinator,
             queue: .main
         ) { [weak self] _ in
-            // Force the viewContext to re-fetch so ObjectsDidChange fires
+            print("🔄 [SYNC] NSPersistentStoreRemoteChange received")
             self?.viewContext.perform {
                 self?.viewContext.refreshAllObjects()
             }

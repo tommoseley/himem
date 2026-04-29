@@ -37,6 +37,7 @@ class JournalViewModel: ObservableObject {
     }
 
     func refresh() {
+        print("🔄 [SYNC] Pull-to-refresh triggered")
         storage.viewContext.reset()
         loadEntries()
     }
@@ -57,6 +58,7 @@ class JournalViewModel: ObservableObject {
         )
         .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
         .sink { [weak self] _ in
+            print("🔄 [SYNC] NSManagedObjectContextObjectsDidChange fired")
             self?.loadEntries()
         }
     }
@@ -66,6 +68,7 @@ class JournalViewModel: ObservableObject {
             for: UIApplication.willEnterForegroundNotification
         )
         .sink { [weak self] _ in
+            print("🔄 [SYNC] App entering foreground — refreshing")
             self?.refresh()
             self?.startSyncPoll()
         }
@@ -83,10 +86,12 @@ class JournalViewModel: ObservableObject {
     }
 
     private func startSyncPoll() {
+        print("🔄 [SYNC] Starting 15s poll timer")
         syncPollTimer?.cancel()
         syncPollTimer = Timer.publish(every: 15, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
+                print("🔄 [SYNC] Poll tick — resetting context and reloading")
                 self?.storage.viewContext.reset()
                 self?.loadEntries()
             }
@@ -213,9 +218,12 @@ class JournalViewModel: ObservableObject {
         let request = JournalEntry.fetchAllChronological()
         do {
             let journalEntries = try storage.viewContext.fetch(request)
+            let firstContent = journalEntries.first?.content.prefix(40) ?? "none"
+            print("🔄 [SYNC] loadEntries: \(journalEntries.count) entries, first: \"\(firstContent)\"")
             entries = journalEntries.map { mapToDisplayModel($0) }
             loadTopics()
         } catch {
+            print("🔄 [SYNC] loadEntries FAILED: \(error.localizedDescription)")
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }
     }
