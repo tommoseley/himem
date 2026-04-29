@@ -24,6 +24,7 @@ class JournalViewModel: ObservableObject {
     private let lifecycle: EntryLifecycleService
     private var contextObserver: AnyCancellable?
     private var foregroundObserver: AnyCancellable?
+    private var syncPollTimer: AnyCancellable?
     private var recomputeCancellables = Set<AnyCancellable>()
 
     init(storage: StorageService = .shared, processingEngine: ProcessingEngine? = .shared) {
@@ -65,8 +66,30 @@ class JournalViewModel: ObservableObject {
             for: UIApplication.willEnterForegroundNotification
         )
         .sink { [weak self] _ in
-            self?.loadEntries()
+            self?.refresh()
+            self?.startSyncPoll()
         }
+
+        // Also stop polling when backgrounded
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.syncPollTimer?.cancel()
+            self?.syncPollTimer = nil
+        }
+
+        startSyncPoll()
+    }
+
+    private func startSyncPoll() {
+        syncPollTimer?.cancel()
+        syncPollTimer = Timer.publish(every: 15, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.storage.viewContext.refreshAllObjects()
+                self?.loadEntries()
+            }
     }
 
     // MARK: - Entry Operations (delegated to EntryLifecycleService)
