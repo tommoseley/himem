@@ -82,23 +82,21 @@ final class StorageService {
                 self?.viewContext.refreshAllObjects()
             }
         }
-    }
 
-
-    /// Write a trivial record to force the container to communicate with CloudKit.
-    /// During the export round-trip, the container often discovers pending imports.
-    func nudgeCloudKitSync() {
-        let context = backgroundContext()
-        context.perform {
-            let request = NSFetchRequest<SyncPing>(entityName: "SyncPing")
-            request.fetchLimit = 1
-            let ping = (try? context.fetch(request).first) ?? SyncPing(context: context)
-            ping.id = ping.id ?? UUID()
-            ping.timestamp = Date()
-            try? context.save()
-            print("🔄 [SYNC] Nudge: wrote SyncPing to trigger export")
+        // CloudKit container event diagnostics
+        NotificationCenter.default.addObserver(
+            forName: NSPersistentCloudKitContainer.eventChangedNotification,
+            object: container,
+            queue: .main
+        ) { note in
+            guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
+                as? NSPersistentCloudKitContainer.Event else { return }
+            let typeNames = ["setup", "import", "export"]
+            let typeName = event.type.rawValue < typeNames.count ? typeNames[event.type.rawValue] : "\(event.type.rawValue)"
+            print("☁️ [CK] type=\(typeName) succeeded=\(event.succeeded) error=\(event.error?.localizedDescription ?? "nil")")
         }
     }
+
 
     /// Test-only initializer: in-memory Core Data store with no disk persistence.
     init(inMemory: Bool) {
