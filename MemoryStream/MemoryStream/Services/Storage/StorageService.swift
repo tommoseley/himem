@@ -95,8 +95,40 @@ final class StorageService {
             let typeName = event.type.rawValue < typeNames.count ? typeNames[event.type.rawValue] : "\(event.type.rawValue)"
             print("☁️ [CK] type=\(typeName) succeeded=\(event.succeeded) error=\(event.error?.localizedDescription ?? "nil")")
         }
+
+        // Ensure CloudKit database subscription exists for push notifications
+        ensureCloudKitSubscription()
     }
 
+    /// Manually create the CKDatabaseSubscription if the container's setup phase
+    /// didn't run (e.g. due to BGTaskScheduler failures on iPad).
+    private func ensureCloudKitSubscription() {
+        let ckContainer = CKContainer(identifier: "iCloud.com.himem.app")
+        let db = ckContainer.privateCloudDatabase
+        let subscriptionID = "com.apple.coredata.cloudkit.private.subscription"
+
+        // Check if subscription already exists
+        db.fetch(withSubscriptionID: subscriptionID) { subscription, error in
+            if subscription != nil {
+                print("☁️ [CK] Subscription already exists")
+                return
+            }
+
+            // Create it
+            let newSub = CKDatabaseSubscription(subscriptionID: subscriptionID)
+            let notifInfo = CKSubscription.NotificationInfo()
+            notifInfo.shouldSendContentAvailable = true
+            newSub.notificationInfo = notifInfo
+
+            db.save(newSub) { saved, error in
+                if let saved {
+                    print("☁️ [CK] Created subscription: \(saved.subscriptionID)")
+                } else if let error {
+                    print("☁️ [CK] Failed to create subscription: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
 
     /// Test-only initializer: in-memory Core Data store with no disk persistence.
     init(inMemory: Bool) {
