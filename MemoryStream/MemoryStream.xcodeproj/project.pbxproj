@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A100000001 /* MemoryStreamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000001 /* MemoryStreamApp.swift */; };
 		A100000002 /* JournalEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000002 /* JournalEntry.swift */; };
+		A100000099 /* SyncPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000099 /* SyncPing.swift */; };
 		A100000003 /* ExtractedEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000003 /* ExtractedEntity.swift */; };
 		A100000004 /* ProcessingTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000004 /* ProcessingTask.swift */; };
 		A100000005 /* InferenceSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000005 /* InferenceSummary.swift */; };
@@ -73,6 +74,7 @@
 /* Begin PBXFileReference section */
 		B100000001 /* MemoryStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryStreamApp.swift; sourceTree = "<group>"; };
 		B100000002 /* JournalEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntry.swift; sourceTree = "<group>"; };
+		B100000099 /* SyncPing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncPing.swift; sourceTree = "<group>"; };
 		B100000003 /* ExtractedEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractedEntity.swift; sourceTree = "<group>"; };
 		B100000004 /* ProcessingTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingTask.swift; sourceTree = "<group>"; };
 		B100000005 /* InferenceSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSummary.swift; sourceTree = "<group>"; };
@@ -188,6 +190,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000002 /* JournalEntry.swift */,
+				B100000099 /* SyncPing.swift */,
 				B100000003 /* ExtractedEntity.swift */,
 				B100000004 /* ProcessingTask.swift */,
 				B100000005 /* InferenceSummary.swift */,
@@ -461,6 +464,7 @@
 			files = (
 				A100000001 /* MemoryStreamApp.swift in Sources */,
 				A100000002 /* JournalEntry.swift in Sources */,
+				A100000099 /* SyncPing.swift in Sources */,
 				A100000003 /* ExtractedEntity.swift in Sources */,
 				A100000004 /* ProcessingTask.swift in Sources */,
 				A100000005 /* InferenceSummary.swift in Sources */,

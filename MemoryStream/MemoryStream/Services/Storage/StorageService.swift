@@ -85,6 +85,21 @@ final class StorageService {
     }
 
 
+    /// Write a trivial record to force the container to communicate with CloudKit.
+    /// During the export round-trip, the container often discovers pending imports.
+    func nudgeCloudKitSync() {
+        let context = backgroundContext()
+        context.perform {
+            let request = NSFetchRequest<SyncPing>(entityName: "SyncPing")
+            request.fetchLimit = 1
+            let ping = (try? context.fetch(request).first) ?? SyncPing(context: context)
+            ping.id = ping.id ?? UUID()
+            ping.timestamp = Date()
+            try? context.save()
+            print("🔄 [SYNC] Nudge: wrote SyncPing to trigger export")
+        }
+    }
+
     /// Test-only initializer: in-memory Core Data store with no disk persistence.
     init(inMemory: Bool) {
         precondition(inMemory, "Use .shared for on-disk storage")

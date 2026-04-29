@@ -38,6 +38,7 @@ class JournalViewModel: ObservableObject {
 
     func refresh() {
         print("🔄 [SYNC] Pull-to-refresh triggered")
+        storage.nudgeCloudKitSync()
         storage.viewContext.reset()
         loadEntries()
     }
@@ -91,9 +92,13 @@ class JournalViewModel: ObservableObject {
         syncPollTimer = Timer.publish(every: 15, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                print("🔄 [SYNC] Poll tick — resetting context and reloading")
-                self?.storage.viewContext.reset()
-                self?.loadEntries()
+                print("🔄 [SYNC] Poll tick — nudging CloudKit and reloading")
+                self?.storage.nudgeCloudKitSync()
+                // Delay the reload slightly to let the import pipeline process
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                    self?.storage.viewContext.reset()
+                    self?.loadEntries()
+                }
             }
     }
 
