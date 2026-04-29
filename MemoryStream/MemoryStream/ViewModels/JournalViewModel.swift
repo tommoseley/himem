@@ -36,9 +36,13 @@ class JournalViewModel: ObservableObject {
     }
 
     func refresh() {
-        print("🔄 [SYNC] Pull-to-refresh triggered")
-        storage.viewContext.reset()
-        loadEntries()
+        print("🔄 [SYNC] Pull-to-refresh triggered — forcing CloudKit resync")
+        storage.forceCloudKitResync()
+        // Give the import pipeline a moment to process, then reload
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            self?.storage.viewContext.reset()
+            self?.loadEntries()
+        }
     }
 
     /// Live lookup by id. Use this in views that need to re-render after the

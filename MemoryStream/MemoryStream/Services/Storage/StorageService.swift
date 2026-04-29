@@ -130,6 +130,48 @@ final class StorageService {
         }
     }
 
+    /// Force CloudKit to re-sync by removing and re-adding the persistent store.
+    /// This replicates what happens on app launch — the container re-initializes
+    /// its CloudKit sync pipeline and imports pending changes.
+    func forceCloudKitResync() {
+        let coordinator = container.persistentStoreCoordinator
+        guard let store = coordinator.persistentStores.first else {
+            print("⚠️ [SYNC] No persistent store to resync")
+            return
+        }
+        let storeURL = store.url
+        let storeType = store.type
+
+        do {
+            // Remove the store (keeps the SQLite file, just disconnects)
+            try coordinator.remove(store)
+            print("🔄 [SYNC] Removed persistent store for resync")
+
+            // Re-add with CloudKit options — triggers full sync pipeline
+            let description = NSPersistentStoreDescription(url: storeURL!)
+            description.type = storeType
+            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
+                containerIdentifier: "iCloud.com.himem.app"
+            )
+
+            container.persistentStoreDescriptions = [description]
+            container.loadPersistentStores { _, error in
+                if let error {
+                    print("⚠️ [SYNC] Resync store load failed: \(error.localizedDescription)")
+                } else {
+                    print("✅ [SYNC] Resync store loaded — CloudKit import should trigger")
+                }
+            }
+
+            container.viewContext.automaticallyMergesChangesFromParent = true
+            container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        } catch {
+            print("⚠️ [SYNC] Resync failed: \(error.localizedDescription)")
+        }
+    }
+
     /// Test-only initializer: in-memory Core Data store with no disk persistence.
     init(inMemory: Bool) {
         precondition(inMemory, "Use .shared for on-disk storage")

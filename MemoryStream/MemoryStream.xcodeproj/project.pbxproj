@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		A100000001 /* MemoryStreamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000001 /* MemoryStreamApp.swift */; };
 		A100000002 /* JournalEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000002 /* JournalEntry.swift */; };
-		A100000099 /* SyncPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000099 /* SyncPing.swift */; };
 		A100000003 /* ExtractedEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000003 /* ExtractedEntity.swift */; };
 		A100000004 /* ProcessingTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000004 /* ProcessingTask.swift */; };
 		A100000005 /* InferenceSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000005 /* InferenceSummary.swift */; };
@@ -34,17 +33,6 @@
 		A100000025 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000026 /* KeychainService.swift */; };
 		A100000026 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000027 /* SettingsView.swift */; };
 		A100000027 /* NewTopicSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028 /* NewTopicSheet.swift */; };
-		A100000046 /* RecycleBinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000046; };
-		A100000047 /* PhotoLibraryPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000047; };
-		A100000054 /* ErrorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000054; };
-		A100000055 /* TopicSlugHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000055; };
-		A100000057 /* EntryLifecycleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000057; };
-		A100000056 /* EntryMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000056; };
-		A100000048 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000048; };
-		A100000049 /* ProjectViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000049; };
-		A100000050 /* ProjectCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000050; };
-		A100000051 /* ProjectListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000051; };
-		A100000052 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000052; };
 		A100000028 /* TopicApprovalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000029 /* TopicApprovalService.swift */; };
 		A100000029 /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000030 /* AudioPlayerService.swift */; };
 		A100000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000031 /* Assets.xcassets */; };
@@ -59,6 +47,18 @@
 		A100000041 /* ComposerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000043 /* ComposerViewModel.swift */; };
 		A100000042 /* ComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000044 /* ComposerView.swift */; };
 		A100000045 /* EntryExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000045 /* EntryExpandedView.swift */; };
+		A100000046 /* RecycleBinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000046 /* RecycleBinView.swift */; };
+		A100000047 /* PhotoLibraryPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000047 /* PhotoLibraryPicker.swift */; };
+		A100000048 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000048 /* Project.swift */; };
+		A100000049 /* ProjectViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000049 /* ProjectViewModel.swift */; };
+		A100000050 /* ProjectCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000050 /* ProjectCardView.swift */; };
+		A100000051 /* ProjectListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000051 /* ProjectListView.swift */; };
+		A100000052 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000052 /* ProjectDetailView.swift */; };
+		A100000054 /* ErrorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000054 /* ErrorService.swift */; };
+		A100000055 /* TopicSlugHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000055 /* TopicSlugHelper.swift */; };
+		A100000056 /* EntryMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000056 /* EntryMapper.swift */; };
+		A100000057 /* EntryLifecycleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000057 /* EntryLifecycleService.swift */; };
+		A100000099 /* SyncPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000099 /* SyncPing.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,7 +74,6 @@
 /* Begin PBXFileReference section */
 		B100000001 /* MemoryStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryStreamApp.swift; sourceTree = "<group>"; };
 		B100000002 /* JournalEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntry.swift; sourceTree = "<group>"; };
-		B100000099 /* SyncPing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncPing.swift; sourceTree = "<group>"; };
 		B100000003 /* ExtractedEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractedEntity.swift; sourceTree = "<group>"; };
 		B100000004 /* ProcessingTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingTask.swift; sourceTree = "<group>"; };
 		B100000005 /* InferenceSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSummary.swift; sourceTree = "<group>"; };
@@ -99,18 +98,6 @@
 		B100000026 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B100000027 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B100000028 /* NewTopicSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTopicSheet.swift; sourceTree = "<group>"; };
-		B100000046 /* RecycleBinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecycleBinView.swift; sourceTree = "<group>"; };
-		B100000047 /* PhotoLibraryPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryPicker.swift; sourceTree = "<group>"; };
-		B100000054 /* ErrorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorService.swift; sourceTree = "<group>"; };
-		B100000055 /* TopicSlugHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicSlugHelper.swift; sourceTree = "<group>"; };
-		B100000057 /* EntryLifecycleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryLifecycleService.swift; sourceTree = "<group>"; };
-		B100000056 /* EntryMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryMapper.swift; sourceTree = "<group>"; };
-		B100000048 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
-		B100000053 /* MemoryStream.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MemoryStream.entitlements; sourceTree = "<group>"; };
-		B100000049 /* ProjectViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectViewModel.swift; sourceTree = "<group>"; };
-		B100000050 /* ProjectCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCardView.swift; sourceTree = "<group>"; };
-		B100000051 /* ProjectListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectListView.swift; sourceTree = "<group>"; };
-		B100000052 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
 		B100000029 /* TopicApprovalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicApprovalService.swift; sourceTree = "<group>"; };
 		B100000030 /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		B100000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -126,6 +113,19 @@
 		B100000043 /* ComposerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerViewModel.swift; sourceTree = "<group>"; };
 		B100000044 /* ComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerView.swift; sourceTree = "<group>"; };
 		B100000045 /* EntryExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryExpandedView.swift; sourceTree = "<group>"; };
+		B100000046 /* RecycleBinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecycleBinView.swift; sourceTree = "<group>"; };
+		B100000047 /* PhotoLibraryPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryPicker.swift; sourceTree = "<group>"; };
+		B100000048 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
+		B100000049 /* ProjectViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectViewModel.swift; sourceTree = "<group>"; };
+		B100000050 /* ProjectCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCardView.swift; sourceTree = "<group>"; };
+		B100000051 /* ProjectListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectListView.swift; sourceTree = "<group>"; };
+		B100000052 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
+		B100000053 /* MemoryStream.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MemoryStream.entitlements; sourceTree = "<group>"; };
+		B100000054 /* ErrorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorService.swift; sourceTree = "<group>"; };
+		B100000055 /* TopicSlugHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicSlugHelper.swift; sourceTree = "<group>"; };
+		B100000056 /* EntryMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryMapper.swift; sourceTree = "<group>"; };
+		B100000057 /* EntryLifecycleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryLifecycleService.swift; sourceTree = "<group>"; };
+		B100000099 /* SyncPing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncPing.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -324,6 +324,14 @@
 			path = Network;
 			sourceTree = "<group>";
 		};
+		G100000060 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				B100000042 /* CrucibleTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
 		G100000061 /* Projects */ = {
 			isa = PBXGroup;
 			children = (
@@ -332,14 +340,6 @@
 				B100000052 /* ProjectDetailView.swift */,
 			);
 			path = Projects;
-			sourceTree = "<group>";
-		};
-		G100000060 /* Theme */ = {
-			isa = PBXGroup;
-			children = (
-				B100000042 /* CrucibleTheme.swift */,
-			);
-			path = Theme;
 			sourceTree = "<group>";
 		};
 		G100000099 /* Products */ = {
@@ -588,8 +588,13 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Memory Stream uses the microphone to record voice notes and the audio for video entries.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Memory Stream uses speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSMainCameraUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Hi Mem uses the microphone to record voice notes and the audio for video entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "Hi Mem uses reminders to remind users set up notifications from the memories they record.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Hi Mem uses the microphone to transcribe voice notes and the audio for video entries. These are used to send to AI to infer information for the construction and classification ot memories, for the user to be able to use to streamline content creation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
@@ -619,8 +624,13 @@
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Memory Stream uses the microphone to record voice notes and the audio for video entries.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Memory Stream uses speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSMainCameraUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Hi Mem uses the microphone to record voice notes and the audio for video entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "Hi Mem uses reminders to remind users set up notifications from the memories they record.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Hi Mem uses the microphone to transcribe voice notes and the audio for video entries. These are used to send to AI to infer information for the construction and classification ot memories, for the user to be able to use to streamline content creation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
