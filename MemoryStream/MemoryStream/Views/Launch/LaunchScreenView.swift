@@ -170,11 +170,16 @@ struct LaunchScreenView: View {
             withAnimation(.easeIn(duration: 0.25)) { showSyncBar = true }
         }
 
-        // Initialize Core Data + CloudKit during the choreography.
-        // Delayed to 0.3s so the SwiftUI splash is visible BEFORE
-        // the main thread blocks on persistent store loading.
+        // Initialize Core Data + CloudKit on a background thread
+        // so the UI choreography isn't blocked by store loading.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.initializeStorage()
+            DispatchQueue.global(qos: .userInitiated).async {
+                // loadPersistentStores is synchronous and can take 1-2s
+                _ = StorageService.shared
+                DispatchQueue.main.async {
+                    self.initializeStorage()
+                }
+            }
         }
 
         // Minimum display: full choreography + time to read epigraph
@@ -190,8 +195,7 @@ struct LaunchScreenView: View {
     }
 
     private func initializeStorage() {
-        // This triggers StorageService singleton init — loads Core Data + CloudKit
-        _ = StorageService.shared
+        // StorageService.shared already initialized on background thread
         TopicPaletteStore.shared.loadFromCoreData()
         onStorageReady()
 
