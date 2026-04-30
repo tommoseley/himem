@@ -46,7 +46,10 @@ struct MemoryStreamApp: App {
     @AppStorage("lastBackgrounded") private var lastBackgrounded: Double = 0
 
     init() {
-        HiMemShortcuts.updateAppShortcutParameters()
+        // Defer shortcut registration — don't block app launch
+        DispatchQueue.main.async {
+            HiMemShortcuts.updateAppShortcutParameters()
+        }
     }
 
     var body: some Scene {

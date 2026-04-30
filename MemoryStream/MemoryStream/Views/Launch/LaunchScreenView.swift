@@ -15,7 +15,6 @@ struct LaunchScreenView: View {
 
     // Choreography states
     @State private var showGreeting = false
-    @State private var showWordmark = false
     @State private var showEpigraph = false
     @State private var showSyncBar = false
 
@@ -160,10 +159,7 @@ struct LaunchScreenView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             withAnimation(.easeIn(duration: 0.3)) { showGreeting = true }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            withAnimation(.easeIn(duration: 0.4)) { showWordmark = true }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             withAnimation(.easeIn(duration: 0.35)) { showEpigraph = true }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
