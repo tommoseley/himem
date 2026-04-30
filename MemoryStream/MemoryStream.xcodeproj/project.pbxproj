@@ -60,6 +60,8 @@
 		A100000070 /* LaunchScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000070 /* LaunchScreenView.swift */; };
 		A100000071 /* EpigraphService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000071 /* EpigraphService.swift */; };
 		A100000072 /* epigraphs.json in Resources */ = {isa = PBXBuildFile; fileRef = B100000072 /* epigraphs.json */; };
+		A100000080 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000080 /* OnboardingView.swift */; };
+		A100000081 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000081 /* AuthService.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
@@ -129,6 +131,8 @@
 		B100000070 /* LaunchScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreenView.swift; sourceTree = "<group>"; };
 		B100000071 /* EpigraphService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpigraphService.swift; sourceTree = "<group>"; };
 		B100000072 /* epigraphs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = epigraphs.json; sourceTree = "<group>"; };
+		B100000080 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		B100000081 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -210,6 +214,7 @@
 			isa = PBXGroup;
 			children = (
 				G100000070 /* Launch */,
+				G100000080 /* Onboarding */,
 				G100000040 /* Journal */,
 				G100000041 /* Input */,
 				G100000042 /* Search */,
@@ -217,6 +222,14 @@
 				G100000043 /* Components */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		G100000080 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				B100000080 /* OnboardingView.swift */,
+			);
+			path = Onboarding;
 			sourceTree = "<group>";
 		};
 		G100000013 /* ViewModels */ = {
@@ -240,6 +253,7 @@
 				G100000052 /* Processing */,
 				G100000053 /* Network */,
 				B100000071 /* EpigraphService.swift */,
+				B100000081 /* AuthService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -537,6 +551,8 @@
 				A100000036 /* MediaViewerView.swift in Sources */,
 				A100000070 /* LaunchScreenView.swift in Sources */,
 				A100000071 /* EpigraphService.swift in Sources */,
+				A100000080 /* OnboardingView.swift in Sources */,
+				A100000081 /* AuthService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

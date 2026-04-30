@@ -41,8 +41,10 @@ class SceneDelegate: NSObject, UIWindowSceneDelegate {
 @main
 struct MemoryStreamApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var auth = AuthService.shared
     @State private var splashComplete = false
     @State private var storageReady = false
+    @State private var onboardingComplete = false
 
     init() {
         DispatchQueue.main.async {
@@ -53,7 +55,7 @@ struct MemoryStreamApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                if storageReady {
+                if storageReady && onboardingComplete {
                     JournalView()
                         .environment(\.managedObjectContext, StorageService.shared.viewContext)
                         .environmentObject(QuickActionState.shared)
@@ -62,12 +64,33 @@ struct MemoryStreamApp: App {
                 if !splashComplete {
                     LaunchScreenView(onStorageReady: {
                         storageReady = true
+                        // Check if onboarding was already completed
+                        if auth.hasCompletedOnboarding {
+                            onboardingComplete = true
+                        }
                     }, onComplete: {
                         splashComplete = true
+                        // Show onboarding if needed, otherwise go to feed
+                        if auth.hasCompletedOnboarding {
+                            onboardingComplete = true
+                        }
                     })
+                }
+
+                // Onboarding — shown after splash if user hasn't signed in
+                if splashComplete && !onboardingComplete {
+                    OnboardingView {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            onboardingComplete = true
+                        }
+                    }
+                    .transition(.opacity)
                 }
             }
             .preferredColorScheme(.light)
+            .onAppear {
+                auth.verifyCredentialState()
+            }
         }
     }
 }
