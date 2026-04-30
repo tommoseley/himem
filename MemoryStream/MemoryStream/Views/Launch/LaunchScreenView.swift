@@ -19,74 +19,86 @@ struct LaunchScreenView: View {
     @State private var showSyncBar = false
 
     private let ochre = Color(red: 0xC6/255, green: 0x4A/255, blue: 0x1C/255)
-    private let ochreLight = Color(red: 0xD4/255, green: 0xA5/255, blue: 0x74/255)
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
-        let name = UIDevice.current.name
+        // iOS 16+ returns just "iPhone"/"iPad" for privacy.
+        // Use first name from device owner if available, otherwise omit name.
+        let deviceName = UIDevice.current.name
+        let isGeneric = deviceName == "iPhone" || deviceName == "iPad"
+            || deviceName == "iPod touch"
+
+        let nameClean: String? = isGeneric ? nil : deviceName
             .replacingOccurrences(of: "\u{2019}s iPhone", with: "")
             .replacingOccurrences(of: "'s iPhone", with: "")
             .replacingOccurrences(of: "\u{2019}s iPad", with: "")
             .replacingOccurrences(of: "'s iPad", with: "")
+            .trimmingCharacters(in: .whitespaces)
+
+        let timeGreeting: String
         switch hour {
-        case 0..<12: return "Good morning, \(name)."
-        case 12..<17: return "Good afternoon, \(name)."
-        default: return "Good evening, \(name)."
+        case 0..<12: timeGreeting = "Good morning"
+        case 12..<17: timeGreeting = "Good afternoon"
+        default: timeGreeting = "Good evening"
         }
+
+        if let name = nameClean, !name.isEmpty {
+            return "\(timeGreeting), \(name)."
+        }
+        return "\(timeGreeting)."
     }
 
     var body: some View {
         ZStack {
-            Crucible.Color.sunk
+            Color(red: 0xEF/255, green: 0xEC/255, blue: 0xE5/255)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                Spacer()
+                // Top spacing — push content to ~35% from top
+                Spacer().frame(height: UIScreen.main.bounds.height * 0.22)
 
                 // Greeting with ochre dot
                 if showGreeting {
                     HStack(spacing: 6) {
                         Circle()
                             .fill(ochre)
-                            .frame(width: 6, height: 6)
+                            .frame(width: 5, height: 5)
                         Text(greeting)
-                            .font(.subheadline)
-                            .foregroundStyle(Crucible.Color.ink3)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.5))
                     }
                     .transition(.opacity)
+                }
+
+                Spacer().frame(height: 20)
+
+                // Wordmark — always visible (matches static launch screen)
+                HStack(spacing: 0) {
+                    Text("Hi")
+                        .font(.custom("Georgia-Bold", size: 64))
+                        .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255))
+                    Text("Mem")
+                        .font(.custom("Georgia-Italic", size: 64))
+                        .foregroundStyle(ochre)
                 }
 
                 Spacer().frame(height: 28)
 
-                // Wordmark
-                if showWordmark {
-                    HStack(spacing: 0) {
-                        Text("Hi")
-                            .font(.custom("Georgia-Bold", size: 56))
-                            .foregroundStyle(Crucible.Color.ink)
-                        Text("Mem")
-                            .font(.custom("Georgia-Italic", size: 56))
-                            .foregroundStyle(ochre)
-                    }
-                    .transition(.opacity)
-                }
-
-                Spacer().frame(height: 24)
-
                 // Epigraph
                 if showEpigraph, !epigraph.isEmpty {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 10) {
                         Text("\u{201C}\(epigraph)\u{201D}")
                             .font(.custom("Georgia-Italic", size: 15))
-                            .foregroundStyle(Crucible.Color.ink2)
+                            .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.55))
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 44)
+                            .lineSpacing(4)
+                            .padding(.horizontal, 48)
 
                         if !epigraphSource.isEmpty {
                             Text(epigraphSource.uppercased())
-                                .font(.system(size: 10, weight: .medium))
-                                .tracking(1.5)
-                                .foregroundStyle(Crucible.Color.ink4)
+                                .font(.system(size: 9, weight: .medium))
+                                .tracking(2)
+                                .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.3))
                         }
                     }
                     .transition(.opacity)
@@ -94,39 +106,41 @@ struct LaunchScreenView: View {
 
                 Spacer()
 
-                // Sync status + progress hairline
+                // Sync status + progress hairline at bottom
                 if showSyncBar {
-                    VStack(spacing: 10) {
+                    VStack(spacing: 8) {
                         HStack(spacing: 4) {
                             Text(syncStatus)
-                                .font(.caption2)
-                                .foregroundStyle(Crucible.Color.ink4)
-                            Text("·")
-                                .foregroundStyle(Crucible.Color.ink4)
-                            Text(syncDetail)
-                                .font(.caption2)
-                                .foregroundStyle(Crucible.Color.ink4)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.3))
+                            if !syncDetail.isEmpty {
+                                Text("\u{00B7}")
+                                    .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.3))
+                                Text(syncDetail)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.3))
+                            }
                         }
 
-                        // Progress hairline — full width
+                        // Progress hairline
                         GeometryReader { geo in
                             Rectangle()
-                                .fill(Crucible.Color.ink4.opacity(0.2))
+                                .fill(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.08))
                                 .frame(height: 1)
                                 .overlay(alignment: .leading) {
                                     Rectangle()
-                                        .fill(ochre)
+                                        .fill(ochre.opacity(0.6))
                                         .frame(width: geo.size.width * syncProgress, height: 1)
                                 }
                         }
                         .frame(height: 1)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 16)
+                    .padding(.horizontal, 40)
                     .transition(.opacity)
                 }
+
+                Spacer().frame(height: 48)
             }
-            .padding(.bottom, 40)
         }
         .onAppear {
             startLaunchSequence()
@@ -143,29 +157,22 @@ struct LaunchScreenView: View {
         epigraphSource = selected.source
         EpigraphService.shared.refreshFromAPI()
 
-        // Staggered fade-in (~1500ms total)
-        // Greeting: 50ms
+        // Staggered fade-in
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            withAnimation(.easeIn(duration: 0.25)) { showGreeting = true }
+            withAnimation(.easeIn(duration: 0.3)) { showGreeting = true }
         }
-
-        // Wordmark: 200ms
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             withAnimation(.easeIn(duration: 0.4)) { showWordmark = true }
         }
-
-        // Epigraph: 650ms
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
-            withAnimation(.easeIn(duration: 0.3)) { showEpigraph = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeIn(duration: 0.35)) { showEpigraph = true }
         }
-
-        // Sync bar: 950ms
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.95) {
-            withAnimation(.easeIn(duration: 0.2)) { showSyncBar = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation(.easeIn(duration: 0.25)) { showSyncBar = true }
         }
 
         // Progress animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
             withAnimation(.easeInOut(duration: 1.2)) {
                 syncProgress = 0.7
             }

@@ -60,6 +60,7 @@
 		A100000070 /* LaunchScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000070 /* LaunchScreenView.swift */; };
 		A100000071 /* EpigraphService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000071 /* EpigraphService.swift */; };
 		A100000072 /* epigraphs.json in Resources */ = {isa = PBXBuildFile; fileRef = B100000072 /* epigraphs.json */; };
+		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -129,6 +130,7 @@
 		B100000071 /* EpigraphService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpigraphService.swift; sourceTree = "<group>"; };
 		B100000072 /* epigraphs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = epigraphs.json; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -180,14 +182,6 @@
 			path = MemoryStream;
 			sourceTree = "<group>";
 		};
-		G100000071 /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				B100000072 /* epigraphs.json */,
-			);
-			path = Resources;
-			sourceTree = "<group>";
-		};
 		G100000010 /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -223,14 +217,6 @@
 				G100000043 /* Components */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		G100000070 /* Launch */ = {
-			isa = PBXGroup;
-			children = (
-				B100000070 /* LaunchScreenView.swift */,
-			);
-			path = Launch;
 			sourceTree = "<group>";
 		};
 		G100000013 /* ViewModels */ = {
@@ -361,6 +347,23 @@
 			path = Projects;
 			sourceTree = "<group>";
 		};
+		G100000070 /* Launch */ = {
+			isa = PBXGroup;
+			children = (
+				B100000070 /* LaunchScreenView.swift */,
+			);
+			path = Launch;
+			sourceTree = "<group>";
+		};
+		G100000071 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B100000072 /* epigraphs.json */,
+				E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		G100000099 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -463,6 +466,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */,
 				A100000030 /* Assets.xcassets in Resources */,
 				A100000072 /* epigraphs.json in Resources */,
 			);
@@ -619,7 +623,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
-								INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -657,7 +661,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
-								INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
