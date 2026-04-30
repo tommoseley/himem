@@ -43,10 +43,8 @@ struct MemoryStreamApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var splashComplete = false
     @State private var storageReady = false
-    @AppStorage("lastBackgrounded") private var lastBackgrounded: Double = 0
 
     init() {
-        // Defer shortcut registration — don't block app launch
         DispatchQueue.main.async {
             HiMemShortcuts.updateAppShortcutParameters()
         }
@@ -59,7 +57,6 @@ struct MemoryStreamApp: App {
                     JournalView()
                         .environment(\.managedObjectContext, StorageService.shared.viewContext)
                         .environmentObject(QuickActionState.shared)
-                        .opacity(splashComplete ? 1 : 0)
                 }
 
                 if !splashComplete {
@@ -68,22 +65,9 @@ struct MemoryStreamApp: App {
                     }, onComplete: {
                         splashComplete = true
                     })
-                    .transition(.opacity)
                 }
             }
             .preferredColorScheme(.light)
-            .onAppear {
-                // Warm start: skip splash if backgrounded < 60s ago
-                let elapsed = Date().timeIntervalSince1970 - lastBackgrounded
-                if lastBackgrounded > 0 && elapsed < 60 {
-                    // Storage is already initialized from previous run
-                    storageReady = true
-                    splashComplete = true
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
-                lastBackgrounded = Date().timeIntervalSince1970
-            }
         }
     }
 }
