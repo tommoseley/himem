@@ -17,9 +17,13 @@ final class EpigraphService {
     // MARK: - Public API
 
     func todaysEpigraph(entryCount: Int) -> String {
+        todaysEpigraphWithSource(entryCount: entryCount).text
+    }
+
+    func todaysEpigraphWithSource(entryCount: Int) -> (text: String, source: String) {
         let catalog = loadCatalog()
         let pool = eligiblePool(from: catalog, entryCount: entryCount)
-        guard !pool.isEmpty else { return "" }
+        guard !pool.isEmpty else { return ("", "") }
 
         let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 1
         let recent = recentlyShown()
@@ -32,7 +36,7 @@ final class EpigraphService {
         let selected = candidates[index]
 
         trackShown(selected.text)
-        return selected.text
+        return (selected.text, selected.source)
     }
 
     /// Kick off an async refresh of the catalog from the API.

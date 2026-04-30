@@ -7,11 +7,19 @@ struct LaunchScreenView: View {
     @State private var syncComplete = false
     @State private var minimumTimeElapsed = false
     @State private var syncProgress: CGFloat = 0
-    @State private var syncStatus: String = "Syncing..."
-    @State private var epigraph: String = ""
-    @State private var showContent = false
+    @State private var syncStatus = "Syncing your bin"
+    @State private var syncDetail = "Cloud"
+    @State private var epigraph = ""
+    @State private var epigraphSource = ""
 
-    private let ochre = Color(red: 0xD4/255, green: 0xA5/255, blue: 0x74/255)
+    // Choreography states
+    @State private var showGreeting = false
+    @State private var showWordmark = false
+    @State private var showEpigraph = false
+    @State private var showSyncBar = false
+
+    private let ochre = Color(red: 0xC6/255, green: 0x4A/255, blue: 0x1C/255)
+    private let ochreLight = Color(red: 0xD4/255, green: 0xA5/255, blue: 0x74/255)
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -29,92 +37,138 @@ struct LaunchScreenView: View {
 
     var body: some View {
         ZStack {
-            Crucible.Color.paper
+            Crucible.Color.sunk
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Spacer()
 
-                // Greeting
-                if showContent {
-                    Text(greeting)
-                        .font(.subheadline)
-                        .foregroundStyle(Crucible.Color.ink3)
-                        .transition(.opacity)
+                // Greeting with ochre dot
+                if showGreeting {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(ochre)
+                            .frame(width: 6, height: 6)
+                        Text(greeting)
+                            .font(.subheadline)
+                            .foregroundStyle(Crucible.Color.ink3)
+                    }
+                    .transition(.opacity)
+                }
+
+                Spacer().frame(height: 28)
+
+                // Wordmark
+                if showWordmark {
+                    HStack(spacing: 0) {
+                        Text("Hi")
+                            .font(.custom("Georgia-Bold", size: 56))
+                            .foregroundStyle(Crucible.Color.ink)
+                        Text("Mem")
+                            .font(.custom("Georgia-Italic", size: 56))
+                            .foregroundStyle(ochre)
+                    }
+                    .transition(.opacity)
                 }
 
                 Spacer().frame(height: 24)
 
-                // Wordmark
-                HStack(spacing: 0) {
-                    Text("Hi")
-                        .font(.custom("Iowan Old Style Bold", size: 48))
-                        .foregroundStyle(Crucible.Color.ink)
-                    Text("Mem")
-                        .font(.custom("Iowan Old Style Italic", size: 48))
-                        .foregroundStyle(ochre)
-                }
-
-                Spacer().frame(height: 20)
-
                 // Epigraph
-                if showContent, !epigraph.isEmpty {
-                    Text("\u{201C}\(epigraph)\u{201D}")
-                        .font(.custom("Iowan Old Style Italic", size: 14))
-                        .foregroundStyle(Crucible.Color.ink3)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                        .transition(.opacity)
+                if showEpigraph, !epigraph.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("\u{201C}\(epigraph)\u{201D}")
+                            .font(.custom("Georgia-Italic", size: 15))
+                            .foregroundStyle(Crucible.Color.ink2)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 44)
+
+                        if !epigraphSource.isEmpty {
+                            Text(epigraphSource.uppercased())
+                                .font(.system(size: 10, weight: .medium))
+                                .tracking(1.5)
+                                .foregroundStyle(Crucible.Color.ink4)
+                        }
+                    }
+                    .transition(.opacity)
                 }
 
                 Spacer()
 
-                // Progress hairline
-                GeometryReader { geo in
-                    Rectangle()
-                        .fill(ochre.opacity(0.3))
-                        .frame(height: 1.5)
-                        .overlay(alignment: .leading) {
-                            Rectangle()
-                                .fill(ochre)
-                                .frame(width: geo.size.width * syncProgress, height: 1.5)
+                // Sync status + progress hairline
+                if showSyncBar {
+                    VStack(spacing: 10) {
+                        HStack(spacing: 4) {
+                            Text(syncStatus)
+                                .font(.caption2)
+                                .foregroundStyle(Crucible.Color.ink4)
+                            Text("·")
+                                .foregroundStyle(Crucible.Color.ink4)
+                            Text(syncDetail)
+                                .font(.caption2)
+                                .foregroundStyle(Crucible.Color.ink4)
                         }
+
+                        // Progress hairline — full width
+                        GeometryReader { geo in
+                            Rectangle()
+                                .fill(Crucible.Color.ink4.opacity(0.2))
+                                .frame(height: 1)
+                                .overlay(alignment: .leading) {
+                                    Rectangle()
+                                        .fill(ochre)
+                                        .frame(width: geo.size.width * syncProgress, height: 1)
+                                }
+                        }
+                        .frame(height: 1)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
+                    .transition(.opacity)
                 }
-                .frame(height: 1.5)
-                .padding(.horizontal, 60)
-
-                Spacer().frame(height: 16)
-
-                // Sync status
-                if showContent {
-                    Text(syncStatus)
-                        .font(.caption2)
-                        .foregroundStyle(Crucible.Color.ink4)
-                        .transition(.opacity)
-                }
-
-                Spacer().frame(height: 60)
             }
+            .padding(.bottom, 40)
         }
         .onAppear {
             startLaunchSequence()
         }
     }
 
+    // MARK: - Choreography
+
     private func startLaunchSequence() {
-        // Load epigraph
+        // Load epigraph data
         let count = EpigraphService.shared.entryCount()
-        epigraph = EpigraphService.shared.todaysEpigraph(entryCount: count)
+        let selected = EpigraphService.shared.todaysEpigraphWithSource(entryCount: count)
+        epigraph = selected.text
+        epigraphSource = selected.source
         EpigraphService.shared.refreshFromAPI()
 
-        // Fade in content
-        withAnimation(.easeIn(duration: 0.4)) {
-            showContent = true
+        // Staggered fade-in (~1500ms total)
+        // Greeting: 50ms
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            withAnimation(.easeIn(duration: 0.25)) { showGreeting = true }
         }
 
-        // Animate progress
-        withAnimation(.easeInOut(duration: 1.5)) {
-            syncProgress = 0.7
+        // Wordmark: 200ms
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.easeIn(duration: 0.4)) { showWordmark = true }
+        }
+
+        // Epigraph: 650ms
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+            withAnimation(.easeIn(duration: 0.3)) { showEpigraph = true }
+        }
+
+        // Sync bar: 950ms
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.95) {
+            withAnimation(.easeIn(duration: 0.2)) { showSyncBar = true }
+        }
+
+        // Progress animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeInOut(duration: 1.2)) {
+                syncProgress = 0.7
+            }
         }
 
         // Minimum display time
@@ -123,12 +177,12 @@ struct LaunchScreenView: View {
             checkComplete()
         }
 
-        // Maximum wait — don't hold longer than 3s
+        // Maximum wait
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             finishLaunch()
         }
 
-        // Observe CloudKit sync completion
+        // Observe CloudKit sync
         NotificationCenter.default.addObserver(
             forName: NSPersistentCloudKitContainer.eventChangedNotification,
             object: StorageService.shared.container,
@@ -141,6 +195,7 @@ struct LaunchScreenView: View {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     syncProgress = 1.0
                     syncStatus = "Ready"
+                    syncDetail = ""
                 }
                 checkComplete()
             }
