@@ -42,6 +42,8 @@ class SceneDelegate: NSObject, UIWindowSceneDelegate {
 struct MemoryStreamApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     let storageService = StorageService.shared
+    @State private var splashComplete = false
+    @AppStorage("lastBackgrounded") private var lastBackgrounded: Double = 0
 
     init() {
         TopicPaletteStore.shared.loadFromCoreData()
@@ -50,10 +52,30 @@ struct MemoryStreamApp: App {
 
     var body: some Scene {
         WindowGroup {
-            JournalView()
-                .environment(\.managedObjectContext, storageService.viewContext)
-                .environmentObject(QuickActionState.shared)
-                .preferredColorScheme(.light)
+            ZStack {
+                JournalView()
+                    .environment(\.managedObjectContext, storageService.viewContext)
+                    .environmentObject(QuickActionState.shared)
+                    .opacity(splashComplete ? 1 : 0)
+
+                if !splashComplete {
+                    LaunchScreenView {
+                        splashComplete = true
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .preferredColorScheme(.light)
+            .onAppear {
+                // Warm start: skip splash if backgrounded < 60s ago
+                let elapsed = Date().timeIntervalSince1970 - lastBackgrounded
+                if lastBackgrounded > 0 && elapsed < 60 {
+                    splashComplete = true
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                lastBackgrounded = Date().timeIntervalSince1970
+            }
         }
     }
 }

@@ -57,6 +57,9 @@
 		A100000055 /* TopicSlugHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000055 /* TopicSlugHelper.swift */; };
 		A100000056 /* EntryMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000056 /* EntryMapper.swift */; };
 		A100000057 /* EntryLifecycleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000057 /* EntryLifecycleService.swift */; };
+		A100000070 /* LaunchScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000070 /* LaunchScreenView.swift */; };
+		A100000071 /* EpigraphService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000071 /* EpigraphService.swift */; };
+		A100000072 /* epigraphs.json in Resources */ = {isa = PBXBuildFile; fileRef = B100000072 /* epigraphs.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -122,6 +125,9 @@
 		B100000055 /* TopicSlugHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicSlugHelper.swift; sourceTree = "<group>"; };
 		B100000056 /* EntryMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryMapper.swift; sourceTree = "<group>"; };
 		B100000057 /* EntryLifecycleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryLifecycleService.swift; sourceTree = "<group>"; };
+		B100000070 /* LaunchScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreenView.swift; sourceTree = "<group>"; };
+		B100000071 /* EpigraphService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpigraphService.swift; sourceTree = "<group>"; };
+		B100000072 /* epigraphs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = epigraphs.json; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -166,11 +172,20 @@
 				G100000013 /* ViewModels */,
 				G100000014 /* Services */,
 				G100000060 /* Theme */,
+				G100000071 /* Resources */,
 				B100000031 /* Assets.xcassets */,
 				B100000033 /* Info.plist */,
 				B100000053 /* MemoryStream.entitlements */,
 			);
 			path = MemoryStream;
+			sourceTree = "<group>";
+		};
+		G100000071 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B100000072 /* epigraphs.json */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		G100000010 /* App */ = {
@@ -200,6 +215,7 @@
 		G100000012 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				G100000070 /* Launch */,
 				G100000040 /* Journal */,
 				G100000041 /* Input */,
 				G100000042 /* Search */,
@@ -207,6 +223,14 @@
 				G100000043 /* Components */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		G100000070 /* Launch */ = {
+			isa = PBXGroup;
+			children = (
+				B100000070 /* LaunchScreenView.swift */,
+			);
+			path = Launch;
 			sourceTree = "<group>";
 		};
 		G100000013 /* ViewModels */ = {
@@ -229,6 +253,7 @@
 				G100000051 /* AI */,
 				G100000052 /* Processing */,
 				G100000053 /* Network */,
+				B100000071 /* EpigraphService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -439,6 +464,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100000030 /* Assets.xcassets in Resources */,
+				A100000072 /* epigraphs.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -505,6 +531,8 @@
 				A100000034 /* CameraPickerView.swift in Sources */,
 				A100000035 /* MediaThumbnailView.swift in Sources */,
 				A100000036 /* MediaViewerView.swift in Sources */,
+				A100000070 /* LaunchScreenView.swift in Sources */,
+				A100000071 /* EpigraphService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
