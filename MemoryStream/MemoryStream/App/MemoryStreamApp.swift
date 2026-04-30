@@ -41,27 +41,30 @@ class SceneDelegate: NSObject, UIWindowSceneDelegate {
 @main
 struct MemoryStreamApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    let storageService = StorageService.shared
     @State private var splashComplete = false
+    @State private var storageReady = false
     @AppStorage("lastBackgrounded") private var lastBackgrounded: Double = 0
 
     init() {
-        TopicPaletteStore.shared.loadFromCoreData()
         HiMemShortcuts.updateAppShortcutParameters()
     }
 
     var body: some Scene {
         WindowGroup {
             ZStack {
-                JournalView()
-                    .environment(\.managedObjectContext, storageService.viewContext)
-                    .environmentObject(QuickActionState.shared)
-                    .opacity(splashComplete ? 1 : 0)
+                if storageReady {
+                    JournalView()
+                        .environment(\.managedObjectContext, StorageService.shared.viewContext)
+                        .environmentObject(QuickActionState.shared)
+                        .opacity(splashComplete ? 1 : 0)
+                }
 
                 if !splashComplete {
-                    LaunchScreenView {
+                    LaunchScreenView(onStorageReady: {
+                        storageReady = true
+                    }, onComplete: {
                         splashComplete = true
-                    }
+                    })
                     .transition(.opacity)
                 }
             }
@@ -70,6 +73,8 @@ struct MemoryStreamApp: App {
                 // Warm start: skip splash if backgrounded < 60s ago
                 let elapsed = Date().timeIntervalSince1970 - lastBackgrounded
                 if lastBackgrounded > 0 && elapsed < 60 {
+                    // Storage is already initialized from previous run
+                    storageReady = true
                     splashComplete = true
                 }
             }

@@ -2,6 +2,7 @@ import SwiftUI
 import CoreData
 
 struct LaunchScreenView: View {
+    let onStorageReady: () -> Void
     let onComplete: () -> Void
 
     @State private var syncComplete = false
@@ -150,14 +151,12 @@ struct LaunchScreenView: View {
     // MARK: - Choreography
 
     private func startLaunchSequence() {
-        // Load epigraph data
-        let count = EpigraphService.shared.entryCount()
-        let selected = EpigraphService.shared.todaysEpigraphWithSource(entryCount: count)
+        // Load epigraph from cache first (no Core Data needed)
+        let selected = EpigraphService.shared.todaysEpigraphWithSource(entryCount: 0)
         epigraph = selected.text
         epigraphSource = selected.source
-        EpigraphService.shared.refreshFromAPI()
 
-        // Staggered fade-in
+        // Staggered fade-in — choreography starts immediately
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             withAnimation(.easeIn(duration: 0.3)) { showGreeting = true }
         }
@@ -171,25 +170,48 @@ struct LaunchScreenView: View {
             withAnimation(.easeIn(duration: 0.25)) { showSyncBar = true }
         }
 
-        // Progress animation
+        // Initialize Core Data + CloudKit during the choreography
+        // This is the real work the progress hairline tracks
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            _ = StorageService.shared // triggers init — loads persistent stores + CloudKit
+            TopicPaletteStore.shared.loadFromCoreData()
+            onStorageReady()
+
+            // Now that storage is ready, get accurate entry count for epigraph stage
+            let count = EpigraphService.shared.entryCount()
+            let accurate = EpigraphService.shared.todaysEpigraphWithSource(entryCount: count)
+            if accurate.text != epigraph {
+                epigraph = accurate.text
+                epigraphSource = accurate.source
+            }
+            EpigraphService.shared.refreshFromAPI()
+        }
+
+        // Progress animation — if sync already done, fill immediately
+        // Otherwise animate to 70% and let sync complete fill the rest
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-            withAnimation(.easeInOut(duration: 1.2)) {
-                syncProgress = 0.7
+            if syncComplete {
+                withAnimation(.easeInOut(duration: 0.4)) { syncProgress = 1.0 }
+            } else {
+                withAnimation(.easeInOut(duration: 1.5)) { syncProgress = 0.7 }
             }
         }
 
-        // Minimum display time
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        // Minimum display: let the full choreography play + a breath
+        // Greeting(0.05) + Wordmark(0.15+0.4) + Epigraph(0.5+0.35) + SyncBar(0.8+0.25) = ~1.1s
+        // Add a beat to let the user read the epigraph
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             minimumTimeElapsed = true
             checkComplete()
         }
 
-        // Maximum wait
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+        // Maximum wait — never hold longer than 4s
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
             finishLaunch()
         }
 
-        // Observe CloudKit sync
+        // Observe CloudKit sync — mark complete but DON'T transition yet
+        // (the minimum timer controls when we actually leave)
         NotificationCenter.default.addObserver(
             forName: NSPersistentCloudKitContainer.eventChangedNotification,
             object: StorageService.shared.container,
@@ -204,7 +226,24 @@ struct LaunchScreenView: View {
                     syncStatus = "Ready"
                     syncDetail = ""
                 }
-                checkComplete()
+                // Don't call checkComplete here — let the minimum timer drive the exit
+            }
+        }
+
+        // If sync was already done before we started (loaded during storyboard),
+        // mark it and update the UI after the sync bar appears
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            if !syncComplete {
+                // Check if entries already loaded (sync happened during storyboard)
+                let count = EpigraphService.shared.entryCount()
+                if count > 0 {
+                    syncComplete = true
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        syncProgress = 1.0
+                        syncStatus = "Ready"
+                        syncDetail = ""
+                    }
+                }
             }
         }
     }
