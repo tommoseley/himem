@@ -19,6 +19,7 @@ struct LaunchScreenView: View {
     @State private var showSyncBar = false
 
     private let ochre = Color(red: 0xC6/255, green: 0x4A/255, blue: 0x1C/255)
+    private let ink = Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255)
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -53,11 +54,11 @@ struct LaunchScreenView: View {
             Color(red: 0xEF/255, green: 0xEC/255, blue: 0xE5/255)
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // Top spacing — push content to ~35% from top
-                Spacer().frame(height: UIScreen.main.bounds.height * 0.22)
+            VStack(alignment: .leading, spacing: 0) {
+                // Top spacing
+                Spacer().frame(height: UIScreen.main.bounds.height * 0.25)
 
-                // Greeting with ochre dot
+                // Greeting with ochre dot — left-aligned
                 if showGreeting {
                     HStack(spacing: 6) {
                         Circle()
@@ -65,40 +66,40 @@ struct LaunchScreenView: View {
                             .frame(width: 5, height: 5)
                         Text(greeting)
                             .font(.system(size: 13))
-                            .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.5))
+                            .foregroundStyle(ink.opacity(0.5))
                     }
                     .transition(.opacity)
                 }
 
-                Spacer().frame(height: 20)
+                Spacer().frame(height: 16)
 
-                // Wordmark — always visible (matches static launch screen)
+                // Wordmark — left-aligned, always visible
                 HStack(spacing: 0) {
                     Text("Hi")
                         .font(.custom("Georgia-Bold", size: 64))
-                        .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255))
+                        .foregroundStyle(ink)
                     Text("Mem")
                         .font(.custom("Georgia-Italic", size: 64))
                         .foregroundStyle(ochre)
                 }
 
-                Spacer().frame(height: 28)
+                Spacer().frame(height: 24)
 
-                // Epigraph
+                // Epigraph — left-aligned
                 if showEpigraph, !epigraph.isEmpty {
-                    VStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("\u{201C}\(epigraph)\u{201D}")
                             .font(.custom("Georgia-Italic", size: 15))
-                            .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.55))
-                            .multilineTextAlignment(.center)
+                            .foregroundStyle(ink.opacity(0.55))
+                            .multilineTextAlignment(.leading)
                             .lineSpacing(4)
-                            .padding(.horizontal, 48)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         if !epigraphSource.isEmpty {
                             Text(epigraphSource.uppercased())
                                 .font(.system(size: 9, weight: .medium))
                                 .tracking(2)
-                                .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.3))
+                                .foregroundStyle(ink.opacity(0.3))
                         }
                     }
                     .transition(.opacity)
@@ -106,26 +107,26 @@ struct LaunchScreenView: View {
 
                 Spacer()
 
-                // Sync status + progress hairline at bottom
+                // Sync status + progress hairline — left-aligned at bottom
                 if showSyncBar {
-                    VStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 4) {
                             Text(syncStatus)
                                 .font(.system(size: 11))
-                                .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.3))
+                                .foregroundStyle(ink.opacity(0.3))
                             if !syncDetail.isEmpty {
                                 Text("\u{00B7}")
-                                    .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.3))
+                                    .foregroundStyle(ink.opacity(0.3))
                                 Text(syncDetail)
                                     .font(.system(size: 11))
-                                    .foregroundStyle(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.3))
+                                    .foregroundStyle(ink.opacity(0.3))
                             }
                         }
 
-                        // Progress hairline
+                        // Progress hairline — full width
                         GeometryReader { geo in
                             Rectangle()
-                                .fill(Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255).opacity(0.08))
+                                .fill(ink.opacity(0.08))
                                 .frame(height: 1)
                                 .overlay(alignment: .leading) {
                                     Rectangle()
@@ -135,12 +136,12 @@ struct LaunchScreenView: View {
                         }
                         .frame(height: 1)
                     }
-                    .padding(.horizontal, 40)
                     .transition(.opacity)
                 }
 
                 Spacer().frame(height: 48)
             }
+            .padding(.horizontal, 32)
         }
         .onAppear {
             startLaunchSequence()
