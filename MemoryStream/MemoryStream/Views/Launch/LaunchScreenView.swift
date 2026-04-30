@@ -64,11 +64,9 @@ struct LaunchScreenView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("Hi")
                         .font(.custom("Georgia-Bold", size: 64))
-                        .tracking(-1.6)
                         .foregroundStyle(ink)
                     Text("Mem")
                         .font(.custom("Georgia-Italic", size: 64))
-                        .tracking(-1.6)
                         .foregroundStyle(ochre)
                 }
                 .padding(.top, 18)
