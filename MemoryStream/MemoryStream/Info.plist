@@ -34,6 +34,11 @@
 		<string>com.apple.coredata.cloudkit.activity.export</string>
 		<string>com.apple.coredata.cloudkit.activity.import</string>
 	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
