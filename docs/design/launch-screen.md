@@ -92,51 +92,123 @@ The user's eye stays on "Today" throughout. The app feels like it was always sho
 - Wordmark "Mem": Ochre #EC7442 (boosted for dark mode legibility)
 - Progress hairline: Ochre #EC7442
 
-## Epigraph Curation
+## Epigraph System
 
 ### Purpose
-Each line should feel like something a thoughtful person would say to frame the act of remembering. Not motivational quotes. Not fortune cookies. Moments of intention.
+Epigraphs are a progression arc, not decoration. They quietly teach: capture → reflect → create. Users won't consciously notice the evolution, but they'll feel it — like seasons, not switches.
 
 ### Selection Criteria
 - Under 60 characters (must fit on one line on iPhone SE)
-- Present tense or imperative — not past tense nostalgia
-- About observation, attention, memory, or noticing — not productivity
-- No attribution shown (keeps the screen clean; attribution stored in data)
-- Tone: quiet confidence, not whimsy
+- No attribution shown on screen (stored in data for internal reference)
+- Must earn its place next to literary quotes — no marketing copy, no fortune cookies
+- Tone: quiet confidence, intention, observation
+- No original/branded lines unless they pass the read-aloud test: read the original line immediately after a Pavese or Wilde quote. If it sounds like a tagline, cut it.
+
+### Stages
+
+The epigraph pool progresses with the user's journey. Stages blend — no hard cutoffs.
+
+**Stage 1 — Awareness (0-9 memories)**
+Theme: notice and capture. The act of remembering matters.
+
+```
+"We do not remember days, we remember moments." — Cesare Pavese
+"Pay attention. Be astonished. Tell about it." — Mary Oliver
+"The art of seeing has to be learned." — Marguerite Duras
+"To look at a thing is very different from seeing it." — Oscar Wilde
+"The world is full of magic things, patiently waiting." — W.B. Yeats
+"Notice what you notice." — unknown
+"Write it down. It will not come this way again." — unknown
+"What you notice becomes your life." — Jenny Offill
+"Every exit is an entry somewhere else." — Tom Stoppard
+"The eye sees only what the mind is prepared to comprehend." — Robertson Davies
+```
+
+**Stage 2 — Habit (10-39 memories)**
+Theme: you're building something. The collection has weight.
+
+```
+"Memory is the diary that we all carry about with us." — Oscar Wilde
+"Your memory and your senses nourish your creative impulse." — Arthur Rimbaud
+"The things you own end up owning you. The things you notice end up shaping you." — unknown
+"A writer is someone for whom writing is harder than for other people." — Thomas Mann
+"How we spend our days is how we spend our lives." — Annie Dillard
+"The imagination needs moodling." — Brenda Ueland
+"You can't use up creativity. The more you use, the more you have." — Maya Angelou
+"Collect the details. They are the only things that matter." — unknown
+"What is remembered, lives." — traditional
+"The harvest of old age is the memory of abundant blessings." — Cicero
+```
+
+**Stage 3 — Meaning (40+ memories)**
+Theme: you have material — shape it. Transition to creation mindset.
+
+```
+"Write what should not be forgotten." — Isabel Allende
+"Inspiration exists, but it has to find you working." — Pablo Picasso
+"There is no such thing as a new idea. We simply combine old ones." — Mark Twain
+"There is no greater agony than bearing an untold story inside you." — Maya Angelou
+"The desire to create is one of the deepest yearnings of the soul." — Dieter F. Uchtdorf
+"Start writing, no matter what. The water does not flow until the faucet is turned on." — Louis L'Amour
+"You don't start out writing good stuff. You start out writing crap." — Octavia Butler
+"Arrange whatever pieces come your way." — Virginia Woolf
+"Every secret of a writer's soul is written in his works." — Virginia Woolf
+"The scariest moment is always just before you start." — Stephen King
+```
+
+### Stage Selection Logic (client-side)
+
+```
+let memoryCount = entries.count
+
+// Blend stages — weighted random from eligible pools
+// Stage 1 always available (foundational)
+// Stage 2 fades in at 5, fully present by 15
+// Stage 3 fades in at 25, fully present by 50
+
+func eligibleStages(memoryCount: Int) -> [(stage: Int, weight: Double)] {
+    var stages: [(Int, Double)] = [(1, 1.0)]
+
+    if memoryCount >= 5 {
+        let stage2Weight = min(1.0, Double(memoryCount - 5) / 10.0)
+        stages.append((2, stage2Weight))
+    }
+    if memoryCount >= 25 {
+        let stage3Weight = min(1.0, Double(memoryCount - 25) / 25.0)
+        stages.append((3, stage3Weight))
+    }
+
+    // Fade out earlier stages as later ones strengthen
+    if memoryCount >= 15 { stages[0].1 = 0.3 } // Stage 1 fades
+    if memoryCount >= 50 { stages[1].1 = 0.5 } // Stage 2 fades
+
+    return stages
+}
+```
 
 ### Rotation
-- Date-seeded: `Calendar.current.ordinality(of: .day, in: .year, for: Date())` mod collection count
-- Same line all day, different tomorrow
-- No randomness — users on multiple devices see the same epigraph
+- Date-seeded within the selected stage pool
+- `Calendar.current.ordinality(of: .day, in: .year)` determines the day
+- Day seed selects stage (weighted), then selects line within that stage
+- Same line all day across all devices (deterministic from day + memory count range)
+- No repeat within 7 days — track last 7 shown in UserDefaults
 
 ### Storage & Sync
 - Stored in the backend database (Postgres on `api.thecombine.ai`)
-- Table: `epigraphs(id, text, source, active, created_at)`
-- App fetches the full list via `GET /himem/epigraphs` on launch
-- Cached locally in `UserDefaults` (lightweight — 30-50 short strings)
+- Table: `epigraphs(id, text, source, stage, active, created_at)`
+- API: `GET /himem/epigraphs` returns full catalog
+- Cached locally in `UserDefaults` (lightweight — 30 short strings)
 - Cache refreshed on each cold start; stale cache used if offline
-- This means new epigraphs can be added server-side without an app update
-- Start with 30-50 lines. Grow over time.
-- Review quarterly — remove any that feel stale or generic
-
-### Seed Examples (candidates — need curation pass)
-```
-"We do not remember days, we remember moments."
-"Pay attention. Be astonished. Tell about it."
-"The art of seeing has to be learned."
-"What you notice becomes your life."
-"Memory is the diary we all carry about with us."
-"To look at a thing is very different from seeing it."
-"Write it down. It will not come this way again."
-"The present moment is filled with joy and happiness."
-"Every day is a collection of moments."
-"Notice what you notice."
-```
+- New epigraphs added server-side without app update
+- App ships with bundled seed set as fallback for first-ever launch
+- Stage selection logic lives in the app (server doesn't know user state)
 
 ### Adding New Epigraphs
-- Propose in a batch (10+), curate down to the ones that pass all criteria
+- Propose in a batch (10+), curate down to those that pass all criteria
 - Test on device at smallest screen size to verify line length
-- No duplicates in meaning (two lines about "paying attention" — pick the stronger one)
+- No duplicates in meaning — if two lines say the same thing, keep the stronger one
+- Minimum 10 lines per stage to keep daily rotation feeling fresh
+- Read-aloud test: read the candidate after a strong literary quote. Does it hold up?
 
 ## What This Screen Is NOT
 
