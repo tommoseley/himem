@@ -411,17 +411,67 @@ private struct LandingScreen: View {
     let userName: String
     let onContinue: () -> Void
 
+    @State private var nameInput: String = ""
+    @State private var displayName: String = ""
+    @FocusState private var nameFieldFocused: Bool
+
+    private var needsName: Bool {
+        userName.isEmpty || userName == "there"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Spacer().frame(height: 100)
 
-            // Welcome
-            Text("Hi \(userName),")
-                .font(.custom("Georgia-Italic", size: 32))
-                .foregroundStyle(ink)
-            Text("welcome.")
-                .font(.custom("Georgia-Italic", size: 32))
-                .foregroundStyle(ink)
+            // Ask for name if Apple didn't provide it
+            if needsName && displayName.isEmpty {
+                Text("One quick thing \u{2014}")
+                    .font(.custom("Georgia-Italic", size: 24))
+                    .foregroundStyle(ink)
+
+                Spacer().frame(height: 12)
+
+                Text("What should we call you?")
+                    .font(.system(size: 16))
+                    .foregroundStyle(ink.opacity(0.6))
+
+                Spacer().frame(height: 16)
+
+                TextField("Your first name", text: $nameInput)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(ink)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .background(Color.white.opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .focused($nameFieldFocused)
+                    .onAppear { nameFieldFocused = true }
+                    .submitLabel(.done)
+                    .onSubmit { saveName() }
+
+                Spacer().frame(height: 16)
+
+                Button(action: saveName) {
+                    Text("Continue")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(nameInput.trimmingCharacters(in: .whitespaces).isEmpty ? ink.opacity(0.3) : ink)
+                        .cornerRadius(12)
+                }
+                .disabled(nameInput.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                Spacer()
+            } else {
+                // Welcome with name
+                let name = displayName.isEmpty ? userName : displayName
+                Text("Hi \(name),")
+                    .font(.custom("Georgia-Italic", size: 32))
+                    .foregroundStyle(ink)
+                Text("welcome.")
+                    .font(.custom("Georgia-Italic", size: 32))
+                    .foregroundStyle(ink)
 
             Spacer().frame(height: 20)
 
@@ -473,7 +523,16 @@ private struct LandingScreen: View {
             .buttonStyle(.plain)
 
             Spacer().frame(height: 32)
+            } // else (has name)
         }
         .padding(.horizontal, 28)
+    }
+
+    private func saveName() {
+        let name = nameInput.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        displayName = name
+        let _ = KeychainService.shared.save(key: "userName", value: name)
+        AuthService.shared.userName = name
     }
 }
