@@ -24,21 +24,16 @@ struct LaunchScreenView: View {
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
-        let deviceName = UIDevice.current.name
-        let isGeneric = ["iPhone", "iPad", "iPod touch"].contains(deviceName)
-        let name: String? = isGeneric ? nil : deviceName
-            .replacingOccurrences(of: "\u{2019}s iPhone", with: "")
-            .replacingOccurrences(of: "'s iPhone", with: "")
-            .replacingOccurrences(of: "\u{2019}s iPad", with: "")
-            .replacingOccurrences(of: "'s iPad", with: "")
-            .trimmingCharacters(in: .whitespaces)
         let time: String
         switch hour {
         case 0..<12: time = "Good morning"
         case 12..<17: time = "Good afternoon"
         default: time = "Good evening"
         }
-        if let n = name, !n.isEmpty { return "\(time), \(n)" }
+        let name = AuthService.shared.userName
+        if !name.isEmpty && name != "there" {
+            return "\(time), \(name)"
+        }
         return time
     }
 
