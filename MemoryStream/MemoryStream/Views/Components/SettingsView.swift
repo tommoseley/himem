@@ -16,9 +16,30 @@ struct SettingsView: View {
 
     private let storage = StorageService.shared
 
+    @State private var displayName: String = AuthService.shared.userName
+
     var body: some View {
         NavigationStack {
             Form {
+                // MARK: - Profile
+                Section {
+                    HStack {
+                        Text("Name")
+                        Spacer()
+                        TextField("Your name", text: $displayName)
+                            .multilineTextAlignment(.trailing)
+                            .foregroundStyle(Crucible.Color.ink2)
+                            .onSubmit {
+                                let name = displayName.trimmingCharacters(in: .whitespaces)
+                                guard !name.isEmpty else { return }
+                                let _ = KeychainService.shared.save(key: "userName", value: name)
+                                AuthService.shared.userName = name
+                            }
+                    }
+                } header: {
+                    Text("Profile")
+                }
+
                 // MARK: - Topics
                 Section {
                     ForEach(topics) { topic in
