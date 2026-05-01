@@ -16,6 +16,7 @@ struct LaunchScreenView: View {
     @State private var showMoment = false
     @State private var showProgress = false
     @State private var showFooter = false
+    @State private var wordmarkExpanded = false
 
     // Design tokens
     private let ochre = Color(red: 0xC6/255, green: 0x4A/255, blue: 0x1C/255)
@@ -55,16 +56,17 @@ struct LaunchScreenView: View {
                 .opacity(showGreeting ? 1 : 0)
                 .padding(.top, 14)
 
-                // Wordmark — 80ms start (always structurally present for layout)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("Hi")
+                // Wordmark — expands to "Hi, Memories!" on sync complete
+                HStack(alignment: .firstTextBaseline, spacing: wordmarkExpanded ? 0 : 4) {
+                    Text(wordmarkExpanded ? "Hi," : "Hi")
                         .font(.custom("Georgia-Bold", size: 64))
                         .foregroundStyle(ink)
-                    Text("Mem")
-                        .font(.custom("Georgia-Italic", size: 64))
+                    Text(wordmarkExpanded ? " Memories!" : "Mem")
+                        .font(.custom("Georgia-Italic", size: wordmarkExpanded ? 48 : 64))
                         .foregroundStyle(ochre)
                 }
                 .padding(.top, 18)
+                .animation(.easeInOut(duration: 0.6), value: wordmarkExpanded)
 
                 // Moment (epigraph) — 220ms start
                 VStack(alignment: .leading, spacing: 10) {
@@ -223,8 +225,14 @@ struct LaunchScreenView: View {
         syncDone = true
         withAnimation(.easeInOut(duration: 0.3)) { syncProgress = 1.0 }
 
-        // Brief hold so the user sees "Ready", then fade to feed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+        // 1. Brief hold so user sees "Ready" (0.3s)
+        // 2. Expand wordmark: "HiMem" → "Hi, Memories!" (0.6s)
+        // 3. Hold so user reads it (0.5s)
+        // 4. Fade to feed (0.3s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            wordmarkExpanded = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
             withAnimation(.easeInOut(duration: 0.3)) {
                 onComplete()
             }
