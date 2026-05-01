@@ -17,17 +17,17 @@
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
                             <stackView opaque="NO" contentMode="scaleToFill" alignment="firstBaseline" spacing="4" translatesAutoresizingMaskIntoConstraints="NO" id="rrE-uT-X7y">
-                                <rect key="frame" x="28.000000000000014" y="237" width="231.33333333333337" height="73"/>
+                                <rect key="frame" x="27.999999999999986" y="236.99999999999997" width="202.66666666666663" height="63.666666666666657"/>
                                 <subviews>
                                     <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Hi" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="2cx-e8-kdD">
-                                        <rect key="frame" x="0.0" y="0.0" width="81.333333333333329" height="73"/>
-                                        <fontDescription key="fontDescription" name="Georgia-Bold" family="Georgia" pointSize="64"/>
+                                        <rect key="frame" x="0.0" y="0.0" width="71" height="63.666666666666664"/>
+                                        <fontDescription key="fontDescription" name="Georgia-Bold" family="Georgia" pointSize="56"/>
                                         <color key="textColor" red="0.10196078431372549" green="0.086274509803921567" blue="0.070588235294117646" alpha="1" colorSpace="calibratedRGB"/>
                                         <nil key="highlightedColor"/>
                                     </label>
                                     <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Mem" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="KRd-0L-pK2">
-                                        <rect key="frame" x="85.333333333333314" y="0.0" width="146" height="73"/>
-                                        <fontDescription key="fontDescription" name="Georgia-Italic" family="Georgia" pointSize="64"/>
+                                        <rect key="frame" x="75" y="0.0" width="127.66666666666669" height="63.666666666666671"/>
+                                        <fontDescription key="fontDescription" name="Georgia-Italic" family="Georgia" pointSize="56"/>
                                         <color key="textColor" red="0.77647058823529413" green="0.29019607843137252" blue="0.10980392156862745" alpha="1" colorSpace="calibratedRGB"/>
                                         <nil key="highlightedColor"/>
                                     </label>
