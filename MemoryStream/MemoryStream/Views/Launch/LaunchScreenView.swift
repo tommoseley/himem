@@ -98,7 +98,7 @@ struct LaunchScreenView: View {
 
                         Text(syncDone
                              ? "Ready"
-                             : "Syncing your bin \u{00B7} iCloud")
+                             : "Opening your memory box \u{00B7} iCloud")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(ink.opacity(0.55))
                     }
