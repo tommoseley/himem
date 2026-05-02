@@ -57,8 +57,22 @@ struct ComposerView: View {
                     }
                 },
                 onTextTap: { showTextEditor = true },
-                onPhotoTap: { composer.showCamera = true },
-                onVideoTap: { composer.showCamera = true }
+                onPhotoTap: {
+                    Task {
+                        if await CameraService.shared.ensureCameraAccess() {
+                            composer.cameraMode = .photo
+                            composer.showCamera = true
+                        }
+                    }
+                },
+                onVideoTap: {
+                    Task {
+                        if await CameraService.shared.ensureCameraAccess() {
+                            composer.cameraMode = .video
+                            composer.showCamera = true
+                        }
+                    }
+                }
             )
             .padding(.horizontal, 14)
 
@@ -191,7 +205,12 @@ struct ComposerView: View {
 
                             // Add tile
                             Button {
-                                composer.showCamera = true
+                                Task {
+                                    if await CameraService.shared.ensureCameraAccess() {
+                                        composer.cameraMode = .photo
+                                        composer.showCamera = true
+                                    }
+                                }
                             } label: {
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(Crucible.Color.divider, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
@@ -251,7 +270,7 @@ struct ComposerView: View {
         .presentationDragIndicator(.hidden)
         .sheet(isPresented: $composer.showCamera) {
             CameraPickerView(
-                captureMode: .both,
+                captureMode: composer.cameraMode,
                 onCapture: { result in
                     composer.showCamera = false
                     Task { @MainActor in

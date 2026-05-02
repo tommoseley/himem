@@ -10,6 +10,7 @@
         <attribute name="sourceDevice" optional="YES" attributeType="String" defaultValueString="phone"/>
         <attribute name="isRecycled" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="recycledAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="lastViewedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="extractedEntities" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExtractedEntity" inverseName="entry" inverseEntity="ExtractedEntity"/>
         <relationship name="mediaReferences" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MediaReference" inverseName="entry" inverseEntity="MediaReference"/>
         <relationship name="processingTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ProcessingTask" inverseName="entry" inverseEntity="ProcessingTask"/>

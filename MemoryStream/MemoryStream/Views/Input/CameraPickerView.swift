@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AVFoundation
 import UniformTypeIdentifiers
 
 struct CameraPickerView: UIViewControllerRepresentable {

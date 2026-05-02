@@ -116,6 +116,23 @@ private struct GhostCard: View {
                     .foregroundStyle(Crucible.Color.ink4)
             }
 
+            // Topic pills (grey — ghost styling)
+            if !entry.topicNames.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(entry.topicNames, id: \.self) { name in
+                            Text(name)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(Crucible.Color.ink2)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Crucible.Color.ink.opacity(0.12))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+
             // Content preview (italicized ghost text)
             Text(entry.content)
                 .font(.subheadline)

@@ -113,6 +113,18 @@ class JournalViewModel: ObservableObject {
         lifecycle.emptyRecycleBin()
     }
 
+    /// Records that the user opened an entry. Powers the Forgotten card's
+    /// "haven't viewed in 3 months" filter.
+    func markEntryViewed(_ entryId: UUID) {
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
+        request.fetchLimit = 1
+        let ctx = storage.viewContext
+        guard let entry = try? ctx.fetch(request).first else { return }
+        entry.lastViewedAt = Date()
+        try? ctx.save()
+    }
+
     func submitFeedback(entryId: UUID, state: InferenceSummary.FeedbackState, correction: String? = nil) {
         // Optimistic UI update
         guard let index = entries.firstIndex(where: { $0.id == entryId }) else { return }

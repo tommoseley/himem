@@ -264,8 +264,17 @@ struct JournalView: View {
         }
 
         } // ZStack
-        .sheet(isPresented: $showSearch) {
-            SearchView()
+        .navigationDestination(isPresented: $showSearch) {
+            SearchView(
+                onSelectEntry: { id in
+                    showSearch = false
+                    selectedEntryId = id
+                },
+                onCaptureNewWith: { text in
+                    showSearch = false
+                    composer.openWithSeedText(text)
+                }
+            )
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
@@ -320,6 +329,7 @@ struct JournalView: View {
                     },
                     availableProjects: projectVM.projects
                 )
+                .onAppear { viewModel.markEntryViewed(entryId) }
             }
         }
         .sheet(isPresented: Binding(

@@ -173,6 +173,9 @@ final class SpeechService: ObservableObject {
 
         audioFile = nil
 
+        // Release the audio session so the camera (and other audio clients) can use it
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
         if let url = currentRecordingURL, FileManager.default.fileExists(atPath: url.path) {
             lastRecordingPath = url.lastPathComponent
         } else {

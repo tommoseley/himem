@@ -13,6 +13,7 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var sourceDevice: String?
     @NSManaged public var isRecycled: Bool
     @NSManaged public var recycledAt: Date?
+    @NSManaged public var lastViewedAt: Date?
     @NSManaged public var extractedEntities: NSSet?
     @NSManaged public var mediaReferences: NSSet?
     @NSManaged public var processingTasks: NSSet?

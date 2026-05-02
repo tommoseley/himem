@@ -1,13 +1,34 @@
 import Foundation
 import CoreData
 
+/// Abstraction over the cloud entry analyzer so ProcessingEngine can be
+/// driven by a stub in tests (and to keep the fallback-on-failure path
+/// exercised without real network access).
+protocol EntryAnalyzer {
+    func analyzeEntry(_ text: String, existingTopics: [String]) async throws -> ClaudeAPIService.AnalysisResult
+}
+
+extension ClaudeAPIService: EntryAnalyzer {}
+
 final class ProcessingEngine {
     static let shared = ProcessingEngine()
 
-    private let storage = StorageService.shared
-    private let claudeAPI = ClaudeAPIService.shared
-    private let localExtractor = LocalEntityExtractor.shared
-    private let connectivity = ConnectivityMonitor.shared
+    private let storage: StorageService
+    private let analyzer: EntryAnalyzer
+    private let localExtractor: LocalEntityExtractor
+    private let connectivity: ConnectivityMonitor
+
+    init(
+        storage: StorageService = .shared,
+        analyzer: EntryAnalyzer = ClaudeAPIService.shared,
+        localExtractor: LocalEntityExtractor = .shared,
+        connectivity: ConnectivityMonitor = .shared
+    ) {
+        self.storage = storage
+        self.analyzer = analyzer
+        self.localExtractor = localExtractor
+        self.connectivity = connectivity
+    }
 
     // MARK: - Process Entry
 
@@ -47,7 +68,7 @@ final class ProcessingEngine {
                 return topics.map(\.name)
             }
 
-            let result = try await claudeAPI.analyzeEntry(content, existingTopics: existingTopics)
+            let result = try await analyzer.analyzeEntry(content, existingTopics: existingTopics)
 
             await context.perform { [self] in
                 do {
@@ -64,9 +85,12 @@ final class ProcessingEngine {
                 }
             }
         } catch {
-            await context.perform {
-                self.markFailed(objectID: objectID, error: error, context: context)
-            }
+            // Cloud unreachable or timed out (weak connection, server error,
+            // auth failure). Don't mark .failed and leave the user stuck —
+            // fall back to local entity extraction so the entry still gets
+            // useful tags. The reconnect watcher will re-process it via
+            // cloud once connectivity is good.
+            await processLocally(objectID: objectID, content: content, context: context)
         }
     }
 
@@ -111,6 +135,44 @@ final class ProcessingEngine {
     }
 
     // MARK: - Queue Processing
+
+    /// Finds entries that were processed via the local fallback (extracted
+    /// entities all marked `processingMethod = "local"`) and re-runs them
+    /// through the cloud analyzer. Wired to fire on connectivity-restored
+    /// transitions so memories captured offline get upgraded once the user
+    /// is back online.
+    func reprocessLocallyHandledEntries() async {
+        let viewContext = storage.viewContext
+        let entryIDs: [NSManagedObjectID] = await viewContext.perform {
+            let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
+            request.predicate = NSPredicate(format: "processingMethod == %@", "local")
+            let entities = (try? viewContext.fetch(request)) ?? []
+            let ids = Set(entities.compactMap { $0.entry?.objectID })
+            return Array(ids)
+        }
+
+        guard !entryIDs.isEmpty else { return }
+
+        for entryID in entryIDs {
+            let entry: JournalEntry? = await viewContext.perform {
+                guard let entry = try? viewContext.existingObject(with: entryID) as? JournalEntry else { return nil }
+                let entities = entry.extractedEntities as? Set<ExtractedEntity> ?? []
+                for entity in entities { viewContext.delete(entity) }
+                if let summary = entry.inferenceSummary { viewContext.delete(summary) }
+                if let task = entry.latestProcessingTask {
+                    task.status = ProcessingTask.Status.pending.rawValue
+                    task.processedAt = nil
+                    task.errorMessage = nil
+                    task.progressDescription = nil
+                }
+                try? viewContext.save()
+                return entry
+            }
+            if let entry {
+                await processEntry(entry)
+            }
+        }
+    }
 
     func processPendingTasks() async {
         let context = storage.backgroundContext()

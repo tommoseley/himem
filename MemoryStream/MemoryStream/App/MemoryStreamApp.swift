@@ -1,5 +1,6 @@
 import SwiftUI
 import AppIntents
+import Combine
 
 @MainActor
 final class QuickActionState: ObservableObject {
@@ -35,6 +36,23 @@ class SceneDelegate: NSObject, UIWindowSceneDelegate {
             QuickActionState.shared.pendingAction = shortcutItem.type
         }
         completionHandler(true)
+    }
+}
+
+@MainActor
+private final class ConnectivityReprocessor {
+    static let shared = ConnectivityReprocessor()
+    private var cancellable: AnyCancellable?
+
+    func start() {
+        guard cancellable == nil else { return }
+        cancellable = ConnectivityMonitor.shared.$isConnected
+            .removeDuplicates()
+            .dropFirst() // skip the initial value; only act on real transitions
+            .filter { $0 } // only when connectivity returns
+            .sink { _ in
+                Task { await ProcessingEngine.shared.reprocessLocallyHandledEntries() }
+            }
     }
 }
 
@@ -90,6 +108,7 @@ struct MemoryStreamApp: App {
             .preferredColorScheme(.light)
             .onAppear {
                 auth.verifyCredentialState()
+                ConnectivityReprocessor.shared.start()
             }
         }
     }

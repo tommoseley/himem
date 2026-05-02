@@ -215,6 +215,18 @@ private struct PermissionsScreen: View {
                 Divider().padding(.leading, 52)
 
                 PermissionRow(
+                    icon: "camera.fill",
+                    title: "Camera",
+                    subtitle: "Snap a photo or video into a memory.",
+                    badge: nil,
+                    ink: ink, ochre: ochre
+                ) {
+                    AVCaptureDevice.requestAccess(for: .video) { _ in }
+                }
+
+                Divider().padding(.leading, 52)
+
+                PermissionRow(
                     icon: "bell.fill",
                     title: "Notifications",
                     subtitle: "A small nudge when an inference needs you.",
@@ -253,6 +265,30 @@ private struct PermissionsScreen: View {
             Spacer().frame(height: 32)
         }
         .padding(.horizontal, 28)
+        .task {
+            await cascadePermissionPrompts()
+        }
+    }
+
+    /// Walks the permissions list serially so iOS shows one system prompt at
+    /// a time. Tapping a row remains a manual fallback; this just removes the
+    /// "user hits Continue and nothing was actually asked" failure mode.
+    private func cascadePermissionPrompts() async {
+        // Microphone — only prompt if undetermined.
+        if AVAudioApplication.shared.recordPermission == .undetermined {
+            _ = await AVAudioApplication.requestRecordPermission()
+        }
+        // Camera.
+        if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
+            _ = await AVCaptureDevice.requestAccess(for: .video)
+        }
+        // Notifications.
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+        }
+        // Photo library remains deferred — iOS prompts on first picker use.
     }
 }
 

@@ -60,6 +60,7 @@ struct EntryExpandedView: View {
     @State private var pendingTypedText = ""
     @State private var pendingTranscripts: [String] = []
     @State private var pendingMedia: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
+    @State private var silenceWatcher = VoiceSilenceWatcher()
     @State private var pendingAudioAppend = false
     @State private var showDiscardConfirm = false
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
@@ -371,10 +372,18 @@ struct EntryExpandedView: View {
                         showTextAppender = true
                     }
                     ToolbarIcon(kind: .photo, icon: "camera", label: "Photo", isActive: false) {
-                        activeSheet = .camera(.photo)
+                        Task {
+                            if await CameraService.shared.ensureCameraAccess() {
+                                activeSheet = .camera(.photo)
+                            }
+                        }
                     }
                     ToolbarIcon(kind: .video, icon: "video", label: "Video", isActive: false) {
-                        activeSheet = .camera(.video)
+                        Task {
+                            if await CameraService.shared.ensureCameraAccess() {
+                                activeSheet = .camera(.video)
+                            }
+                        }
                     }
 
                     // Separator
@@ -614,11 +623,18 @@ struct EntryExpandedView: View {
 
     private func toggleAudioRecording() {
         if speechService.isRecording {
+            silenceWatcher.cancel()
             speechService.stopRecording()
         } else {
             pendingAudioAppend = true
             speechService.transcribedText = ""
             speechService.startRecording()
+            silenceWatcher.start(
+                textProvider: { speechService.transcribedText },
+                onSilence: {
+                    speechService.stopRecording()
+                }
+            )
         }
     }
 

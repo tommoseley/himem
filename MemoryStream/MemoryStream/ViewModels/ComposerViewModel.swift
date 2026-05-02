@@ -16,6 +16,7 @@ class ComposerViewModel: ObservableObject {
     @Published var pendingTranscripts: [String] = []
     @Published var selectedTopicName: String? = nil
     @Published var showCamera = false
+    @Published var cameraMode: CameraPickerView.CaptureMode = .photo
     @Published var recordingDuration: TimeInterval = 0
     /// Set true by the view while a recording is active and the stop transition
     /// still needs to stage the captured audio + transcript. Cleared once the
@@ -30,6 +31,7 @@ class ComposerViewModel: ObservableObject {
     // MARK: - Private
 
     private var durationTimer: AnyCancellable?
+    private let silenceWatcher = VoiceSilenceWatcher()
 
     // MARK: - Computed
 
@@ -63,6 +65,11 @@ class ComposerViewModel: ObservableObject {
         }
     }
 
+    func openWithSeedText(_ seed: String) {
+        textContent = seed
+        isPresented = true
+    }
+
     func close() {
         if speechService?.isRecording == true {
             speechService?.stopRecording()
@@ -92,9 +99,14 @@ class ComposerViewModel: ObservableObject {
         speech.startRecording()
         recordingDuration = 0
         startDurationTimer()
+        silenceWatcher.start(
+            textProvider: { [weak speech] in speech?.transcribedText ?? "" },
+            onSilence: { [weak self] in self?.stopRecording() }
+        )
     }
 
     func stopRecording() {
+        silenceWatcher.cancel()
         speechService?.stopRecording()
         stopDurationTimer()
     }

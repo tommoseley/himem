@@ -62,6 +62,10 @@
 		A100000072 /* epigraphs.json in Resources */ = {isa = PBXBuildFile; fileRef = B100000072 /* epigraphs.json */; };
 		A100000080 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000080 /* OnboardingView.swift */; };
 		A100000081 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000081 /* AuthService.swift */; };
+		A100000090 /* ScopeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000090 /* ScopeParser.swift */; };
+		A100000091 /* VoiceIntentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000091 /* VoiceIntentParser.swift */; };
+		A100000092 /* VoiceSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000092 /* VoiceSearchView.swift */; };
+		A100000093 /* VoiceSilenceWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000093 /* VoiceSilenceWatcher.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
@@ -133,6 +137,10 @@
 		B100000072 /* epigraphs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = epigraphs.json; sourceTree = "<group>"; };
 		B100000080 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		B100000081 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		B100000090 /* ScopeParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopeParser.swift; sourceTree = "<group>"; };
+		B100000091 /* VoiceIntentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceIntentParser.swift; sourceTree = "<group>"; };
+		B100000092 /* VoiceSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSearchView.swift; sourceTree = "<group>"; };
+		B100000093 /* VoiceSilenceWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSilenceWatcher.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -224,14 +232,6 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		G100000080 /* Onboarding */ = {
-			isa = PBXGroup;
-			children = (
-				B100000080 /* OnboardingView.swift */,
-			);
-			path = Onboarding;
-			sourceTree = "<group>";
-		};
 		G100000013 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
@@ -252,6 +252,7 @@
 				G100000051 /* AI */,
 				G100000052 /* Processing */,
 				G100000053 /* Network */,
+				G100000054 /* Search */,
 				B100000071 /* EpigraphService.swift */,
 				B100000081 /* AuthService.swift */,
 			);
@@ -284,6 +285,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000023 /* SearchView.swift */,
+				B100000092 /* VoiceSearchView.swift */,
 			);
 			path = Search;
 			sourceTree = "<group>";
@@ -318,6 +320,7 @@
 				B100000010 /* LocalEntityExtractor.swift */,
 				B100000011 /* SearchEngine.swift */,
 				B100000012 /* SpeechService.swift */,
+				B100000093 /* VoiceSilenceWatcher.swift */,
 				B100000030 /* AudioPlayerService.swift */,
 				B100000034 /* CameraService.swift */,
 				B100000035 /* ThumbnailService.swift */,
@@ -341,6 +344,15 @@
 				B100000013 /* ConnectivityMonitor.swift */,
 			);
 			path = Network;
+			sourceTree = "<group>";
+		};
+		G100000054 /* Search */ = {
+			isa = PBXGroup;
+			children = (
+				B100000090 /* ScopeParser.swift */,
+				B100000091 /* VoiceIntentParser.swift */,
+			);
+			path = Search;
 			sourceTree = "<group>";
 		};
 		G100000060 /* Theme */ = {
@@ -376,6 +388,14 @@
 				E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		G100000080 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				B100000080 /* OnboardingView.swift */,
+			);
+			path = Onboarding;
 			sourceTree = "<group>";
 		};
 		G100000099 /* Products */ = {
@@ -553,6 +573,10 @@
 				A100000071 /* EpigraphService.swift in Sources */,
 				A100000080 /* OnboardingView.swift in Sources */,
 				A100000081 /* AuthService.swift in Sources */,
+				A100000090 /* ScopeParser.swift in Sources */,
+				A100000091 /* VoiceIntentParser.swift in Sources */,
+				A100000092 /* VoiceSearchView.swift in Sources */,
+				A100000093 /* VoiceSilenceWatcher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -624,7 +648,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MemoryStream/MemoryStream.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
@@ -663,9 +687,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MemoryStream/MemoryStream.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MemoryStream/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";
 				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";
 				INFOPLIST_KEY_NSMainCameraUsageDescription = "Hi Mem uses photographs to compose and record a memory photographic entries. These are used to record memories for the user to be able to use to streamline content creation.";

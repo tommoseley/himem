@@ -1,12 +1,14 @@
 import Foundation
 import Photos
 import UIKit
+import AVFoundation
 
 @MainActor
 final class CameraService: ObservableObject {
     static let shared = CameraService()
 
     @Published var authorizationStatus: PHAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    @Published var cameraAuthorizationStatus: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
     @Published var error: CameraError?
 
     enum CameraError: LocalizedError, Equatable {
@@ -23,7 +25,7 @@ final class CameraService: ObservableObject {
         }
     }
 
-    // MARK: - Authorization
+    // MARK: - Photo Library authorization
 
     func requestAuthorization() async {
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
@@ -33,6 +35,49 @@ final class CameraService: ObservableObject {
     var isAuthorized: Bool {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         return status == .authorized || status == .limited
+    }
+
+    // MARK: - Camera (AVCaptureDevice) authorization
+    //
+    // Without this preflight, UIImagePickerController(sourceType: .camera) shows
+    // a black preview when permission hasn't been resolved yet — exactly what
+    // testers hit on first launch after a TestFlight install.
+
+    var isCameraAuthorized: Bool {
+        AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+    }
+
+    func refreshCameraAuthorizationStatus() {
+        cameraAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    }
+
+    /// Requests camera access from the user. Returns true if granted (or already
+    /// granted), false if denied/restricted. Updates `cameraAuthorizationStatus`.
+    @discardableResult
+    func requestCameraAccess() async -> Bool {
+        let current = AVCaptureDevice.authorizationStatus(for: .video)
+        if current == .authorized {
+            cameraAuthorizationStatus = .authorized
+            return true
+        }
+        if current == .denied || current == .restricted {
+            cameraAuthorizationStatus = current
+            return false
+        }
+        let granted = await AVCaptureDevice.requestAccess(for: .video)
+        cameraAuthorizationStatus = granted ? .authorized : .denied
+        return granted
+    }
+
+    /// Convenience used by camera trigger buttons. Returns true if the caller
+    /// should proceed to present the picker; surfaces a Settings hint via
+    /// ErrorState on denial.
+    func ensureCameraAccess() async -> Bool {
+        let granted = await requestCameraAccess()
+        if !granted {
+            ErrorState.shared.report(.mediaError("Camera access is off. Enable it in Settings to capture photos and videos."))
+        }
+        return granted
     }
 
     // MARK: - Save to Photos

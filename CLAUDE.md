@@ -112,6 +112,27 @@ Do not infer intent from partial understanding. If something is unclear, ask rat
 
 ---
 
+### CloudKit Schema Changes
+
+Any change to a CloudKit-synced Core Data entity (adding, renaming, or removing an attribute or relationship) requires a manual deploy to the Production CloudKit environment **before** the next TestFlight or App Store upload.
+
+`StorageService` calls `initializeCloudKitSchema(options:)` only under `#if DEBUG`, which auto-publishes new fields to the **Development** CloudKit environment. Production schema is only updated via the CloudKit Dashboard.
+
+**Symptom of skipping this step:** outbound sync silently breaks in TestFlight/Production. Local edits save and never propagate to other devices, even though inbound CloudKit-to-device sync still works (because incoming records use the existing schema). Dev builds remain unaffected.
+
+**Required steps when adding/changing a synced attribute:**
+
+1. Make the schema edit in `MemoryStream.xcdatamodel` and the matching `@NSManaged` property.
+2. Run a Debug build on a real device — this triggers `initializeCloudKitSchema` against Development.
+3. Open https://icloud.developer.apple.com/dashboard/, select container `iCloud.com.himem.app`.
+4. Confirm the change is present in the **Development** environment.
+5. Click **Deploy Schema Changes** in the dashboard top bar -- review the diff -- deploy to **Production**.
+6. Only then archive and upload to TestFlight.
+
+This step is non-negotiable. Skipping it is a regression that's invisible in code review and only surfaces after testers report broken sync.
+
+---
+
 ## Planning Discipline
 
 ### Plan Before Executing

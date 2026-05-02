@@ -30,7 +30,7 @@ final class ClaudeAPIService {
         var request = URLRequest(url: analyzeURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
+        request.timeoutInterval = 10
 
         var body: [String: Any] = ["text": text]
         if !existingTopics.isEmpty {

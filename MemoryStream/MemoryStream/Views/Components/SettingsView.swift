@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var editingTopic: Topic? = nil
     @State private var refreshID = UUID()
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
+    @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
     // autoSaveDelay removed — Composer uses explicit commit
 
     private let storage = StorageService.shared
@@ -121,12 +122,17 @@ struct SettingsView: View {
                 // MARK: - Voice
                 Section {
                     Toggle("Save voice recordings", isOn: $saveVoiceEntries)
+                    Picker("Voice search pace", selection: $voiceSilenceModeRaw) {
+                        ForEach(VoiceSilenceMode.allCases) { mode in
+                            Text("\(mode.label) · \(mode.subtitle)").tag(mode.rawValue)
+                        }
+                    }
                 } header: {
                     Text("Voice")
                 } footer: {
                     Text(saveVoiceEntries
-                        ? "Voice recordings are saved on device. You can play them back from entry cards."
-                        : "Voice recordings are discarded after transcription. Only the text is kept.")
+                        ? "Voice recordings are saved on device. You can play them back from entry cards. Tap Done to finish a voice search; the pace setting only controls how long HiMem waits if you stop talking."
+                        : "Voice recordings are discarded after transcription. Only the text is kept. Tap Done to finish a voice search; the pace setting only controls how long HiMem waits if you stop talking.")
                 }
             }
             .navigationTitle("Settings")
