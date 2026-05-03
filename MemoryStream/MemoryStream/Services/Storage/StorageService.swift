@@ -11,8 +11,21 @@ final class StorageService {
         container.viewContext
     }
 
+    /// Loaded once per process. Without this, multiple in-memory test
+    /// containers (one per @Test method) each load their own copy of the
+    /// model, producing "Class X is implemented in two NSManagedObjectModels"
+    /// warnings that escalate to test-process crashes when many CoreData
+    /// suites run in parallel.
+    private static let cachedModel: NSManagedObjectModel = {
+        guard let url = Bundle.main.url(forResource: "MemoryStream", withExtension: "momd"),
+              let model = NSManagedObjectModel(contentsOf: url) else {
+            fatalError("Failed to locate MemoryStream Core Data model in main bundle.")
+        }
+        return model
+    }()
+
     private init() {
-        container = NSPersistentCloudKitContainer(name: "MemoryStream")
+        container = NSPersistentCloudKitContainer(name: "MemoryStream", managedObjectModel: Self.cachedModel)
         let description = container.persistentStoreDescriptions.first!
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
@@ -62,7 +75,7 @@ final class StorageService {
     /// Test-only initializer: in-memory Core Data store with no disk persistence.
     init(inMemory: Bool) {
         precondition(inMemory, "Use .shared for on-disk storage")
-        container = NSPersistentCloudKitContainer(name: "MemoryStream")
+        container = NSPersistentCloudKitContainer(name: "MemoryStream", managedObjectModel: Self.cachedModel)
         let description = NSPersistentStoreDescription()
         description.type = NSInMemoryStoreType
         // No CloudKit options for in-memory test store
