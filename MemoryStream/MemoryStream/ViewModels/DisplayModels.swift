@@ -56,6 +56,9 @@ struct EntryDisplayModel: Identifiable {
     let userCorrection: String?
     let mediaItems: [MediaDisplayItem]
     let recycledAt: Date?
+    let latitude: Double?
+    let longitude: Double?
+    let locationName: String?
 
     var timeString: String {
         let interval = Date().timeIntervalSince(createdAt)

@@ -3,6 +3,14 @@ import Foundation
 /// Single source of truth for mapping JournalEntry → EntryDisplayModel.
 /// Replaces 3 duplicate mapping implementations.
 enum EntryMapper {
+    /// Removes duplicate topic names (CloudKit merge conflicts can produce
+    /// multiple Topic entities with the same name; ForEach keys on the name
+    /// and warns about duplicate IDs).
+    private static func dedupedNames(_ names: [String]) -> [String] {
+        var seen: Set<String> = []
+        return names.compactMap { seen.insert($0).inserted ? $0 : nil }
+    }
+
     static func mapToDisplayModel(_ entry: JournalEntry) -> EntryDisplayModel {
         let task = entry.latestProcessingTask
         let inference = entry.inferenceSummary
@@ -23,7 +31,7 @@ enum EntryMapper {
                     confidence: entity.confidenceScore
                 )
             },
-            topicNames: entry.topicsArray.map(\.name),
+            topicNames: dedupedNames(entry.topicsArray.map(\.name)),
             audioFilePath: entry.audioFilePath,
             inferenceSummary: inference?.summaryText,
             feedbackState: inference?.feedbackStateEnum,
@@ -37,7 +45,10 @@ enum EntryMapper {
                     isAccessible: ref.isAccessible
                 )
             },
-            recycledAt: entry.recycledAt
+            recycledAt: entry.recycledAt,
+            latitude: entry.latitude?.doubleValue,
+            longitude: entry.longitude?.doubleValue,
+            locationName: entry.locationName
         )
     }
 }

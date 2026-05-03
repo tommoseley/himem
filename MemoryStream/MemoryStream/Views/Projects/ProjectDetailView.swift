@@ -236,28 +236,6 @@ struct ProjectDetailView: View {
     private func loadProjectEntries() {
         guard let project else { return }
         let journalEntries = project.entriesArray.filter { !$0.isRecycled }
-        entries = journalEntries.map { entry in
-            let task = entry.latestProcessingTask
-            let inference = entry.inferenceSummary
-            return EntryDisplayModel(
-                id: entry.id,
-                displayTitle: entry.displayTitle,
-                content: entry.content,
-                inputType: entry.inputTypeEnum,
-                createdAt: entry.createdAt,
-                processingStatus: task?.statusEnum,
-                progressDescription: task?.progressDescription,
-                tags: entry.entitiesArray.map { TagDisplayModel(id: $0.id, value: $0.value, entityType: $0.entityTypeEnum, confidence: $0.confidenceScore) },
-                topicNames: entry.topicsArray.map(\.name),
-                audioFilePath: entry.audioFilePath,
-                inferenceSummary: inference?.summaryText,
-                feedbackState: inference?.feedbackStateEnum,
-                userCorrection: inference?.userCorrection,
-                mediaItems: entry.mediaReferencesArray.map { ref in
-                    MediaDisplayItem(id: ref.id, localIdentifier: ref.osIdentifier, mediaType: ref.mediaTypeEnum, thumbnailCacheFilename: ref.thumbnailCacheFilename, isAccessible: ref.isAccessible)
-                },
-                recycledAt: entry.recycledAt
-            )
-        }
+        entries = journalEntries.map(EntryMapper.mapToDisplayModel)
     }
 }
