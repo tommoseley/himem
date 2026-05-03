@@ -126,20 +126,11 @@ class JournalViewModel: ObservableObject {
     }
 
     func submitFeedback(entryId: UUID, state: InferenceSummary.FeedbackState, correction: String? = nil) {
-        // Optimistic UI update
-        guard let index = entries.firstIndex(where: { $0.id == entryId }) else { return }
-        let current = entries[index]
-        entries[index] = EntryDisplayModel(
-            id: current.id, displayTitle: current.displayTitle, content: current.content,
-            inputType: current.inputType, createdAt: current.createdAt,
-            processingStatus: current.processingStatus, progressDescription: current.progressDescription,
-            tags: current.tags, topicNames: current.topicNames, audioFilePath: current.audioFilePath,
-            inferenceSummary: current.inferenceSummary, feedbackState: state,
-            userCorrection: correction ?? current.userCorrection,
-            mediaItems: current.mediaItems, recycledAt: current.recycledAt,
-            latitude: current.latitude, longitude: current.longitude, locationName: current.locationName
-        )
-
+        // Optimistic UI update — reflect the new feedback state immediately,
+        // then let the persisted save catch up via loadEntries.
+        if let index = entries.firstIndex(where: { $0.id == entryId }) {
+            entries[index] = entries[index].with(feedbackState: state, userCorrection: correction)
+        }
         lifecycle.submitFeedback(entryId: entryId, state: state, correction: correction)
         loadEntries()
     }

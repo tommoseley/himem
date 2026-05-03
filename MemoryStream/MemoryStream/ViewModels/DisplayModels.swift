@@ -122,6 +122,34 @@ extension EntryDisplayModel: Hashable {
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
+extension EntryDisplayModel {
+    /// Returns a copy with feedback state updated. Used for optimistic UI on
+    /// confirm/adjust/dismiss before the persisted save lands. Avoids the
+    /// fragile 17-arg constructor reconstruction at the call site.
+    func with(feedbackState: InferenceSummary.FeedbackState?, userCorrection: String? = nil) -> EntryDisplayModel {
+        EntryDisplayModel(
+            id: id,
+            displayTitle: displayTitle,
+            content: content,
+            inputType: inputType,
+            createdAt: createdAt,
+            processingStatus: processingStatus,
+            progressDescription: progressDescription,
+            tags: tags,
+            topicNames: topicNames,
+            audioFilePath: audioFilePath,
+            inferenceSummary: inferenceSummary,
+            feedbackState: feedbackState,
+            userCorrection: userCorrection ?? self.userCorrection,
+            mediaItems: mediaItems,
+            recycledAt: recycledAt,
+            latitude: latitude,
+            longitude: longitude,
+            locationName: locationName
+        )
+    }
+}
+
 struct DisplayStatus {
     let text: String
     let style: StatusBadge.BadgeStyle
