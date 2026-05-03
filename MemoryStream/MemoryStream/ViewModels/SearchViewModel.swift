@@ -125,24 +125,24 @@ final class SearchViewModel: ObservableObject {
     // MARK: - Scope chip toggles (compose / decompose)
 
     func toggleTopicScope(_ slug: String) {
-        let parsed = ScopeParser.parse(queryText)
-        if parsed.topicSlug == slug {
-            queryText = removeScope(prefix: "topic:\(slug)", from: queryText)
-        } else {
-            queryText = removeScope(prefix: "topic:", from: queryText)
-            queryText = appendScope("topic:\(slug)", to: queryText)
-        }
-        committed = true
-        executeSearch()
+        let active = ScopeParser.parse(queryText).topicSlug == slug
+        toggleScope(prefix: "topic", value: slug, isCurrentlyActive: active)
     }
 
     func toggleTypeScope(_ type: TypeScope) {
-        let parsed = ScopeParser.parse(queryText)
-        if parsed.typeScope == type {
-            queryText = removeScope(prefix: "type:\(type.rawValue)", from: queryText)
+        let active = ScopeParser.parse(queryText).typeScope == type
+        toggleScope(prefix: "type", value: type.rawValue, isCurrentlyActive: active)
+    }
+
+    /// If the scope is already on the query, strip its specific token; otherwise
+    /// strip any other value of the same kind and append the new one. Either
+    /// way, mark the search committed and re-run it.
+    private func toggleScope(prefix: String, value: String, isCurrentlyActive: Bool) {
+        if isCurrentlyActive {
+            queryText = removeScope(prefix: "\(prefix):\(value)", from: queryText)
         } else {
-            queryText = removeScope(prefix: "type:", from: queryText)
-            queryText = appendScope("type:\(type.rawValue)", to: queryText)
+            queryText = removeScope(prefix: "\(prefix):", from: queryText)
+            queryText = appendScope("\(prefix):\(value)", to: queryText)
         }
         committed = true
         executeSearch()
@@ -337,7 +337,7 @@ extension SearchViewModel {
     func groupedHits(now: Date = Date(), calendar: Calendar = .current) -> [(ResultGroup, [SearchEngine.Hit])] {
         var buckets: [ResultGroup: [SearchEngine.Hit]] = [:]
         for hit in hits {
-            let group = bucket(for: hit.entry.createdAt, now: now, calendar: calendar)
+            let group = Self.bucket(for: hit.entry.createdAt, now: now, calendar: calendar)
             buckets[group, default: []].append(hit)
         }
         return ResultGroup.allCases.compactMap { group in
@@ -346,9 +346,20 @@ extension SearchViewModel {
         }
     }
 
-    private func bucket(for date: Date, now: Date, calendar: Calendar) -> ResultGroup {
-        if calendar.isDateInToday(date) { return .today }
-        if calendar.isDateInYesterday(date) { return .yesterday }
+    /// Pure: classifies a date relative to `now` into a result-group bucket.
+    /// Made `static` + `nonisolated` (was private) so it's testable without
+    /// populating `hits` and from non-MainActor contexts.
+    ///
+    /// `Calendar.isDateInToday/isDateInYesterday` ignore the caller's `now`
+    /// and use the system clock — wrong when tests inject a fixed `now`.
+    /// We use `isDate(_:inSameDayAs:)` instead so the function is fully
+    /// determined by its inputs.
+    nonisolated static func bucket(for date: Date, now: Date, calendar: Calendar) -> ResultGroup {
+        if calendar.isDate(date, inSameDayAs: now) { return .today }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return .yesterday
+        }
         if let week = calendar.dateInterval(of: .weekOfYear, for: now), week.contains(date) { return .thisWeek }
         if let month = calendar.dateInterval(of: .month, for: now), month.contains(date) { return .thisMonth }
         if let lastMonthDate = calendar.date(byAdding: .month, value: -1, to: now),
