@@ -188,15 +188,17 @@ struct JournalView: View {
         .background(Crucible.Color.paper)
 
         // Composer FAB
+        // Tap = jump straight into voice recording (the primary capture mode).
+        // Long-press = open Composer without auto-recording (media selector).
         ComposerFAB(isOpen: composer.isPresented) {
             composer.speechService = speechService
             composer.cameraService = cameraService
-            composer.open()
+            composer.open(withRecording: true)
         } onLongPress: {
             UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
             composer.speechService = speechService
             composer.cameraService = cameraService
-            composer.open(withRecording: true)
+            composer.open()
         }
         .padding(.trailing, 14)
         .padding(.bottom, 14)

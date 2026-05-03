@@ -136,7 +136,8 @@ class JournalViewModel: ObservableObject {
             tags: current.tags, topicNames: current.topicNames, audioFilePath: current.audioFilePath,
             inferenceSummary: current.inferenceSummary, feedbackState: state,
             userCorrection: correction ?? current.userCorrection,
-            mediaItems: current.mediaItems, recycledAt: current.recycledAt
+            mediaItems: current.mediaItems, recycledAt: current.recycledAt,
+            latitude: current.latitude, longitude: current.longitude, locationName: current.locationName
         )
 
         lifecycle.submitFeedback(entryId: entryId, state: state, correction: correction)
@@ -213,7 +214,16 @@ class JournalViewModel: ObservableObject {
         let request = Topic.fetchAll()
         do {
             let topicEntities = try storage.viewContext.fetch(request)
-            topics = topicEntities.map(\.name)
+            // De-duplicate by name. CloudKit merges occasionally produce two
+            // Topic entities with the same name (e.g. both devices created
+            // "Garden" before they synced). The UI keys ForEach on name, so
+            // duplicates trigger SwiftUI "ID occurs multiple times" warnings.
+            var seen: Set<String> = []
+            topics = topicEntities.compactMap { topic in
+                guard !seen.contains(topic.name) else { return nil }
+                seen.insert(topic.name)
+                return topic.name
+            }
         } catch {
             ErrorState.shared.report(.topicError(error.localizedDescription))
         }

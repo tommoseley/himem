@@ -111,6 +111,42 @@ class ComposerViewModel: ObservableObject {
         stopDurationTimer()
     }
 
+    /// Used by the Commit button: if recording is active, stop it and
+    /// synchronously stage the live transcript + audio file so a follow-up
+    /// `commitContent` read sees them. The view's `.onChange(of: isRecording)`
+    /// handler stages on its own runloop tick, which is too late for a
+    /// commit fired from the same tap. Idempotent — call any time.
+    func stopRecordingAndStageIfActive() {
+        guard let speech = speechService, speech.isRecording else { return }
+        // Snapshot the live values BEFORE stopping. The recognition callback
+        // can fire after cancel and clobber transcribedText.
+        let transcript = speech.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        silenceWatcher.cancel()
+        speech.stopRecording()
+        stopDurationTimer()
+
+        // After stopRecording, lastRecordingPath is set if a file landed.
+        let saveVoice = (UserDefaults.standard.object(forKey: "saveVoiceEntries") as? Bool) ?? true
+        if let path = speech.lastRecordingPath {
+            if saveVoice {
+                if !mediaCaptures.contains(where: { $0.localIdentifier == path }) {
+                    mediaCaptures.append((localIdentifier: path, mediaType: .voice))
+                }
+            } else {
+                AudioPlayerService.deleteAudio(filename: path)
+            }
+        }
+        if !transcript.isEmpty, !pendingTranscripts.contains(transcript) {
+            pendingTranscripts.append(transcript)
+        }
+
+        // Reset so the view's .onChange doesn't double-stage.
+        pendingAudioAppend = false
+        speech.transcribedText = ""
+        speech.lastRecordingPath = nil
+    }
+
     func toggleRecording() {
         if isRecording {
             stopRecording()
