@@ -1,6 +1,7 @@
 import Foundation
 import Photos
 import UIKit
+import CryptoKit
 
 @MainActor
 final class ThumbnailService {
@@ -21,6 +22,15 @@ final class ThumbnailService {
         thumbnailDirectory.appendingPathComponent(filename)
     }
 
+    /// Filename derived from the asset's local identifier. Same identifier
+    /// always maps to the same file, which lets `cacheThumbnail` skip the
+    /// PHImageManager round-trip and disk write on repeat calls.
+    private func cacheFilename(for localIdentifier: String) -> String {
+        let digest = SHA256.hash(data: Data(localIdentifier.utf8))
+        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        return hex + ".jpg"
+    }
+
     // MARK: - Synchronous disk read
 
     func cachedThumbnail(filename: String) -> UIImage? {
@@ -31,7 +41,17 @@ final class ThumbnailService {
 
     // MARK: - Fetch from PHImageManager and cache to disk
 
+    /// Idempotent: if a thumbnail for `localIdentifier` is already on disk,
+    /// returns the existing filename without re-fetching from Photos. The
+    /// composer view re-runs its `.task` on every appearance and we want
+    /// repeats to be free.
     func cacheThumbnail(for localIdentifier: String) async -> String? {
+        let filename = cacheFilename(for: localIdentifier)
+        let url = Self.thumbnailURL(for: filename)
+        if FileManager.default.fileExists(atPath: url.path) {
+            return filename
+        }
+
         guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil).firstObject else {
             return nil
         }
@@ -62,8 +82,6 @@ final class ThumbnailService {
                     return
                 }
 
-                let filename = UUID().uuidString + ".jpg"
-                let url = Self.thumbnailURL(for: filename)
                 do {
                     try jpeg.write(to: url)
                     continuation.resume(returning: filename)
