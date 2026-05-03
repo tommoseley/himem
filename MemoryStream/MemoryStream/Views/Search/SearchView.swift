@@ -343,7 +343,11 @@ private struct ResultsBody: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Crucible.Space.lg) {
+            // LazyVStack so result rows render only as they scroll into view.
+            // For typical searches (few hits) this is identical; for broad
+            // queries returning hundreds, it avoids materializing every row
+            // and the snippet-highlight work behind it on first frame.
+            LazyVStack(alignment: .leading, spacing: Crucible.Space.lg) {
                 if !viewModel.resultCountSummary.isEmpty {
                     Text(viewModel.resultCountSummary)
                         .font(.footnote)
