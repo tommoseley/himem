@@ -34,11 +34,12 @@ final class EntryLifecycleService {
     /// captures on an append-anchor entry untouched.
     func deleteMediaReferences(ids: Set<UUID>) {
         guard !ids.isEmpty else { return }
-        let request = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-        request.predicate = NSPredicate(format: "id IN %@", Array(ids))
         do {
-            let refs = try storage.viewContext.fetch(request)
-            for ref in refs {
+            for id in ids {
+                let request = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+                request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+                request.fetchLimit = 1
+                guard let ref = try storage.viewContext.fetch(request).first else { continue }
                 if let cacheFile = ref.thumbnailCacheFilename {
                     ThumbnailService.shared.evictThumbnail(filename: cacheFile)
                 }
