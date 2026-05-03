@@ -45,8 +45,7 @@ final class ClaudeAPIService {
         }
 
         guard response.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw APIError.httpError(statusCode: response.statusCode, body: errorBody)
+            throw APIError.httpError(statusCode: response.statusCode)
         }
 
         return try JSONDecoder().decode(AnalysisResult.self, from: data)
@@ -72,8 +71,7 @@ final class ClaudeAPIService {
         }
 
         guard response.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw APIError.httpError(statusCode: response.statusCode, body: errorBody)
+            throw APIError.httpError(statusCode: response.statusCode)
         }
 
         return try JSONDecoder().decode(CleanupResult.self, from: data).text
@@ -83,13 +81,13 @@ final class ClaudeAPIService {
 
     enum APIError: LocalizedError {
         case invalidResponse
-        case httpError(statusCode: Int, body: String)
+        case httpError(statusCode: Int)
 
         var errorDescription: String? {
             switch self {
             case .invalidResponse:
                 return "Invalid response from server."
-            case .httpError(let code, _):
+            case .httpError(let code):
                 return "Processing failed (status \(code)). Please try again later."
             }
         }
