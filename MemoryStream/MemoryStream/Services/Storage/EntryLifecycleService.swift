@@ -16,6 +16,40 @@ final class EntryLifecycleService {
 
     // MARK: - Create
 
+    /// Creates a new JournalEntry with no content and no media. Used by
+    /// Contribute Mode when the user enters a new-memory session — the entry
+    /// is created lazily on the first capture, populated as captures are
+    /// taken, and either preserved on Done or deleted on X.
+    ///
+    /// Unlike `save(content:inputType:...)`, this does NOT enqueue a
+    /// processing task or capture location. Those happen at session end (or
+    /// per-capture as appropriate) once we know the entry has real content.
+    func createEmptyEntry(inputType: JournalEntry.InputType) throws -> JournalEntry {
+        return try storage.createEntry(content: "", inputType: inputType)
+    }
+
+    /// Deletes the specified MediaReferences (and their cached thumbnails) by
+    /// id, regardless of which entry they belong to. Used by Contribute Mode's
+    /// X-cancel to remove only this-session captures, leaving any pre-existing
+    /// captures on an append-anchor entry untouched.
+    func deleteMediaReferences(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let request = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        request.predicate = NSPredicate(format: "id IN %@", Array(ids))
+        do {
+            let refs = try storage.viewContext.fetch(request)
+            for ref in refs {
+                if let cacheFile = ref.thumbnailCacheFilename {
+                    ThumbnailService.shared.evictThumbnail(filename: cacheFile)
+                }
+                storage.viewContext.delete(ref)
+            }
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
     func save(
         content: String,
         inputType: JournalEntry.InputType,

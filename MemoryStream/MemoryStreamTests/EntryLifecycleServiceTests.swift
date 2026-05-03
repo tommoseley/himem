@@ -197,4 +197,55 @@ struct EntryLifecycleServiceTests {
         #expect(recycled.last?.id == firstTrashed.id)
         #expect(!recycled.contains { $0.id == activeEntry.id })
     }
+
+    // MARK: - createEmptyEntry (Contribute Mode lazy-create)
+
+    @Test func createEmptyEntry_persistsRowWithEmptyContent() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+
+        #expect(entry.content == "")
+        #expect(entry.inputType == JournalEntry.InputType.composed.rawValue)
+        let fetched = fetchEntry(entry.id, in: storage)
+        #expect(fetched != nil)
+        #expect(fetched?.content == "")
+    }
+
+    @Test func createEmptyEntry_doesNotEnqueueProcessingTask() throws {
+        let (storage, service) = makeService()
+        _ = try service.createEmptyEntry(inputType: .voiceInApp)
+
+        let request = NSFetchRequest<ProcessingTask>(entityName: "ProcessingTask")
+        let tasks = try storage.viewContext.fetch(request)
+        // Empty entries don't have content to process yet.
+        #expect(tasks.isEmpty)
+    }
+
+    // MARK: - deleteMediaReferences (Contribute Mode X-cancel)
+
+    @Test func deleteMediaReferences_removesOnlyTheTargetedRefs() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        let refA = try storage.createMediaReference(for: entry, localIdentifier: "A", mediaType: .image)
+        let refB = try storage.createMediaReference(for: entry, localIdentifier: "B", mediaType: .image)
+        let refC = try storage.createMediaReference(for: entry, localIdentifier: "C", mediaType: .voice)
+
+        service.deleteMediaReferences(ids: [refA.id, refC.id])
+
+        let remaining = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let remainingIds = remaining.map(\.id)
+        #expect(remainingIds.count == 1)
+        #expect(remainingIds.contains(refB.id))
+    }
+
+    @Test func deleteMediaReferences_emptySet_isNoOp() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        _ = try storage.createMediaReference(for: entry, localIdentifier: "A", mediaType: .image)
+
+        service.deleteMediaReferences(ids: [])
+
+        let remaining = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        #expect(remaining.count == 1)
+    }
 }
