@@ -176,7 +176,7 @@ class JournalViewModel: ObservableObject {
         if let topic {
             recycledCount = lifecycle.recycledCountForTopic(topic)
         } else {
-            recycledCount = lifecycle.loadRecycledEntries().count
+            recycledCount = lifecycle.recycledCount()
         }
     }
 

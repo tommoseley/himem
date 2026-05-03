@@ -227,6 +227,14 @@ final class EntryLifecycleService {
         return (try? storage.viewContext.count(for: request)) ?? 0
     }
 
+    /// Counts every recycled entry without materializing the rows. Cheap;
+    /// use this in derived state instead of `loadRecycledEntries().count`.
+    func recycledCount() -> Int {
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "isRecycled == YES")
+        return (try? storage.viewContext.count(for: request)) ?? 0
+    }
+
     // MARK: - Private Helpers
 
     private func fetchEntry(id: UUID) throws -> JournalEntry? {
