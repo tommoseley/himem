@@ -34,16 +34,6 @@ extension JournalEntry {
         case typed = "typed"
         case camera = "camera"
         case composed = "composed"
-
-        var displayLabel: String {
-            switch self {
-            case .siri: return "Captured via Siri"
-            case .voiceInApp: return "Voice in app"
-            case .typed: return "Typed"
-            case .camera: return "Photo / Video"
-            case .composed: return "Composed"
-            }
-        }
     }
 
     var inputTypeEnum: InputType {

@@ -43,14 +43,6 @@ final class CameraService: ObservableObject {
     // a black preview when permission hasn't been resolved yet — exactly what
     // testers hit on first launch after a TestFlight install.
 
-    var isCameraAuthorized: Bool {
-        AVCaptureDevice.authorizationStatus(for: .video) == .authorized
-    }
-
-    func refreshCameraAuthorizationStatus() {
-        cameraAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
-    }
-
     /// Requests camera access from the user. Returns true if granted (or already
     /// granted), false if denied/restricted. Updates `cameraAuthorizationStatus`.
     @discardableResult

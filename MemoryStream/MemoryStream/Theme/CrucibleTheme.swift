@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreData
 
 /// Crucible design system tokens.
 /// Apple-native base · warm editorial serif moments · Swiss precision in layout.
@@ -344,8 +345,6 @@ struct TopicEditorSheet: View {
         return name.trimmingCharacters(in: .whitespaces) != topic.name || colorKey != currentKey
     }
 }
-
-import CoreData
 
 // MARK: - Color hex initializer
 

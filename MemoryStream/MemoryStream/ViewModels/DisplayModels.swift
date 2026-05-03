@@ -113,8 +113,6 @@ struct EntryDisplayModel: Identifiable {
     }
 
     var hasAudio: Bool { audioFilePath != nil || mediaItems.contains { $0.mediaType == .voice } }
-    var photoCount: Int { mediaItems.filter { $0.mediaType == .image }.count }
-    var videoCount: Int { mediaItems.filter { $0.mediaType == .video }.count }
 }
 
 extension EntryDisplayModel: Hashable {

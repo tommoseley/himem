@@ -22,15 +22,6 @@ extension ProcessingTask {
         case processing = "processing"
         case completed = "completed"
         case failed = "failed"
-
-        var displayLabel: String {
-            switch self {
-            case .pending: return "Queued"
-            case .processing: return "Parsing now"
-            case .completed: return "Processed"
-            case .failed: return "Failed"
-            }
-        }
     }
 
     var statusEnum: Status {

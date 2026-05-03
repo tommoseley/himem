@@ -24,16 +24,6 @@ extension ExtractedEntity {
         case issue = "issue"
         case idea = "idea"
         case nextAction = "next_action"
-
-        var displayLabel: String {
-            switch self {
-            case .project: return "Project"
-            case .person: return "Person"
-            case .issue: return "Issue"
-            case .idea: return "Idea"
-            case .nextAction: return "Next Action"
-            }
-        }
     }
 
     var entityTypeEnum: EntityType {
