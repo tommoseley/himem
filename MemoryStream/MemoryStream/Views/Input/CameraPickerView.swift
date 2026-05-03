@@ -9,8 +9,9 @@ struct CameraPickerView: UIViewControllerRepresentable {
         case video(URL)
     }
 
-    enum CaptureMode {
+    enum CaptureMode: String, Identifiable {
         case photo, video, both
+        var id: String { rawValue }
     }
 
     var captureMode: CaptureMode = .both
@@ -20,36 +21,30 @@ struct CameraPickerView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
+        picker.cameraDevice = .rear
+        picker.allowsEditing = false
         switch captureMode {
         case .photo:
             picker.mediaTypes = [UTType.image.identifier]
             picker.cameraCaptureMode = .photo
-            picker.videoMaximumDuration = 0
         case .video:
             picker.mediaTypes = [UTType.movie.identifier]
             picker.cameraCaptureMode = .video
             picker.videoMaximumDuration = 120
         case .both:
             picker.mediaTypes = [UTType.image.identifier, UTType.movie.identifier]
+            picker.cameraCaptureMode = .photo
             picker.videoMaximumDuration = 120
         }
         picker.delegate = context.coordinator
         return picker
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
-        // Re-enforce media types in case SwiftUI reuses the controller
-        switch captureMode {
-        case .photo:
-            uiViewController.mediaTypes = [UTType.image.identifier]
-            uiViewController.cameraCaptureMode = .photo
-        case .video:
-            uiViewController.mediaTypes = [UTType.movie.identifier]
-            uiViewController.cameraCaptureMode = .video
-        case .both:
-            uiViewController.mediaTypes = [UTType.image.identifier, UTType.movie.identifier]
-        }
-    }
+    // Intentional no-op. Setting cameraCaptureMode or mediaTypes on a live
+    // UIImagePickerController tears down its AVCaptureSession (black preview).
+    // Once configured in makeUIViewController the picker doesn't need updates;
+    // SwiftUI re-renders of the parent must not propagate to it.
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onCapture: onCapture, onDismiss: onDismiss)

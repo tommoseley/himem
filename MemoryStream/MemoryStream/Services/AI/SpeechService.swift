@@ -112,7 +112,16 @@ final class SpeechService: ObservableObject {
                 guard let self else { return }
 
                 if let result {
-                    self.transcribedText = result.bestTranscription.formattedString
+                    let newText = result.bestTranscription.formattedString
+                    // After an intentional cancel, the recognizer can deliver
+                    // a final result that's empty or shorter than the live
+                    // partial we already showed. Don't let it clobber a good
+                    // transcript on the way out — only accept the new value
+                    // when it's non-empty (final correction) or we're still
+                    // actively recording.
+                    if !newText.isEmpty || !self.isStoppingIntentionally {
+                        self.transcribedText = newText
+                    }
                 }
 
                 if let error {

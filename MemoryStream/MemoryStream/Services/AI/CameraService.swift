@@ -71,7 +71,9 @@ final class CameraService: ObservableObject {
 
     /// Convenience used by camera trigger buttons. Returns true if the caller
     /// should proceed to present the picker; surfaces a Settings hint via
-    /// ErrorState on denial.
+    /// ErrorState on denial. Callers are responsible for stopping any active
+    /// SpeechService recording before calling this — that path already
+    /// releases the audio session cleanly.
     func ensureCameraAccess() async -> Bool {
         let granted = await requestCameraAccess()
         if !granted {

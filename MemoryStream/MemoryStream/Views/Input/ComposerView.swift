@@ -58,6 +58,7 @@ struct ComposerView: View {
                 },
                 onTextTap: { showTextEditor = true },
                 onPhotoTap: {
+                    if composer.isRecording { composer.stopRecording() }
                     Task {
                         if await CameraService.shared.ensureCameraAccess() {
                             composer.cameraMode = .photo
@@ -66,6 +67,7 @@ struct ComposerView: View {
                     }
                 },
                 onVideoTap: {
+                    if composer.isRecording { composer.stopRecording() }
                     Task {
                         if await CameraService.shared.ensureCameraAccess() {
                             composer.cameraMode = .video
@@ -205,6 +207,7 @@ struct ComposerView: View {
 
                             // Add tile
                             Button {
+                                if composer.isRecording { composer.stopRecording() }
                                 Task {
                                     if await CameraService.shared.ensureCameraAccess() {
                                         composer.cameraMode = .photo
@@ -245,6 +248,7 @@ struct ComposerView: View {
 
                 // Commit button
                 Button(action: {
+                    composer.stopRecordingAndStageIfActive()
                     onCommit()
                     dismiss()
                 }) {
@@ -268,7 +272,7 @@ struct ComposerView: View {
         .background(Crucible.Color.paper)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
-        .sheet(isPresented: $composer.showCamera) {
+        .fullScreenCover(isPresented: $composer.showCamera) {
             CameraPickerView(
                 captureMode: composer.cameraMode,
                 onCapture: { result in
