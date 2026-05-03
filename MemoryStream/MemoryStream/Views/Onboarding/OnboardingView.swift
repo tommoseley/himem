@@ -291,26 +291,51 @@ private struct PermissionsScreen: View {
     /// a time. Tapping a row remains a manual fallback; this just removes the
     /// "user hits Continue and nothing was actually asked" failure mode.
     private func cascadePermissionPrompts() async {
-        // Microphone — only prompt if undetermined.
-        if AVAudioApplication.shared.recordPermission == .undetermined {
-            _ = await AVAudioApplication.requestRecordPermission()
-        }
-        // Camera.
-        if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
-            _ = await AVCaptureDevice.requestAccess(for: .video)
-        }
-        // Notifications.
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        if settings.authorizationStatus == .notDetermined {
-            _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
-        }
-        // Location (When In Use).
-        if CLLocationManager().authorizationStatus == .notDetermined {
-            _ = await LocationService.shared.requestWhenInUseAuthorization()
+        for prompt in Self.permissionPrompts {
+            if await prompt.isUndetermined() {
+                await prompt.request()
+            }
         }
         // Photo library remains deferred — iOS prompts on first picker use.
     }
+
+    /// Table-driven permission cascade. Each entry exposes its own
+    /// "is undetermined?" check and request callback so the loop above
+    /// stays a 4-line walker; adding a new prompt is one entry, no branch.
+    private static let permissionPrompts: [PermissionPrompt] = [
+        PermissionPrompt(
+            label: "microphone",
+            isUndetermined: { AVAudioApplication.shared.recordPermission == .undetermined },
+            request: { _ = await AVAudioApplication.requestRecordPermission() }
+        ),
+        PermissionPrompt(
+            label: "camera",
+            isUndetermined: { AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined },
+            request: { _ = await AVCaptureDevice.requestAccess(for: .video) }
+        ),
+        PermissionPrompt(
+            label: "notifications",
+            isUndetermined: {
+                let settings = await UNUserNotificationCenter.current().notificationSettings()
+                return settings.authorizationStatus == .notDetermined
+            },
+            request: {
+                _ = try? await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .badge, .sound])
+            }
+        ),
+        PermissionPrompt(
+            label: "location",
+            isUndetermined: { CLLocationManager().authorizationStatus == .notDetermined },
+            request: { _ = await LocationService.shared.requestWhenInUseAuthorization() }
+        )
+    ]
+}
+
+struct PermissionPrompt: Sendable {
+    let label: String
+    let isUndetermined: @Sendable () async -> Bool
+    let request: @Sendable () async -> Void
 }
 
 private struct PermissionRow: View {
