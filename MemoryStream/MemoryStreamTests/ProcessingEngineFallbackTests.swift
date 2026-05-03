@@ -42,7 +42,8 @@ struct ProcessingEngineFallbackTests {
         let storage = StorageService(inMemory: true)
         let engine = ProcessingEngine(
             storage: storage,
-            analyzer: ThrowingAnalyzer()
+            analyzer: ThrowingAnalyzer(),
+            localExtractor: LocalEntityExtractor()
         )
 
         let entry = try storage.createEntry(
@@ -73,6 +74,72 @@ struct ProcessingEngineFallbackTests {
     /// processed via the local fallback should be re-analyzed via cloud once
     /// `reprocessLocallyHandledEntries()` fires (which the app wires to a
     /// connectivity-restored transition).
+    /// Happy path: cloud analyzer succeeds → entry gets entities, topics,
+    /// and an inference summary; task ends .completed with method=cloud.
+    @Test func processEntry_cloudSuccess_storesEverything() async throws {
+        let storage = StorageService(inMemory: true)
+        let engine = ProcessingEngine(
+            storage: storage,
+            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
+            localExtractor: LocalEntityExtractor()
+        )
+
+        let entry = try storage.createEntry(
+            content: "Met with Sarah about the garden.",
+            inputType: .typed
+        )
+        _ = try storage.createProcessingTask(for: entry)
+
+        await engine.processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+
+        let request = NSFetchRequest<ProcessingTask>(entityName: "ProcessingTask")
+        request.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let task = try storage.viewContext.fetch(request).first
+        #expect(task?.statusEnum == .completed)
+
+        let entityRequest = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
+        entityRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let entities = try storage.viewContext.fetch(entityRequest)
+        #expect(entities.count == 1)
+        #expect(entities.first?.value == "Sarah")
+        #expect(entities.first?.processingMethod == "cloud")
+
+        let summaryRequest = NSFetchRequest<InferenceSummary>(entityName: "InferenceSummary")
+        summaryRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let summary = try storage.viewContext.fetch(summaryRequest).first
+        #expect(summary?.summaryText == "cloud summary")
+
+        // Title from the analyzer flows back to the entry.
+        let entryRequest = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        entryRequest.predicate = NSPredicate(format: "id == %@", entry.id as CVarArg)
+        let refreshed = try storage.viewContext.fetch(entryRequest).first
+        #expect(refreshed?.title == "Garden meeting")
+    }
+
+    /// processPendingTasks fetches pending ProcessingTasks and runs them.
+    /// Useful for entries created before the engine was ready (e.g. during
+    /// the brief startup window) — they shouldn't sit pending forever.
+    @Test func processPendingTasks_picksUpQueuedEntries() async throws {
+        let storage = StorageService(inMemory: true)
+        let engine = ProcessingEngine(
+            storage: storage,
+            analyzer: SuccessfulAnalyzer(title: "Note", entityValue: "Bob", topic: "Work"),
+            localExtractor: LocalEntityExtractor()
+        )
+
+        let entry = try storage.createEntry(content: "Coffee with Bob.", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+
+        await engine.processPendingTasks()
+        storage.viewContext.refreshAllObjects()
+
+        let request = NSFetchRequest<ProcessingTask>(entityName: "ProcessingTask")
+        request.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let task = try storage.viewContext.fetch(request).first
+        #expect(task?.statusEnum == .completed)
+    }
+
     @Test func reprocess_upgradesLocalEntriesToCloud() async throws {
         let storage = StorageService(inMemory: true)
         let offlineEngine = ProcessingEngine(storage: storage, analyzer: ThrowingAnalyzer())
