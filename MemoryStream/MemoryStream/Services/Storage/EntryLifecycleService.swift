@@ -38,9 +38,42 @@ final class EntryLifecycleService {
 
             let savedRefs = try createMediaReferences(for: entry, mediaCaptures: mediaCaptures)
             cacheThumbnails(for: savedRefs)
+            captureLocation(for: entry)
             processEntry(entry)
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    // MARK: - Location capture (fire-and-forget, doesn't block save)
+
+    private func captureLocation(for entry: JournalEntry) {
+        let entryId = entry.id
+        Task { @MainActor in
+            let toggleOn = UserDefaults.standard.object(forKey: "tagMemoriesWithLocation") as? Bool ?? true
+            guard toggleOn else { return }
+
+            // Existing users who already cleared onboarding never saw the
+            // location row, so authorization is still .notDetermined for
+            // them. Request it the first time we try to tag — the iOS
+            // system prompt fires once per app install.
+            let granted = await LocationService.shared.requestWhenInUseAuthorization()
+            guard granted else { return }
+
+            guard let fix = await LocationService.shared.currentLocation() else { return }
+            guard let entry = try? self.fetchEntry(id: entryId) else { return }
+            entry.latitude = NSNumber(value: fix.coordinate.latitude)
+            entry.longitude = NSNumber(value: fix.coordinate.longitude)
+            try? self.storage.save(context: self.storage.viewContext)
+
+            // Reverse-geocode separately so the lat/lon land immediately even
+            // if the network is slow.
+            if let name = await LocationService.shared.reverseGeocode(fix) {
+                if let refreshed = try? self.fetchEntry(id: entryId) {
+                    refreshed.locationName = name
+                    try? self.storage.save(context: self.storage.viewContext)
+                }
+            }
         }
     }
 

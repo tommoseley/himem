@@ -29,7 +29,7 @@ struct EntryCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: density == .compact ? 8 : 12) {
             // Title + metadata row
-            EntryHeaderRow(entry: entry, onStatusTap: entry.feedbackState != nil ? {
+            EntryHeaderRow(entry: entry, density: density, onStatusTap: entry.feedbackState != nil ? {
                 showInferenceDetail = true
             } : nil)
 
@@ -152,6 +152,7 @@ struct EntryCardView: View {
 
 struct EntryHeaderRow: View {
     let entry: EntryDisplayModel
+    var density: CardDensity = .standard
     var onStatusTap: (() -> Void)? = nil
 
     var body: some View {
@@ -162,14 +163,6 @@ struct EntryHeaderRow: View {
 
             HStack(spacing: 6) {
                 Text(entry.timeString)
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink2)
-
-                Circle()
-                    .fill(Color(.separator))
-                    .frame(width: 3, height: 3)
-
-                Text(entry.inputType.displayLabel)
                     .font(.caption)
                     .foregroundStyle(Crucible.Color.ink2)
 
@@ -186,7 +179,41 @@ struct EntryHeaderRow: View {
                     }
                 }
             }
+
+            // Variant B (Himem · Location.html): own row, mappin glyph, place
+            // name. Max density only. Apply the design's truncation ladder —
+            // drop trailing comma-separated segments (locality, then admin)
+            // until the result fits the row, never mid-token "…".
+            if density == .rich,
+               let locationName = entry.locationName,
+               !locationName.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "mappin")
+                        .font(.caption2)
+                        .foregroundStyle(Crucible.Color.ink3)
+                    Text(EntryHeaderRow.fitting(locationName))
+                        .font(.caption)
+                        .foregroundStyle(Crucible.Color.ink2)
+                        .lineLimit(1)
+                }
+            }
         }
+    }
+
+    /// Drops trailing comma-separated segments from a placemark string until
+    /// it fits the target character budget. Lossy but predictable — never
+    /// produces a string that ends in a comma + ellipsis.
+    static func fitting(_ name: String, maxChars: Int = 28) -> String {
+        if name.count <= maxChars { return name }
+        var segments = name.components(separatedBy: ", ")
+        while segments.count > 1 {
+            segments.removeLast()
+            let candidate = segments.joined(separator: ", ")
+            if candidate.count <= maxChars { return candidate }
+        }
+        // Single segment, still too long. Let SwiftUI truncate as a last
+        // resort — a long single token can't be split without becoming wrong.
+        return segments.first ?? name
     }
 }
 

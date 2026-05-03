@@ -104,17 +104,9 @@ private struct GhostCard: View {
             }
 
             // Timestamp
-            HStack(spacing: 6) {
-                Text(entry.timeString)
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink4)
-                Circle()
-                    .fill(Crucible.Color.ink4)
-                    .frame(width: 3, height: 3)
-                Text(entry.inputType.displayLabel)
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink4)
-            }
+            Text(entry.timeString)
+                .font(.caption)
+                .foregroundStyle(Crucible.Color.ink4)
 
             // Topic pills (grey — ghost styling)
             if !entry.topicNames.isEmpty {

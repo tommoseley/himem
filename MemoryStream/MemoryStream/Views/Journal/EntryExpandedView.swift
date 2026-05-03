@@ -56,6 +56,7 @@ struct EntryExpandedView: View {
 
     // Inline staging state (reading mode). Commit flushes these in one batch.
     @State private var activeSheet: ExpandedSheet?
+    @State private var cameraMode: CameraPickerView.CaptureMode?
     @State private var showTextAppender = false
     @State private var pendingTypedText = ""
     @State private var pendingTranscripts: [String] = []
@@ -186,6 +187,43 @@ struct EntryExpandedView: View {
                 Text(fullTimestamp)
                     .font(.caption)
                     .foregroundStyle(Crucible.Color.ink3)
+
+                // Tappable location chip — variant E (Himem · Location.html).
+                // Pin glyph in accent, place name in ink, chevron implies tap.
+                // Tap opens Apple Maps centered on the entry's coordinates.
+                if let name = entry.locationName, let lat = entry.latitude, let lon = entry.longitude {
+                    Button {
+                        openInMaps(name: name, latitude: lat, longitude: lon)
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Image(systemName: "mappin")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Crucible.Color.accent)
+                            // Detail shows the full string — let it wrap to
+                            // a second line rather than truncate.
+                            Text(name)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(Crucible.Color.ink)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Crucible.Color.ink3)
+                                .padding(.leading, 2)
+                        }
+                        .padding(.leading, 10)
+                        .padding(.trailing, 14)
+                        .padding(.vertical, 8)
+                        .background(Crucible.Color.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Crucible.Color.hairline, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
 
                 // Body
                 if mode == .editing {
@@ -372,16 +410,18 @@ struct EntryExpandedView: View {
                         showTextAppender = true
                     }
                     ToolbarIcon(kind: .photo, icon: "camera", label: "Photo", isActive: false) {
+                        if speechService.isRecording { speechService.stopRecording() }
                         Task {
                             if await CameraService.shared.ensureCameraAccess() {
-                                activeSheet = .camera(.photo)
+                                cameraMode = .photo
                             }
                         }
                     }
                     ToolbarIcon(kind: .video, icon: "video", label: "Video", isActive: false) {
+                        if speechService.isRecording { speechService.stopRecording() }
                         Task {
                             if await CameraService.shared.ensureCameraAccess() {
-                                activeSheet = .camera(.video)
+                                cameraMode = .video
                             }
                         }
                     }
@@ -505,30 +545,33 @@ struct EntryExpandedView: View {
         } message: {
             Text("This memory will be moved to the Recently Deleted. You can restore it from Settings.")
         }
+        .fullScreenCover(item: $cameraMode) { mode in
+            CameraPickerView(
+                captureMode: mode,
+                onCapture: { result in
+                    cameraMode = nil
+                    Task { @MainActor in
+                        do {
+                            switch result {
+                            case .photo(let image):
+                                let id = try await cameraService.savePhoto(image)
+                                pendingMedia.append((localIdentifier: id, mediaType: .image))
+                            case .video(let url):
+                                let id = try await cameraService.saveVideo(at: url)
+                                pendingMedia.append((localIdentifier: id, mediaType: .video))
+                            }
+                        } catch {
+                            ErrorState.shared.report(.mediaError(error.localizedDescription))
+                        }
+                    }
+                },
+                onDismiss: { cameraMode = nil }
+            )
+        }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
-            case .camera(let mode):
-                CameraPickerView(
-                    captureMode: mode,
-                    onCapture: { result in
-                        activeSheet = nil
-                        Task { @MainActor in
-                            do {
-                                switch result {
-                                case .photo(let image):
-                                    let id = try await cameraService.savePhoto(image)
-                                    pendingMedia.append((localIdentifier: id, mediaType: .image))
-                                case .video(let url):
-                                    let id = try await cameraService.saveVideo(at: url)
-                                    pendingMedia.append((localIdentifier: id, mediaType: .video))
-                                }
-                            } catch {
-                                ErrorState.shared.report(.mediaError(error.localizedDescription))
-                            }
-                        }
-                    },
-                    onDismiss: { activeSheet = nil }
-                )
+            case .camera:
+                EmptyView() // Camera now uses fullScreenCover above
             case .newTopic:
                 NewTopicSheet(
                     name: $newTopicName,
@@ -708,7 +751,15 @@ struct EntryExpandedView: View {
     private var fullTimestamp: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM d · h:mm a"
-        return formatter.string(from: entry.createdAt) + " · " + entry.inputType.displayLabel
+        return formatter.string(from: entry.createdAt)
+    }
+
+    private func openInMaps(name: String, latitude: Double, longitude: Double) {
+        let coords = "\(latitude),\(longitude)"
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "https://maps.apple.com/?q=\(encoded)&ll=\(coords)") {
+            UIApplication.shared.open(url)
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 import SwiftUI
 import AuthenticationServices
 import AVFoundation
+import CoreLocation
 import UserNotifications
 
 struct OnboardingView: View {
@@ -239,6 +240,18 @@ private struct PermissionsScreen: View {
                 Divider().padding(.leading, 52)
 
                 PermissionRow(
+                    icon: "location.fill",
+                    title: "Location",
+                    subtitle: "Tag where you were so you can find memories by place.",
+                    badge: nil,
+                    ink: ink, ochre: ochre
+                ) {
+                    Task { await LocationService.shared.requestWhenInUseAuthorization() }
+                }
+
+                Divider().padding(.leading, 52)
+
+                PermissionRow(
                     icon: "photo.fill",
                     title: "Photo library",
                     subtitle: "Pull in pictures alongside your notes.",
@@ -287,6 +300,10 @@ private struct PermissionsScreen: View {
         let settings = await center.notificationSettings()
         if settings.authorizationStatus == .notDetermined {
             _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+        }
+        // Location (When In Use).
+        if CLLocationManager().authorizationStatus == .notDetermined {
+            _ = await LocationService.shared.requestWhenInUseAuthorization()
         }
         // Photo library remains deferred — iOS prompts on first picker use.
     }

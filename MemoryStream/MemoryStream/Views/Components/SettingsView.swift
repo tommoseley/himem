@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var refreshID = UUID()
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
+    @AppStorage("tagMemoriesWithLocation") private var tagMemoriesWithLocation = true
     // autoSaveDelay removed — Composer uses explicit commit
 
     private let storage = StorageService.shared
@@ -133,6 +134,15 @@ struct SettingsView: View {
                     Text(saveVoiceEntries
                         ? "Voice recordings are saved on device. You can play them back from entry cards. Tap Done to finish a voice search; the pace setting only controls how long HiMem waits if you stop talking."
                         : "Voice recordings are discarded after transcription. Only the text is kept. Tap Done to finish a voice search; the pace setting only controls how long HiMem waits if you stop talking.")
+                }
+
+                // MARK: - Privacy
+                Section {
+                    Toggle("Tag memories with location", isOn: $tagMemoriesWithLocation)
+                } header: {
+                    Text("Privacy")
+                } footer: {
+                    Text("Location stays on your device. We never send it to the server. Turn this off and new memories will be saved without location.")
                 }
             }
             .navigationTitle("Settings")
