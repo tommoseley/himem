@@ -2,42 +2,30 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSCameraUsageDescription</key>
-	<string>Memory Stream uses the camera to capture photos and videos as part of your journal entries.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Memory Stream uses the microphone to record voice notes and the audio for video entries.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Memory Stream saves photos and videos you capture to your photo library and lets you attach existing photos to journal entries.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Memory Stream uses speech recognition to convert your voice to text.</string>
-	<key>UIApplicationShortcutItems</key>
-	<array>
-		<dict>
-			<key>UIApplicationShortcutItemType</key>
-			<string>com.himem.app.voice-capture</string>
-			<key>UIApplicationShortcutItemTitle</key>
-			<string>Voice Capture</string>
-			<key>UIApplicationShortcutItemIconSymbolName</key>
-			<string>mic.fill</string>
-		</dict>
-		<dict>
-			<key>UIApplicationShortcutItemType</key>
-			<string>com.himem.app.new-entry</string>
-			<key>UIApplicationShortcutItemTitle</key>
-			<string>New Memory</string>
-			<key>UIApplicationShortcutItemIconSymbolName</key>
-			<string>plus</string>
-		</dict>
-	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.apple.coredata.cloudkit.activity.export</string>
 		<string>com.apple.coredata.cloudkit.activity.import</string>
 	</array>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>mic.fill</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Voice Capture</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.himem.app.voice-capture</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>plus</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>New Memory</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.himem.app.new-entry</string>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
