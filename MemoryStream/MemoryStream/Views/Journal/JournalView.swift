@@ -190,10 +190,10 @@ struct JournalView: View {
         }
         .background(Crucible.Color.paper)
 
-        // Composer FAB
-        // Tap = jump straight into voice recording (the primary capture mode).
-        // Long-press = open Composer without auto-recording (media selector).
-        ComposerFAB(isOpen: composer.isPresented) {
+        // Contribute button — universal entry point to Contribute Mode.
+        // Tap = enter Contribute Mode + start voice recording (the garden gesture).
+        // Long-press = enter Contribute Mode showing the Action Box (deliberate).
+        ContributeButton(isOpen: composer.isPresented) {
             composer.speechService = speechService
             composer.cameraService = cameraService
             composer.open(withRecording: true)
@@ -531,9 +531,15 @@ struct JournalHeaderView: View {
     }
 }
 
-// MARK: - Composer FAB
+// MARK: - Contribute Button
 
-struct ComposerFAB: View {
+/// The universal entry point to Contribute Mode. Idle glyph is `mic.fill` to
+/// communicate that the default short-press action is voice; long-press opens
+/// the Action Box without auto-starting recording. While Contribute Mode is
+/// active the host hides this button entirely (per Contribute Mode spec — entry
+/// and exit are via the Action Box's Done/X). The `xmark` rendering is kept
+/// only as a transient cue during the open/close animation.
+struct ContributeButton: View {
     let isOpen: Bool
     let onTap: () -> Void
     let onLongPress: () -> Void
@@ -545,7 +551,7 @@ struct ComposerFAB: View {
                 .frame(width: 56, height: 56)
                 .shadow(color: Color(red: 40/255, green: 25/255, blue: 15/255).opacity(0.22), radius: 10, y: 4)
 
-            Image(systemName: isOpen ? "xmark" : "plus")
+            Image(systemName: isOpen ? "xmark" : "mic.fill")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.white)
                 .rotationEffect(.degrees(isOpen ? 90 : 0))
@@ -559,8 +565,8 @@ struct ComposerFAB: View {
             }
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(isOpen ? "Close composer" : "Record memory")
-        .accessibilityHint(isOpen ? "" : "Long-press to open the composer instead")
+        .accessibilityLabel(isOpen ? "Close contribute mode" : "Contribute a memory")
+        .accessibilityHint(isOpen ? "" : "Tap to start recording. Long-press to choose a capture type.")
         .accessibilityAddTraits(.isButton)
     }
 }
