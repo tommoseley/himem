@@ -103,56 +103,7 @@ final class LocationService: NSObject, ObservableObject {
             return nil
         }
         guard let pm = placemarks.first else { return nil }
-
-        let primary = Self.primaryToken(from: pm)
-        let context = Self.contextToken(from: pm, given: primary)
-
-        if let primary, let context, primary != context {
-            return "\(primary), \(context)"
-        }
-        if let primary { return primary }
-        if let context { return context }
-        return pm.country
-    }
-
-    /// The most-specific identifier for the location. POI > street (with
-    /// number when present) > neighborhood > city > state > country.
-    private static func primaryToken(from pm: CLPlacemark) -> String? {
-        if let poi = pm.areasOfInterest?.first(where: { !$0.isEmpty }) { return poi }
-        if let thoroughfare = pm.thoroughfare, !thoroughfare.isEmpty {
-            if let number = pm.subThoroughfare, !number.isEmpty {
-                return "\(number) \(thoroughfare)"
-            }
-            return thoroughfare
-        }
-        if let sub = pm.subLocality, !sub.isEmpty { return sub }
-        if let locality = pm.locality, !locality.isEmpty { return locality }
-        if let admin = pm.administrativeArea, !admin.isEmpty { return admin }
-        return pm.country
-    }
-
-    /// The next-broader scope to append after the primary. We don't repeat
-    /// what's already in `primary` and we never go more granular.
-    private static func contextToken(from pm: CLPlacemark, given primary: String?) -> String? {
-        guard let primary else { return nil }
-        if pm.areasOfInterest?.contains(where: { $0 == primary }) == true,
-           let locality = pm.locality, !locality.isEmpty {
-            return locality
-        }
-        if let thoroughfare = pm.thoroughfare,
-           primary.hasSuffix(thoroughfare),
-           let locality = pm.locality, !locality.isEmpty {
-            return locality
-        }
-        if let sub = pm.subLocality, sub == primary,
-           let locality = pm.locality, !locality.isEmpty, locality != primary {
-            return locality
-        }
-        if let locality = pm.locality, locality == primary,
-           let admin = pm.administrativeArea, !admin.isEmpty, admin != primary {
-            return admin
-        }
-        return nil
+        return PlacemarkFormatter.displayName(from: pm)
     }
 }
 

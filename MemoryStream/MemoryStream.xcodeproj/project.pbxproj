@@ -67,6 +67,7 @@
 		A100000092 /* VoiceSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000092 /* VoiceSearchView.swift */; };
 		A100000093 /* VoiceSilenceWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000093 /* VoiceSilenceWatcher.swift */; };
 		A100000094 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000094 /* LocationService.swift */; };
+		A100000095 /* PlacemarkFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000095 /* PlacemarkFormatter.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
@@ -143,6 +144,7 @@
 		B100000092 /* VoiceSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSearchView.swift; sourceTree = "<group>"; };
 		B100000093 /* VoiceSilenceWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSilenceWatcher.swift; sourceTree = "<group>"; };
 		B100000094 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
+		B100000095 /* PlacemarkFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacemarkFormatter.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -362,6 +364,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000094 /* LocationService.swift */,
+				B100000095 /* PlacemarkFormatter.swift */,
 			);
 			path = Location;
 			sourceTree = "<group>";
@@ -589,6 +592,7 @@
 				A100000092 /* VoiceSearchView.swift in Sources */,
 				A100000093 /* VoiceSilenceWatcher.swift in Sources */,
 				A100000094 /* LocationService.swift in Sources */,
+				A100000095 /* PlacemarkFormatter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
