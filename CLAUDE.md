@@ -133,6 +133,41 @@ This step is non-negotiable. Skipping it is a regression that's invisible in cod
 
 ---
 
+### UIKit Pickers in SwiftUI
+
+`UIViewControllerRepresentable` wrappers around system view controllers (`UIImagePickerController`, similar) MUST leave `updateUIViewController` empty unless there's a specific reason to push state changes.
+
+Setting configuration properties like `cameraCaptureMode` or `mediaTypes` on a live picker tears down its underlying `AVCaptureSession`. SwiftUI calls `updateUIViewController` on every parent re-render — that's often enough to repeatedly destroy and rebuild the session, producing a black preview and `appleh16camerad: failed preProcessJasper jasper` errors in the device console.
+
+**Symptom:** picker UI loads (zoom controls, shutter, dismiss all work) and the privacy indicator confirms the camera is active, but the preview is black.
+
+**Rule:** configure the controller once in `makeUIViewController`. Leave `updateUIViewController` empty unless an external state value really needs to drive a property change.
+
+---
+
+### Audio Session Coordination
+
+`SpeechService` (voice capture) and `UIImagePickerController` (camera capture) both compete for the singleton `AVAudioSession`. Voice sets `.record` mode and activates the session; camera's internal `AVCaptureSession` may fail to initialize if the existing session is in the wrong state.
+
+**Required at every camera-trigger button:**
+
+1. Stop any active speech recording before presenting the picker (`composer.stopRecording()` / `speechService.stopRecording()`). Don't rely on the picker to interrupt it.
+2. Don't manually `setActive(false)` the audio session as a "release" step in the camera path. `SpeechService.stopRecording()` already does it. Calling `setActive(false)` on an already-inactive session can churn the audio HAL.
+
+---
+
+### Test Concurrency and Shared Singletons
+
+Swift Testing runs `@Test` methods inside a `@Suite` in parallel by default. Tests that touch non-thread-safe shared singletons crash with `libsystem_malloc.dylib: Abort Cause` errors when run concurrently.
+
+Known offenders in this codebase:
+
+- `LocalEntityExtractor.shared` — uses an `NLTagger` instance which isn't thread-safe.
+
+**Rule:** mark any suite that exercises a shared non-thread-safe API with `@Suite(.serialized)` and leave a comment naming the reason. Example: `ProcessingEngineFallbackTests`.
+
+---
+
 ## Planning Discipline
 
 ### Plan Before Executing
