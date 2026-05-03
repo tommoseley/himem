@@ -206,18 +206,28 @@ struct ProjectDetailView: View {
     }
 
     private func composeProjectText() -> String {
+        Self.composeProjectText(
+            name: project?.name,
+            purpose: project?.purpose,
+            entries: entries
+        )
+    }
+
+    /// Pure formatter for the share-sheet output. Header (uppercased name +
+    /// optional purpose) followed by `---`-separated entry blocks containing
+    /// the entry title and clean content. Static so tests can call it
+    /// directly with any (name, purpose, entries) inputs.
+    static func composeProjectText(name: String?, purpose: String?, entries: [EntryDisplayModel]) -> String {
         var lines: [String] = []
 
-        // Header
-        if let project {
-            lines.append(project.name.uppercased())
-            if let purpose = project.purpose, !purpose.isEmpty {
+        if let name {
+            lines.append(name.uppercased())
+            if let purpose, !purpose.isEmpty {
                 lines.append(purpose)
             }
             lines.append("")
         }
 
-        // Entries — clean content only, no UI metadata
         for entry in entries {
             lines.append("---")
             lines.append("")
