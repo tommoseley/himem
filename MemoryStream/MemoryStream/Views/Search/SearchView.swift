@@ -60,6 +60,7 @@ struct SearchView: View {
         HStack(spacing: Crucible.Space.sm) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(Crucible.Color.ink3)
+                .accessibilityHidden(true)
             TextField("Search the Memory Box", text: Binding(
                 get: { viewModel.queryText },
                 set: { viewModel.onQueryChanged($0) }
@@ -78,6 +79,7 @@ struct SearchView: View {
                         .foregroundStyle(Crucible.Color.ink3)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
             } else {
                 Button {
                     fieldFocused = false
@@ -87,6 +89,7 @@ struct SearchView: View {
                         .foregroundStyle(Crucible.Color.captureAudio)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Voice search")
             }
         }
         .padding(.horizontal, Crucible.Space.md)
@@ -164,6 +167,7 @@ private struct PreSearchBody: View {
                     HStack(spacing: Crucible.Space.sm) {
                         Image(systemName: "clock")
                             .foregroundStyle(Crucible.Color.ink3)
+                            .accessibilityHidden(true)
                         Text(raw)
                             .foregroundStyle(Crucible.Color.ink)
                         Spacer()
@@ -313,6 +317,7 @@ private struct FilterSuggestionsSection: View {
                         HStack {
                             Image(systemName: suggestion.icon)
                                 .foregroundStyle(Crucible.Color.ink3)
+                                .accessibilityHidden(true)
                             Text(suggestion.label)
                                 .foregroundStyle(Crucible.Color.ink)
                             Spacer()
@@ -374,6 +379,7 @@ private struct ResultsBody: View {
                 HStack(spacing: Crucible.Space.sm) {
                     Image(systemName: "trash")
                         .font(.footnote)
+                        .accessibilityHidden(true)
                     Text("Recently deleted")
                         .font(.footnote.weight(.semibold))
                         .textCase(.uppercase)
@@ -383,6 +389,7 @@ private struct ResultsBody: View {
                     Spacer()
                     Image(systemName: showRecycled ? "chevron.up" : "chevron.down")
                         .font(.footnote)
+                        .accessibilityHidden(true)
                 }
                 .foregroundStyle(Crucible.Color.ink3)
                 .padding(.horizontal, Crucible.Space.lg)
@@ -424,6 +431,7 @@ private struct NoResultsBody: View {
                 Button(action: onCapture) {
                     HStack {
                         Image(systemName: "plus.circle.fill")
+                            .accessibilityHidden(true)
                         Text("Capture \u{201C}\(viewModel.queryText)\u{201D} now")
                             .lineLimit(2)
                         Spacer()
@@ -440,6 +448,7 @@ private struct NoResultsBody: View {
                     Button { viewModel.queryText = term; viewModel.submit() } label: {
                         HStack {
                             Image(systemName: "magnifyingglass")
+                                .accessibilityHidden(true)
                             Text("Search just \u{201C}\(term)\u{201D}")
                             Spacer()
                         }
@@ -452,6 +461,7 @@ private struct NoResultsBody: View {
                     Button { viewModel.toggleTopicScope(topic.slug) } label: {
                         HStack {
                             Image(systemName: "tag")
+                                .accessibilityHidden(true)
                             Text("Browse \(topic.name)")
                             Spacer()
                         }
@@ -602,6 +612,7 @@ private struct TopicPip: View {
             Circle()
                 .fill(hue.fg)
                 .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
             Text(name)
                 .font(.caption)
                 .foregroundStyle(hue.fg)
@@ -631,6 +642,7 @@ private struct ResultRow: View {
                     Image(systemName: icon)
                         .font(.caption)
                         .foregroundStyle(Crucible.Color.ink3)
+                        .accessibilityLabel(mediaIconLabel(icon))
                 }
             }
             Text(hit.entry.displayTitle)
@@ -674,6 +686,15 @@ private struct ResultRow: View {
             icons.append("video")
         }
         return icons
+    }
+
+    private func mediaIconLabel(_ icon: String) -> String {
+        switch icon {
+        case "waveform": return "Voice"
+        case "photo": return "Photo"
+        case "video": return "Video"
+        default: return icon
+        }
     }
 }
 

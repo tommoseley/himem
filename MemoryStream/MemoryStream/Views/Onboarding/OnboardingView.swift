@@ -142,7 +142,7 @@ private struct WelcomeScreen: View {
 
             // Terms & Privacy
             Text("By continuing, you agree to our Terms & Privacy")
-                .font(.system(size: 11))
+                .font(.caption2)
                 .foregroundStyle(ink.opacity(0.35))
                 .frame(maxWidth: .infinity, alignment: .center)
 
@@ -160,10 +160,11 @@ private struct FeaturePill: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.subheadline)
+                .fontWeight(.semibold)
                 .foregroundStyle(ink)
             Text(subtitle)
-                .font(.system(size: 14))
+                .font(.footnote)
                 .foregroundStyle(ink.opacity(0.55))
         }
     }
@@ -182,7 +183,8 @@ private struct PermissionsScreen: View {
             HStack {
                 Spacer()
                 Button("Skip") { onContinue() }
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.subheadline)
+                    .fontWeight(.medium)
                     .foregroundStyle(ink.opacity(0.45))
             }
             .padding(.top, 16)
@@ -190,13 +192,14 @@ private struct PermissionsScreen: View {
             Spacer().frame(height: 40)
 
             Text("A few things we\u{2019}ll need.")
-                .font(.system(size: 28, weight: .bold))
+                .font(.title3)
+                .fontWeight(.bold)
                 .foregroundStyle(ink)
 
             Spacer().frame(height: 8)
 
             Text("Permissions stay between you and your phone. We never see them.")
-                .font(.system(size: 15))
+                .font(.subheadline)
                 .foregroundStyle(ink.opacity(0.55))
 
             Spacer().frame(height: 32)
@@ -267,7 +270,8 @@ private struct PermissionsScreen: View {
             // Continue button
             Button(action: onContinue) {
                 Text("Continue")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
@@ -322,18 +326,21 @@ private struct PermissionRow: View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Image(systemName: icon)
-                    .font(.system(size: 18))
+                    .font(.system(size: 18)) // design-token size
                     .foregroundStyle(ochre)
                     .frame(width: 32, height: 32)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text(title)
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.subheadline)
+                            .fontWeight(.medium)
                             .foregroundStyle(ink)
                         if let badge {
                             Text(badge)
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.caption2)
+                                .fontWeight(.semibold)
                                 .foregroundStyle(ochre)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -342,7 +349,7 @@ private struct PermissionRow: View {
                         }
                     }
                     Text(subtitle)
-                        .font(.system(size: 13))
+                        .font(.caption)
                         .foregroundStyle(ink.opacity(0.5))
                 }
 
@@ -371,7 +378,8 @@ private struct TopicsScreen: View {
             HStack {
                 Spacer()
                 Button("Skip") { onContinue() }
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.subheadline)
+                    .fontWeight(.medium)
                     .foregroundStyle(ink.opacity(0.45))
             }
             .padding(.top, 16)
@@ -379,13 +387,14 @@ private struct TopicsScreen: View {
             Spacer().frame(height: 40)
 
             Text("What\u{2019}s on your mind these days?")
-                .font(.system(size: 28, weight: .bold))
+                .font(.title3)
+                .fontWeight(.bold)
                 .foregroundStyle(ink)
 
             Spacer().frame(height: 8)
 
             Text("Pick a few. We\u{2019}ll group your captures by these. You can change them anytime.")
-                .font(.system(size: 15))
+                .font(.subheadline)
                 .foregroundStyle(ink.opacity(0.55))
 
             Spacer().frame(height: 28)
@@ -411,7 +420,7 @@ private struct TopicsScreen: View {
 
             // Count
             Text("\(selectedTopics.count) selected \u{00B7} pick up to 6")
-                .font(.system(size: 13))
+                .font(.caption)
                 .foregroundStyle(ink.opacity(0.4))
 
             Spacer()
@@ -419,7 +428,8 @@ private struct TopicsScreen: View {
             // Continue button
             Button(action: onContinue) {
                 Text("Continue")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
@@ -443,7 +453,8 @@ private struct TopicChip: View {
     var body: some View {
         Button(action: action) {
             Text(name)
-                .font(.system(size: 15, weight: .medium))
+                .font(.subheadline)
+                .fontWeight(.medium)
                 .foregroundStyle(isSelected ? .white : ink.opacity(0.7))
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
@@ -485,13 +496,14 @@ private struct LandingScreen: View {
                 Spacer().frame(height: 12)
 
                 Text("What should we call you?")
-                    .font(.system(size: 16))
+                    .font(.subheadline)
                     .foregroundStyle(ink.opacity(0.6))
 
                 Spacer().frame(height: 16)
 
                 TextField("Your first name", text: $nameInput)
-                    .font(.system(size: 20, weight: .medium))
+                    .font(.title3)
+                    .fontWeight(.medium)
                     .foregroundStyle(ink)
                     .padding(.vertical, 12)
                     .padding(.horizontal, 16)
@@ -506,7 +518,8 @@ private struct LandingScreen: View {
 
                 Button(action: saveName) {
                     Text("Continue")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.body)
+                        .fontWeight(.semibold)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
@@ -529,7 +542,7 @@ private struct LandingScreen: View {
             Spacer().frame(height: 20)
 
             Text("Your bin is empty. The best first capture is the one closest to your tongue right now.")
-                .font(.system(size: 16))
+                .font(.subheadline)
                 .foregroundStyle(ink.opacity(0.6))
                 .lineSpacing(4)
 
@@ -538,7 +551,8 @@ private struct LandingScreen: View {
             // Prompt card
             VStack(alignment: .leading, spacing: 12) {
                 Text("A small prompt")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.caption2)
+                    .fontWeight(.medium)
                     .foregroundStyle(ink.opacity(0.4))
                     .tracking(0.5)
 
@@ -557,7 +571,8 @@ private struct LandingScreen: View {
             // CTA
             Button(action: onContinue) {
                 Text("Tap to capture")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
@@ -569,7 +584,7 @@ private struct LandingScreen: View {
 
             Button(action: onContinue) {
                 Text("Later \u{2014} let me look around")
-                    .font(.system(size: 14))
+                    .font(.footnote)
                     .foregroundStyle(ink.opacity(0.4))
                     .frame(maxWidth: .infinity)
             }

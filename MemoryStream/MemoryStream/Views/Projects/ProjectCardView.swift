@@ -38,6 +38,7 @@ struct ProjectCardView: View {
                     let hue = Crucible.Color.topicHue(for: topic)
                     HStack(spacing: 3) {
                         Circle().fill(hue.fg).frame(width: 6, height: 6)
+                            .accessibilityHidden(true)
                         Text(topic)
                             .font(.caption2)
                             .foregroundStyle(hue.fg)

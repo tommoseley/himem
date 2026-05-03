@@ -53,6 +53,7 @@ struct SettingsView: View {
                                 Circle()
                                     .fill(hue.fg)
                                     .frame(width: 10, height: 10)
+                                    .accessibilityHidden(true)
                                 Text(topic.name)
                                     .foregroundStyle(Crucible.Color.ink)
                                 Spacer()
@@ -62,6 +63,7 @@ struct SettingsView: View {
                                 Image(systemName: "chevron.right")
                                     .font(.caption2)
                                     .foregroundStyle(Crucible.Color.ink4)
+                                    .accessibilityHidden(true)
                             }
                         }
                     }
@@ -76,6 +78,7 @@ struct SettingsView: View {
                         HStack {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundStyle(Crucible.Color.accent)
+                                .accessibilityHidden(true)
                             Text("New Topic")
                                 .foregroundStyle(Crucible.Color.accent)
                         }
@@ -95,6 +98,7 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "trash")
                                     .foregroundStyle(Crucible.Color.ink2)
+                                    .accessibilityHidden(true)
                                 Text("Recently Deleted")
                                     .foregroundStyle(Crucible.Color.ink)
                                 Spacer()
@@ -111,6 +115,7 @@ struct SettingsView: View {
                                 Image(systemName: "chevron.right")
                                     .font(.caption2)
                                     .foregroundStyle(Crucible.Color.ink4)
+                                    .accessibilityHidden(true)
                             }
                         }
                     } header: {

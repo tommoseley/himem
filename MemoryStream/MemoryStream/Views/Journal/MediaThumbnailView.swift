@@ -33,10 +33,12 @@ struct MediaThumbnailView: View {
                         .foregroundStyle(.white)
                         .shadow(radius: 2)
                         .padding(4)
+                        .accessibilityHidden(true)
                 }
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(item.mediaType == .video ? "Open video" : "Open photo")
         .task {
             await loadThumbnail()
         }

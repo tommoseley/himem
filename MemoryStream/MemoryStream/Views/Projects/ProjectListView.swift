@@ -19,8 +19,9 @@ struct ProjectListView: View {
             if filteredProjects.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "folder")
-                        .font(.system(size: 40))
+                        .font(.system(size: 40)) // design-token size
                         .foregroundStyle(Crucible.Color.ink4)
+                        .accessibilityHidden(true)
                     Text("No projects yet")
                         .font(.subheadline)
                         .foregroundStyle(Crucible.Color.ink2)
@@ -73,6 +74,7 @@ struct ProjectListView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundStyle(Crucible.Color.accent)
+                                .accessibilityHidden(true)
                             Text("New Project")
                                 .foregroundStyle(Crucible.Color.accent)
                                 .fontWeight(.semibold)

@@ -58,6 +58,7 @@ struct JournalView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "line.3.horizontal.decrease.circle.fill")
                         .foregroundStyle(Crucible.Color.accent)
+                        .accessibilityHidden(true)
                     Text(filter)
                         .font(.subheadline)
                         .fontWeight(.medium)
@@ -69,6 +70,7 @@ struct JournalView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Clear filter")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 4)
@@ -87,6 +89,7 @@ struct JournalView: View {
                         Image(systemName: "text.book.closed")
                             .font(.largeTitle)
                             .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                         Text("No entries yet")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -209,6 +212,7 @@ struct JournalView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(Crucible.Color.danger)
+                        .accessibilityHidden(true)
                     Text(error.errorDescription ?? "Something went wrong")
                         .font(.caption)
                         .foregroundStyle(.white)
@@ -222,6 +226,7 @@ struct JournalView: View {
                             .foregroundStyle(.white.opacity(0.7))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss error")
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -502,12 +507,14 @@ struct JournalHeaderView: View {
                         .font(.body)
                         .foregroundStyle(.primary)
                 }
+                .accessibilityLabel("Search")
 
                 Button(action: onDensityTap) {
                     Image(systemName: density.icon)
                         .font(.body)
                         .foregroundStyle(.primary)
                 }
+                .accessibilityLabel("Card density: \(density.label)")
                 .padding(.leading, 8)
 
                 Button(action: onSettingsTap) {
@@ -515,6 +522,7 @@ struct JournalHeaderView: View {
                         .font(.body)
                         .foregroundStyle(.primary)
                 }
+                .accessibilityLabel("Settings")
                 .padding(.leading, 8)
             }
         }
@@ -550,6 +558,10 @@ struct ComposerFAB: View {
                 onLongPress()
             }
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isOpen ? "Close composer" : "Record memory")
+        .accessibilityHint(isOpen ? "" : "Long-press to open the composer instead")
+        .accessibilityAddTraits(.isButton)
     }
 }
 

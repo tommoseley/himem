@@ -38,11 +38,13 @@ struct EntryCardView: View {
                 HStack(spacing: 6) {
                     if entry.audioFilePath != nil {
                         Circle().fill(Crucible.Color.Media.audio).frame(width: 8, height: 8)
+                            .accessibilityHidden(true)
                     }
                     ForEach(entry.mediaItems) { item in
                         Circle()
                             .fill(dotColor(for: item.mediaType))
                             .frame(width: 8, height: 8)
+                            .accessibilityHidden(true)
                     }
                     if let summary = entry.mediaSummary {
                         Text(summary)
@@ -191,6 +193,7 @@ struct EntryHeaderRow: View {
                     Image(systemName: "mappin")
                         .font(.caption2)
                         .foregroundStyle(Crucible.Color.ink3)
+                        .accessibilityHidden(true)
                     Text(EntryHeaderRow.fitting(locationName))
                         .font(.caption)
                         .foregroundStyle(Crucible.Color.ink2)
@@ -368,6 +371,7 @@ struct InferenceCard: View {
                 Image(systemName: "sparkles")
                     .font(.caption2)
                     .foregroundStyle(Crucible.Color.AI.base)
+                    .accessibilityHidden(true)
                 Text("APP IS INFERRING")
                     .font(.caption2)
                     .fontWeight(.bold)
@@ -384,8 +388,9 @@ struct InferenceCard: View {
                 // Resolved — show status pill
                 HStack(spacing: 6) {
                     Image(systemName: state.iconName)
-                        .font(.system(size: 10))
+                        .font(.system(size: 10)) // design-token size
                         .foregroundStyle(state.color)
+                        .accessibilityHidden(true)
                     Text(state.pillLabel)
                         .font(.caption2)
                         .fontWeight(.medium)
@@ -401,7 +406,8 @@ struct InferenceCard: View {
                     Button(action: { onFeedback(.confirmed) }) {
                         HStack(spacing: 4) {
                             Image(systemName: "sparkles")
-                                .font(.system(size: 10))
+                                .font(.system(size: 10)) // design-token size
+                                .accessibilityHidden(true)
                             Text("Confirm")
                         }
                         .font(.caption)
@@ -538,6 +544,7 @@ struct VoicePlaybackRow: View {
                     Image(systemName: isThisPlaying ? "stop.circle.fill" : "play.circle.fill")
                         .font(.title3)
                         .foregroundStyle(.blue)
+                        .accessibilityHidden(true)
 
                     Text(isThisPlaying ? "Stop playback" : "Play voice entry")
                         .font(.caption)
@@ -554,6 +561,7 @@ struct VoicePlaybackRow: View {
                     .foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Share voice recording")
             .sheet(isPresented: $showShare) {
                 ShareSheet(items: [audioURL])
             }
@@ -644,6 +652,7 @@ struct InferenceDetailSheet: View {
                     HStack(spacing: 8) {
                         Image(systemName: feedbackState.iconName)
                             .foregroundStyle(feedbackState.color)
+                            .accessibilityHidden(true)
                         Text(feedbackState.responseLabel)
                             .font(.subheadline)
                             .foregroundStyle(feedbackState.color)

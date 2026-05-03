@@ -31,6 +31,7 @@ struct MediaViewerView: View {
                         Image(systemName: "photo.slash")
                             .font(.largeTitle)
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         Text("Media no longer available")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)

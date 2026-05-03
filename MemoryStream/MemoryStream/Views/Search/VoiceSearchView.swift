@@ -43,6 +43,7 @@ struct VoiceSearchView: View {
                     .foregroundStyle(Crucible.Color.ink)
                     .padding(Crucible.Space.lg)
             }
+            .accessibilityLabel("Back")
 
             // Vertically-centered listening group
             VStack(spacing: Crucible.Space.lg) {
@@ -51,6 +52,7 @@ struct VoiceSearchView: View {
                     Circle()
                         .fill(Crucible.Color.captureAudio)
                         .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
                     Text("LISTENING")
                         .font(.footnote.weight(.semibold))
                         .tracking(1.6)
@@ -59,10 +61,11 @@ struct VoiceSearchView: View {
 
                 BreathingWaveform(isActive: speechService.isRecording)
                     .frame(width: 160, height: 36)
+                    .accessibilityHidden(true)
 
                 if !speechService.transcribedText.isEmpty {
                     Text("\u{201C}\(speechService.transcribedText)\u{201D}")
-                        .font(.system(size: 22, design: .serif))
+                        .font(.system(.title3, design: .serif))
                         .italic()
                         .foregroundStyle(Crucible.Color.ink)
                         .multilineTextAlignment(.center)
@@ -142,6 +145,7 @@ struct VoiceSearchView: View {
                     .foregroundStyle(Crucible.Color.ink)
                     .padding(Crucible.Space.lg)
             }
+            .accessibilityLabel("Back")
         }
     }
 
@@ -151,6 +155,7 @@ struct VoiceSearchView: View {
                 Circle()
                     .fill(Crucible.Color.captureAudio)
                     .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
                 Text("HEARD")
                     .font(.footnote.weight(.semibold))
                     .tracking(1.6)

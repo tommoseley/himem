@@ -41,6 +41,7 @@ struct ComposerView: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Discard memory")
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 8)
@@ -163,6 +164,7 @@ struct ComposerView: View {
                                     .foregroundStyle(Crucible.Color.ink4)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Remove transcript")
                         }
                         .padding(.horizontal, 4)
                     }
@@ -225,6 +227,7 @@ struct ComposerView: View {
                                     )
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Add photo or video")
                         }
                     }
                 }
@@ -590,6 +593,7 @@ struct MediaTile: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Remove attachment")
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(4)
             }

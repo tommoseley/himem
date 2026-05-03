@@ -12,8 +12,9 @@ struct RecycleBinView: View {
                 if recycledEntries.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "trash")
-                            .font(.system(size: 40))
+                            .font(.system(size: 40)) // design-token size
                             .foregroundStyle(Crucible.Color.ink4)
+                            .accessibilityHidden(true)
                         Text("Recently Deleted is empty")
                             .font(.subheadline)
                             .foregroundStyle(Crucible.Color.ink3)
@@ -137,9 +138,11 @@ private struct GhostCard: View {
                 HStack(spacing: 6) {
                     if entry.hasAudio {
                         Circle().fill(Crucible.Color.ink4).frame(width: 6, height: 6)
+                            .accessibilityHidden(true)
                     }
                     ForEach(entry.mediaItems.indices, id: \.self) { _ in
                         Circle().fill(Crucible.Color.ink4).frame(width: 6, height: 6)
+                            .accessibilityHidden(true)
                     }
                     Text(summary)
                         .font(.caption2)
@@ -160,7 +163,8 @@ private struct GhostCard: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 12))
+                            .font(.system(size: 12)) // design-token size
+                            .accessibilityHidden(true)
                         Text("Restore")
                             .font(.caption)
                             .fontWeight(.semibold)
@@ -174,7 +178,8 @@ private struct GhostCard: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "trash")
-                            .font(.system(size: 12))
+                            .font(.system(size: 12)) // design-token size
+                            .accessibilityHidden(true)
                         Text("Delete")
                             .font(.caption)
                             .fontWeight(.semibold)

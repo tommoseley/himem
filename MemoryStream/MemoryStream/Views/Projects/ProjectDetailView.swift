@@ -73,6 +73,7 @@ struct ProjectDetailView: View {
                                 } label: {
                                     HStack(spacing: 3) {
                                         Circle().fill(hue.fg).frame(width: 6, height: 6)
+                                            .accessibilityHidden(true)
                                         Text(topic)
                                             .font(.caption2)
                                             .fontWeight(.semibold)
@@ -104,6 +105,7 @@ struct ProjectDetailView: View {
                         Image(systemName: "tray")
                             .font(.title)
                             .foregroundStyle(Crucible.Color.ink4)
+                            .accessibilityHidden(true)
                         Text("No memories in this project yet")
                             .font(.subheadline)
                             .foregroundStyle(Crucible.Color.ink3)
@@ -156,7 +158,8 @@ struct ProjectDetailView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 14, weight: .semibold)) // design-token size
+                                .accessibilityHidden(true)
                             Text("Projects")
                         }
                         .foregroundStyle(Crucible.Color.accent)
@@ -178,14 +181,16 @@ struct ProjectDetailView: View {
                     HStack(spacing: 16) {
                         Button { showShareSheet = true } label: {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 15))
+                                .font(.system(size: 15)) // design-token size
                                 .foregroundStyle(Crucible.Color.ink2)
                         }
+                        .accessibilityLabel("Share project")
                         Button { isEditing = true } label: {
                             Image(systemName: "pencil")
-                                .font(.system(size: 15))
+                                .font(.system(size: 15)) // design-token size
                                 .foregroundStyle(Crucible.Color.ink2)
                         }
+                        .accessibilityLabel("Edit project")
                     }
                 }
             }

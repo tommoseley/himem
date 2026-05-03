@@ -496,6 +496,7 @@ struct EntryExpandedView: View {
                                 .font(.system(size: 15))
                                 .foregroundStyle(Crucible.Color.ink3)
                         }
+                        .accessibilityLabel("Delete memory")
                         if !availableProjects.isEmpty {
                             Menu {
                                 ForEach(availableProjects) { project in
@@ -510,17 +511,20 @@ struct EntryExpandedView: View {
                                     .font(.system(size: 15))
                                     .foregroundStyle(Crucible.Color.ink2)
                             }
+                            .accessibilityLabel("Add to project")
                         }
                         Button { showShareSheet = true } label: {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 15))
                                 .foregroundStyle(Crucible.Color.ink2)
                         }
+                        .accessibilityLabel("Share memory")
                         Button { enterEditing() } label: {
                             Image(systemName: "pencil")
                                 .font(.system(size: 15))
                                 .foregroundStyle(Crucible.Color.ink2)
                         }
+                        .accessibilityLabel("Edit memory")
                     }
                 }
             }
