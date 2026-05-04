@@ -5,15 +5,11 @@ enum EntryViewMode {
 }
 
 private enum ExpandedSheet: Identifiable {
-    case camera(CameraPickerView.CaptureMode)
     case newTopic
-    case photoPicker
 
     var id: String {
         switch self {
-        case .camera: return "camera"
         case .newTopic: return "newTopic"
-        case .photoPicker: return "photoPicker"
         }
     }
 }
@@ -54,16 +50,11 @@ struct EntryExpandedView: View {
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
 
-    // Inline staging state (reading mode). Commit flushes these in one batch.
+    /// Append-mode Contribute session. Tapping the Contribute button on this
+    /// view enters this session anchored at the current entry; captures
+    /// persist directly to the entry as they're taken (no inline staging).
+    @StateObject private var contributeSession = ContributeSessionViewModel(lifecycle: EntryLifecycleService())
     @State private var activeSheet: ExpandedSheet?
-    @State private var cameraMode: CameraPickerView.CaptureMode?
-    @State private var showTextAppender = false
-    @State private var pendingTypedText = ""
-    @State private var pendingTranscripts: [String] = []
-    @State private var pendingMedia: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
-    @State private var silenceWatcher = VoiceSilenceWatcher()
-    @State private var pendingAudioAppend = false
-    @State private var showDiscardConfirm = false
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
     private var currentTopics: [String] {
@@ -92,6 +83,7 @@ struct EntryExpandedView: View {
     }
 
     var body: some View {
+        ZStack(alignment: .bottomTrailing) {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // Topic + status row
@@ -357,94 +349,10 @@ struct EntryExpandedView: View {
                     }
                 }
 
-                // Inline staging (reading mode only)
-                if mode == .reading {
-                    if hasPending {
-                        PendingStagingSection(
-                            typedText: pendingTypedText,
-                            transcripts: pendingTranscripts,
-                            media: pendingMedia,
-                            isRecording: speechService.isRecording,
-                            onRemoveMedia: { index in
-                                guard pendingMedia.indices.contains(index) else { return }
-                                pendingMedia.remove(at: index)
-                            },
-                            onRemoveTranscript: { index in
-                                guard pendingTranscripts.indices.contains(index) else { return }
-                                pendingTranscripts.remove(at: index)
-                            },
-                            onClearTypedText: { pendingTypedText = "" }
-                        )
-                    }
-
-                    if showTextAppender {
-                        InlineTextAppender(
-                            text: $pendingTypedText,
-                            onCommit: { showTextAppender = false },
-                            onCancel: {
-                                pendingTypedText = ""
-                                showTextAppender = false
-                            }
-                        )
-                    }
-
-                    if hasPending {
-                        CommitFooter(
-                            pendingItemCount: pendingItemCount,
-                            onCommit: commitPending
-                        )
-                    }
-                }
-
-                // Media toolbar — always visible
-                HStack(spacing: 4) {
-                    ToolbarIcon(
-                        kind: .audio,
-                        icon: speechService.isRecording ? "stop.fill" : "mic",
-                        label: speechService.isRecording ? "Stop" : "Audio",
-                        isActive: speechService.isRecording
-                    ) {
-                        toggleAudioRecording()
-                    }
-                    ToolbarIcon(kind: .text, icon: "pencil", label: "Text", isActive: false) {
-                        showTextAppender = true
-                    }
-                    ToolbarIcon(kind: .photo, icon: "camera", label: "Photo", isActive: false) {
-                        if speechService.isRecording { speechService.stopRecording() }
-                        Task {
-                            if await CameraService.shared.ensureCameraAccess() {
-                                cameraMode = .photo
-                            }
-                        }
-                    }
-                    ToolbarIcon(kind: .video, icon: "video", label: "Video", isActive: false) {
-                        if speechService.isRecording { speechService.stopRecording() }
-                        Task {
-                            if await CameraService.shared.ensureCameraAccess() {
-                                cameraMode = .video
-                            }
-                        }
-                    }
-
-                    // Separator
-                    Rectangle()
-                        .fill(Crucible.Color.divider)
-                        .frame(width: 1, height: 28)
-                        .padding(.horizontal, 2)
-
-                    ToolbarIcon(kind: .photo, icon: "photo.on.rectangle", label: "Attach", isActive: false) {
-                        activeSheet = .photoPicker
-                    }
-                }
-                .padding(4)
-                .background(Crucible.Color.sunk)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Crucible.Color.hairline, lineWidth: 1)
-                )
             }
             .padding(16)
+            // Bottom inset so the floating Contribute button doesn't cover content.
+            .padding(.bottom, 80)
         }
         .background(Crucible.Color.paper)
         .navigationBarBackButtonHidden(true)
@@ -455,11 +363,7 @@ struct EntryExpandedView: View {
                         .foregroundStyle(Crucible.Color.accent)
                 } else {
                     Button {
-                        if hasPending {
-                            showDiscardConfirm = true
-                        } else {
-                            dismiss()
-                        }
+                        dismiss()
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
@@ -549,33 +453,8 @@ struct EntryExpandedView: View {
         } message: {
             Text("This memory will be moved to the Recently Deleted. You can restore it from Settings.")
         }
-        .fullScreenCover(item: $cameraMode) { mode in
-            CameraPickerView(
-                captureMode: mode,
-                onCapture: { result in
-                    cameraMode = nil
-                    Task { @MainActor in
-                        do {
-                            switch result {
-                            case .photo(let image):
-                                let id = try await cameraService.savePhoto(image)
-                                pendingMedia.append((localIdentifier: id, mediaType: .image))
-                            case .video(let url):
-                                let id = try await cameraService.saveVideo(at: url)
-                                pendingMedia.append((localIdentifier: id, mediaType: .video))
-                            }
-                        } catch {
-                            ErrorState.shared.report(.mediaError(error.localizedDescription))
-                        }
-                    }
-                },
-                onDismiss: { cameraMode = nil }
-            )
-        }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
-            case .camera:
-                EmptyView() // Camera now uses fullScreenCover above
             case .newTopic:
                 NewTopicSheet(
                     name: $newTopicName,
@@ -585,103 +464,32 @@ struct EntryExpandedView: View {
                         TopicPaletteStore.shared.set(key: colorKey, for: name)
                     }
                 )
-            case .photoPicker:
-                PhotoLibraryPicker { identifiers in
-                    for id in identifiers {
-                        pendingMedia.append((localIdentifier: id, mediaType: .image))
-                    }
-                    activeSheet = nil
+            }
+        }
+
+            // Contribute button — append to this memory.
+            // Tap = enter Contribute Mode + start voice recording.
+            // Long-press = enter Contribute Mode showing the Action Box.
+            // Hidden while a session is active (entry/exit via Action Box).
+            if !contributeSession.isPresented && mode == .reading {
+                ContributeButton(isOpen: false) {
+                    contributeSession.enter(anchor: .existingMemory(entry.id), autoStartVoice: true)
+                } onLongPress: {
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                    contributeSession.enter(anchor: .existingMemory(entry.id), autoStartVoice: false)
                 }
+                .padding(.trailing, 14)
+                .padding(.bottom, 14)
             }
         }
-        .onChange(of: speechService.isRecording) { wasRecording, isRecording in
-            guard wasRecording, !isRecording else { return }
-            guard pendingAudioAppend else { return }
-            pendingAudioAppend = false
-
-            let transcript = speechService.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let path = speechService.lastRecordingPath {
-                if saveVoiceEntries {
-                    pendingMedia.append((localIdentifier: path, mediaType: .voice))
-                    if !transcript.isEmpty { pendingTranscripts.append(transcript) }
-                } else {
-                    // Primary audio discarded by user preference; derived transcript still retained.
-                    AudioPlayerService.deleteAudio(filename: path)
-                    if !transcript.isEmpty { pendingTranscripts.append(transcript) }
-                }
-            } else if !transcript.isEmpty {
-                pendingTranscripts.append(transcript)
-            }
-            speechService.transcribedText = ""
-            speechService.lastRecordingPath = nil
-        }
-        .confirmationDialog(
-            "Discard pending additions?",
-            isPresented: $showDiscardConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Discard", role: .destructive) {
-                discardPending()
-                dismiss()
-            }
-            Button("Keep editing", role: .cancel) {}
-        }
-    }
-
-    // MARK: - Staging
-
-    private var hasPending: Bool {
-        !pendingMedia.isEmpty
-            || !pendingTranscripts.isEmpty
-            || !pendingTypedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var pendingItemCount: Int {
-        var count = pendingMedia.count
-        count += pendingTranscripts.count
-        if !pendingTypedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
-        return count
-    }
-
-    private func commitPending() {
-        let typed = pendingTypedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let allText = ([typed] + pendingTranscripts)
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n\n")
-        onCommit?(entry.id, allText, pendingMedia)
-        pendingTypedText = ""
-        pendingTranscripts = []
-        pendingMedia = []
-    }
-
-    private func discardPending() {
-        // Delete saved assets we staged but will never commit.
-        for item in pendingMedia {
-            if item.mediaType == .voice {
-                AudioPlayerService.deleteAudio(filename: item.localIdentifier)
-            }
-            // photo/video assets live in the PHPhotoLibrary — leave them alone;
-            // the user may want them outside the app regardless.
-        }
-        pendingTypedText = ""
-        pendingTranscripts = []
-        pendingMedia = []
-    }
-
-    private func toggleAudioRecording() {
-        if speechService.isRecording {
-            silenceWatcher.cancel()
-            speechService.stopRecording()
-        } else {
-            pendingAudioAppend = true
-            speechService.transcribedText = ""
-            speechService.startRecording()
-            silenceWatcher.start(
-                textProvider: { speechService.transcribedText },
-                onSilence: {
-                    speechService.stopRecording()
-                }
+        .sheet(isPresented: $contributeSession.isPresented) {
+            ContributeActionBox(
+                session: contributeSession,
+                speechService: speechService
             )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .interactiveDismissDisabled(true)
         }
     }
 
