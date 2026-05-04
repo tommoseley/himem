@@ -85,6 +85,14 @@ struct EntryDisplayModel: Identifiable {
             }
             return DisplayStatus(text: feedbackState.displayLabel, style: style)
         }
+        // If we have an inference summary and the user hasn't yet given
+        // feedback, the inference card is the answer — suppress any
+        // processing pill regardless of what the task status says.
+        // Defends against state drift where the inference lands but the
+        // task row hasn't merged its `.completed` status into viewContext
+        // yet (CloudKit sync race, context merge timing, or an interrupted
+        // run that left an old task at `.processing`).
+        if inferenceSummary != nil { return nil }
         guard let processingStatus else { return nil }
         switch processingStatus {
         case .pending:
@@ -92,9 +100,6 @@ struct EntryDisplayModel: Identifiable {
         case .processing:
             return DisplayStatus(text: "Parsing now", style: .processing)
         case .completed:
-            if inferenceSummary != nil, feedbackState == nil {
-                return nil // Show inference card instead
-            }
             return DisplayStatus(text: "Processed", style: .confirmed)
         case .failed:
             return DisplayStatus(text: "Failed", style: .failed)
