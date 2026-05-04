@@ -1,11 +1,49 @@
 import Testing
 import Foundation
+import CoreData
 @testable import MemoryStream
 
 /// Tests for `JournalEntry.derivedTitle(from:)` — the content-derived fallback
 /// that fires when the AI didn't return a title and we want something better
 /// than the static "Hands-free capture" placeholder on the card.
+@MainActor
+@Suite(.serialized)
 struct JournalEntryTitleTests {
+
+    // MARK: - End-to-end via displayTitle on a real JournalEntry
+
+    @Test func displayTitle_usesDerivedFallback_whenTitleNilButContentSet() throws {
+        let storage = StorageService(inMemory: true)
+        let entry = try storage.createEntry(content: "", inputType: .voiceInApp)
+        entry.content = "Well this is better can you hear me interesting with the clock only runs when I'm speaking"
+        try storage.viewContext.save()
+
+        // No AI title — should fall back to derived from content, NOT to
+        // the static "Hands-free capture" placeholder.
+        #expect(entry.displayTitle != "Hands-free capture")
+        #expect(entry.displayTitle.contains("Well this is better"))
+    }
+
+    @Test func displayTitle_usesAITitle_whenSet() throws {
+        let storage = StorageService(inMemory: true)
+        let entry = try storage.createEntry(content: "Some content", inputType: .voiceInApp)
+        entry.title = "AI generated title"
+        try storage.viewContext.save()
+
+        #expect(entry.displayTitle == "AI generated title")
+    }
+
+    @Test func displayTitle_usesPlaceholder_whenContentEmpty() throws {
+        let storage = StorageService(inMemory: true)
+        let entry = try storage.createEntry(content: "", inputType: .voiceInApp)
+        try storage.viewContext.save()
+
+        // No content, no title → placeholder fallback per input type.
+        #expect(entry.displayTitle == "Hands-free capture")
+    }
+
+    // MARK: - derivedTitle (pure-string)
+
 
     @Test func emptyContent_returnsNil() {
         #expect(JournalEntry.derivedTitle(from: "") == nil)

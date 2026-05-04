@@ -205,9 +205,11 @@ struct ContributeActionBox: View {
                         Circle()
                             .fill(Color.red)
                             .frame(width: 8, height: 8)
-                        Text(elapsedRecordingLabel)
-                            .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(Crucible.Color.ink2)
+                        ElapsedTimeLabel(
+                            startedAt: recordingStartedAt,
+                            font: .system(size: 13, weight: .semibold)
+                        )
+                        .foregroundStyle(Crucible.Color.ink2)
                     }
                     LiveWaveform()
                         .frame(width: 56, height: 24)
@@ -376,8 +378,10 @@ struct ContributeActionBox: View {
                         Circle()
                             .fill(Color.red)
                             .frame(width: 10, height: 10)
-                        Text(elapsedRecordingLabel)
-                            .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                        ElapsedTimeLabel(
+                            startedAt: recordingStartedAt,
+                            font: .system(size: 14, weight: .semibold)
+                        )
                     }
                     Text("Tap to stop")
                         .font(.caption2.weight(.semibold))
@@ -543,11 +547,31 @@ struct ContributeActionBox: View {
         session.setActiveCapture(nil)
     }
 
-    private var elapsedRecordingLabel: String {
-        let total = Int((recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0).rounded())
-        let minutes = total / 60
-        let seconds = total % 60
-        return String(format: "%d:%02d", minutes, seconds)
+}
+
+// MARK: - Elapsed time label
+
+/// Renders an mm:ss elapsed-time label that ticks once per second using
+/// SwiftUI's TimelineView, independent of any other state changes. Without
+/// this, the label only refreshed when SpeechService published transcript
+/// updates — so it appeared frozen during silence.
+private struct ElapsedTimeLabel: View {
+    let startedAt: Date?
+    let font: Font
+
+    var body: some View {
+        TimelineView(.periodic(from: startedAt ?? Date(), by: 1.0)) { context in
+            Text(label(for: context.date))
+                .font(font.monospacedDigit())
+        }
+    }
+
+    private func label(for now: Date) -> String {
+        guard let startedAt else { return "0:00" }
+        let total = Int(now.timeIntervalSince(startedAt).rounded(.down))
+        let m = max(0, total) / 60
+        let s = max(0, total) % 60
+        return String(format: "%d:%02d", m, s)
     }
 }
 
