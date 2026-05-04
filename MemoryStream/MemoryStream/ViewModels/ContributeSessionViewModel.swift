@@ -105,12 +105,39 @@ final class ContributeSessionViewModel: ObservableObject {
     /// Exits the session, preserving captured content. For new-memory anchors,
     /// applies the silent-discard rule (trivial-clip cases delete the entry
     /// without surfacing anything to the user).
+    ///
+    /// On the keep path, folds all in-session voice transcripts + typed notes
+    /// into entry.content and enqueues a ProcessingTask so the AI engine
+    /// extracts entities/topics. Without this step the entry would land in
+    /// the journal feed with no content text and no inferences.
     func exitDone() {
         if shouldSilentlyDiscard {
             performDiscard()
             return
         }
+        if let entryId {
+            let added = finalizeContent
+            // captureLocation only on new-memory finalization — append flows
+            // already inherit the existing entry's location (or its absence).
+            let isNewMemoryAnchor: Bool = { if case .newMemory = anchor { return true } else { return false } }()
+            lifecycle.finalizeContribution(entryId: entryId, addedContent: added, captureLocation: isNewMemoryAnchor)
+        }
         teardown()
+    }
+
+    /// Joins voice-capture transcripts and typed notes into a single string
+    /// to fold into entry.content. Voice transcripts come first (since
+    /// short-press auto-starts voice — they tend to be the user's first
+    /// thought), then typed notes in capture order.
+    private var finalizeContent: String {
+        var parts: [String] = []
+        for capture in sessionCaptures {
+            if let transcript = capture.transcript, !transcript.isEmpty {
+                parts.append(transcript)
+            }
+        }
+        parts.append(contentsOf: sessionTypedNotes)
+        return parts.joined(separator: "\n\n")
     }
 
     /// Asks for confirmation if the session created any captures and the user

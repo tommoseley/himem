@@ -40,6 +40,39 @@ final class EntryLifecycleService {
         return try storage.createMediaReference(for: entry, localIdentifier: localIdentifier, mediaType: mediaType)
     }
 
+    /// Finalizes a Contribute Mode session against an existing entry. Appends
+    /// the joined transcripts + typed notes to entry.content (separated from
+    /// any pre-existing content with a blank line), enqueues a ProcessingTask
+    /// so the AI engine extracts entities/topics, and captures location for
+    /// new-memory finalization.
+    ///
+    /// Mirrors `save(...)` for the persist-as-you-go flow: media references
+    /// were already attached one-by-one as they were captured, so the only
+    /// work left at session-end is to fold the text in and kick off
+    /// processing.
+    func finalizeContribution(entryId: UUID, addedContent: String, captureLocation shouldCaptureLocation: Bool) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            let trimmed = addedContent.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                let existing = entry.content
+                if existing.isEmpty {
+                    entry.content = trimmed
+                } else {
+                    entry.content = existing + "\n\n" + trimmed
+                }
+            }
+            try storage.save(context: storage.viewContext)
+            let _ = try storage.createProcessingTask(for: entry)
+            processEntry(entry)
+            if shouldCaptureLocation {
+                captureLocation(for: entry)
+            }
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
     /// Deletes the specified MediaReferences (and their cached thumbnails, and
     /// for voice refs, the underlying audio file) by id, regardless of which
     /// entry they belong to. Used by Contribute Mode's X-cancel to remove only
