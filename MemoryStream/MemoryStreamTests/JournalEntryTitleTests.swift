@@ -42,6 +42,31 @@ struct JournalEntryTitleTests {
         #expect(entry.displayTitle == "Hands-free capture")
     }
 
+    @Test func displayTitle_prefersInferenceSummary_overContent() throws {
+        // Mirrors the user's actual on-device case:
+        //   - entry.title nil (AI didn't return a title)
+        //   - entry.content is the user's transcript ("As an interesting quote…")
+        //   - InferenceSummary attached with descriptive third-person text
+        // Expected: title derived from the inference summary, NOT a quote
+        // of the content.
+        let storage = StorageService(inMemory: true)
+        let entry = try storage.createEntry(content: "", inputType: .voiceInApp)
+        entry.content = "As an interesting quote that was on the screen year notice where you notice"
+
+        let inference = InferenceSummary(context: storage.viewContext)
+        inference.id = UUID()
+        inference.entryId = entry.id
+        inference.summaryText = "This entry appears to be a fragment or incomplete thought about a quote or notice, but lacks sufficient clear information to extract actionable entities."
+        inference.createdAt = Date()
+        inference.entry = entry
+        try storage.viewContext.save()
+
+        // Title should be derived from "This entry appears…" (the inference),
+        // not "As an interesting quote…" (the user's words).
+        #expect(entry.displayTitle.hasPrefix("This entry appears"))
+        #expect(!entry.displayTitle.contains("As an interesting"))
+    }
+
     // MARK: - derivedTitle (pure-string)
 
 
