@@ -29,16 +29,22 @@ struct ContributeActionBox: View {
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @State private var recordingStartedAt: Date? = nil
     @State private var cameraMode: CameraPickerView.CaptureMode? = nil
+    @State private var isMountingCamera = false
     @State private var showTextEditor = false
     @State private var textDraft: String = ""
     @State private var selectedTileMedia: MediaDisplayItem? = nil
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                tilesArea
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                actionBox
+            ZStack {
+                VStack(spacing: 0) {
+                    tilesArea
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    actionBox
+                }
+                if isMountingCamera {
+                    cameraMountingOverlay
+                }
             }
             .background(Crucible.Color.paper)
             .toolbar {
@@ -86,6 +92,11 @@ struct ContributeActionBox: View {
                 },
                 onDismiss: { cameraMode = nil }
             )
+            .onAppear {
+                // Cover is on screen; user can see the camera UI now, drop
+                // the mounting spinner.
+                isMountingCamera = false
+            }
         }
         .fullScreenCover(isPresented: $showTextEditor) {
             ContributeTextEditor(
@@ -301,6 +312,32 @@ struct ContributeActionBox: View {
         }
     }
 
+    // MARK: - Camera mounting overlay
+
+    private var cameraMountingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .ignoresSafeArea()
+            VStack(spacing: 12) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .scaleEffect(1.4)
+                    .tint(Crucible.Color.accent)
+                Text("Opening camera…")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Crucible.Color.ink2)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 22)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+        }
+        .transition(.opacity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Opening camera")
+    }
+
     // MARK: - Action Box
 
     private var actionBox: some View {
@@ -425,9 +462,18 @@ struct ContributeActionBox: View {
 
     private func openCamera(mode: CameraPickerView.CaptureMode) {
         if speechService.isRecording { speechService.stopRecording() }
+        // Camera mount takes ~1-2s on first open (AVCaptureSession setup). Show
+        // a mid-page spinner so the user knows something's happening between
+        // the tap and the camera UI sliding up.
+        isMountingCamera = true
         Task {
-            if await CameraService.shared.ensureCameraAccess() {
+            let granted = await CameraService.shared.ensureCameraAccess()
+            if granted {
                 cameraMode = mode
+                // Spinner clears when CameraPickerView's .onAppear fires below
+                // (cover finished presenting).
+            } else {
+                isMountingCamera = false
             }
         }
     }
