@@ -94,6 +94,44 @@ struct ContributeActionBox: View {
                 }
             )
         }
+        .sheet(isPresented: $session.showDiscardConfirmation) {
+            DiscardConfirmationSheet(
+                summary: discardSummary,
+                onDiscard: { mute in
+                    session.confirmDiscard(muteFutureConfirmations: mute)
+                },
+                onKeep: {
+                    session.showDiscardConfirmation = false
+                }
+            )
+            .presentationDetents([.medium])
+        }
+    }
+
+    /// Plain-language enumeration of what's about to be discarded — used in
+    /// the X confirmation. Pluralization handled per type; voice clips and
+    /// transcribed/typed text segments are listed separately because the
+    /// user thinks of them as different things.
+    private var discardSummary: String {
+        let voice = session.sessionCaptures.filter { $0.mediaType == .voice }.count
+        let photo = session.sessionCaptures.filter { $0.mediaType == .image }.count
+        let video = session.sessionCaptures.filter { $0.mediaType == .video }.count
+        let text = session.sessionTextSegments.count
+
+        var parts: [String] = []
+        if voice > 0 { parts.append("\(voice) voice clip" + (voice == 1 ? "" : "s")) }
+        if photo > 0 { parts.append("\(photo) photo" + (photo == 1 ? "" : "s")) }
+        if video > 0 { parts.append("\(video) video" + (video == 1 ? "" : "s")) }
+        if text > 0 { parts.append("\(text) note" + (text == 1 ? "" : "s")) }
+
+        switch parts.count {
+        case 0: return "this contribution"
+        case 1: return parts[0]
+        case 2: return "\(parts[0]) and \(parts[1])"
+        default:
+            let head = parts.dropLast().joined(separator: ", ")
+            return "\(head), and \(parts.last!)"
+        }
     }
 
     // MARK: - Tiles
@@ -347,6 +385,75 @@ struct ContributeActionBox: View {
         let minutes = total / 60
         let seconds = total % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+// MARK: - Discard confirmation
+
+/// Sheet shown when the user taps X with a non-empty session and hasn't muted
+/// the prompt. Enumerates what's about to be discarded ("1 voice clip and 3
+/// photos…") and offers a "Don't ask me this" toggle whose state is committed
+/// only on Discard. Cancel closes the sheet without writing the toggle.
+private struct DiscardConfirmationSheet: View {
+    let summary: String
+    let onDiscard: (Bool) -> Void
+    let onKeep: () -> Void
+
+    @State private var muteFuture: Bool = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Discard contribution?")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Crucible.Color.ink)
+                    Text("You've added \(summary) to this memory. Discarding can't be undone.")
+                        .font(.subheadline)
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Don't ask me this again", isOn: $muteFuture)
+                        .font(.callout)
+                        .tint(Crucible.Color.accent)
+                    Text("You can re-enable this in Settings → Confirmations.")
+                        .font(.caption2)
+                        .foregroundStyle(Crucible.Color.ink4)
+                }
+
+                Spacer()
+
+                VStack(spacing: 10) {
+                    Button(role: .destructive) {
+                        onDiscard(muteFuture)
+                    } label: {
+                        Text("Discard")
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Crucible.Color.danger)
+
+                    Button {
+                        onKeep()
+                    } label: {
+                        Text("Keep editing")
+                            .fontWeight(.medium)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Crucible.Color.ink2)
+                }
+            }
+            .padding(20)
+            .background(Crucible.Color.paper)
+            .navigationTitle("")
+            .navigationBarHidden(true)
+        }
     }
 }
 
