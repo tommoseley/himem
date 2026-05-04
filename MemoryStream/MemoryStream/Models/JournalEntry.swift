@@ -52,6 +52,14 @@ extension JournalEntry {
 
     var displayTitle: String {
         if let title, !title.isEmpty { return title }
+        // Prefer the AI's inference summary over the raw content. The
+        // inference is third-person and descriptive ("This entry reflects
+        // on…") which reads as a real title; using content directly reads
+        // as a quote of the user's words.
+        if let summaryText = inferenceSummary?.summaryText,
+           let derived = Self.derivedTitle(from: summaryText), !derived.isEmpty {
+            return derived
+        }
         if let derived = Self.derivedTitle(from: content), !derived.isEmpty {
             return derived
         }
