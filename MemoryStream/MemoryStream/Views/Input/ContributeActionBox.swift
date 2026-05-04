@@ -29,6 +29,8 @@ struct ContributeActionBox: View {
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @State private var recordingStartedAt: Date? = nil
     @State private var cameraMode: CameraPickerView.CaptureMode? = nil
+    @State private var showTextEditor = false
+    @State private var textDraft: String = ""
 
     var body: some View {
         NavigationStack {
@@ -74,6 +76,22 @@ struct ContributeActionBox: View {
                     handleCameraCapture(result)
                 },
                 onDismiss: { cameraMode = nil }
+            )
+        }
+        .fullScreenCover(isPresented: $showTextEditor) {
+            ContributeTextEditor(
+                draft: $textDraft,
+                onCommit: { text in
+                    session.trackTextSegment(text)
+                    textDraft = ""
+                    session.setActiveCapture(nil)
+                    showTextEditor = false
+                },
+                onCancel: {
+                    textDraft = ""
+                    session.setActiveCapture(nil)
+                    showTextEditor = false
+                }
             )
         }
     }
@@ -244,9 +262,14 @@ struct ContributeActionBox: View {
         case .video:
             openCamera(mode: .video)
         case .text:
-            // Wired in a subsequent commit.
-            break
+            openTextEditor()
         }
+    }
+
+    private func openTextEditor() {
+        if speechService.isRecording { speechService.stopRecording() }
+        session.setActiveCapture(.text)
+        showTextEditor = true
     }
 
     private func openCamera(mode: CameraPickerView.CaptureMode) {
@@ -324,6 +347,50 @@ struct ContributeActionBox: View {
         let minutes = total / 60
         let seconds = total % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+// MARK: - Text Editor
+
+/// Full-screen text editor presented from Contribute Mode. Done returns the
+/// (trimmed, non-empty) text to the caller as a session text tile; Cancel
+/// discards the draft. Symmetric with how camera takes the screen during
+/// photo/video capture.
+private struct ContributeTextEditor: View {
+    @Binding var draft: String
+    let onCommit: (String) -> Void
+    let onCancel: () -> Void
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $draft)
+                .focused($isFocused)
+                .padding(16)
+                .background(Crucible.Color.paper)
+                .scrollContentBackground(.hidden)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") { onCancel() }
+                            .foregroundStyle(Crucible.Color.ink2)
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if trimmed.isEmpty {
+                                onCancel()
+                            } else {
+                                onCommit(trimmed)
+                            }
+                        }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Crucible.Color.accent)
+                    }
+                }
+                .navigationTitle("Add text")
+                .navigationBarTitleDisplayMode(.inline)
+                .onAppear { isFocused = true }
+        }
     }
 }
 
