@@ -33,6 +33,7 @@ struct ContributeActionBox: View {
     @State private var showTextEditor = false
     @State private var textDraft: String = ""
     @State private var selectedTileMedia: MediaDisplayItem? = nil
+    @State private var showLibraryPicker = false
 
     var body: some View {
         NavigationStack {
@@ -125,6 +126,18 @@ struct ContributeActionBox: View {
                 }
             )
             .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showLibraryPicker) {
+            PhotoLibraryPicker { identifiers in
+                handleLibraryAttach(identifiers)
+                showLibraryPicker = false
+            }
+        }
+    }
+
+    private func handleLibraryAttach(_ identifiers: [String]) {
+        for id in identifiers {
+            session.persistMediaCapture(localIdentifier: id, mediaType: .image)
         }
     }
 
@@ -342,6 +355,15 @@ struct ContributeActionBox: View {
 
     // MARK: - Action Box
 
+    /// True when this session is appending to an existing memory (rather
+    /// than creating a new one). The Attach-from-library button shows only
+    /// in this mode — it's for surfacing an old photo against a memory the
+    /// user is already inside.
+    private var isAppendingToExisting: Bool {
+        if case .existingMemory = session.anchor { return true }
+        return false
+    }
+
     private var actionBox: some View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
@@ -351,6 +373,9 @@ struct ContributeActionBox: View {
             HStack(spacing: 10) {
                 actionButton(.video, label: "Video", icon: "video.fill")
                 actionButton(.text, label: "Note", icon: "text.alignleft")
+            }
+            if isAppendingToExisting {
+                actionButton(.attach, label: "Attach", icon: "photo.on.rectangle")
             }
         }
         .padding(16)
@@ -363,7 +388,7 @@ struct ContributeActionBox: View {
         )
     }
 
-    private enum ActionKind { case voice, photo, video, text }
+    private enum ActionKind { case voice, photo, video, text, attach }
 
     private func actionButton(_ kind: ActionKind, label: String, icon: String) -> some View {
         let isActive = isActiveCapture(kind)
@@ -455,6 +480,9 @@ struct ContributeActionBox: View {
             openCamera(mode: .video)
         case .text:
             openTextEditor()
+        case .attach:
+            if speechService.isRecording { speechService.stopRecording() }
+            showLibraryPicker = true
         }
     }
 
