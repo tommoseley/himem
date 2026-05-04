@@ -68,6 +68,14 @@ struct ContributeActionBox: View {
             guard wasRecording, !isRecording else { return }
             handleRecordingStopped()
         }
+        .onAppear {
+            // session.enter(autoStartVoice: true) marks activeCapture=.voice
+            // but doesn't itself touch SpeechService — the view owns that.
+            // Honor the auto-start now that we're on screen.
+            if session.activeCapture == .voice && !speechService.isRecording {
+                startVoiceRecording()
+            }
+        }
         .fullScreenCover(item: $cameraMode) { mode in
             CameraPickerView(
                 captureMode: mode,
@@ -353,12 +361,16 @@ struct ContributeActionBox: View {
             // persists what we've got.
             speechService.stopRecording()
         } else {
-            recordingStartedAt = Date()
-            session.setActiveCapture(.voice)
-            speechService.transcribedText = ""
-            speechService.lastRecordingPath = nil
-            speechService.startRecording()
+            startVoiceRecording()
         }
+    }
+
+    private func startVoiceRecording() {
+        recordingStartedAt = Date()
+        session.setActiveCapture(.voice)
+        speechService.transcribedText = ""
+        speechService.lastRecordingPath = nil
+        speechService.startRecording()
     }
 
     private func handleRecordingStopped() {
