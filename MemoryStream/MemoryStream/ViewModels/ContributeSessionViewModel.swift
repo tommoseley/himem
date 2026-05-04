@@ -146,6 +146,21 @@ final class ContributeSessionViewModel: ObservableObject {
         sessionTextSegments.append(trimmed)
     }
 
+    /// Persists a photo or video capture: lazy-creates the entry if needed,
+    /// attaches the corresponding MediaReference, tracks it for X-cleanup.
+    /// `localIdentifier` is the PhotoKit asset id returned by
+    /// `CameraService.savePhoto` / `saveVideo`. `duration` is non-nil for
+    /// videos so the silent-discard rule can apply.
+    func persistMediaCapture(localIdentifier: String, mediaType: MediaReference.MediaType, duration: TimeInterval? = nil) {
+        do {
+            let entryId = try ensureEntryForCapture(inputType: .camera)
+            let ref = try lifecycle.createMediaReference(forEntryId: entryId, localIdentifier: localIdentifier, mediaType: mediaType)
+            trackCapture(id: ref.id, mediaType: mediaType, duration: duration)
+        } catch {
+            ErrorState.shared.report(.mediaError(error.localizedDescription))
+        }
+    }
+
     /// Persists a voice capture: lazy-creates the entry if needed, attaches a
     /// `.voice` MediaReference, tracks it for X-cleanup, and stores the
     /// transcript as a session text segment. If `saveAudio` is false (user

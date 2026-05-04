@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 /// Contribute Mode's primary surface. Replaces the legacy ComposerView in the
 /// new-memory and append-to-memory flows.
@@ -27,6 +28,7 @@ struct ContributeActionBox: View {
     @ObservedObject var speechService: SpeechService
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @State private var recordingStartedAt: Date? = nil
+    @State private var cameraMode: CameraPickerView.CaptureMode? = nil
 
     var body: some View {
         NavigationStack {
@@ -63,6 +65,16 @@ struct ContributeActionBox: View {
             // Recording transitioned from on → off: persist the result.
             guard wasRecording, !isRecording else { return }
             handleRecordingStopped()
+        }
+        .fullScreenCover(item: $cameraMode) { mode in
+            CameraPickerView(
+                captureMode: mode,
+                onCapture: { result in
+                    cameraMode = nil
+                    handleCameraCapture(result)
+                },
+                onDismiss: { cameraMode = nil }
+            )
         }
     }
 
@@ -227,9 +239,50 @@ struct ContributeActionBox: View {
         switch kind {
         case .voice:
             toggleVoiceRecording()
-        case .photo, .video, .text:
-            // Wired in subsequent commits.
+        case .photo:
+            openCamera(mode: .photo)
+        case .video:
+            openCamera(mode: .video)
+        case .text:
+            // Wired in a subsequent commit.
             break
+        }
+    }
+
+    private func openCamera(mode: CameraPickerView.CaptureMode) {
+        if speechService.isRecording { speechService.stopRecording() }
+        Task {
+            if await CameraService.shared.ensureCameraAccess() {
+                cameraMode = mode
+            }
+        }
+    }
+
+    private func handleCameraCapture(_ result: CameraPickerView.CaptureResult) {
+        Task { @MainActor in
+            do {
+                switch result {
+                case .photo(let image):
+                    let id = try await CameraService.shared.savePhoto(image)
+                    session.persistMediaCapture(localIdentifier: id, mediaType: .image)
+                case .video(let url):
+                    let id = try await CameraService.shared.saveVideo(at: url)
+                    let duration = await videoDuration(at: url)
+                    session.persistMediaCapture(localIdentifier: id, mediaType: .video, duration: duration)
+                }
+            } catch {
+                ErrorState.shared.report(.mediaError(error.localizedDescription))
+            }
+        }
+    }
+
+    private func videoDuration(at url: URL) async -> TimeInterval? {
+        let asset = AVURLAsset(url: url)
+        do {
+            let cm = try await asset.load(.duration)
+            return cm.seconds.isFinite ? cm.seconds : nil
+        } catch {
+            return nil
         }
     }
 
