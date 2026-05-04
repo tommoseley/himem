@@ -283,7 +283,7 @@ struct JournalView: View {
                     // Enter Contribute Mode and seed the search query as a
                     // text tile so the user can keep adding captures around it.
                     contributeSession.enter(anchor: .newMemory, autoStartVoice: false)
-                    contributeSession.trackTextSegment(text)
+                    contributeSession.trackTypedNote(text)
                 }
             )
         }

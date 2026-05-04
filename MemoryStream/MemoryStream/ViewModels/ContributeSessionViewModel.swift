@@ -35,10 +35,19 @@ final class ContributeSessionViewModel: ObservableObject {
     struct SessionCapture: Equatable {
         let id: UUID
         let mediaType: MediaReference.MediaType
+        /// PhotoKit local identifier (image / video) or audio file path
+        /// (voice). Used to render the tile (look up the asset) and play
+        /// audio for voice captures.
+        let osIdentifier: String
         /// Duration in seconds for `.voice` / `.video`, `nil` otherwise.
         /// Populated by the UI layer when the recording stops; required for
         /// the silent-discard rule to apply.
         let duration: TimeInterval?
+        /// For `.voice` captures only: the transcript produced by SFSpeech.
+        /// Travels with the voice clip — the discard summary counts a voice
+        /// capture as one "voice clip", not as a "note", so transcripts are
+        /// not double-counted.
+        let transcript: String?
     }
 
     // MARK: - Published state
@@ -50,7 +59,11 @@ final class ContributeSessionViewModel: ObservableObject {
     @Published private(set) var anchor: Anchor = .newMemory
     @Published private(set) var entryId: UUID? = nil
     @Published private(set) var sessionCaptures: [SessionCapture] = []
-    @Published private(set) var sessionTextSegments: [String] = []
+    /// Notes added via the **Note** button. Voice transcripts live on the
+    /// voice SessionCapture itself, not here, so a voice clip with a
+    /// transcript is counted as one capture (not as a clip + a note) in the
+    /// discard summary.
+    @Published private(set) var sessionTypedNotes: [String] = []
     @Published private(set) var activeCapture: ActiveCapture? = nil
     @Published var showDiscardConfirmation = false
 
@@ -83,7 +96,7 @@ final class ContributeSessionViewModel: ObservableObject {
             self.entryId = id
         }
         self.sessionCaptures = []
-        self.sessionTextSegments = []
+        self.sessionTypedNotes = []
         self.activeCapture = autoStartVoice ? .voice : nil
         self.showDiscardConfirmation = false
         self.isPresented = true
@@ -139,14 +152,29 @@ final class ContributeSessionViewModel: ObservableObject {
         return entry.id
     }
 
-    func trackCapture(id: UUID, mediaType: MediaReference.MediaType, duration: TimeInterval? = nil) {
-        sessionCaptures.append(SessionCapture(id: id, mediaType: mediaType, duration: duration))
+    func trackCapture(
+        id: UUID,
+        mediaType: MediaReference.MediaType,
+        osIdentifier: String,
+        duration: TimeInterval? = nil,
+        transcript: String? = nil
+    ) {
+        sessionCaptures.append(SessionCapture(
+            id: id,
+            mediaType: mediaType,
+            osIdentifier: osIdentifier,
+            duration: duration,
+            transcript: transcript
+        ))
     }
 
-    func trackTextSegment(_ text: String) {
+    /// Adds a typed note (Note button). Voice transcripts are NOT routed here
+    /// — they travel with the voice SessionCapture so the discard summary
+    /// can count voice clips and notes separately.
+    func trackTypedNote(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        sessionTextSegments.append(trimmed)
+        sessionTypedNotes.append(trimmed)
     }
 
     /// Persists a photo or video capture: lazy-creates the entry if needed,
@@ -158,31 +186,39 @@ final class ContributeSessionViewModel: ObservableObject {
         do {
             let entryId = try ensureEntryForCapture(inputType: .camera)
             let ref = try lifecycle.createMediaReference(forEntryId: entryId, localIdentifier: localIdentifier, mediaType: mediaType)
-            trackCapture(id: ref.id, mediaType: mediaType, duration: duration)
+            trackCapture(id: ref.id, mediaType: mediaType, osIdentifier: localIdentifier, duration: duration)
         } catch {
             ErrorState.shared.report(.mediaError(error.localizedDescription))
         }
     }
 
     /// Persists a voice capture: lazy-creates the entry if needed, attaches a
-    /// `.voice` MediaReference, tracks it for X-cleanup, and stores the
-    /// transcript as a session text segment. If `saveAudio` is false (user
-    /// pref `saveVoiceEntries: false`), the audio file is deleted but the
-    /// transcript is still recorded.
+    /// `.voice` MediaReference whose transcript travels with it on the
+    /// SessionCapture struct (so the discard summary can count clips and
+    /// notes separately). If `saveAudio` is false (user pref
+    /// `saveVoiceEntries: false`), the audio file is deleted and the
+    /// transcript is stored as a typed note instead — there's no voice
+    /// capture for it to attach to.
     func persistVoiceCapture(audioPath: String?, transcript: String, duration: TimeInterval, saveAudio: Bool) {
+        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            if let audioPath {
-                if saveAudio {
-                    let entryId = try ensureEntryForCapture(inputType: .voiceInApp)
-                    let ref = try lifecycle.createMediaReference(forEntryId: entryId, localIdentifier: audioPath, mediaType: .voice)
-                    trackCapture(id: ref.id, mediaType: .voice, duration: duration)
-                } else {
-                    AudioPlayerService.deleteAudio(filename: audioPath)
+            if let audioPath, saveAudio {
+                let entryId = try ensureEntryForCapture(inputType: .voiceInApp)
+                let ref = try lifecycle.createMediaReference(forEntryId: entryId, localIdentifier: audioPath, mediaType: .voice)
+                trackCapture(
+                    id: ref.id,
+                    mediaType: .voice,
+                    osIdentifier: audioPath,
+                    duration: duration,
+                    transcript: trimmedTranscript.isEmpty ? nil : trimmedTranscript
+                )
+            } else {
+                if let audioPath { AudioPlayerService.deleteAudio(filename: audioPath) }
+                if !trimmedTranscript.isEmpty {
+                    // No voice clip to attach to → the transcript becomes
+                    // a standalone typed note.
+                    trackTypedNote(trimmedTranscript)
                 }
-            }
-            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                trackTextSegment(trimmed)
             }
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
@@ -200,16 +236,16 @@ final class ContributeSessionViewModel: ObservableObject {
     // MARK: - Predicates
 
     private var isSessionEmpty: Bool {
-        sessionCaptures.isEmpty && sessionTextSegments.isEmpty
+        sessionCaptures.isEmpty && sessionTypedNotes.isEmpty
     }
 
     /// Spec: a new-memory session that ends with **exactly one** voice/video
     /// capture, that capture **shorter than 2 seconds**, and **no other
-    /// captures** (no photos, no text), is silently discarded. Anything else
+    /// captures** (no photos, no notes), is silently discarded. Anything else
     /// is preserved. Existing-memory sessions never silent-discard.
     private var shouldSilentlyDiscard: Bool {
         guard case .newMemory = anchor else { return false }
-        guard sessionTextSegments.isEmpty else { return false }
+        guard sessionTypedNotes.isEmpty else { return false }
         guard sessionCaptures.count == 1 else { return false }
 
         let only = sessionCaptures[0]
@@ -239,7 +275,7 @@ final class ContributeSessionViewModel: ObservableObject {
         showDiscardConfirmation = false
         activeCapture = nil
         sessionCaptures = []
-        sessionTextSegments = []
+        sessionTypedNotes = []
         entryId = nil
     }
 }

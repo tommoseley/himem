@@ -31,6 +31,7 @@ struct ContributeActionBox: View {
     @State private var cameraMode: CameraPickerView.CaptureMode? = nil
     @State private var showTextEditor = false
     @State private var textDraft: String = ""
+    @State private var selectedTileMedia: MediaDisplayItem? = nil
 
     var body: some View {
         NavigationStack {
@@ -90,7 +91,7 @@ struct ContributeActionBox: View {
             ContributeTextEditor(
                 draft: $textDraft,
                 onCommit: { text in
-                    session.trackTextSegment(text)
+                    session.trackTypedNote(text)
                     textDraft = ""
                     session.setActiveCapture(nil)
                     showTextEditor = false
@@ -124,7 +125,7 @@ struct ContributeActionBox: View {
         let voice = session.sessionCaptures.filter { $0.mediaType == .voice }.count
         let photo = session.sessionCaptures.filter { $0.mediaType == .image }.count
         let video = session.sessionCaptures.filter { $0.mediaType == .video }.count
-        let text = session.sessionTextSegments.count
+        let text = session.sessionTypedNotes.count
 
         var parts: [String] = []
         if voice > 0 { parts.append("\(voice) voice clip" + (voice == 1 ? "" : "s")) }
@@ -147,15 +148,24 @@ struct ContributeActionBox: View {
     private var tilesArea: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                if session.sessionCaptures.isEmpty && session.sessionTextSegments.isEmpty {
+                liveRecordingCard
+                if !hasAnyCapture && !speechService.isRecording {
                     emptyState
                 } else {
-                    captureTiles
-                    textTiles
+                    voiceCaptureCards
+                    photoVideoGrid
+                    typedNoteCards
                 }
             }
             .padding(16)
         }
+        .fullScreenCover(item: $selectedTileMedia) { item in
+            MediaViewerView(item: item)
+        }
+    }
+
+    private var hasAnyCapture: Bool {
+        !session.sessionCaptures.isEmpty || !session.sessionTypedNotes.isEmpty
     }
 
     private var emptyState: some View {
@@ -172,38 +182,104 @@ struct ContributeActionBox: View {
         .padding(.top, 60)
     }
 
-    private var captureTiles: some View {
-        // Three-up grid using GeometryReader so MediaTile (square aspect) fits.
-        GeometryReader { geo in
-            let cols = 3
-            let spacing: CGFloat = 8
-            let tileSize = (geo.size.width - spacing * CGFloat(cols - 1)) / CGFloat(cols)
+    // MARK: Live recording card
 
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.fixed(tileSize), spacing: spacing), count: cols),
-                spacing: spacing
-            ) {
-                ForEach(session.sessionCaptures, id: \.id) { capture in
-                    MediaTile(
-                        localIdentifier: capture.id.uuidString, // placeholder until capture wiring lands
-                        mediaType: capture.mediaType
-                    )
-                    .frame(width: tileSize, height: tileSize)
+    @ViewBuilder
+    private var liveRecordingCard: some View {
+        if speechService.isRecording {
+            HStack(alignment: .top, spacing: 10) {
+                // Pulsing red dot + animated waveform
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 8, height: 8)
+                        Text(elapsedRecordingLabel)
+                            .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(Crucible.Color.ink2)
+                    }
+                    LiveWaveform()
+                        .frame(width: 56, height: 24)
+                }
+                .frame(width: 60)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(speechService.transcribedText.isEmpty
+                         ? "Listening…"
+                         : speechService.transcribedText)
+                        .font(.callout)
+                        .foregroundStyle(speechService.transcribedText.isEmpty
+                                         ? Crucible.Color.ink3 : Crucible.Color.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .multilineTextAlignment(.leading)
                 }
             }
+            .padding(12)
+            .background(Crucible.Color.card)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Crucible.Color.Media.audio.opacity(0.6), lineWidth: 1.5)
+            )
         }
-        .frame(height: tileGridHeight)
     }
 
-    private var tileGridHeight: CGFloat {
-        // Three columns, rows of tiles ~110pt tall. Cap so the grid doesn't
-        // dominate the screen on a long session.
-        let rows = max(1, (session.sessionCaptures.count + 2) / 3)
+    // MARK: Voice capture cards
+
+    @ViewBuilder
+    private var voiceCaptureCards: some View {
+        ForEach(session.sessionCaptures.filter { $0.mediaType == .voice }, id: \.id) { capture in
+            VoiceContributionCard(capture: capture)
+        }
+    }
+
+    // MARK: Photo + video grid
+
+    @ViewBuilder
+    private var photoVideoGrid: some View {
+        let visualCaptures = session.sessionCaptures.filter { $0.mediaType == .image || $0.mediaType == .video }
+        if !visualCaptures.isEmpty {
+            GeometryReader { geo in
+                let cols = 3
+                let spacing: CGFloat = 8
+                let tileSize = (geo.size.width - spacing * CGFloat(cols - 1)) / CGFloat(cols)
+
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.fixed(tileSize), spacing: spacing), count: cols),
+                    spacing: spacing
+                ) {
+                    ForEach(visualCaptures, id: \.id) { capture in
+                        MediaTile(
+                            localIdentifier: capture.osIdentifier,
+                            mediaType: capture.mediaType,
+                            onTap: {
+                                selectedTileMedia = MediaDisplayItem(
+                                    id: capture.id,
+                                    localIdentifier: capture.osIdentifier,
+                                    mediaType: capture.mediaType,
+                                    thumbnailCacheFilename: nil,
+                                    isAccessible: true
+                                )
+                            }
+                        )
+                        .frame(width: tileSize, height: tileSize)
+                    }
+                }
+            }
+            .frame(height: gridHeight(for: visualCaptures.count))
+        }
+    }
+
+    private func gridHeight(for visualCount: Int) -> CGFloat {
+        let rows = max(1, (visualCount + 2) / 3)
         return min(CGFloat(rows) * 116, 360)
     }
 
-    private var textTiles: some View {
-        ForEach(Array(session.sessionTextSegments.enumerated()), id: \.offset) { _, text in
+    // MARK: Typed notes
+
+    @ViewBuilder
+    private var typedNoteCards: some View {
+        ForEach(Array(session.sessionTypedNotes.enumerated()), id: \.offset) { _, text in
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "text.alignleft")
                     .font(.caption)
@@ -235,7 +311,7 @@ struct ContributeActionBox: View {
             }
             HStack(spacing: 10) {
                 actionButton(.video, label: "Video", icon: "video.fill")
-                actionButton(.text, label: "Text", icon: "text.alignleft")
+                actionButton(.text, label: "Note", icon: "text.alignleft")
             }
         }
         .padding(16)
@@ -400,6 +476,88 @@ struct ContributeActionBox: View {
     }
 }
 
+// MARK: - Voice contribution card
+
+/// Wide card showing the transcript of a finished voice clip with a small
+/// audio-tile playback control on the right. Tap the audio tile to play.
+/// If there's no transcript, falls back to a duration label.
+private struct VoiceContributionCard: View {
+    let capture: ContributeSessionViewModel.SessionCapture
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                if let transcript = capture.transcript, !transcript.isEmpty {
+                    Text(transcript)
+                        .font(.callout)
+                        .foregroundStyle(Crucible.Color.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .multilineTextAlignment(.leading)
+                } else {
+                    Text("Voice clip · \(durationLabel)")
+                        .font(.callout)
+                        .foregroundStyle(Crucible.Color.ink3)
+                        .italic()
+                }
+            }
+
+            // Inline audio tile — small, tap to play. Reuses MediaTile's
+            // voice rendering (waveform + tap-to-play via AudioPlayerService).
+            MediaTile(
+                localIdentifier: capture.osIdentifier,
+                mediaType: .voice
+            )
+            .frame(width: 52, height: 52)
+        }
+        .padding(12)
+        .background(Crucible.Color.card)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Crucible.Color.hairline, lineWidth: 1)
+        )
+    }
+
+    private var durationLabel: String {
+        let total = Int((capture.duration ?? 0).rounded())
+        let minutes = total / 60
+        let seconds = total % 60
+        return minutes > 0 ? String(format: "%d:%02d", minutes, seconds) : "\(seconds)s"
+    }
+}
+
+// MARK: - Live waveform
+
+/// Animated bar waveform shown while a voice capture is live. Purely
+/// decorative — does not actually sample audio levels (cheap, predictable,
+/// and avoids the complexity of an audio metering tap).
+private struct LiveWaveform: View {
+    @State private var phase: Double = 0
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(0..<10, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Crucible.Color.Media.audio)
+                    .frame(width: 3, height: barHeight(for: i))
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                phase = 1
+            }
+        }
+    }
+
+    private func barHeight(for index: Int) -> CGFloat {
+        let base: CGFloat = 6
+        let amplitude: CGFloat = 14
+        let phaseOffset = Double(index) * 0.6
+        let wave = sin(phase * .pi * 2 + phaseOffset)
+        return base + amplitude * CGFloat(abs(wave))
+    }
+}
+
 // MARK: - Discard confirmation
 
 /// Sheet shown when the user taps X with a non-empty session and hasn't muted
@@ -506,7 +664,7 @@ private struct ContributeTextEditor: View {
                         .foregroundStyle(Crucible.Color.accent)
                     }
                 }
-                .navigationTitle("Add text")
+                .navigationTitle("Add a note")
                 .navigationBarTitleDisplayMode(.inline)
                 .onAppear { isFocused = true }
         }
@@ -515,7 +673,7 @@ private struct ContributeTextEditor: View {
 
 #Preview("Empty") {
     ContributeActionBox(
-        session: previewSession(captures: [], textSegments: []),
+        session: previewSession(captures: [], typedNotes: []),
         speechService: SpeechService()
     )
 }
@@ -524,12 +682,12 @@ private struct ContributeTextEditor: View {
     ContributeActionBox(
         session: previewSession(
             captures: [
-                .init(id: UUID(), mediaType: .voice, duration: 8.4),
-                .init(id: UUID(), mediaType: .image, duration: nil),
-                .init(id: UUID(), mediaType: .image, duration: nil),
-                .init(id: UUID(), mediaType: .video, duration: 21.2)
+                .init(id: UUID(), mediaType: .voice, osIdentifier: "voice1", duration: 8.4, transcript: "The tomatoes in bed 3 are coming in earlier than last year. Two cherry plants showed first flowers yesterday."),
+                .init(id: UUID(), mediaType: .image, osIdentifier: "img1", duration: nil, transcript: nil),
+                .init(id: UUID(), mediaType: .image, osIdentifier: "img2", duration: nil, transcript: nil),
+                .init(id: UUID(), mediaType: .video, osIdentifier: "vid1", duration: 21.2, transcript: nil)
             ],
-            textSegments: ["The tomatoes in bed 3 are coming in earlier than last year."]
+            typedNotes: ["Remember to mulch bed 5 before the weekend."]
         ),
         speechService: SpeechService()
     )
@@ -538,7 +696,7 @@ private struct ContributeTextEditor: View {
 @MainActor
 private func previewSession(
     captures: [ContributeSessionViewModel.SessionCapture],
-    textSegments: [String]
+    typedNotes: [String]
 ) -> ContributeSessionViewModel {
     let storage = StorageService(inMemory: true)
     let lifecycle = EntryLifecycleService(storage: storage, processingEngine: nil)
@@ -547,11 +705,11 @@ private func previewSession(
         userDefaults: UserDefaults(suiteName: "ContributeActionBox.preview")!
     )
     session.enter(anchor: .newMemory)
-    for capture in captures {
-        session.trackCapture(id: capture.id, mediaType: capture.mediaType, duration: capture.duration)
+    for c in captures {
+        session.trackCapture(id: c.id, mediaType: c.mediaType, osIdentifier: c.osIdentifier, duration: c.duration, transcript: c.transcript)
     }
-    for text in textSegments {
-        session.trackTextSegment(text)
+    for n in typedNotes {
+        session.trackTypedNote(n)
     }
     return session
 }

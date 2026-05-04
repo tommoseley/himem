@@ -38,7 +38,7 @@ struct ContributeSessionViewModelTests {
         #expect(session.isPresented == true)
         #expect(session.entryId == nil)
         #expect(session.sessionCaptures.isEmpty)
-        #expect(session.sessionTextSegments.isEmpty)
+        #expect(session.sessionTypedNotes.isEmpty)
         #expect(session.activeCapture == nil)
         #expect(session.anchor == .newMemory)
     }
@@ -104,7 +104,7 @@ struct ContributeSessionViewModelTests {
         session.enter(anchor: .newMemory)
         let entryId = try session.ensureEntryForCapture(inputType: .voiceInApp)
         let captureId = UUID()
-        session.trackCapture(id: captureId, mediaType: .voice, duration: 1.4)
+        session.trackCapture(id: captureId, mediaType: .voice, osIdentifier: "test-id", duration: 1.4)
 
         session.exitDone()
 
@@ -116,7 +116,7 @@ struct ContributeSessionViewModelTests {
         let (storage, _, _, session) = makeFixture()
         session.enter(anchor: .newMemory)
         let entryId = try session.ensureEntryForCapture(inputType: .camera)
-        session.trackCapture(id: UUID(), mediaType: .video, duration: 1.0)
+        session.trackCapture(id: UUID(), mediaType: .video, osIdentifier: "test-id", duration: 1.0)
 
         session.exitDone()
         #expect(!entryExists(entryId, in: storage))
@@ -126,7 +126,7 @@ struct ContributeSessionViewModelTests {
         let (storage, _, _, session) = makeFixture()
         session.enter(anchor: .newMemory)
         let entryId = try session.ensureEntryForCapture(inputType: .voiceInApp)
-        session.trackCapture(id: UUID(), mediaType: .voice, duration: 5.2)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "test-id", duration: 5.2)
 
         session.exitDone()
         #expect(entryExists(entryId, in: storage))
@@ -136,8 +136,8 @@ struct ContributeSessionViewModelTests {
         let (storage, _, _, session) = makeFixture()
         session.enter(anchor: .newMemory)
         let entryId = try session.ensureEntryForCapture(inputType: .voiceInApp)
-        session.trackCapture(id: UUID(), mediaType: .voice, duration: 1.4)
-        session.trackCapture(id: UUID(), mediaType: .image, duration: nil)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "test-id", duration: 1.4)
+        session.trackCapture(id: UUID(), mediaType: .image, osIdentifier: "test-id", duration: nil)
 
         session.exitDone()
         #expect(entryExists(entryId, in: storage))
@@ -147,8 +147,8 @@ struct ContributeSessionViewModelTests {
         let (storage, _, _, session) = makeFixture()
         session.enter(anchor: .newMemory)
         let entryId = try session.ensureEntryForCapture(inputType: .voiceInApp)
-        session.trackCapture(id: UUID(), mediaType: .voice, duration: 1.4)
-        session.trackTextSegment("a thought")
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "test-id", duration: 1.4)
+        session.trackTypedNote("a thought")
 
         session.exitDone()
         #expect(entryExists(entryId, in: storage))
@@ -160,7 +160,7 @@ struct ContributeSessionViewModelTests {
         let (storage, lifecycle, _, session) = makeFixture()
         let preExisting = try lifecycle.createEmptyEntry(inputType: .typed)
         session.enter(anchor: .existingMemory(preExisting.id))
-        session.trackCapture(id: UUID(), mediaType: .voice, duration: 0.5)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "test-id", duration: 0.5)
 
         session.exitDone()
         #expect(entryExists(preExisting.id, in: storage))
@@ -181,7 +181,7 @@ struct ContributeSessionViewModelTests {
         let (_, _, _, session) = makeFixture()
         session.enter(anchor: .newMemory)
         _ = try session.ensureEntryForCapture(inputType: .voiceInApp)
-        session.trackCapture(id: UUID(), mediaType: .voice, duration: 5.0)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "test-id", duration: 5.0)
 
         session.requestExitDiscard()
 
@@ -194,7 +194,7 @@ struct ContributeSessionViewModelTests {
         defaults.set(true, forKey: ContributeSessionViewModel.muteDiscardConfirmationKey)
         session.enter(anchor: .newMemory)
         let entryId = try session.ensureEntryForCapture(inputType: .voiceInApp)
-        session.trackCapture(id: UUID(), mediaType: .voice, duration: 5.0)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "test-id", duration: 5.0)
 
         session.requestExitDiscard()
 
@@ -207,7 +207,7 @@ struct ContributeSessionViewModelTests {
         let (_, _, defaults, session) = makeFixture()
         session.enter(anchor: .newMemory)
         _ = try session.ensureEntryForCapture(inputType: .voiceInApp)
-        session.trackCapture(id: UUID(), mediaType: .voice, duration: 5.0)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "test-id", duration: 5.0)
         session.requestExitDiscard()
 
         session.confirmDiscard(muteFutureConfirmations: true)
@@ -219,7 +219,7 @@ struct ContributeSessionViewModelTests {
         let (_, _, defaults, session) = makeFixture()
         session.enter(anchor: .newMemory)
         _ = try session.ensureEntryForCapture(inputType: .voiceInApp)
-        session.trackCapture(id: UUID(), mediaType: .voice, duration: 5.0)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "test-id", duration: 5.0)
         session.requestExitDiscard()
 
         session.confirmDiscard(muteFutureConfirmations: false)
@@ -236,7 +236,7 @@ struct ContributeSessionViewModelTests {
         session.enter(anchor: .existingMemory(preExisting.id))
         // Track a synthetic capture id — VM doesn't need a real Core Data
         // row to make its keep-or-delete-the-entry decision.
-        session.trackCapture(id: UUID(), mediaType: .image)
+        session.trackCapture(id: UUID(), mediaType: .image, osIdentifier: "test-id")
 
         session.requestExitDiscard()
         session.confirmDiscard(muteFutureConfirmations: false)
