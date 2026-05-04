@@ -140,11 +140,14 @@ final class ContributeSessionViewModel: ObservableObject {
         return parts.joined(separator: "\n\n")
     }
 
-    /// Asks for confirmation if the session created any captures and the user
-    /// hasn't muted the prompt. Empty sessions and muted users go straight to
-    /// discard.
+    /// Asks for confirmation if the session has substantive content and the
+    /// user hasn't muted the prompt. Sessions with only trivial captures
+    /// (e.g. an autostart-voice clip <2s with no transcript that landed
+    /// because the user immediately tapped X) discard silently — the
+    /// confirmation exists to prevent losing real work, not to interrogate
+    /// fat-fingers.
     func requestExitDiscard() {
-        if isSessionEmpty {
+        if !hasSubstantiveContent {
             performDiscard()
             return
         }
@@ -264,6 +267,26 @@ final class ContributeSessionViewModel: ObservableObject {
 
     private var isSessionEmpty: Bool {
         sessionCaptures.isEmpty && sessionTypedNotes.isEmpty
+    }
+
+    /// True if the session contains anything the user would care about
+    /// losing on X. Photos, videos, and typed notes always count
+    /// (deliberate gestures). Voice clips count when they have a
+    /// transcript OR ran for at least 2 seconds — a short transcript-less
+    /// voice clip is the auto-start-then-immediate-X failure mode and
+    /// shouldn't trigger a confirmation.
+    private var hasSubstantiveContent: Bool {
+        if !sessionTypedNotes.isEmpty { return true }
+        for capture in sessionCaptures {
+            switch capture.mediaType {
+            case .image, .video:
+                return true
+            case .voice:
+                if let transcript = capture.transcript, !transcript.isEmpty { return true }
+                if let duration = capture.duration, duration >= 2.0 { return true }
+            }
+        }
+        return false
     }
 
     /// Spec: a new-memory session that ends with **exactly one** voice/video

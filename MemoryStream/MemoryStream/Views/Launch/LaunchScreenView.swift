@@ -58,7 +58,7 @@ struct LaunchScreenView: View {
 
                 // Wordmark — expands to "Hi, Memories!" on sync complete
                 HStack(alignment: .firstTextBaseline, spacing: wordmarkExpanded ? 0 : 4) {
-                    Text(wordmarkExpanded ? "Hiok," : "Hi")
+                    Text(wordmarkExpanded ? "Hi," : "Hi")
                         .font(.custom("Georgia-Bold", size: 56))
                         .foregroundStyle(ink)
                     Text(wordmarkExpanded ? "Memories!" : "Mem")

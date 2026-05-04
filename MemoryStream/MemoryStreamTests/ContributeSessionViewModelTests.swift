@@ -177,6 +177,46 @@ struct ContributeSessionViewModelTests {
         #expect(session.showDiscardConfirmation == false)
     }
 
+    @Test func requestExitDiscard_trivialAutostartVoice_exitsSilently() async throws {
+        // Tap FAB → autostart voice → immediately tap X (no transcript,
+        // <2s clip). Should NOT prompt — we're not losing real work.
+        let (_, _, _, session) = makeFixture()
+        session.enter(anchor: .newMemory, autoStartVoice: true)
+        _ = try session.ensureEntryForCapture(inputType: .voiceInApp)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "trivial.m4a", duration: 0.4, transcript: nil)
+
+        session.requestExitDiscard()
+
+        #expect(session.showDiscardConfirmation == false)
+        #expect(session.isPresented == false)
+    }
+
+    @Test func requestExitDiscard_voiceWithTranscript_promptsEvenIfShort() async throws {
+        // A short voice clip with a transcript still represents real
+        // intent — confirm before discarding.
+        let (_, _, _, session) = makeFixture()
+        session.enter(anchor: .newMemory)
+        _ = try session.ensureEntryForCapture(inputType: .voiceInApp)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "short.m4a", duration: 1.2, transcript: "Mulch bed 3")
+
+        session.requestExitDiscard()
+
+        #expect(session.showDiscardConfirmation == true)
+    }
+
+    @Test func requestExitDiscard_longVoiceNoTranscript_promptsAnyway() async throws {
+        // Speech recognition can fail on a real recording. A 5-second clip
+        // with no transcript is still real audio the user produced.
+        let (_, _, _, session) = makeFixture()
+        session.enter(anchor: .newMemory)
+        _ = try session.ensureEntryForCapture(inputType: .voiceInApp)
+        session.trackCapture(id: UUID(), mediaType: .voice, osIdentifier: "long.m4a", duration: 5.4, transcript: nil)
+
+        session.requestExitDiscard()
+
+        #expect(session.showDiscardConfirmation == true)
+    }
+
     @Test func requestExitDiscard_nonEmptySession_opensConfirmation() async throws {
         let (_, _, _, session) = makeFixture()
         session.enter(anchor: .newMemory)
