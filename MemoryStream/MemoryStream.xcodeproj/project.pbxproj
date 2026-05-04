@@ -32,8 +32,6 @@
 		A100000025 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000026 /* KeychainService.swift */; };
 		A100000026 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000027 /* SettingsView.swift */; };
 		A100000027 /* NewTopicSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028 /* NewTopicSheet.swift */; };
-		A100000201 /* MediaTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000201 /* MediaTile.swift */; };
-		A100000202 /* ContributeActionBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000202 /* ContributeActionBox.swift */; };
 		A100000028 /* TopicApprovalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000029 /* TopicApprovalService.swift */; };
 		A100000029 /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000030 /* AudioPlayerService.swift */; };
 		A100000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000031 /* Assets.xcassets */; };
@@ -71,6 +69,8 @@
 		A100000094 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000094 /* LocationService.swift */; };
 		A100000095 /* PlacemarkFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000095 /* PlacemarkFormatter.swift */; };
 		A100000200 /* ContributeSessionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000200 /* ContributeSessionViewModel.swift */; };
+		A100000201 /* MediaTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000201 /* MediaTile.swift */; };
+		A100000202 /* ContributeActionBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000202 /* ContributeActionBox.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
@@ -110,8 +110,6 @@
 		B100000026 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B100000027 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B100000028 /* NewTopicSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTopicSheet.swift; sourceTree = "<group>"; };
-		B100000201 /* MediaTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTile.swift; sourceTree = "<group>"; };
-		B100000202 /* ContributeActionBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributeActionBox.swift; sourceTree = "<group>"; };
 		B100000029 /* TopicApprovalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicApprovalService.swift; sourceTree = "<group>"; };
 		B100000030 /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		B100000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -151,6 +149,8 @@
 		B100000094 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		B100000095 /* PlacemarkFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacemarkFormatter.swift; sourceTree = "<group>"; };
 		B100000200 /* ContributeSessionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributeSessionViewModel.swift; sourceTree = "<group>"; };
+		B100000201 /* MediaTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTile.swift; sourceTree = "<group>"; };
+		B100000202 /* ContributeActionBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributeActionBox.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };

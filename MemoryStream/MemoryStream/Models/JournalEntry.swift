@@ -52,12 +52,40 @@ extension JournalEntry {
 
     var displayTitle: String {
         if let title, !title.isEmpty { return title }
+        if let derived = Self.derivedTitle(from: content), !derived.isEmpty {
+            return derived
+        }
         switch inputTypeEnum {
         case .siri, .voiceInApp: return "Hands-free capture"
         case .typed: return "Journal entry"
         case .camera: return "Photo / Video capture"
         case .composed: return "Memory"
         }
+    }
+
+    /// Falls back to the entry's content when the AI didn't return a title.
+    /// Takes the first sentence or first ~10 words, trimmed and truncated to
+    /// keep the card title compact. Returns nil for empty content (caller
+    /// then uses the input-type fallback).
+    static func derivedTitle(from content: String) -> String? {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        // First sentence / line: split on . ! ? newline.
+        let terminators: Set<Character> = [".", "!", "?", "\n"]
+        let firstSentence: String
+        if let idx = trimmed.firstIndex(where: { terminators.contains($0) }) {
+            firstSentence = String(trimmed[..<idx])
+        } else {
+            firstSentence = trimmed
+        }
+        let cleaned = firstSentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
+
+        // Soft word cap so long single sentences don't dominate the card.
+        let words = cleaned.split(separator: " ", omittingEmptySubsequences: true)
+        if words.count <= 10 { return cleaned }
+        return words.prefix(10).joined(separator: " ") + "…"
     }
 }
 
