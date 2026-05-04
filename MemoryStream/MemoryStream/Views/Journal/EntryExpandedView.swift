@@ -160,7 +160,7 @@ struct EntryExpandedView: View {
 
                     Spacer()
 
-                    if let status = entry.displayStatus {
+                    if let status = entry.displayStatus, entry.inferenceSummary == nil {
                         StatusBadge(text: status.text, style: status.style)
                     }
                 }

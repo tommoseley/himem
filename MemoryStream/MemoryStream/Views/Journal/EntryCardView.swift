@@ -170,7 +170,11 @@ struct EntryHeaderRow: View {
 
                 Spacer()
 
-                if let status = entry.displayStatus {
+                // Belt + suspenders: the inference card itself is the user-
+                // facing signal once an inference has landed; never show a
+                // status pill alongside it. Defends against any case where
+                // displayStatus's own suppression might miss a stale state.
+                if let status = entry.displayStatus, entry.inferenceSummary == nil {
                     if let onStatusTap {
                         Button(action: onStatusTap) {
                             StatusBadge(text: status.text, style: status.style)
