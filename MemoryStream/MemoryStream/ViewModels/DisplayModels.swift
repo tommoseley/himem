@@ -120,9 +120,34 @@ struct EntryDisplayModel: Identifiable {
     var hasAudio: Bool { audioFilePath != nil || mediaItems.contains { $0.mediaType == .voice } }
 }
 
-extension EntryDisplayModel: Hashable {
-    static func == (lhs: EntryDisplayModel, rhs: EntryDisplayModel) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+extension EntryDisplayModel: Equatable {
+    /// Field-by-field equality so SwiftUI's diffing actually re-renders cards
+    /// when the underlying data updates. The previous id-only equality was
+    /// short-circuiting renders: when `JournalViewModel` replaced the entries
+    /// array with snapshots holding fresh `displayTitle` / `inferenceSummary` /
+    /// `processingStatus` / etc., SwiftUI saw `lhs.id == rhs.id`, declared the
+    /// structs identical, and skipped re-rendering — so the card kept showing
+    /// the very first snapshot's data until a cold launch forced a re-render.
+    static func == (lhs: EntryDisplayModel, rhs: EntryDisplayModel) -> Bool {
+        lhs.id == rhs.id
+            && lhs.displayTitle == rhs.displayTitle
+            && lhs.content == rhs.content
+            && lhs.inputType == rhs.inputType
+            && lhs.createdAt == rhs.createdAt
+            && lhs.processingStatus == rhs.processingStatus
+            && lhs.progressDescription == rhs.progressDescription
+            && lhs.tags == rhs.tags
+            && lhs.topicNames == rhs.topicNames
+            && lhs.audioFilePath == rhs.audioFilePath
+            && lhs.inferenceSummary == rhs.inferenceSummary
+            && lhs.feedbackState == rhs.feedbackState
+            && lhs.userCorrection == rhs.userCorrection
+            && lhs.mediaItems == rhs.mediaItems
+            && lhs.recycledAt == rhs.recycledAt
+            && lhs.latitude == rhs.latitude
+            && lhs.longitude == rhs.longitude
+            && lhs.locationName == rhs.locationName
+    }
 }
 
 extension EntryDisplayModel {
@@ -160,7 +185,7 @@ struct DisplayStatus {
 
 // MARK: - Media Display Model
 
-struct MediaDisplayItem: Identifiable {
+struct MediaDisplayItem: Identifiable, Equatable {
     let id: UUID
     let localIdentifier: String
     let mediaType: MediaReference.MediaType
@@ -170,7 +195,7 @@ struct MediaDisplayItem: Identifiable {
 
 // MARK: - Tag Display Model
 
-struct TagDisplayModel: Identifiable {
+struct TagDisplayModel: Identifiable, Equatable {
     let id: UUID
     let value: String
     let entityType: ExtractedEntity.EntityType
