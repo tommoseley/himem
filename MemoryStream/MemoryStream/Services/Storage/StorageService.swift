@@ -5,17 +5,27 @@ import CloudKit
 final class StorageService {
     static let shared = StorageService()
 
-    let container: NSPersistentCloudKitContainer
+    /// Base type so the test path can use a plain `NSPersistentContainer`
+    /// (no CloudKit). Production assigns an `NSPersistentCloudKitContainer`
+    /// here; everything we call on it (`viewContext`,
+    /// `newBackgroundContext`, `persistentStoreCoordinator`,
+    /// `persistentStoreDescriptions`) is on the base class. CloudKit-only
+    /// APIs like `initializeCloudKitSchema` get a downcast inside the init
+    /// that needs them.
+    let container: NSPersistentContainer
 
     var viewContext: NSManagedObjectContext {
         container.viewContext
     }
 
-    /// Loaded once per process. Without this, multiple in-memory test
-    /// containers (one per @Test method) each load their own copy of the
-    /// model, producing "Class X is implemented in two NSManagedObjectModels"
-    /// warnings that escalate to test-process crashes when many CoreData
-    /// suites run in parallel.
+    /// Test-only model cache. Multiple `init(inMemory:)` calls during a
+    /// parallel test run each used to load their own copy of the model,
+    /// producing "Class X is implemented in two NSManagedObjectModels"
+    /// warnings that escalate to test-process crashes. Not used in
+    /// production — the singleton lets `NSPersistentCloudKitContainer(name:)`
+    /// auto-discover and configure the model itself, which it does in a
+    /// way that the explicit-model overload doesn't quite match for the
+    /// CloudKit-mirroring entities (`NSCKImportOperation` and friends).
     private static let cachedModel: NSManagedObjectModel = {
         guard let url = Bundle.main.url(forResource: "MemoryStream", withExtension: "momd"),
               let model = NSManagedObjectModel(contentsOf: url) else {
@@ -25,7 +35,8 @@ final class StorageService {
     }()
 
     private init() {
-        container = NSPersistentCloudKitContainer(name: "MemoryStream", managedObjectModel: Self.cachedModel)
+        let cloudKitContainer = NSPersistentCloudKitContainer(name: "MemoryStream")
+        container = cloudKitContainer
         let description = container.persistentStoreDescriptions.first!
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
@@ -57,7 +68,7 @@ final class StorageService {
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
 
         #if DEBUG
-        try? container.initializeCloudKitSchema(options: [])
+        try? cloudKitContainer.initializeCloudKitSchema(options: [])
         #endif
 
         // Listen for remote changes from other devices
@@ -72,13 +83,15 @@ final class StorageService {
         }
     }
 
-    /// Test-only initializer: in-memory Core Data store with no disk persistence.
+    /// Test-only initializer: in-memory Core Data store with no disk
+    /// persistence and no CloudKit. Tests don't exercise CloudKit, so plain
+    /// `NSPersistentContainer` is the right type — no mirroring entities,
+    /// faster init, no possibility of CloudKit-related model warnings.
     init(inMemory: Bool) {
         precondition(inMemory, "Use .shared for on-disk storage")
-        container = NSPersistentCloudKitContainer(name: "MemoryStream", managedObjectModel: Self.cachedModel)
+        container = NSPersistentContainer(name: "MemoryStream", managedObjectModel: Self.cachedModel)
         let description = NSPersistentStoreDescription()
         description.type = NSInMemoryStoreType
-        // No CloudKit options for in-memory test store
         container.persistentStoreDescriptions = [description]
         container.loadPersistentStores { _, error in
             if let error {
