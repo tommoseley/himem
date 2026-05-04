@@ -23,6 +23,7 @@ class JournalViewModel: ObservableObject {
     private let storage: StorageService
     private let lifecycle: EntryLifecycleService
     private var contextObserver: AnyCancellable?
+    private var remoteChangeObserver: AnyCancellable?
     private var foregroundObserver: AnyCancellable?
     private var recomputeCancellables = Set<AnyCancellable>()
 
@@ -30,6 +31,7 @@ class JournalViewModel: ObservableObject {
         self.storage = storage
         self.lifecycle = EntryLifecycleService(storage: storage, processingEngine: processingEngine)
         observeStorageChanges()
+        observeRemoteChanges()
         observeForeground()
         observeFilterInputs()
         loadEntries()
@@ -53,6 +55,28 @@ class JournalViewModel: ObservableObject {
         contextObserver = NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
             object: storage.viewContext
+        )
+        .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
+        .sink { [weak self] _ in
+            self?.loadEntries()
+        }
+    }
+
+    /// `NSPersistentStoreRemoteChange` fires when a background context save
+    /// propagates through the persistent store coordinator (e.g. when the
+    /// ProcessingEngine finishes its analysis on a bg context and saves the
+    /// inference + completed task). The viewContext's auto-merge picks the
+    /// change up, BUT the StorageService also calls `refreshAllObjects()` in
+    /// the same notification path, which turns viewContext objects into
+    /// faults without firing `ObjectsDidChange`. As a result, the
+    /// observeStorageChanges path above doesn't reload, and the journal feed
+    /// keeps showing the EntryDisplayModel snapshot from before the bg save.
+    /// This observer closes the loop so the feed reloads as soon as the
+    /// remote change lands.
+    private func observeRemoteChanges() {
+        remoteChangeObserver = NotificationCenter.default.publisher(
+            for: NSNotification.Name.NSPersistentStoreRemoteChange,
+            object: storage.container.persistentStoreCoordinator
         )
         .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
         .sink { [weak self] _ in
