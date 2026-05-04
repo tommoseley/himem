@@ -468,22 +468,20 @@ struct EntryExpandedView: View {
         }
 
             // Contribute button — append to this memory.
-            // Tap = quick voice (the appending-while-in-a-memory case is the
-            // garden-thought scenario; voice-first stays the dominant pattern
-            // here even though the home FAB now leads with the chooser).
-            // Long-press = open the Action Box without auto-recording.
+            // Same gesture mapping as the home FAB (tap = Action Box,
+            // long-press = quick voice) for consistency across the app.
             // Hidden while a session is active (entry/exit via Action Box).
             if !contributeSession.isPresented && mode == .reading {
                 ContributeButton(
                     isOpen: false,
-                    idleIcon: "mic.fill",
+                    idleIcon: "plus",
                     accessibilityLabel: "Add to memory",
-                    accessibilityHint: "Tap to start recording. Long-press to choose a capture type."
+                    accessibilityHint: "Tap to choose a capture type. Long-press for quick voice capture."
                 ) {
-                    contributeSession.enter(anchor: .existingMemory(entry.id), autoStartVoice: true)
+                    contributeSession.enter(anchor: .existingMemory(entry.id), autoStartVoice: false)
                 } onLongPress: {
                     UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                    contributeSession.enter(anchor: .existingMemory(entry.id), autoStartVoice: false)
+                    contributeSession.enter(anchor: .existingMemory(entry.id), autoStartVoice: true)
                 }
                 .padding(.trailing, 14)
                 .padding(.bottom, 14)
