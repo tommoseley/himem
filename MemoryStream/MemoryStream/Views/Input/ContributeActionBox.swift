@@ -44,7 +44,7 @@ struct ContributeActionBox: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        session.requestExitDiscard()
+                        handleDiscardTap()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
@@ -54,7 +54,7 @@ struct ContributeActionBox: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
-                        session.exitDone()
+                        handleDoneTap()
                     }
                     .fontWeight(.semibold)
                     .foregroundStyle(Crucible.Color.accent)
@@ -374,6 +374,35 @@ struct ContributeActionBox: View {
     }
 
     // MARK: - Capture handlers
+
+    /// Done while a recording is live needs to stop and synchronously persist
+    /// the in-flight recording before exiting — otherwise the audio file gets
+    /// finalized to disk but the session never tracks it as a capture, and
+    /// the user is left with a no-op tap on Done.
+    private func handleDoneTap() {
+        finalizeActiveRecordingIfNeeded()
+        session.exitDone()
+    }
+
+    /// X while recording: stop the recording and persist it so the session's
+    /// discard path knows to delete the just-created audio file. (If we
+    /// don't persist, the session has nothing to clean up and the audio
+    /// file is leaked on disk.)
+    private func handleDiscardTap() {
+        finalizeActiveRecordingIfNeeded()
+        session.requestExitDiscard()
+    }
+
+    /// Synchronously stops any active recording and runs the persistence
+    /// path inline — avoids the .onChange race where the view tears down
+    /// before the isRecording false-transition handler fires.
+    /// `SpeechService.stopRecording()` is synchronous and populates
+    /// `lastRecordingPath` before returning, so this is safe.
+    private func finalizeActiveRecordingIfNeeded() {
+        guard speechService.isRecording else { return }
+        speechService.stopRecording()
+        handleRecordingStopped()
+    }
 
     private func handleActionTap(_ kind: ActionKind) {
         switch kind {

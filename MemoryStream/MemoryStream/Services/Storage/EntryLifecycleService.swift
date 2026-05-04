@@ -40,10 +40,11 @@ final class EntryLifecycleService {
         return try storage.createMediaReference(for: entry, localIdentifier: localIdentifier, mediaType: mediaType)
     }
 
-    /// Deletes the specified MediaReferences (and their cached thumbnails) by
-    /// id, regardless of which entry they belong to. Used by Contribute Mode's
-    /// X-cancel to remove only this-session captures, leaving any pre-existing
-    /// captures on an append-anchor entry untouched.
+    /// Deletes the specified MediaReferences (and their cached thumbnails, and
+    /// for voice refs, the underlying audio file) by id, regardless of which
+    /// entry they belong to. Used by Contribute Mode's X-cancel to remove only
+    /// this-session captures, leaving any pre-existing captures on an
+    /// append-anchor entry untouched.
     func deleteMediaReferences(ids: Set<UUID>) {
         guard !ids.isEmpty else { return }
         do {
@@ -54,6 +55,13 @@ final class EntryLifecycleService {
                 guard let ref = try storage.viewContext.fetch(request).first else { continue }
                 if let cacheFile = ref.thumbnailCacheFilename {
                     ThumbnailService.shared.evictThumbnail(filename: cacheFile)
+                }
+                // For voice refs, osIdentifier is the audio file path — delete
+                // it from disk so X-discard doesn't leave orphan audio files.
+                // (Photos and videos live in PhotoKit, not our sandbox; we
+                // intentionally leave those in place.)
+                if ref.mediaTypeEnum == .voice {
+                    AudioPlayerService.deleteAudio(filename: ref.osIdentifier)
                 }
                 storage.viewContext.delete(ref)
             }
