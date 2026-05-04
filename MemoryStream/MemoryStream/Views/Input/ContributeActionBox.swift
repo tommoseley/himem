@@ -24,6 +24,9 @@ import SwiftUI
 /// added incrementally in subsequent commits — this commit is the layout shell.
 struct ContributeActionBox: View {
     @ObservedObject var session: ContributeSessionViewModel
+    @ObservedObject var speechService: SpeechService
+    @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
+    @State private var recordingStartedAt: Date? = nil
 
     var body: some View {
         NavigationStack {
@@ -55,6 +58,11 @@ struct ContributeActionBox: View {
             }
             .navigationTitle("Contribute")
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .onChange(of: speechService.isRecording) { wasRecording, isRecording in
+            // Recording transitioned from on → off: persist the result.
+            guard wasRecording, !isRecording else { return }
+            handleRecordingStopped()
         }
     }
 
@@ -168,14 +176,28 @@ struct ContributeActionBox: View {
 
     private func actionButton(_ kind: ActionKind, label: String, icon: String) -> some View {
         let isActive = isActiveCapture(kind)
+        let isVoiceRecording = (kind == .voice) && speechService.isRecording
         return Button {
-            // Capture plumbing wires up in the next commit.
+            handleActionTap(kind)
         } label: {
             VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: .semibold))
-                Text(label)
-                    .font(.subheadline.weight(.semibold))
+                if isVoiceRecording {
+                    // Inline recording state: red dot + elapsed time. Tap to stop.
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 10, height: 10)
+                        Text(elapsedRecordingLabel)
+                            .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                    }
+                    Text("Tap to stop")
+                        .font(.caption2.weight(.semibold))
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 22, weight: .semibold))
+                    Text(label)
+                        .font(.subheadline.weight(.semibold))
+                }
             }
             .frame(maxWidth: .infinity)
             .frame(height: 64)
@@ -188,7 +210,7 @@ struct ContributeActionBox: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        .accessibilityLabel(isVoiceRecording ? "Stop recording" : label)
         .accessibilityAddTraits(.isButton)
     }
 
@@ -198,11 +220,64 @@ struct ContributeActionBox: View {
         default: return false
         }
     }
+
+    // MARK: - Capture handlers
+
+    private func handleActionTap(_ kind: ActionKind) {
+        switch kind {
+        case .voice:
+            toggleVoiceRecording()
+        case .photo, .video, .text:
+            // Wired in subsequent commits.
+            break
+        }
+    }
+
+    private func toggleVoiceRecording() {
+        if speechService.isRecording {
+            // Stop — the .onChange handler picks up the transition and
+            // persists what we've got.
+            speechService.stopRecording()
+        } else {
+            recordingStartedAt = Date()
+            session.setActiveCapture(.voice)
+            speechService.transcribedText = ""
+            speechService.lastRecordingPath = nil
+            speechService.startRecording()
+        }
+    }
+
+    private func handleRecordingStopped() {
+        let duration: TimeInterval = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        let transcript = speechService.transcribedText
+        let path = speechService.lastRecordingPath
+
+        session.persistVoiceCapture(
+            audioPath: path,
+            transcript: transcript,
+            duration: duration,
+            saveAudio: saveVoiceEntries
+        )
+
+        // Reset speech service buffers so the next recording starts clean.
+        speechService.transcribedText = ""
+        speechService.lastRecordingPath = nil
+        recordingStartedAt = nil
+        session.setActiveCapture(nil)
+    }
+
+    private var elapsedRecordingLabel: String {
+        let total = Int((recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0).rounded())
+        let minutes = total / 60
+        let seconds = total % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
 }
 
 #Preview("Empty") {
     ContributeActionBox(
-        session: previewSession(captures: [], textSegments: [])
+        session: previewSession(captures: [], textSegments: []),
+        speechService: SpeechService()
     )
 }
 
@@ -216,7 +291,8 @@ struct ContributeActionBox: View {
                 .init(id: UUID(), mediaType: .video, duration: 21.2)
             ],
             textSegments: ["The tomatoes in bed 3 are coming in earlier than last year."]
-        )
+        ),
+        speechService: SpeechService()
     )
 }
 

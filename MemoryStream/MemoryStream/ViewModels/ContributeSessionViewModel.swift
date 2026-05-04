@@ -146,6 +146,31 @@ final class ContributeSessionViewModel: ObservableObject {
         sessionTextSegments.append(trimmed)
     }
 
+    /// Persists a voice capture: lazy-creates the entry if needed, attaches a
+    /// `.voice` MediaReference, tracks it for X-cleanup, and stores the
+    /// transcript as a session text segment. If `saveAudio` is false (user
+    /// pref `saveVoiceEntries: false`), the audio file is deleted but the
+    /// transcript is still recorded.
+    func persistVoiceCapture(audioPath: String?, transcript: String, duration: TimeInterval, saveAudio: Bool) {
+        do {
+            if let audioPath {
+                if saveAudio {
+                    let entryId = try ensureEntryForCapture(inputType: .voiceInApp)
+                    let ref = try lifecycle.createMediaReference(forEntryId: entryId, localIdentifier: audioPath, mediaType: .voice)
+                    trackCapture(id: ref.id, mediaType: .voice, duration: duration)
+                } else {
+                    AudioPlayerService.deleteAudio(filename: audioPath)
+                }
+            }
+            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                trackTextSegment(trimmed)
+            }
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
     /// UI sets the active-capture indicator when a recording starts and
     /// clears it when the recording stops. The session view model itself
     /// doesn't manage the recording — it just reflects the state for the

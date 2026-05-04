@@ -28,6 +28,18 @@ final class EntryLifecycleService {
         return try storage.createEntry(content: "", inputType: inputType)
     }
 
+    /// Creates a single MediaReference attached to the entry with the given
+    /// id. Used by Contribute Mode to persist each capture as it's taken
+    /// (rather than buffering and committing in batch like the legacy
+    /// composer). Throws if the entry can't be found.
+    @discardableResult
+    func createMediaReference(forEntryId entryId: UUID, localIdentifier: String, mediaType: MediaReference.MediaType) throws -> MediaReference {
+        guard let entry = try fetchEntry(id: entryId) else {
+            throw NSError(domain: "EntryLifecycleService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry \(entryId) not found"])
+        }
+        return try storage.createMediaReference(for: entry, localIdentifier: localIdentifier, mediaType: mediaType)
+    }
+
     /// Deletes the specified MediaReferences (and their cached thumbnails) by
     /// id, regardless of which entry they belong to. Used by Contribute Mode's
     /// X-cancel to remove only this-session captures, leaving any pre-existing
