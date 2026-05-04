@@ -1,0 +1,242 @@
+import SwiftUI
+
+/// Contribute Mode's primary surface. Replaces the legacy ComposerView in the
+/// new-memory and append-to-memory flows.
+///
+/// Layout:
+///
+///   ┌──────────────────────────────────┐  ← top toolbar: X + Done
+///   │ [Tiles ScrollView, top-down]     │
+///   │ [tile] [tile] [tile]             │
+///   │ [tile]                           │
+///   ├──────────────────────────────────┤
+///   │ [Voice]  [Photo]                 │  ← Action Box, fixed-height
+///   │ [Video]  [Text]                  │
+///   └──────────────────────────────────┘
+///
+/// The Action Box is bottom-anchored so it never moves as tiles accumulate.
+/// Voice and Video buttons render their own recording-state UI inline (red dot,
+/// elapsed time, tap to stop). Tap a capture-type button to begin that capture.
+///
+/// Wired to ContributeSessionViewModel for the lifecycle (Done / X) and to
+/// track each capture's id for the silent-discard rule and X-discard cleanup.
+/// Capture *plumbing* (SpeechService, camera presentation, photo picker) is
+/// added incrementally in subsequent commits — this commit is the layout shell.
+struct ContributeActionBox: View {
+    @ObservedObject var session: ContributeSessionViewModel
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                tilesArea
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                actionBox
+            }
+            .background(Crucible.Color.paper)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        session.requestExitDiscard()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.ink2)
+                    }
+                    .accessibilityLabel("Discard contribution")
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        session.exitDone()
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Crucible.Color.accent)
+                    .accessibilityHint("Save these contributions and exit")
+                }
+            }
+            .navigationTitle("Contribute")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    // MARK: - Tiles
+
+    private var tilesArea: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                if session.sessionCaptures.isEmpty && session.sessionTextSegments.isEmpty {
+                    emptyState
+                } else {
+                    captureTiles
+                    textTiles
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "plus.bubble")
+                .font(.title)
+                .foregroundStyle(Crucible.Color.ink4)
+                .accessibilityHidden(true)
+            Text("Tap a button below to capture")
+                .font(.caption)
+                .foregroundStyle(Crucible.Color.ink3)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 60)
+    }
+
+    private var captureTiles: some View {
+        // Three-up grid using GeometryReader so MediaTile (square aspect) fits.
+        GeometryReader { geo in
+            let cols = 3
+            let spacing: CGFloat = 8
+            let tileSize = (geo.size.width - spacing * CGFloat(cols - 1)) / CGFloat(cols)
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.fixed(tileSize), spacing: spacing), count: cols),
+                spacing: spacing
+            ) {
+                ForEach(session.sessionCaptures, id: \.id) { capture in
+                    MediaTile(
+                        localIdentifier: capture.id.uuidString, // placeholder until capture wiring lands
+                        mediaType: capture.mediaType
+                    )
+                    .frame(width: tileSize, height: tileSize)
+                }
+            }
+        }
+        .frame(height: tileGridHeight)
+    }
+
+    private var tileGridHeight: CGFloat {
+        // Three columns, rows of tiles ~110pt tall. Cap so the grid doesn't
+        // dominate the screen on a long session.
+        let rows = max(1, (session.sessionCaptures.count + 2) / 3)
+        return min(CGFloat(rows) * 116, 360)
+    }
+
+    private var textTiles: some View {
+        ForEach(Array(session.sessionTextSegments.enumerated()), id: \.offset) { _, text in
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "text.alignleft")
+                    .font(.caption)
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .padding(.top, 2)
+                    .accessibilityHidden(true)
+                Text(text)
+                    .font(.callout)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12)
+            .background(Crucible.Color.card)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Crucible.Color.hairline, lineWidth: 1)
+            )
+        }
+    }
+
+    // MARK: - Action Box
+
+    private var actionBox: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                actionButton(.voice, label: "Voice", icon: "mic.fill")
+                actionButton(.photo, label: "Photo", icon: "camera.fill")
+            }
+            HStack(spacing: 10) {
+                actionButton(.video, label: "Video", icon: "video.fill")
+                actionButton(.text, label: "Text", icon: "text.alignleft")
+            }
+        }
+        .padding(16)
+        .background(Crucible.Color.sunk)
+        .overlay(
+            Rectangle()
+                .fill(Crucible.Color.divider)
+                .frame(height: 1),
+            alignment: .top
+        )
+    }
+
+    private enum ActionKind { case voice, photo, video, text }
+
+    private func actionButton(_ kind: ActionKind, label: String, icon: String) -> some View {
+        let isActive = isActiveCapture(kind)
+        return Button {
+            // Capture plumbing wires up in the next commit.
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .semibold))
+                Text(label)
+                    .font(.subheadline.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 64)
+            .background(isActive ? Crucible.Color.accent : Crucible.Color.card)
+            .foregroundStyle(isActive ? .white : Crucible.Color.ink)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Crucible.Color.hairline, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func isActiveCapture(_ kind: ActionKind) -> Bool {
+        switch (kind, session.activeCapture) {
+        case (.voice, .voice), (.video, .video), (.text, .text): return true
+        default: return false
+        }
+    }
+}
+
+#Preview("Empty") {
+    ContributeActionBox(
+        session: previewSession(captures: [], textSegments: [])
+    )
+}
+
+#Preview("Mixed captures") {
+    ContributeActionBox(
+        session: previewSession(
+            captures: [
+                .init(id: UUID(), mediaType: .voice, duration: 8.4),
+                .init(id: UUID(), mediaType: .image, duration: nil),
+                .init(id: UUID(), mediaType: .image, duration: nil),
+                .init(id: UUID(), mediaType: .video, duration: 21.2)
+            ],
+            textSegments: ["The tomatoes in bed 3 are coming in earlier than last year."]
+        )
+    )
+}
+
+@MainActor
+private func previewSession(
+    captures: [ContributeSessionViewModel.SessionCapture],
+    textSegments: [String]
+) -> ContributeSessionViewModel {
+    let storage = StorageService(inMemory: true)
+    let lifecycle = EntryLifecycleService(storage: storage, processingEngine: nil)
+    let session = ContributeSessionViewModel(
+        lifecycle: lifecycle,
+        userDefaults: UserDefaults(suiteName: "ContributeActionBox.preview")!
+    )
+    session.enter(anchor: .newMemory)
+    for capture in captures {
+        session.trackCapture(id: capture.id, mediaType: capture.mediaType, duration: capture.duration)
+    }
+    for text in textSegments {
+        session.trackTextSegment(text)
+    }
+    return session
+}

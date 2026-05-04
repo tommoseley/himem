@@ -33,6 +33,7 @@
 		A100000026 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000027 /* SettingsView.swift */; };
 		A100000027 /* NewTopicSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028 /* NewTopicSheet.swift */; };
 		A100000201 /* MediaTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000201 /* MediaTile.swift */; };
+		A100000202 /* ContributeActionBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000202 /* ContributeActionBox.swift */; };
 		A100000028 /* TopicApprovalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000029 /* TopicApprovalService.swift */; };
 		A100000029 /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000030 /* AudioPlayerService.swift */; };
 		A100000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000031 /* Assets.xcassets */; };
@@ -110,6 +111,7 @@
 		B100000027 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B100000028 /* NewTopicSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTopicSheet.swift; sourceTree = "<group>"; };
 		B100000201 /* MediaTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTile.swift; sourceTree = "<group>"; };
+		B100000202 /* ContributeActionBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributeActionBox.swift; sourceTree = "<group>"; };
 		B100000029 /* TopicApprovalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicApprovalService.swift; sourceTree = "<group>"; };
 		B100000030 /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		B100000031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -286,6 +288,7 @@
 			children = (
 				B100000036 /* CameraPickerView.swift */,
 				B100000044 /* ComposerView.swift */,
+				B100000202 /* ContributeActionBox.swift */,
 				B100000047 /* PhotoLibraryPicker.swift */,
 			);
 			path = Input;
@@ -584,6 +587,7 @@
 				A100000041 /* ComposerViewModel.swift in Sources */,
 				A100000200 /* ContributeSessionViewModel.swift in Sources */,
 				A100000042 /* ComposerView.swift in Sources */,
+				A100000202 /* ContributeActionBox.swift in Sources */,
 				A100000029 /* AudioPlayerService.swift in Sources */,
 				A100000031 /* HiMemShortcuts.swift in Sources */,
 				A100000032 /* CameraService.swift in Sources */,
