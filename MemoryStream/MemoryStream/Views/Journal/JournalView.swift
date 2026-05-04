@@ -8,6 +8,7 @@ struct JournalView: View {
     @StateObject private var topicApproval = TopicApprovalService.shared
     @StateObject private var albumSync = AlbumSyncService.shared
     @StateObject private var composer = ComposerViewModel()
+    @StateObject private var contributeSession = ContributeSessionViewModel(lifecycle: EntryLifecycleService())
     @StateObject private var projectVM = ProjectViewModel()
     @StateObject private var errorState = ErrorState.shared
     @EnvironmentObject private var quickAction: QuickActionState
@@ -193,18 +194,18 @@ struct JournalView: View {
         // Contribute button — universal entry point to Contribute Mode.
         // Tap = enter Contribute Mode + start voice recording (the garden gesture).
         // Long-press = enter Contribute Mode showing the Action Box (deliberate).
-        ContributeButton(isOpen: composer.isPresented) {
-            composer.speechService = speechService
-            composer.cameraService = cameraService
-            composer.open(withRecording: true)
-        } onLongPress: {
-            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-            composer.speechService = speechService
-            composer.cameraService = cameraService
-            composer.open()
+        // Hidden while Contribute Mode is active — entry/exit goes through the
+        // Action Box's own Done/X controls (see contribute-mode.md spec).
+        if !contributeSession.isPresented {
+            ContributeButton(isOpen: false) {
+                contributeSession.enter(anchor: .newMemory, autoStartVoice: true)
+            } onLongPress: {
+                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                contributeSession.enter(anchor: .newMemory, autoStartVoice: false)
+            }
+            .padding(.trailing, 14)
+            .padding(.bottom, 14)
         }
-        .padding(.trailing, 14)
-        .padding(.bottom, 14)
 
         // Error banner
         if let error = errorState.current {
@@ -279,22 +280,29 @@ struct JournalView: View {
                 },
                 onCaptureNewWith: { text in
                     showSearch = false
-                    composer.openWithSeedText(text)
+                    // Enter Contribute Mode and seed the search query as a
+                    // text tile so the user can keep adding captures around it.
+                    contributeSession.enter(anchor: .newMemory, autoStartVoice: false)
+                    contributeSession.trackTextSegment(text)
                 }
             )
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
         }
-        .sheet(isPresented: $composer.isPresented, onDismiss: {
-            composer.close()
+        .sheet(isPresented: $contributeSession.isPresented, onDismiss: {
+            // Refresh the journal feed so the new memory (or appended captures)
+            // appear immediately. The actual persistence already happened
+            // capture-by-capture; this just nudges the UI.
+            viewModel.refresh()
         }) {
-            ComposerView(
-                composer: composer,
-                speechService: speechService,
-                topics: viewModel.topics,
-                onCommit: { handleCommit() }
+            ContributeActionBox(
+                session: contributeSession,
+                speechService: speechService
             )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .interactiveDismissDisabled(true)
         }
         .navigationDestination(item: $selectedEntryId) { entryId in
             if let entry = viewModel.currentEntry(id: entryId) {
@@ -410,13 +418,9 @@ struct JournalView: View {
             quickAction.pendingAction = nil
             switch action {
             case "com.himem.app.voice-capture":
-                composer.speechService = speechService
-                composer.cameraService = cameraService
-                composer.open(withRecording: true)
+                contributeSession.enter(anchor: .newMemory, autoStartVoice: true)
             case "com.himem.app.new-entry":
-                composer.speechService = speechService
-                composer.cameraService = cameraService
-                composer.open()
+                contributeSession.enter(anchor: .newMemory, autoStartVoice: false)
             default:
                 break
             }

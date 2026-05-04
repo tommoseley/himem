@@ -43,7 +43,10 @@ final class ContributeSessionViewModel: ObservableObject {
 
     // MARK: - Published state
 
-    @Published private(set) var isPresented = false
+    /// Public-set so SwiftUI's `.sheet(isPresented:)` Binding can write back
+    /// when the sheet dismisses on its own (rare with interactiveDismissDisabled
+    /// on the host, but the compiler needs write access for the binding type).
+    @Published var isPresented = false
     @Published private(set) var anchor: Anchor = .newMemory
     @Published private(set) var entryId: UUID? = nil
     @Published private(set) var sessionCaptures: [SessionCapture] = []
