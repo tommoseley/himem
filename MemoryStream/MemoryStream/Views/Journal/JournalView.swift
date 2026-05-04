@@ -191,17 +191,22 @@ struct JournalView: View {
         }
         .background(Crucible.Color.paper)
 
-        // Contribute button — universal entry point to Contribute Mode.
-        // Tap = enter Contribute Mode + start voice recording (the garden gesture).
-        // Long-press = enter Contribute Mode showing the Action Box (deliberate).
-        // Hidden while Contribute Mode is active — entry/exit goes through the
-        // Action Box's own Done/X controls (see contribute-mode.md spec).
+        // Add Memory button — home-page entry point to Contribute Mode.
+        // Tap = open the Action Box (deliberate "add memory"; user picks a
+        // capture type). Long-press = quick voice (auto-starts recording for
+        // the garden case). Hidden while Contribute Mode is active — entry/exit
+        // goes through the Action Box's own Done/X controls.
         if !contributeSession.isPresented {
-            ContributeButton(isOpen: false) {
-                contributeSession.enter(anchor: .newMemory, autoStartVoice: true)
+            ContributeButton(
+                isOpen: false,
+                idleIcon: "plus",
+                accessibilityLabel: "Add memory",
+                accessibilityHint: "Tap to choose a capture type. Long-press for quick voice capture."
+            ) {
+                contributeSession.enter(anchor: .newMemory, autoStartVoice: false)
             } onLongPress: {
                 UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                contributeSession.enter(anchor: .newMemory, autoStartVoice: false)
+                contributeSession.enter(anchor: .newMemory, autoStartVoice: true)
             }
             .padding(.trailing, 14)
             .padding(.bottom, 14)
@@ -537,14 +542,18 @@ struct JournalHeaderView: View {
 
 // MARK: - Contribute Button
 
-/// The universal entry point to Contribute Mode. Idle glyph is `mic.fill` to
-/// communicate that the default short-press action is voice; long-press opens
-/// the Action Box without auto-starting recording. While Contribute Mode is
-/// active the host hides this button entirely (per Contribute Mode spec — entry
-/// and exit are via the Action Box's Done/X). The `xmark` rendering is kept
-/// only as a transient cue during the open/close animation.
+/// The universal entry point to Contribute Mode. The idle glyph is configurable
+/// per context — `plus` on the home page (where it reads as "Add memory") and
+/// `mic.fill` on an entry detail (where the dominant gesture is appending a
+/// quick voice clip). While Contribute Mode is active the host hides this
+/// button entirely (per spec — entry and exit are via the Action Box's
+/// Done/X). The `xmark` rendering is kept only as a transient cue during the
+/// open/close animation.
 struct ContributeButton: View {
     let isOpen: Bool
+    var idleIcon: String = "plus"
+    var accessibilityLabel: String = "Add memory"
+    var accessibilityHint: String = "Tap to choose a capture type. Long-press for quick voice capture."
     let onTap: () -> Void
     let onLongPress: () -> Void
 
@@ -555,7 +564,7 @@ struct ContributeButton: View {
                 .frame(width: 56, height: 56)
                 .shadow(color: Color(red: 40/255, green: 25/255, blue: 15/255).opacity(0.22), radius: 10, y: 4)
 
-            Image(systemName: isOpen ? "xmark" : "mic.fill")
+            Image(systemName: isOpen ? "xmark" : idleIcon)
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.white)
                 .rotationEffect(.degrees(isOpen ? 90 : 0))
@@ -569,8 +578,8 @@ struct ContributeButton: View {
             }
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(isOpen ? "Close contribute mode" : "Contribute a memory")
-        .accessibilityHint(isOpen ? "" : "Tap to start recording. Long-press to choose a capture type.")
+        .accessibilityLabel(isOpen ? "Close contribute mode" : accessibilityLabel)
+        .accessibilityHint(isOpen ? "" : accessibilityHint)
         .accessibilityAddTraits(.isButton)
     }
 }
