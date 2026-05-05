@@ -176,7 +176,12 @@ private struct VoiceClipPanel: View {
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
-        .swipeToDelete(onDelete: onDelete, accessibilityLabel: "Delete voice clip")
+        .swipeActions(
+            onDelete: onDelete,
+            onEdit: { editing = true },
+            deleteAccessibilityLabel: "Delete voice clip",
+            editAccessibilityLabel: "Edit transcript"
+        )
     }
 
     private var displayText: String {
@@ -232,115 +237,186 @@ private struct NotePanel: View {
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
-        .swipeToDelete(onDelete: onDelete, accessibilityLabel: "Delete note")
+        .swipeActions(
+            onDelete: onDelete,
+            onEdit: { editing = true },
+            deleteAccessibilityLabel: "Delete note",
+            editAccessibilityLabel: "Edit note"
+        )
     }
 }
 
-// MARK: - Swipe-to-delete modifier
+// MARK: - Swipe actions modifier (pill-style)
 
 extension View {
-    /// Wraps the view with a swipe-left-to-delete affordance: drag the
-    /// content leftward to reveal a red Delete button on the trailing edge,
-    /// tap it to fire `onDelete`. Drag past `commitThreshold` and release
-    /// to delete in one motion. Standard iOS pattern (Mail, Messages).
+    /// Outlook-style swipe action pills.
     ///
-    /// Used on voice and note panels in the chronological capture stream.
-    /// Photo filmstrip tiles keep their inline × because the horizontal
-    /// scroll inside the filmstrip would compete with this gesture.
-    func swipeToDelete(onDelete: @escaping () -> Void, accessibilityLabel: String = "Delete") -> some View {
-        modifier(SwipeToDeleteModifier(onDelete: onDelete, accessibilityLabel: accessibilityLabel))
+    /// Right-to-left swipe → trailing red Delete pill.
+    /// Left-to-right swipe → leading accent Edit pill (only if `onEdit` is
+    /// non-nil — pure delete-only panels just don't reveal anything on the
+    /// rightward drag).
+    ///
+    /// Tap the pill to fire its action; drag past `commitThreshold` and
+    /// release to fire in one motion.
+    func swipeActions(
+        onDelete: @escaping () -> Void,
+        onEdit: (() -> Void)? = nil,
+        deleteAccessibilityLabel: String = "Delete",
+        editAccessibilityLabel: String = "Edit"
+    ) -> some View {
+        modifier(SwipeActionsModifier(
+            onDelete: onDelete,
+            onEdit: onEdit,
+            deleteAccessibilityLabel: deleteAccessibilityLabel,
+            editAccessibilityLabel: editAccessibilityLabel
+        ))
     }
 }
 
-private struct SwipeToDeleteModifier: ViewModifier {
+private struct SwipeActionsModifier: ViewModifier {
     let onDelete: () -> Void
-    let accessibilityLabel: String
+    let onEdit: (() -> Void)?
+    let deleteAccessibilityLabel: String
+    let editAccessibilityLabel: String
 
-    /// Magnitude of reveal in points. Positive value moves content leftward
-    /// and exposes the delete button on the trailing edge.
-    @State private var revealedAmount: CGFloat = 0
-    @State private var revealed: Bool = false
-    /// Once the drag is dominantly horizontal, we lock into swipe mode for
-    /// the rest of the drag — otherwise the parent ScrollView's gesture can
-    /// re-claim the touch when the user's finger wobbles vertically.
+    /// Signed offset: negative = revealing trailing Delete, positive =
+    /// revealing leading Edit. Magnitude clamped to `commitThreshold`.
+    @State private var offset: CGFloat = 0
+    @State private var revealed: RevealedSide? = nil
+    /// Once the drag is dominantly horizontal, lock for the rest of the
+    /// gesture so vertical wobbles don't yield to the parent ScrollView.
     @State private var engagedHorizontal: Bool = false
 
-    private let revealWidth: CGFloat = 88
+    private enum RevealedSide { case leading, trailing }
+
+    private let revealWidth: CGFloat = 84
     private let commitThreshold: CGFloat = 200
 
     func body(content: Content) -> some View {
-        ZStack(alignment: .trailing) {
-            // Delete affordance behind the content — reveals on the trailing
-            // edge as the user drags leftward. Tap fires the delete; the row
-            // otherwise snaps back when released below the reveal threshold.
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 16, weight: .semibold))
-                    if revealedAmount > revealWidth * 0.6 {
-                        Text("Delete")
-                            .font(.subheadline.weight(.semibold))
-                    }
+        ZStack {
+            // Leading Edit pill — visible only on positive offset.
+            if let onEdit, offset > 4 {
+                HStack(spacing: 0) {
+                    SwipeActionPill(
+                        icon: "pencil",
+                        label: "Edit",
+                        color: Crucible.Color.accent,
+                        action: onEdit
+                    )
+                    .frame(width: offset)
+                    .accessibilityLabel(editAccessibilityLabel)
+                    Spacer(minLength: 0)
                 }
-                .foregroundStyle(.white)
-                .frame(width: max(0, revealedAmount))
-                .frame(maxHeight: .infinity)
-                .background(Crucible.Color.danger)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accessibilityLabel)
-            .opacity(revealedAmount > 4 ? 1 : 0)
+
+            // Trailing Delete pill — visible only on negative offset.
+            if offset < -4 {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    SwipeActionPill(
+                        icon: "trash",
+                        label: "Delete",
+                        color: Crucible.Color.danger,
+                        action: onDelete
+                    )
+                    .frame(width: -offset)
+                    .accessibilityLabel(deleteAccessibilityLabel)
+                }
+            }
 
             content
-                .offset(x: -revealedAmount)
-                // simultaneousGesture lets the parent ScrollView keep its
-                // vertical scroll while we still claim horizontal drags.
-                // Without this, the ScrollView's pan recognizer eats the
-                // touch and our DragGesture's onChanged never fires.
+                .offset(x: offset)
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 8)
                         .onChanged { value in
-                            // First-pass direction lock: once we see a
-                            // dominantly-leftward drag, stay in swipe mode
-                            // for the rest of this gesture so vertical
-                            // wobbles don't release us back to the ScrollView.
                             if !engagedHorizontal {
                                 let dx = value.translation.width
                                 let dy = value.translation.height
-                                if dx < -4, abs(dx) > abs(dy) * 1.4 {
+                                if abs(dx) > 4, abs(dx) > abs(dy) * 1.4 {
                                     engagedHorizontal = true
                                 } else if abs(dy) > abs(dx) {
                                     return
                                 }
                             }
                             guard engagedHorizontal else { return }
-                            // Convert leftward drag (negative width) into
-                            // positive reveal amount.
-                            let proposed = -value.translation.width + (revealed ? revealWidth : 0)
-                            revealedAmount = max(0, min(proposed, commitThreshold))
+
+                            let base: CGFloat = {
+                                switch revealed {
+                                case .leading: return revealWidth
+                                case .trailing: return -revealWidth
+                                case .none: return 0
+                                }
+                            }()
+                            var proposed = value.translation.width + base
+                            // If no Edit handler, can't drag rightward.
+                            if onEdit == nil { proposed = min(0, proposed) }
+                            offset = max(-commitThreshold, min(proposed, commitThreshold))
                         }
                         .onEnded { _ in
                             defer { engagedHorizontal = false }
-                            if revealedAmount >= commitThreshold {
-                                withAnimation(.easeOut(duration: 0.18)) { revealedAmount = commitThreshold }
+                            // Negative = trailing/Delete.
+                            if offset <= -commitThreshold {
+                                withAnimation(.easeOut(duration: 0.18)) { offset = -commitThreshold }
                                 onDelete()
-                            } else if revealedAmount > revealWidth * 0.6 {
+                            } else if offset < -revealWidth * 0.6 {
                                 withAnimation(.easeOut(duration: 0.18)) {
-                                    revealedAmount = revealWidth
-                                    revealed = true
+                                    offset = -revealWidth
+                                    revealed = .trailing
                                 }
-                            } else {
+                            }
+                            // Positive = leading/Edit.
+                            else if offset >= commitThreshold, onEdit != nil {
+                                withAnimation(.easeOut(duration: 0.18)) { offset = commitThreshold }
+                                onEdit?()
+                                // Snap back so pill doesn't linger.
+                                withAnimation(.easeOut(duration: 0.18).delay(0.05)) {
+                                    offset = 0
+                                    revealed = nil
+                                }
+                            } else if offset > revealWidth * 0.6, onEdit != nil {
                                 withAnimation(.easeOut(duration: 0.18)) {
-                                    revealedAmount = 0
-                                    revealed = false
+                                    offset = revealWidth
+                                    revealed = .leading
+                                }
+                            }
+                            // Snap closed.
+                            else {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    offset = 0
+                                    revealed = nil
                                 }
                             }
                         }
                 )
         }
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// Outlook-style swipe action pill — vertically stacked icon over label,
+/// inset from the row edges so it reads as a separate button rather than
+/// a flush stripe.
+private struct SwipeActionPill: View {
+    let icon: String
+    let label: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                Text(label)
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(color)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .padding(.vertical, 4)
+            .padding(.horizontal, 4)
+        }
+        .buttonStyle(.plain)
     }
 }
 
