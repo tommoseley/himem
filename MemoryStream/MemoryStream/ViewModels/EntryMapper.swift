@@ -43,7 +43,15 @@ enum EntryMapper {
                     mediaType: ref.mediaTypeEnum,
                     thumbnailCacheFilename: ref.thumbnailCacheFilename,
                     isAccessible: ref.isAccessible,
-                    transcript: ref.transcript
+                    transcript: ref.transcript,
+                    createdAt: ref.createdAt ?? .distantPast
+                )
+            },
+            textSegments: entry.textSegmentsArray.map { segment in
+                TextSegmentDisplayItem(
+                    id: segment.id,
+                    text: segment.text,
+                    createdAt: segment.createdAt ?? .distantPast
                 )
             },
             recycledAt: entry.recycledAt,

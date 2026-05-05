@@ -15,6 +15,7 @@
 		A100000006 /* Topic.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000006 /* Topic.swift */; };
 		A100000007 /* MediaReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000007 /* MediaReference.swift */; };
 		A100000204 /* TextSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000204 /* TextSegment.swift */; };
+		A100000205 /* ChronologicalCaptureStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000205 /* ChronologicalCaptureStream.swift */; };
 		A100000008 /* StorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000008 /* StorageService.swift */; };
 		A100000009 /* ClaudeAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000009 /* ClaudeAPIService.swift */; };
 		A100000010 /* LocalEntityExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000010 /* LocalEntityExtractor.swift */; };
@@ -95,6 +96,7 @@
 		B100000006 /* Topic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Topic.swift; sourceTree = "<group>"; };
 		B100000007 /* MediaReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReference.swift; sourceTree = "<group>"; };
 		B100000204 /* TextSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSegment.swift; sourceTree = "<group>"; };
+		B100000205 /* ChronologicalCaptureStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronologicalCaptureStream.swift; sourceTree = "<group>"; };
 		B100000008 /* StorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageService.swift; sourceTree = "<group>"; };
 		B100000009 /* ClaudeAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAPIService.swift; sourceTree = "<group>"; };
 		B100000010 /* LocalEntityExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalEntityExtractor.swift; sourceTree = "<group>"; };
@@ -282,6 +284,7 @@
 				B100000018 /* JournalView.swift */,
 				B100000019 /* EntryCardView.swift */,
 				B100000045 /* EntryExpandedView.swift */,
+				B100000205 /* ChronologicalCaptureStream.swift */,
 				B100000037 /* MediaThumbnailView.swift */,
 				B100000038 /* MediaViewerView.swift */,
 			);
@@ -589,6 +592,7 @@
 				A100000051 /* ProjectListView.swift in Sources */,
 				A100000052 /* ProjectDetailView.swift in Sources */,
 				A100000045 /* EntryExpandedView.swift in Sources */,
+				A100000205 /* ChronologicalCaptureStream.swift in Sources */,
 				A100000028 /* TopicApprovalService.swift in Sources */,
 				A100000039 /* AlbumSyncService.swift in Sources */,
 				A100000040 /* CrucibleTheme.swift in Sources */,

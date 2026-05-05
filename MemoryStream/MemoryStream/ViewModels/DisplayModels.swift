@@ -55,6 +55,7 @@ struct EntryDisplayModel: Identifiable {
     let feedbackState: InferenceSummary.FeedbackState?
     let userCorrection: String?
     let mediaItems: [MediaDisplayItem]
+    let textSegments: [TextSegmentDisplayItem]
     let recycledAt: Date?
     let latitude: Double?
     let longitude: Double?
@@ -143,6 +144,7 @@ extension EntryDisplayModel: Equatable {
             && lhs.feedbackState == rhs.feedbackState
             && lhs.userCorrection == rhs.userCorrection
             && lhs.mediaItems == rhs.mediaItems
+            && lhs.textSegments == rhs.textSegments
             && lhs.recycledAt == rhs.recycledAt
             && lhs.latitude == rhs.latitude
             && lhs.longitude == rhs.longitude
@@ -170,6 +172,7 @@ extension EntryDisplayModel {
             feedbackState: feedbackState,
             userCorrection: userCorrection ?? self.userCorrection,
             mediaItems: mediaItems,
+            textSegments: textSegments,
             recycledAt: recycledAt,
             latitude: latitude,
             longitude: longitude,
@@ -195,6 +198,15 @@ struct MediaDisplayItem: Identifiable, Equatable {
     /// `nil` for image/video items and for legacy voice refs created before
     /// the schema gained this field.
     var transcript: String? = nil
+    /// Wall-clock timestamp the capture was taken — used to interleave with
+    /// TextSegments in the chronological capture stream.
+    var createdAt: Date = .distantPast
+}
+
+struct TextSegmentDisplayItem: Identifiable, Equatable {
+    let id: UUID
+    let text: String
+    let createdAt: Date
 }
 
 // MARK: - Tag Display Model

@@ -23,6 +23,7 @@ struct ProjectDetailViewTextTests {
             feedbackState: nil,
             userCorrection: nil,
             mediaItems: [],
+            textSegments: [],
             recycledAt: nil,
             latitude: nil,
             longitude: nil,

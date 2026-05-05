@@ -30,6 +30,7 @@ struct EntryDisplayStatusTests {
             feedbackState: feedbackState,
             userCorrection: nil,
             mediaItems: [],
+            textSegments: [],
             recycledAt: nil,
             latitude: nil,
             longitude: nil,

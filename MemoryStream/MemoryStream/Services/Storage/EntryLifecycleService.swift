@@ -122,6 +122,40 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Updates a TextSegment's text and regenerates the parent entry's
+    /// joined content. Used by per-panel inline editing in the
+    /// chronological capture stream.
+    func updateTextSegment(id: UUID, text: String, entryId: UUID) {
+        do {
+            let request = NSFetchRequest<TextSegment>(entityName: "TextSegment")
+            request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+            request.fetchLimit = 1
+            guard let segment = try storage.viewContext.fetch(request).first else { return }
+            segment.text = text
+            try storage.save(context: storage.viewContext)
+            regenerateContent(forEntryId: entryId)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    /// Updates a voice MediaReference's transcript and regenerates the
+    /// parent entry's joined content. Used by per-panel inline editing of
+    /// transcripts in the chronological capture stream.
+    func updateMediaTranscript(mediaId: UUID, transcript: String, entryId: UUID) {
+        do {
+            let request = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+            request.predicate = NSPredicate(format: "id == %@", mediaId as CVarArg)
+            request.fetchLimit = 1
+            guard let ref = try storage.viewContext.fetch(request).first else { return }
+            ref.transcript = transcript
+            try storage.save(context: storage.viewContext)
+            regenerateContent(forEntryId: entryId)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
     /// Pure: builds the joined-content string from an entry's segments +
     /// voice transcripts in chronological order. Exposed as static so it
     /// can be called from any context with a live JournalEntry.

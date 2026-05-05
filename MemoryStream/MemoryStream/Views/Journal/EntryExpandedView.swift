@@ -68,6 +68,10 @@ struct EntryExpandedView: View {
     /// view enters this session anchored at the current entry; captures
     /// persist directly to the entry as they're taken (no inline staging).
     @StateObject private var contributeSession = ContributeSessionViewModel(lifecycle: EntryLifecycleService())
+    /// Direct lifecycle reference for per-panel edit/delete operations on the
+    /// chronological capture stream. Same shared StorageService as the
+    /// session's lifecycle, just exposed at view level for synchronous calls.
+    private let lifecycle = EntryLifecycleService()
     @State private var activeSheet: ExpandedSheet?
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
@@ -231,42 +235,76 @@ struct EntryExpandedView: View {
                     .padding(.top, 4)
                 }
 
-                // Body
-                if mode == .editing {
-                    TextEditor(text: $editedText)
-                        .font(.body)
-                        .foregroundStyle(Crucible.Color.ink)
-                        .frame(minHeight: 120)
-                        .padding(8)
-                        .scrollContentBackground(.hidden)
-                        .background(Crucible.Color.paper)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
+                // Body — new-style entries (with TextSegments) render the
+                // chronological capture stream; legacy entries keep the
+                // single-block content text + media grid below.
+                if isLegacyEntry {
+                    if mode == .editing {
+                        TextEditor(text: $editedText)
+                            .font(.body)
+                            .foregroundStyle(Crucible.Color.ink)
+                            .frame(minHeight: 120)
+                            .padding(8)
+                            .scrollContentBackground(.hidden)
+                            .background(Crucible.Color.paper)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
 
-                    // Clean up text (editing only)
-                    Button {
-                        cleanUpText()
-                    } label: {
-                        HStack(spacing: 4) {
-                            if isCleaningUp {
-                                ProgressView().scaleEffect(0.7)
-                            } else {
-                                Image(systemName: "sparkles").font(.system(size: 11))
+                        Button {
+                            cleanUpText()
+                        } label: {
+                            HStack(spacing: 4) {
+                                if isCleaningUp {
+                                    ProgressView().scaleEffect(0.7)
+                                } else {
+                                    Image(systemName: "sparkles").font(.system(size: 11))
+                                }
+                                Text("Clean up text")
                             }
-                            Text("Clean up text")
+                            .font(.footnote)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Crucible.Color.AI.base)
                         }
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Crucible.Color.AI.base)
+                        .buttonStyle(.plain)
+                        .disabled(isCleaningUp)
+                    } else {
+                        Text(entry.content)
+                            .font(.body)
+                            .foregroundStyle(Crucible.Color.ink)
+                            .lineSpacing(4)
+                            .onTapGesture { enterEditing() }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isCleaningUp)
                 } else {
-                    Text(entry.content)
-                        .font(.body)
-                        .foregroundStyle(Crucible.Color.ink)
-                        .lineSpacing(4)
-                        .onTapGesture { enterEditing() }
+                    ChronologicalCaptureStream(
+                        entry: entry,
+                        onDeleteVoice: { id in
+                            removedMediaIds.insert(id)
+                            applyEditsImmediately()
+                        },
+                        onDeleteNote: { id in
+                            deleteTextSegment(id: id)
+                        },
+                        onDeleteMedia: { id in
+                            removedMediaIds.insert(id)
+                            applyEditsImmediately()
+                        },
+                        onEditNote: { id, newText in
+                            updateTextSegment(id: id, text: newText)
+                        },
+                        onEditTranscript: { id, newText in
+                            updateMediaTranscript(id: id, text: newText)
+                        },
+                        onPlayVoice: { item in
+                            audioPlayerForFile = AudioPlayerTarget(
+                                filename: item.localIdentifier,
+                                recordedAt: item.createdAt,
+                                transcript: item.transcript
+                            )
+                        },
+                        onTapPhoto: { item in
+                            selectedMedia = item
+                        }
+                    )
                 }
 
                 // Inference card (if pending)
@@ -279,8 +317,9 @@ struct EntryExpandedView: View {
                     )
                 }
 
-                // Media tile grid
-                if entry.hasAudio || !entry.mediaItems.isEmpty || mode == .editing {
+                // Media tile grid (legacy display only — new-style entries
+                // render media in-place via ChronologicalCaptureStream above).
+                if isLegacyEntry, entry.hasAudio || !entry.mediaItems.isEmpty || mode == .editing {
                     let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
                     LazyVGrid(columns: columns, spacing: 8) {
                         // Audio tile (legacy single-audio entries — older
@@ -617,6 +656,41 @@ struct EntryExpandedView: View {
         if let url = URL(string: "https://maps.apple.com/?q=\(encoded)&ll=\(coords)") {
             UIApplication.shared.open(url)
         }
+    }
+
+    // MARK: - Chronological capture stream helpers
+
+    /// New-style entries — those with TextSegments — render the chronological
+    /// capture stream. Legacy entries (single-block content + media grid)
+    /// keep the old layout. No migration: an entry stays "legacy" until the
+    /// user adds a typed Note via Contribute Mode (which creates a
+    /// TextSegment), at which point it flips to the new layout.
+    private var isLegacyEntry: Bool {
+        entry.textSegments.isEmpty
+    }
+
+    /// Removes a media reference immediately rather than batching it with
+    /// title/content edits via the existing onSave path. Used by the
+    /// chronological capture stream's per-panel delete.
+    private func applyEditsImmediately() {
+        let ids = removedMediaIds
+        guard !ids.isEmpty else { return }
+        lifecycle.deleteMediaReferences(ids: ids)
+        lifecycle.regenerateContent(forEntryId: entry.id)
+        removedMediaIds = []
+    }
+
+    private func deleteTextSegment(id: UUID) {
+        lifecycle.deleteTextSegments(ids: [id])
+        lifecycle.regenerateContent(forEntryId: entry.id)
+    }
+
+    private func updateTextSegment(id: UUID, text: String) {
+        lifecycle.updateTextSegment(id: id, text: text, entryId: entry.id)
+    }
+
+    private func updateMediaTranscript(id: UUID, text: String) {
+        lifecycle.updateMediaTranscript(mediaId: id, transcript: text, entryId: entry.id)
     }
 }
 
