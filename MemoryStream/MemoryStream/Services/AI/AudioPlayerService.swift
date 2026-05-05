@@ -10,6 +10,11 @@ final class AudioPlayerService: ObservableObject {
 
     private var player: AVAudioPlayer?
 
+    /// Exposes the underlying player so views needing live playback time
+    /// (e.g. AudioPlayerSheet's scrub bar) can poll `currentTime`. Read-only
+    /// reference — control surface remains `play(filename:)` / `stop()`.
+    var currentAVPlayer: AVAudioPlayer? { player }
+
     func play(filename: String) {
         stop()
 

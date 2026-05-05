@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 /// Square tile — the thumbnail IS the type identifier.
 /// Photos and videos show themselves (no fold, no label).
@@ -12,9 +13,14 @@ import SwiftUI
 struct MediaTile: View {
     let localIdentifier: String
     let mediaType: MediaReference.MediaType
+    /// When provided on a voice tile, a small "HH:mm · m:ss" footer is
+    /// rendered showing the capture timestamp and audio duration. Lets the
+    /// user tell multiple audio clips on a single memory apart visually.
+    var createdAt: Date? = nil
     var onRemove: (() -> Void)? = nil
     var onTap: (() -> Void)? = nil
     @State private var thumbnail: UIImage? = nil
+    @State private var audioDuration: TimeInterval? = nil
     @StateObject private var player = AudioPlayerService.shared
 
     /// Only audio and text get a fold — photos/videos carry their own visual
@@ -27,9 +33,10 @@ struct MediaTile: View {
             // Tile content
             Group {
                 if mediaType == .voice {
-                    // Audio: quieted waveform on white, tap to play
+                    // Audio: quieted waveform on white, tap to play.
                     let isPlaying = player.isPlaying && player.currentFile == localIdentifier
-                    VStack(spacing: 5) {
+                    VStack(spacing: 4) {
+                        Spacer(minLength: 0)
                         HStack(spacing: 2) {
                             ForEach(0..<10, id: \.self) { i in
                                 RoundedRectangle(cornerRadius: 1)
@@ -43,6 +50,18 @@ struct MediaTile: View {
                             Image(systemName: "stop.fill")
                                 .font(.system(size: 10))
                                 .foregroundStyle(Crucible.Color.Media.audio)
+                        }
+                        Spacer(minLength: 0)
+
+                        if let footer = audioFooterLabel {
+                            Text(footer)
+                                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                                .foregroundStyle(Crucible.Color.ink3)
+                                .padding(.bottom, 6)
+                                .padding(.horizontal, 4)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .accessibilityLabel(audioFooterAccessibilityLabel ?? "")
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -128,7 +147,45 @@ struct MediaTile: View {
                 thumbnail = ThumbnailService.shared.cachedThumbnail(filename: cached)
             }
         }
+        .task(id: localIdentifier) {
+            // Load audio duration for the footer label. AVURLAsset.load is
+            // async; the tile renders without a duration until this resolves.
+            guard mediaType == .voice, createdAt != nil else { return }
+            let url = SpeechService.audioURL(for: localIdentifier)
+            guard FileManager.default.fileExists(atPath: url.path) else { return }
+            let asset = AVURLAsset(url: url)
+            if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
+                audioDuration = cm.seconds
+            }
+        }
     }
+
+    private var audioFooterLabel: String? {
+        guard let createdAt else { return nil }
+        let timestamp = Self.timeFormatter.string(from: createdAt)
+        guard let audioDuration else { return timestamp }
+        return "\(timestamp) · \(formatDuration(audioDuration))"
+    }
+
+    private var audioFooterAccessibilityLabel: String? {
+        guard let createdAt else { return nil }
+        let timestamp = Self.timeFormatter.string(from: createdAt)
+        guard let audioDuration else { return "Recorded at \(timestamp)" }
+        return "Recorded at \(timestamp), \(formatDuration(audioDuration)) long"
+    }
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded(.down))
+        let m = total / 60
+        let s = total % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
 }
 
 /// 12pt corner fold in the media color, top-right. Only used on audio & text tiles.

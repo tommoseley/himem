@@ -71,6 +71,7 @@
 		A100000200 /* ContributeSessionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000200 /* ContributeSessionViewModel.swift */; };
 		A100000201 /* MediaTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000201 /* MediaTile.swift */; };
 		A100000202 /* ContributeActionBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000202 /* ContributeActionBox.swift */; };
+		A100000203 /* AudioPlayerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000203 /* AudioPlayerSheet.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
@@ -151,6 +152,7 @@
 		B100000200 /* ContributeSessionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributeSessionViewModel.swift; sourceTree = "<group>"; };
 		B100000201 /* MediaTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTile.swift; sourceTree = "<group>"; };
 		B100000202 /* ContributeActionBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributeActionBox.swift; sourceTree = "<group>"; };
+		B100000203 /* AudioPlayerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerSheet.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -311,6 +313,7 @@
 				B100000028 /* NewTopicSheet.swift */,
 				B100000046 /* RecycleBinView.swift */,
 				B100000201 /* MediaTile.swift */,
+				B100000203 /* AudioPlayerSheet.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -569,6 +572,7 @@
 				A100000026 /* SettingsView.swift in Sources */,
 				A100000027 /* NewTopicSheet.swift in Sources */,
 				A100000201 /* MediaTile.swift in Sources */,
+				A100000203 /* AudioPlayerSheet.swift in Sources */,
 				A100000046 /* RecycleBinView.swift in Sources */,
 				A100000047 /* PhotoLibraryPicker.swift in Sources */,
 				A100000054 /* ErrorService.swift in Sources */,

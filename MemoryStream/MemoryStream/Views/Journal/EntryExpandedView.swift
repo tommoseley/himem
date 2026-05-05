@@ -14,6 +14,16 @@ private enum ExpandedSheet: Identifiable {
     }
 }
 
+/// Identifies the voice tile a user tapped, so the AudioPlayerSheet can be
+/// presented via SwiftUI's `sheet(item:)` API. `filename` is the audio file
+/// path (matching the MediaReference.osIdentifier), `recordedAt` is shown
+/// as a header timestamp.
+struct AudioPlayerTarget: Identifiable {
+    let filename: String
+    let recordedAt: Date?
+    var id: String { filename }
+}
+
 struct EntryExpandedView: View {
     let entry: EntryDisplayModel
     var backLabel: String = "Today"
@@ -45,6 +55,7 @@ struct EntryExpandedView: View {
     @State private var isCleaningUp = false
     @State private var mentionsExpanded = false
     @State private var selectedMedia: MediaDisplayItem? = nil
+    @State private var audioPlayerForFile: AudioPlayerTarget? = nil
     @State private var showDeleteConfirmation = false
     @State private var showShareSheet = false
     @State private var newTopicName = ""
@@ -269,12 +280,16 @@ struct EntryExpandedView: View {
                 if entry.hasAudio || !entry.mediaItems.isEmpty || mode == .editing {
                     let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
                     LazyVGrid(columns: columns, spacing: 8) {
-                        // Audio tile
+                        // Audio tile (legacy single-audio entries — older
+                        // memories stored their voice clip on
+                        // entry.audioFilePath rather than a MediaReference).
                         if let audioFile = entry.audioFilePath, !discardAudio {
                             MediaTile(
                                 localIdentifier: audioFile,
                                 mediaType: .voice,
-                                onRemove: { discardAudio = true; if mode != .editing { enterEditing() } }
+                                createdAt: entry.createdAt,
+                                onRemove: { discardAudio = true; if mode != .editing { enterEditing() } },
+                                onTap: { audioPlayerForFile = AudioPlayerTarget(filename: audioFile, recordedAt: entry.createdAt) }
                             )
                         }
 
@@ -284,8 +299,15 @@ struct EntryExpandedView: View {
                                 MediaTile(
                                     localIdentifier: item.localIdentifier,
                                     mediaType: item.mediaType,
+                                    createdAt: item.mediaType == .voice ? entry.createdAt : nil,
                                     onRemove: { removedMediaIds.insert(item.id); if mode != .editing { enterEditing() } },
-                                    onTap: { selectedMedia = item }
+                                    onTap: {
+                                        if item.mediaType == .voice {
+                                            audioPlayerForFile = AudioPlayerTarget(filename: item.localIdentifier, recordedAt: entry.createdAt)
+                                        } else {
+                                            selectedMedia = item
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -436,6 +458,14 @@ struct EntryExpandedView: View {
         .onAppear {
             editedTitle = entry.displayTitle
             editedText = entry.content
+        }
+        .sheet(item: $audioPlayerForFile) { target in
+            AudioPlayerSheet(
+                filename: target.filename,
+                recordedAt: target.recordedAt,
+                transcriptFallback: entry.content
+            )
+            .presentationDetents([.medium, .large])
         }
         .fullScreenCover(item: $selectedMedia) { item in
             MediaViewerView(item: item)

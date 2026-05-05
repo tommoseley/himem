@@ -1,0 +1,189 @@
+import SwiftUI
+import AVFoundation
+
+/// Sheet-presented audio player. Shown when the user taps a voice tile in
+/// an entry's media grid. Plays the recording (via AudioPlayerService.shared
+/// so existing inline waveforms update too) and surfaces a transcript area
+/// alongside it.
+///
+/// Transcripts: voice-recording transcripts are joined into the parent
+/// JournalEntry.content during finalize, so we don't have a per-clip
+/// transcript field on MediaReference yet (that's a CloudKit schema change
+/// for a future pass). For now this sheet shows `transcriptFallback` —
+/// typically the entry's content — so the user can read along while the
+/// clip plays.
+struct AudioPlayerSheet: View {
+    let filename: String
+    let recordedAt: Date?
+    /// Text to render in the transcript area. Pass `entry.content` for now —
+    /// when we add per-clip transcripts to MediaReference, swap this for the
+    /// clip's own transcript text.
+    let transcriptFallback: String
+
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var player = AudioPlayerService.shared
+    @State private var totalDuration: TimeInterval = 0
+    @State private var currentTime: TimeInterval = 0
+    @State private var tickTimer: Timer?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 24) {
+                header
+                playerControls
+                Divider()
+                transcriptArea
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .background(Crucible.Color.paper)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Crucible.Color.accent)
+                }
+            }
+            .navigationTitle("Voice clip")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .task {
+            await loadDuration()
+            startTicking()
+        }
+        .onDisappear {
+            tickTimer?.invalidate()
+            tickTimer = nil
+            // If this clip is what's playing, stop it on dismiss so the
+            // user isn't surprised by audio continuing without a UI.
+            if player.currentFile == filename {
+                player.stop()
+            }
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let recordedAt {
+                Text(Self.timestampFormatter.string(from: recordedAt))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Crucible.Color.ink2)
+            }
+            Text(durationLabel)
+                .font(.system(size: 28, weight: .semibold).monospacedDigit())
+                .foregroundStyle(Crucible.Color.ink)
+        }
+    }
+
+    // MARK: - Player controls
+
+    private var playerControls: some View {
+        VStack(spacing: 12) {
+            ProgressView(value: progress)
+                .tint(Crucible.Color.Media.audio)
+
+            HStack {
+                Text(formatTime(currentTime))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Crucible.Color.ink3)
+                Spacer()
+                Button { togglePlay() } label: {
+                    Image(systemName: isPlayingThisClip ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 56))
+                        .foregroundStyle(Crucible.Color.Media.audio)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isPlayingThisClip ? "Pause" : "Play")
+                Spacer()
+                Text(formatTime(totalDuration))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Crucible.Color.ink3)
+            }
+        }
+    }
+
+    private var transcriptArea: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("TRANSCRIPT")
+                .font(.caption2.weight(.bold))
+                .tracking(0.5)
+                .foregroundStyle(Crucible.Color.ink3)
+
+            ScrollView {
+                Text(transcriptFallback.isEmpty ? "No transcript available." : transcriptFallback)
+                    .font(.callout)
+                    .foregroundStyle(transcriptFallback.isEmpty ? Crucible.Color.ink4 : Crucible.Color.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+    }
+
+    // MARK: - Playback state
+
+    private var isPlayingThisClip: Bool {
+        player.isPlaying && player.currentFile == filename
+    }
+
+    private var progress: Double {
+        guard totalDuration > 0 else { return 0 }
+        return min(1.0, max(0.0, currentTime / totalDuration))
+    }
+
+    private var durationLabel: String {
+        formatTime(totalDuration)
+    }
+
+    private func togglePlay() {
+        if isPlayingThisClip {
+            player.stop()
+        } else {
+            player.play(filename: filename)
+        }
+    }
+
+    // MARK: - Time tracking
+
+    private func loadDuration() async {
+        let url = SpeechService.audioURL(for: filename)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let asset = AVURLAsset(url: url)
+        if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
+            totalDuration = cm.seconds
+        }
+    }
+
+    /// AudioPlayerService doesn't expose a currentTime stream, so we tick a
+    /// timer at 4Hz and ask the underlying player. Cheap; this view is on
+    /// screen briefly.
+    private func startTicking() {
+        tickTimer?.invalidate()
+        tickTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
+            Task { @MainActor in
+                if player.isPlaying && player.currentFile == filename,
+                   let avPlayer = AudioPlayerService.shared.currentAVPlayer {
+                    currentTime = avPlayer.currentTime
+                } else if !player.isPlaying {
+                    // Reset to 0 when not playing this clip.
+                    currentTime = 0
+                }
+            }
+        }
+    }
+
+    private func formatTime(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded(.down))
+        let m = max(0, total) / 60
+        let s = max(0, total) % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
+    private static let timestampFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+}
