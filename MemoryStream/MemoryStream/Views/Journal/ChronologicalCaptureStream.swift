@@ -136,14 +136,6 @@ private struct VoiceClipPanel: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Button(action: onDelete) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Crucible.Color.ink4)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Delete voice clip")
-
             Button(action: onPlay) {
                 Image(systemName: isPlayingThis ? "speaker.wave.2.fill" : "speaker.wave.2")
                     .font(.system(size: 18))
@@ -184,6 +176,7 @@ private struct VoiceClipPanel: View {
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
+        .swipeToDelete(onDelete: onDelete, accessibilityLabel: "Delete voice clip")
     }
 
     private var displayText: String {
@@ -204,14 +197,6 @@ private struct NotePanel: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Button(action: onDelete) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Crucible.Color.ink4)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Delete note")
-
             // Spacer where the speaker icon lives on voice panels — keeps
             // text alignment consistent across panel types.
             Color.clear.frame(width: 18, height: 18)
@@ -247,6 +232,92 @@ private struct NotePanel: View {
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
+        .swipeToDelete(onDelete: onDelete, accessibilityLabel: "Delete note")
+    }
+}
+
+// MARK: - Swipe-to-delete modifier
+
+extension View {
+    /// Wraps the view with a swipe-right-to-delete affordance: drag the
+    /// content rightward to reveal a red Delete button on the leading edge,
+    /// tap it to fire `onDelete`. Drag past `commitThreshold` and release
+    /// to delete in one motion.
+    ///
+    /// Used on voice and note panels in the chronological capture stream.
+    /// Photo filmstrip tiles keep their inline × because the horizontal
+    /// scroll inside the filmstrip would compete with this gesture.
+    func swipeToDelete(onDelete: @escaping () -> Void, accessibilityLabel: String = "Delete") -> some View {
+        modifier(SwipeToDeleteModifier(onDelete: onDelete, accessibilityLabel: accessibilityLabel))
+    }
+}
+
+private struct SwipeToDeleteModifier: ViewModifier {
+    let onDelete: () -> Void
+    let accessibilityLabel: String
+
+    @State private var offset: CGFloat = 0
+    @State private var revealed: Bool = false
+
+    private let revealWidth: CGFloat = 88
+    private let commitThreshold: CGFloat = 200
+
+    func body(content: Content) -> some View {
+        ZStack(alignment: .leading) {
+            // Delete affordance behind the content — reveals as the user
+            // drags right. Tap fires the delete; the row otherwise snaps
+            // back when released below the reveal threshold.
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 16, weight: .semibold))
+                    if offset > revealWidth * 0.6 {
+                        Text("Delete")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(width: max(0, offset))
+                .frame(maxHeight: .infinity)
+                .background(Crucible.Color.danger)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
+            .opacity(offset > 4 ? 1 : 0)
+
+            content
+                .offset(x: offset)
+                .gesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { value in
+                            // Only respond to right-ward drags. Vertical-
+                            // dominant drags fall through to the parent
+                            // ScrollView naturally.
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            let proposed = value.translation.width + (revealed ? revealWidth : 0)
+                            offset = max(0, min(proposed, commitThreshold))
+                        }
+                        .onEnded { value in
+                            if offset >= commitThreshold {
+                                withAnimation(.easeOut(duration: 0.18)) { offset = commitThreshold }
+                                onDelete()
+                            } else if offset > revealWidth * 0.6 {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    offset = revealWidth
+                                    revealed = true
+                                }
+                            } else {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    offset = 0
+                                    revealed = false
+                                }
+                            }
+                        }
+                )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
