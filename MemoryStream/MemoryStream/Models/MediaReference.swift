@@ -10,6 +10,10 @@ public class MediaReference: NSManagedObject, Identifiable {
     @NSManaged public var isAccessible: Bool
     @NSManaged public var createdAt: Date?
     @NSManaged public var thumbnailCacheFilename: String?
+    /// Transcript captured at recording time for `.voice` refs. Nil for
+    /// image/video refs and for legacy voice refs created before this
+    /// attribute existed.
+    @NSManaged public var transcript: String?
     @NSManaged public var entry: JournalEntry?
 }
 

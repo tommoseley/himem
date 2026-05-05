@@ -17,10 +17,13 @@ private enum ExpandedSheet: Identifiable {
 /// Identifies the voice tile a user tapped, so the AudioPlayerSheet can be
 /// presented via SwiftUI's `sheet(item:)` API. `filename` is the audio file
 /// path (matching the MediaReference.osIdentifier), `recordedAt` is shown
-/// as a header timestamp.
+/// as a header timestamp, and `transcript` is the per-clip transcript
+/// (nil for legacy voice refs from before the schema gained the field —
+/// the sheet falls back to entry.content in that case).
 struct AudioPlayerTarget: Identifiable {
     let filename: String
     let recordedAt: Date?
+    let transcript: String?
     var id: String { filename }
 }
 
@@ -289,7 +292,7 @@ struct EntryExpandedView: View {
                                 mediaType: .voice,
                                 createdAt: entry.createdAt,
                                 onRemove: { discardAudio = true; if mode != .editing { enterEditing() } },
-                                onTap: { audioPlayerForFile = AudioPlayerTarget(filename: audioFile, recordedAt: entry.createdAt) }
+                                onTap: { audioPlayerForFile = AudioPlayerTarget(filename: audioFile, recordedAt: entry.createdAt, transcript: nil) }
                             )
                         }
 
@@ -303,7 +306,11 @@ struct EntryExpandedView: View {
                                     onRemove: { removedMediaIds.insert(item.id); if mode != .editing { enterEditing() } },
                                     onTap: {
                                         if item.mediaType == .voice {
-                                            audioPlayerForFile = AudioPlayerTarget(filename: item.localIdentifier, recordedAt: entry.createdAt)
+                                            audioPlayerForFile = AudioPlayerTarget(
+                                                filename: item.localIdentifier,
+                                                recordedAt: entry.createdAt,
+                                                transcript: item.transcript
+                                            )
                                         } else {
                                             selectedMedia = item
                                         }
@@ -460,10 +467,13 @@ struct EntryExpandedView: View {
             editedText = entry.content
         }
         .sheet(item: $audioPlayerForFile) { target in
+            // Prefer the per-clip transcript captured at recording time;
+            // fall back to entry.content (the joined-transcript blob) for
+            // legacy voice refs from before the schema gained the field.
             AudioPlayerSheet(
                 filename: target.filename,
                 recordedAt: target.recordedAt,
-                transcriptFallback: entry.content
+                transcriptFallback: target.transcript ?? entry.content
             )
             .presentationDetents([.medium, .large])
         }

@@ -42,7 +42,8 @@ enum EntryMapper {
                     localIdentifier: ref.osIdentifier,
                     mediaType: ref.mediaTypeEnum,
                     thumbnailCacheFilename: ref.thumbnailCacheFilename,
-                    isAccessible: ref.isAccessible
+                    isAccessible: ref.isAccessible,
+                    transcript: ref.transcript
                 )
             },
             recycledAt: entry.recycledAt,

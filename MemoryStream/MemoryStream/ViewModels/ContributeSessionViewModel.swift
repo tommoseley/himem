@@ -234,7 +234,12 @@ final class ContributeSessionViewModel: ObservableObject {
         do {
             if let audioPath, saveAudio {
                 let entryId = try ensureEntryForCapture(inputType: .voiceInApp)
-                let ref = try lifecycle.createMediaReference(forEntryId: entryId, localIdentifier: audioPath, mediaType: .voice)
+                let ref = try lifecycle.createMediaReference(
+                    forEntryId: entryId,
+                    localIdentifier: audioPath,
+                    mediaType: .voice,
+                    transcript: trimmedTranscript.isEmpty ? nil : trimmedTranscript
+                )
                 trackCapture(
                     id: ref.id,
                     mediaType: .voice,

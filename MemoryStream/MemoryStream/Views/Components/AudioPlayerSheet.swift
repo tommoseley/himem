@@ -5,19 +5,13 @@ import AVFoundation
 /// an entry's media grid. Plays the recording (via AudioPlayerService.shared
 /// so existing inline waveforms update too) and surfaces a transcript area
 /// alongside it.
-///
-/// Transcripts: voice-recording transcripts are joined into the parent
-/// JournalEntry.content during finalize, so we don't have a per-clip
-/// transcript field on MediaReference yet (that's a CloudKit schema change
-/// for a future pass). For now this sheet shows `transcriptFallback` —
-/// typically the entry's content — so the user can read along while the
-/// clip plays.
 struct AudioPlayerSheet: View {
     let filename: String
     let recordedAt: Date?
-    /// Text to render in the transcript area. Pass `entry.content` for now —
-    /// when we add per-clip transcripts to MediaReference, swap this for the
-    /// clip's own transcript text.
+    /// Text rendered in the transcript area. Callers should pass the per-clip
+    /// transcript stored on MediaReference for new captures; for legacy voice
+    /// refs that predate the per-clip transcript field, pass `entry.content`
+    /// (the joined-transcripts blob) so there's still something to read.
     let transcriptFallback: String
 
     @Environment(\.dismiss) private var dismiss

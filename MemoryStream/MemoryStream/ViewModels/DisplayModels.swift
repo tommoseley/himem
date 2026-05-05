@@ -191,6 +191,10 @@ struct MediaDisplayItem: Identifiable, Equatable {
     let mediaType: MediaReference.MediaType
     let thumbnailCacheFilename: String?
     let isAccessible: Bool
+    /// Per-clip speech-recognition transcript captured at recording time.
+    /// `nil` for image/video items and for legacy voice refs created before
+    /// the schema gained this field.
+    var transcript: String? = nil
 }
 
 // MARK: - Tag Display Model

@@ -31,13 +31,25 @@ final class EntryLifecycleService {
     /// Creates a single MediaReference attached to the entry with the given
     /// id. Used by Contribute Mode to persist each capture as it's taken
     /// (rather than buffering and committing in batch like the legacy
-    /// composer). Throws if the entry can't be found.
+    /// composer). For voice refs, optionally stores the speech-recognition
+    /// transcript on the ref itself so the audio player can show it
+    /// per-clip. Throws if the entry can't be found.
     @discardableResult
-    func createMediaReference(forEntryId entryId: UUID, localIdentifier: String, mediaType: MediaReference.MediaType) throws -> MediaReference {
+    func createMediaReference(
+        forEntryId entryId: UUID,
+        localIdentifier: String,
+        mediaType: MediaReference.MediaType,
+        transcript: String? = nil
+    ) throws -> MediaReference {
         guard let entry = try fetchEntry(id: entryId) else {
             throw NSError(domain: "EntryLifecycleService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry \(entryId) not found"])
         }
-        return try storage.createMediaReference(for: entry, localIdentifier: localIdentifier, mediaType: mediaType)
+        let ref = try storage.createMediaReference(for: entry, localIdentifier: localIdentifier, mediaType: mediaType)
+        if let transcript, !transcript.isEmpty {
+            ref.transcript = transcript
+            try storage.save(context: storage.viewContext)
+        }
+        return ref
     }
 
     /// Finalizes a Contribute Mode session against an existing entry. Appends
