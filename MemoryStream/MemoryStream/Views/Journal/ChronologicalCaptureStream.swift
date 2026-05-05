@@ -301,7 +301,16 @@ private struct SwipeActionsModifier: ViewModifier {
                         icon: "pencil",
                         label: "Edit",
                         color: .blue,
-                        action: onEdit
+                        action: {
+                            // Snap closed before firing — the panel may swap
+                            // to a taller editing layout, and a lingering
+                            // pill stretches with it.
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                offset = 0
+                                revealed = nil
+                            }
+                            onEdit()
+                        }
                     )
                     .frame(width: offset)
                     .accessibilityLabel(editAccessibilityLabel)
@@ -317,7 +326,13 @@ private struct SwipeActionsModifier: ViewModifier {
                         icon: "trash",
                         label: "Delete",
                         color: Crucible.Color.danger,
-                        action: onDelete
+                        action: {
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                offset = 0
+                                revealed = nil
+                            }
+                            onDelete()
+                        }
                     )
                     .frame(width: -offset)
                     .accessibilityLabel(deleteAccessibilityLabel)
