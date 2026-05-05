@@ -59,11 +59,17 @@ final class ContributeSessionViewModel: ObservableObject {
     @Published private(set) var anchor: Anchor = .newMemory
     @Published private(set) var entryId: UUID? = nil
     @Published private(set) var sessionCaptures: [SessionCapture] = []
-    /// Notes added via the **Note** button. Voice transcripts live on the
-    /// voice SessionCapture itself, not here, so a voice clip with a
-    /// transcript is counted as one capture (not as a clip + a note) in the
-    /// discard summary.
-    @Published private(set) var sessionTypedNotes: [String] = []
+    /// Notes added via the **Note** button. Each one is persisted as a
+    /// `TextSegment` immediately on commit so it shows up in the entry's
+    /// chronological capture stream alongside voice/photo. The `id` matches
+    /// the underlying `TextSegment.id` so X-discard can clean them up
+    /// individually.
+    @Published private(set) var sessionTypedNotes: [SessionTypedNote] = []
+
+    struct SessionTypedNote: Identifiable, Equatable {
+        let id: UUID
+        let text: String
+    }
     @Published private(set) var activeCapture: ActiveCapture? = nil
     @Published var showDiscardConfirmation = false
 
@@ -116,28 +122,12 @@ final class ContributeSessionViewModel: ObservableObject {
             return
         }
         if let entryId {
-            let added = finalizeContent
             // captureLocation only on new-memory finalization — append flows
             // already inherit the existing entry's location (or its absence).
             let isNewMemoryAnchor: Bool = { if case .newMemory = anchor { return true } else { return false } }()
-            lifecycle.finalizeContribution(entryId: entryId, addedContent: added, captureLocation: isNewMemoryAnchor)
+            lifecycle.finalizeContribution(entryId: entryId, captureLocation: isNewMemoryAnchor)
         }
         teardown()
-    }
-
-    /// Joins voice-capture transcripts and typed notes into a single string
-    /// to fold into entry.content. Voice transcripts come first (since
-    /// short-press auto-starts voice — they tend to be the user's first
-    /// thought), then typed notes in capture order.
-    private var finalizeContent: String {
-        var parts: [String] = []
-        for capture in sessionCaptures {
-            if let transcript = capture.transcript, !transcript.isEmpty {
-                parts.append(transcript)
-            }
-        }
-        parts.append(contentsOf: sessionTypedNotes)
-        return parts.joined(separator: "\n\n")
     }
 
     /// Asks for confirmation if the session has substantive content and the
@@ -198,13 +188,20 @@ final class ContributeSessionViewModel: ObservableObject {
         ))
     }
 
-    /// Adds a typed note (Note button). Voice transcripts are NOT routed here
-    /// — they travel with the voice SessionCapture so the discard summary
-    /// can count voice clips and notes separately.
+    /// Adds a typed note (Note button). Persists a TextSegment immediately
+    /// so the note participates in the entry's chronological capture stream
+    /// and X-discard can clean it up by id. Voice transcripts are NOT routed
+    /// here — they travel on their voice MediaReference (`transcript`).
     func trackTypedNote(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        sessionTypedNotes.append(trimmed)
+        do {
+            let entryId = try ensureEntryForCapture(inputType: .typed)
+            let segment = try lifecycle.createTextSegment(forEntryId: entryId, text: trimmed)
+            sessionTypedNotes.append(SessionTypedNote(id: segment.id, text: trimmed))
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
     }
 
     /// Persists a photo or video capture: lazy-creates the entry if needed,
@@ -313,14 +310,22 @@ final class ContributeSessionViewModel: ObservableObject {
 
     private func performDiscard() {
         let captureIds = Set(sessionCaptures.map(\.id))
+        let textIds = Set(sessionTypedNotes.map(\.id))
         if !captureIds.isEmpty {
             lifecycle.deleteMediaReferences(ids: captureIds)
         }
+        if !textIds.isEmpty {
+            lifecycle.deleteTextSegments(ids: textIds)
+        }
         // For new-memory, the entry only exists because this session created
         // it (lazy-create). Safe to delete unconditionally on discard.
-        // For existing-memory, the entry pre-exists; we leave it alone.
+        // For existing-memory, the entry pre-exists; we leave it alone but
+        // regenerate its content so the deleted segments stop showing in
+        // entry.content.
         if case .newMemory = anchor, let entryId {
             lifecycle.delete(entryId: entryId)
+        } else if case .existingMemory = anchor, let entryId {
+            lifecycle.regenerateContent(forEntryId: entryId)
         }
         teardown()
     }

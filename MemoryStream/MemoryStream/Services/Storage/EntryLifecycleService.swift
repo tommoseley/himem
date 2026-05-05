@@ -52,28 +52,19 @@ final class EntryLifecycleService {
         return ref
     }
 
-    /// Finalizes a Contribute Mode session against an existing entry. Appends
-    /// the joined transcripts + typed notes to entry.content (separated from
-    /// any pre-existing content with a blank line), enqueues a ProcessingTask
-    /// so the AI engine extracts entities/topics, and captures location for
-    /// new-memory finalization.
+    /// Finalizes a Contribute Mode session. Regenerates `entry.content` from
+    /// all chronological captures (TextSegments + voice MediaReference
+    /// transcripts) so the AI sees a coherent joined text, enqueues a
+    /// ProcessingTask, and captures location for new-memory finalization.
     ///
-    /// Mirrors `save(...)` for the persist-as-you-go flow: media references
-    /// were already attached one-by-one as they were captured, so the only
-    /// work left at session-end is to fold the text in and kick off
-    /// processing.
-    func finalizeContribution(entryId: UUID, addedContent: String, captureLocation shouldCaptureLocation: Bool) {
+    /// Mirrors `save(...)` for the persist-as-you-go flow: every capture
+    /// (voice refs, image/video refs, typed text segments) was already
+    /// attached one-by-one as it was taken, so the only work left at
+    /// session-end is to derive the joined content + kick off processing.
+    func finalizeContribution(entryId: UUID, captureLocation shouldCaptureLocation: Bool) {
         do {
             guard let entry = try fetchEntry(id: entryId) else { return }
-            let trimmed = addedContent.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                let existing = entry.content
-                if existing.isEmpty {
-                    entry.content = trimmed
-                } else {
-                    entry.content = existing + "\n\n" + trimmed
-                }
-            }
+            entry.content = Self.joinedContent(from: entry)
             try storage.save(context: storage.viewContext)
             let _ = try storage.createProcessingTask(for: entry)
             processEntry(entry)
@@ -83,6 +74,73 @@ final class EntryLifecycleService {
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }
+    }
+
+    /// Creates a TextSegment row attached to the entry with the given id.
+    /// Used by Contribute Mode when the user commits a typed Note — segments
+    /// are persisted immediately so they show up in the chronological capture
+    /// stream alongside voice/photo captures.
+    @discardableResult
+    func createTextSegment(forEntryId entryId: UUID, text: String) throws -> TextSegment {
+        guard let entry = try fetchEntry(id: entryId) else {
+            throw NSError(domain: "EntryLifecycleService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry \(entryId) not found"])
+        }
+        return try storage.createTextSegment(for: entry, text: text)
+    }
+
+    /// Deletes TextSegments by id. Used by Contribute Mode's X-cancel to
+    /// remove only this-session segments, leaving any pre-existing segments
+    /// on an append-anchor entry untouched.
+    func deleteTextSegments(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        do {
+            for id in ids {
+                let request = NSFetchRequest<TextSegment>(entityName: "TextSegment")
+                request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+                request.fetchLimit = 1
+                guard let segment = try storage.viewContext.fetch(request).first else { continue }
+                storage.viewContext.delete(segment)
+            }
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    /// Regenerates `entry.content` from the entry's TextSegments + voice
+    /// MediaReference transcripts, sorted by `createdAt`. Called after any
+    /// add/edit/delete that affects the chronological capture stream — keeps
+    /// AI input (which still reads `entry.content`) in sync with what the
+    /// user actually captured.
+    func regenerateContent(forEntryId entryId: UUID) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            entry.content = Self.joinedContent(from: entry)
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    /// Pure: builds the joined-content string from an entry's segments +
+    /// voice transcripts in chronological order. Exposed as static so it
+    /// can be called from any context with a live JournalEntry.
+    static func joinedContent(from entry: JournalEntry) -> String {
+        struct Item { let createdAt: Date; let text: String }
+        var items: [Item] = []
+        for segment in entry.textSegmentsArray {
+            let trimmed = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            items.append(Item(createdAt: segment.createdAt ?? .distantPast, text: trimmed))
+        }
+        for ref in entry.mediaReferencesArray where ref.mediaTypeEnum == .voice {
+            guard let transcript = ref.transcript?.trimmingCharacters(in: .whitespacesAndNewlines), !transcript.isEmpty else { continue }
+            items.append(Item(createdAt: ref.createdAt ?? .distantPast, text: transcript))
+        }
+        return items
+            .sorted { $0.createdAt < $1.createdAt }
+            .map(\.text)
+            .joined(separator: "\n\n")
     }
 
     /// Deletes the specified MediaReferences (and their cached thumbnails, and

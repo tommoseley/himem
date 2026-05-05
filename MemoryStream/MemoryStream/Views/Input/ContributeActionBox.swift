@@ -305,14 +305,14 @@ struct ContributeActionBox: View {
 
     @ViewBuilder
     private var typedNoteCards: some View {
-        ForEach(Array(session.sessionTypedNotes.enumerated()), id: \.offset) { _, text in
+        ForEach(session.sessionTypedNotes) { note in
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "text.alignleft")
                     .font(.caption)
                     .foregroundStyle(Crucible.Color.ink3)
                     .padding(.top, 2)
                     .accessibilityHidden(true)
-                Text(text)
+                Text(note.text)
                     .font(.callout)
                     .foregroundStyle(Crucible.Color.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
