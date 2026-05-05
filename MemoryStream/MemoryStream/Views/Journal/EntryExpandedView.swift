@@ -660,13 +660,13 @@ struct EntryExpandedView: View {
 
     // MARK: - Chronological capture stream helpers
 
-    /// New-style entries — those with TextSegments — render the chronological
-    /// capture stream. Legacy entries (single-block content + media grid)
-    /// keep the old layout. No migration: an entry stays "legacy" until the
-    /// user adds a typed Note via Contribute Mode (which creates a
-    /// TextSegment), at which point it flips to the new layout.
+    /// Entries with any chronological captures (voice / photo / video
+    /// MediaReferences, or typed TextSegments) use the new
+    /// ChronologicalCaptureStream view. Legacy entries — those with only a
+    /// single content blob and an optional `audioFilePath` from the old
+    /// composer — keep the original single-block + media-grid layout.
     private var isLegacyEntry: Bool {
-        entry.textSegments.isEmpty
+        entry.textSegments.isEmpty && entry.mediaItems.isEmpty
     }
 
     /// Removes a media reference immediately rather than batching it with

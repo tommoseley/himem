@@ -48,6 +48,9 @@ final class ContributeSessionViewModel: ObservableObject {
         /// capture as one "voice clip", not as a "note", so transcripts are
         /// not double-counted.
         let transcript: String?
+        /// Wall-clock time the capture was tracked. Used to interleave
+        /// session items chronologically in the Action Box display.
+        let createdAt: Date
     }
 
     // MARK: - Published state
@@ -69,6 +72,7 @@ final class ContributeSessionViewModel: ObservableObject {
     struct SessionTypedNote: Identifiable, Equatable {
         let id: UUID
         let text: String
+        let createdAt: Date
     }
     @Published private(set) var activeCapture: ActiveCapture? = nil
     @Published var showDiscardConfirmation = false
@@ -177,14 +181,16 @@ final class ContributeSessionViewModel: ObservableObject {
         mediaType: MediaReference.MediaType,
         osIdentifier: String,
         duration: TimeInterval? = nil,
-        transcript: String? = nil
+        transcript: String? = nil,
+        createdAt: Date = Date()
     ) {
         sessionCaptures.append(SessionCapture(
             id: id,
             mediaType: mediaType,
             osIdentifier: osIdentifier,
             duration: duration,
-            transcript: transcript
+            transcript: transcript,
+            createdAt: createdAt
         ))
     }
 
@@ -198,7 +204,11 @@ final class ContributeSessionViewModel: ObservableObject {
         do {
             let entryId = try ensureEntryForCapture(inputType: .typed)
             let segment = try lifecycle.createTextSegment(forEntryId: entryId, text: trimmed)
-            sessionTypedNotes.append(SessionTypedNote(id: segment.id, text: trimmed))
+            sessionTypedNotes.append(SessionTypedNote(
+                id: segment.id,
+                text: trimmed,
+                createdAt: segment.createdAt ?? Date()
+            ))
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }

@@ -170,22 +170,123 @@ struct ContributeActionBox: View {
     // MARK: - Tiles
 
     private var tilesArea: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
-                liveRecordingCard
-                if !hasAnyCapture && !speechService.isRecording {
-                    emptyState
-                } else {
-                    voiceCaptureCards
-                    photoVideoGrid
-                    typedNoteCards
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    if !hasAnyCapture && !speechService.isRecording {
+                        emptyState
+                    } else {
+                        // Chronological — oldest at top, newest at bottom.
+                        // Live recording card (when active) is the most recent
+                        // "thing happening" so it pins below the captured items.
+                        ForEach(chronologicalItems) { item in
+                            renderItem(item)
+                        }
+                        liveRecordingCard
+                            .id(Self.liveCardAnchor)
+                    }
+                }
+                .padding(16)
+            }
+            .onChange(of: speechService.isRecording) { _, isRecording in
+                if isRecording {
+                    withAnimation { proxy.scrollTo(Self.liveCardAnchor, anchor: .bottom) }
                 }
             }
-            .padding(16)
+            .onChange(of: chronologicalItems.count) { _, _ in
+                // Keep the freshly-landed capture in view.
+                withAnimation { proxy.scrollTo(Self.liveCardAnchor, anchor: .bottom) }
+            }
         }
         .fullScreenCover(item: $selectedTileMedia) { item in
             MediaViewerView(item: item)
         }
+    }
+
+    private static let liveCardAnchor = "live-recording-card"
+
+    /// Unified chronological list of session captures + typed notes. Image
+    /// and video captures are NOT grouped into filmstrips here (each renders
+    /// as its own square tile) — keeping per-item identity makes auto-scroll
+    /// behaviour predictable when a single new photo lands. The entry detail
+    /// view's ChronologicalCaptureStream handles the post-Done filmstrip
+    /// grouping for review.
+    private var chronologicalItems: [SessionItem] {
+        var items: [SessionItem] = session.sessionCaptures.map { .capture($0) }
+        items.append(contentsOf: session.sessionTypedNotes.map { .note($0) })
+        return items.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private enum SessionItem: Identifiable {
+        case capture(ContributeSessionViewModel.SessionCapture)
+        case note(ContributeSessionViewModel.SessionTypedNote)
+
+        var id: String {
+            switch self {
+            case .capture(let c): return "c-\(c.id.uuidString)"
+            case .note(let n): return "n-\(n.id.uuidString)"
+            }
+        }
+
+        var createdAt: Date {
+            switch self {
+            case .capture(let c): return c.createdAt
+            case .note(let n): return n.createdAt
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func renderItem(_ item: SessionItem) -> some View {
+        switch item {
+        case .capture(let c):
+            switch c.mediaType {
+            case .voice:
+                VoiceContributionCard(capture: c)
+            case .image, .video:
+                singleVisualTile(for: c)
+            }
+        case .note(let n):
+            noteCard(text: n.text)
+        }
+    }
+
+    private func singleVisualTile(for capture: ContributeSessionViewModel.SessionCapture) -> some View {
+        MediaTile(
+            localIdentifier: capture.osIdentifier,
+            mediaType: capture.mediaType,
+            onTap: {
+                selectedTileMedia = MediaDisplayItem(
+                    id: capture.id,
+                    localIdentifier: capture.osIdentifier,
+                    mediaType: capture.mediaType,
+                    thumbnailCacheFilename: nil,
+                    isAccessible: true
+                )
+            }
+        )
+        .frame(width: 110, height: 110)
+    }
+
+    private func noteCard(text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "text.alignleft")
+                .font(.caption)
+                .foregroundStyle(Crucible.Color.ink3)
+                .padding(.top, 2)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(Crucible.Color.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(Crucible.Color.card)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Crucible.Color.hairline, lineWidth: 1)
+        )
     }
 
     private var hasAnyCapture: Bool {
@@ -246,83 +347,6 @@ struct ContributeActionBox: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(Crucible.Color.Media.audio.opacity(0.6), lineWidth: 1.5)
-            )
-        }
-    }
-
-    // MARK: Voice capture cards
-
-    @ViewBuilder
-    private var voiceCaptureCards: some View {
-        ForEach(session.sessionCaptures.filter { $0.mediaType == .voice }, id: \.id) { capture in
-            VoiceContributionCard(capture: capture)
-        }
-    }
-
-    // MARK: Photo + video grid
-
-    @ViewBuilder
-    private var photoVideoGrid: some View {
-        let visualCaptures = session.sessionCaptures.filter { $0.mediaType == .image || $0.mediaType == .video }
-        if !visualCaptures.isEmpty {
-            GeometryReader { geo in
-                let cols = 3
-                let spacing: CGFloat = 8
-                let tileSize = (geo.size.width - spacing * CGFloat(cols - 1)) / CGFloat(cols)
-
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.fixed(tileSize), spacing: spacing), count: cols),
-                    spacing: spacing
-                ) {
-                    ForEach(visualCaptures, id: \.id) { capture in
-                        MediaTile(
-                            localIdentifier: capture.osIdentifier,
-                            mediaType: capture.mediaType,
-                            onTap: {
-                                selectedTileMedia = MediaDisplayItem(
-                                    id: capture.id,
-                                    localIdentifier: capture.osIdentifier,
-                                    mediaType: capture.mediaType,
-                                    thumbnailCacheFilename: nil,
-                                    isAccessible: true
-                                )
-                            }
-                        )
-                        .frame(width: tileSize, height: tileSize)
-                    }
-                }
-            }
-            .frame(height: gridHeight(for: visualCaptures.count))
-        }
-    }
-
-    private func gridHeight(for visualCount: Int) -> CGFloat {
-        let rows = max(1, (visualCount + 2) / 3)
-        return min(CGFloat(rows) * 116, 360)
-    }
-
-    // MARK: Typed notes
-
-    @ViewBuilder
-    private var typedNoteCards: some View {
-        ForEach(session.sessionTypedNotes) { note in
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "text.alignleft")
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink3)
-                    .padding(.top, 2)
-                    .accessibilityHidden(true)
-                Text(note.text)
-                    .font(.callout)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(12)
-            .background(Crucible.Color.card)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Crucible.Color.hairline, lineWidth: 1)
             )
         }
     }
@@ -809,10 +833,10 @@ private struct ContributeTextEditor: View {
     ContributeActionBox(
         session: previewSession(
             captures: [
-                .init(id: UUID(), mediaType: .voice, osIdentifier: "voice1", duration: 8.4, transcript: "The tomatoes in bed 3 are coming in earlier than last year. Two cherry plants showed first flowers yesterday."),
-                .init(id: UUID(), mediaType: .image, osIdentifier: "img1", duration: nil, transcript: nil),
-                .init(id: UUID(), mediaType: .image, osIdentifier: "img2", duration: nil, transcript: nil),
-                .init(id: UUID(), mediaType: .video, osIdentifier: "vid1", duration: 21.2, transcript: nil)
+                .init(id: UUID(), mediaType: .voice, osIdentifier: "voice1", duration: 8.4, transcript: "The tomatoes in bed 3 are coming in earlier than last year. Two cherry plants showed first flowers yesterday.", createdAt: Date()),
+                .init(id: UUID(), mediaType: .image, osIdentifier: "img1", duration: nil, transcript: nil, createdAt: Date()),
+                .init(id: UUID(), mediaType: .image, osIdentifier: "img2", duration: nil, transcript: nil, createdAt: Date()),
+                .init(id: UUID(), mediaType: .video, osIdentifier: "vid1", duration: 21.2, transcript: nil, createdAt: Date())
             ],
             typedNotes: ["Remember to mulch bed 5 before the weekend."]
         ),
