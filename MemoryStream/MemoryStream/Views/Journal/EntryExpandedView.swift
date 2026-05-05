@@ -15,12 +15,14 @@ private enum ExpandedSheet: Identifiable {
 }
 
 /// Identifies the voice tile a user tapped, so the AudioPlayerSheet can be
-/// presented via SwiftUI's `sheet(item:)` API. `filename` is the audio file
-/// path (matching the MediaReference.osIdentifier), `recordedAt` is shown
-/// as a header timestamp, and `transcript` is the per-clip transcript
-/// (nil for legacy voice refs from before the schema gained the field —
-/// the sheet falls back to entry.content in that case).
+/// presented via SwiftUI's `sheet(item:)` API. `mediaId` is the
+/// MediaReference id (so the sheet's transcript edit can save back to the
+/// right ref); `filename` is the audio file path; `recordedAt` is shown as
+/// a header timestamp; `transcript` is the per-clip transcript (nil for
+/// legacy voice refs from before the schema gained the field, in which
+/// case the sheet falls back to entry.content).
 struct AudioPlayerTarget: Identifiable {
+    let mediaId: UUID?
     let filename: String
     let recordedAt: Date?
     let transcript: String?
@@ -291,11 +293,9 @@ struct EntryExpandedView: View {
                         onEditNote: { id, newText in
                             updateTextSegment(id: id, text: newText)
                         },
-                        onEditTranscript: { id, newText in
-                            updateMediaTranscript(id: id, text: newText)
-                        },
-                        onPlayVoice: { item in
+                        onOpenVoice: { item in
                             audioPlayerForFile = AudioPlayerTarget(
+                                mediaId: item.id,
                                 filename: item.localIdentifier,
                                 recordedAt: item.createdAt,
                                 transcript: item.transcript
@@ -331,7 +331,7 @@ struct EntryExpandedView: View {
                                 mediaType: .voice,
                                 createdAt: entry.createdAt,
                                 onRemove: { discardAudio = true; if mode != .editing { enterEditing() } },
-                                onTap: { audioPlayerForFile = AudioPlayerTarget(filename: audioFile, recordedAt: entry.createdAt, transcript: nil) }
+                                onTap: { audioPlayerForFile = AudioPlayerTarget(mediaId: nil, filename: audioFile, recordedAt: entry.createdAt, transcript: nil) }
                             )
                         }
 
@@ -512,7 +512,15 @@ struct EntryExpandedView: View {
             AudioPlayerSheet(
                 filename: target.filename,
                 recordedAt: target.recordedAt,
-                transcriptFallback: target.transcript ?? entry.content
+                initialTranscript: target.transcript ?? entry.content,
+                onSaveTranscript: { newText in
+                    if let mediaId = target.mediaId {
+                        updateMediaTranscript(id: mediaId, text: newText)
+                    }
+                    // For legacy entries (no mediaId), edits aren't
+                    // persisted — the transcript is sourced from
+                    // entry.content which has its own edit path.
+                }
             )
             .presentationDetents([.medium, .large])
         }

@@ -20,8 +20,10 @@ struct ChronologicalCaptureStream: View {
     let onDeleteNote: (UUID) -> Void
     let onDeleteMedia: (UUID) -> Void
     let onEditNote: (UUID, String) -> Void
-    let onEditTranscript: (UUID, String) -> Void
-    let onPlayVoice: (MediaDisplayItem) -> Void
+    /// Opens the AudioPlayerSheet for a voice clip — fires on swipe-edit.
+    /// Sheet is the canonical surface for playing AND editing the
+    /// transcript; the panel itself doesn't have a tap-to-play affordance.
+    let onOpenVoice: (MediaDisplayItem) -> Void
     let onTapPhoto: (MediaDisplayItem) -> Void
 
     var body: some View {
@@ -32,8 +34,7 @@ struct ChronologicalCaptureStream: View {
                     VoiceClipPanel(
                         item: item,
                         onDelete: { onDeleteVoice(item.id) },
-                        onPlay: { onPlayVoice(item) },
-                        onEditTranscript: { newText in onEditTranscript(item.id, newText) }
+                        onOpenSheet: { onOpenVoice(item) }
                     )
                 case .note(let segment):
                     NotePanel(
@@ -123,54 +124,20 @@ struct ChronologicalCaptureStream: View {
 private struct VoiceClipPanel: View {
     let item: MediaDisplayItem
     let onDelete: () -> Void
-    let onPlay: () -> Void
-    let onEditTranscript: (String) -> Void
-
-    @StateObject private var player = AudioPlayerService.shared
-    @State private var editing = false
-    @State private var draftText = ""
-
-    private var isPlayingThis: Bool {
-        player.isPlaying && player.currentFile == item.localIdentifier
-    }
+    /// Opens the AudioPlayerSheet — the canonical play + edit-transcript
+    /// surface for a voice clip. Tap on the panel and swipe-right both
+    /// route here; the sheet's transcript editor is the only way to edit
+    /// the clip's transcript now.
+    let onOpenSheet: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Button(action: onPlay) {
-                Image(systemName: isPlayingThis ? "speaker.wave.2.fill" : "speaker.wave.2")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Crucible.Color.Media.audio)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Play voice clip")
-
-            if editing {
-                TextEditor(text: $draftText)
-                    .font(.callout)
-                    .frame(minHeight: 60)
-                    .scrollContentBackground(.hidden)
-                    .background(Crucible.Color.paper)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Crucible.Color.hairline))
-                    .onAppear { draftText = item.transcript ?? "" }
-                    .toolbar {
-                        ToolbarItemGroup(placement: .keyboard) {
-                            Spacer()
-                            Button("Done") {
-                                onEditTranscript(draftText.trimmingCharacters(in: .whitespacesAndNewlines))
-                                editing = false
-                            }
-                        }
-                    }
-            } else {
-                Text(displayText)
-                    .font(.callout)
-                    .foregroundStyle(item.transcript == nil || item.transcript?.isEmpty == true
-                                     ? Crucible.Color.ink4 : Crucible.Color.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.leading)
-                    .onTapGesture(count: 2) { editing = true }
-            }
+        HStack(alignment: .top, spacing: 0) {
+            Text(displayText)
+                .font(.callout)
+                .foregroundStyle(item.transcript == nil || item.transcript?.isEmpty == true
+                                 ? Crucible.Color.ink4 : Crucible.Color.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(.leading)
         }
         .padding(12)
         .background(Crucible.Color.card)
@@ -178,7 +145,7 @@ private struct VoiceClipPanel: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
         .swipeActions(
             onDelete: onDelete,
-            onEdit: { editing = true },
+            onEdit: onOpenSheet,
             deleteAccessibilityLabel: "Delete voice clip",
             editAccessibilityLabel: "Edit transcript"
         )

@@ -1,24 +1,32 @@
 import SwiftUI
 import AVFoundation
 
-/// Sheet-presented audio player. Shown when the user taps a voice tile in
-/// an entry's media grid. Plays the recording (via AudioPlayerService.shared
-/// so existing inline waveforms update too) and surfaces a transcript area
-/// alongside it.
+/// Sheet-presented audio player + transcript editor. Tap a voice tile in
+/// an entry's media grid to open this sheet; play the clip via
+/// AudioPlayerService.shared (existing inline waveforms update too) and
+/// edit the transcript inline.
+///
+/// The transcript area is the edit control. Cancel discards changes;
+/// Done saves the (trimmed) text via `onSaveTranscript` if it differs
+/// from the initial value.
 struct AudioPlayerSheet: View {
     let filename: String
     let recordedAt: Date?
-    /// Text rendered in the transcript area. Callers should pass the per-clip
-    /// transcript stored on MediaReference for new captures; for legacy voice
-    /// refs that predate the per-clip transcript field, pass `entry.content`
-    /// (the joined-transcripts blob) so there's still something to read.
-    let transcriptFallback: String
+    /// Transcript to seed the editor with. Pass the per-clip transcript
+    /// stored on MediaReference for new captures; for legacy voice refs
+    /// that predate the per-clip transcript field, pass `entry.content`.
+    let initialTranscript: String
+    /// Persists the edited transcript. Called on Done if the trimmed text
+    /// differs from `initialTranscript`. Skipped on Cancel and on Done
+    /// with no changes.
+    let onSaveTranscript: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var player = AudioPlayerService.shared
     @State private var totalDuration: TimeInterval = 0
     @State private var currentTime: TimeInterval = 0
     @State private var tickTimer: Timer?
+    @State private var draftTranscript: String = ""
 
     var body: some View {
         NavigationStack {
@@ -26,22 +34,29 @@ struct AudioPlayerSheet: View {
                 header
                 playerControls
                 Divider()
-                transcriptArea
-                Spacer(minLength: 0)
+                transcriptEditor
             }
             .padding(20)
             .background(Crucible.Color.paper)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Crucible.Color.accent)
+                    Button("Done") {
+                        commitIfChanged()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Crucible.Color.accent)
                 }
             }
             .navigationTitle("Voice clip")
             .navigationBarTitleDisplayMode(.inline)
         }
         .task {
+            draftTranscript = initialTranscript
             await loadDuration()
             startTicking()
         }
@@ -98,21 +113,32 @@ struct AudioPlayerSheet: View {
         }
     }
 
-    private var transcriptArea: some View {
+    // MARK: - Transcript editor
+
+    private var transcriptEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("TRANSCRIPT")
                 .font(.caption2.weight(.bold))
                 .tracking(0.5)
                 .foregroundStyle(Crucible.Color.ink3)
 
-            ScrollView {
-                Text(transcriptFallback.isEmpty ? "No transcript available." : transcriptFallback)
-                    .font(.callout)
-                    .foregroundStyle(transcriptFallback.isEmpty ? Crucible.Color.ink4 : Crucible.Color.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.leading)
-            }
+            TextEditor(text: $draftTranscript)
+                .font(.callout)
+                .foregroundStyle(Crucible.Color.ink)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 120)
+                .scrollContentBackground(.hidden)
+                .background(Crucible.Color.paper)
         }
+    }
+
+    // MARK: - Save
+
+    private func commitIfChanged() {
+        let trimmed = draftTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let original = initialTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != original else { return }
+        onSaveTranscript(trimmed)
     }
 
     // MARK: - Playback state
