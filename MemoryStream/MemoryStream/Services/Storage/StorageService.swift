@@ -196,6 +196,19 @@ final class StorageService {
         try save(context: ctx)
     }
 
+    // MARK: - Text Segment Operations
+
+    func createTextSegment(for entry: JournalEntry, text: String, createdAt: Date = Date(), context: NSManagedObjectContext? = nil) throws -> TextSegment {
+        let ctx = context ?? viewContext
+        let segment = TextSegment(context: ctx)
+        segment.id = UUID()
+        segment.text = text
+        segment.createdAt = createdAt
+        segment.entry = entry
+        try save(context: ctx)
+        return segment
+    }
+
     // MARK: - Media Reference Operations
 
     func createMediaReference(for entry: JournalEntry, localIdentifier: String, mediaType: MediaReference.MediaType, context: NSManagedObjectContext? = nil) throws -> MediaReference {

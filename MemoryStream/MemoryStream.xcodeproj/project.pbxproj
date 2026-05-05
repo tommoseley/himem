@@ -14,6 +14,7 @@
 		A100000005 /* InferenceSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000005 /* InferenceSummary.swift */; };
 		A100000006 /* Topic.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000006 /* Topic.swift */; };
 		A100000007 /* MediaReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000007 /* MediaReference.swift */; };
+		A100000204 /* TextSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000204 /* TextSegment.swift */; };
 		A100000008 /* StorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000008 /* StorageService.swift */; };
 		A100000009 /* ClaudeAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000009 /* ClaudeAPIService.swift */; };
 		A100000010 /* LocalEntityExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000010 /* LocalEntityExtractor.swift */; };
@@ -93,6 +94,7 @@
 		B100000005 /* InferenceSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSummary.swift; sourceTree = "<group>"; };
 		B100000006 /* Topic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Topic.swift; sourceTree = "<group>"; };
 		B100000007 /* MediaReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReference.swift; sourceTree = "<group>"; };
+		B100000204 /* TextSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSegment.swift; sourceTree = "<group>"; };
 		B100000008 /* StorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageService.swift; sourceTree = "<group>"; };
 		B100000009 /* ClaudeAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAPIService.swift; sourceTree = "<group>"; };
 		B100000010 /* LocalEntityExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalEntityExtractor.swift; sourceTree = "<group>"; };
@@ -224,6 +226,7 @@
 				B100000005 /* InferenceSummary.swift */,
 				B100000006 /* Topic.swift */,
 				B100000007 /* MediaReference.swift */,
+				B100000204 /* TextSegment.swift */,
 				B100000048 /* Project.swift */,
 				B100000024 /* MemoryStream.xcdatamodeld */,
 			);
@@ -553,6 +556,7 @@
 				A100000005 /* InferenceSummary.swift in Sources */,
 				A100000006 /* Topic.swift in Sources */,
 				A100000007 /* MediaReference.swift in Sources */,
+				A100000204 /* TextSegment.swift in Sources */,
 				A100000008 /* StorageService.swift in Sources */,
 				A100000009 /* ClaudeAPIService.swift in Sources */,
 				A100000010 /* LocalEntityExtractor.swift in Sources */,

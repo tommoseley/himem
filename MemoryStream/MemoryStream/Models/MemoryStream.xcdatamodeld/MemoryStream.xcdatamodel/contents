@@ -18,6 +18,7 @@
         <relationship name="mediaReferences" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MediaReference" inverseName="entry" inverseEntity="MediaReference"/>
         <relationship name="processingTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ProcessingTask" inverseName="entry" inverseEntity="ProcessingTask"/>
         <relationship name="inferenceSummary" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="InferenceSummary" inverseName="entry" inverseEntity="InferenceSummary"/>
+        <relationship name="textSegments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="TextSegment" inverseName="entry" inverseEntity="TextSegment"/>
         <relationship name="topics" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Topic" inverseName="entries" inverseEntity="Topic"/>
         <relationship name="projects" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Project" inverseName="entries" inverseEntity="Project"/>
     </entity>
@@ -84,5 +85,11 @@
     <entity name="SyncPing" representedClassName="SyncPing" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="TextSegment" representedClassName="TextSegment" syncable="YES">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="text" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="textSegments" inverseEntity="JournalEntry"/>
     </entity>
 </model>

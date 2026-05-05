@@ -21,6 +21,7 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var mediaReferences: NSSet?
     @NSManaged public var processingTasks: NSSet?
     @NSManaged public var inferenceSummary: InferenceSummary?
+    @NSManaged public var textSegments: NSSet?
     @NSManaged public var topics: NSSet?
     @NSManaged public var projects: NSSet?
 }
@@ -112,6 +113,11 @@ extension JournalEntry {
 
     var mediaReferencesArray: [MediaReference] {
         let set = mediaReferences as? Set<MediaReference> ?? []
+        return set.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
+    }
+
+    var textSegmentsArray: [TextSegment] {
+        let set = textSegments as? Set<TextSegment> ?? []
         return set.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
     }
 
