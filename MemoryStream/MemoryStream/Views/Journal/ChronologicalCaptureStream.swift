@@ -300,7 +300,7 @@ private struct SwipeActionsModifier: ViewModifier {
                     SwipeActionPill(
                         icon: "pencil",
                         label: "Edit",
-                        color: Crucible.Color.accent,
+                        color: .blue,
                         action: onEdit
                     )
                     .frame(width: offset)
