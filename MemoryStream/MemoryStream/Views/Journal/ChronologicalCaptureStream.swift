@@ -239,10 +239,10 @@ private struct NotePanel: View {
 // MARK: - Swipe-to-delete modifier
 
 extension View {
-    /// Wraps the view with a swipe-right-to-delete affordance: drag the
-    /// content rightward to reveal a red Delete button on the leading edge,
+    /// Wraps the view with a swipe-left-to-delete affordance: drag the
+    /// content leftward to reveal a red Delete button on the trailing edge,
     /// tap it to fire `onDelete`. Drag past `commitThreshold` and release
-    /// to delete in one motion.
+    /// to delete in one motion. Standard iOS pattern (Mail, Messages).
     ///
     /// Used on voice and note panels in the chronological capture stream.
     /// Photo filmstrip tiles keep their inline × because the horizontal
@@ -256,7 +256,9 @@ private struct SwipeToDeleteModifier: ViewModifier {
     let onDelete: () -> Void
     let accessibilityLabel: String
 
-    @State private var offset: CGFloat = 0
+    /// Magnitude of reveal in points. Positive value moves content leftward
+    /// and exposes the delete button on the trailing edge.
+    @State private var revealedAmount: CGFloat = 0
     @State private var revealed: Bool = false
     /// Once the drag is dominantly horizontal, we lock into swipe mode for
     /// the rest of the drag — otherwise the parent ScrollView's gesture can
@@ -267,32 +269,32 @@ private struct SwipeToDeleteModifier: ViewModifier {
     private let commitThreshold: CGFloat = 200
 
     func body(content: Content) -> some View {
-        ZStack(alignment: .leading) {
-            // Delete affordance behind the content — reveals as the user
-            // drags right. Tap fires the delete; the row otherwise snaps
-            // back when released below the reveal threshold.
+        ZStack(alignment: .trailing) {
+            // Delete affordance behind the content — reveals on the trailing
+            // edge as the user drags leftward. Tap fires the delete; the row
+            // otherwise snaps back when released below the reveal threshold.
             Button(role: .destructive) {
                 onDelete()
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "trash")
                         .font(.system(size: 16, weight: .semibold))
-                    if offset > revealWidth * 0.6 {
+                    if revealedAmount > revealWidth * 0.6 {
                         Text("Delete")
                             .font(.subheadline.weight(.semibold))
                     }
                 }
                 .foregroundStyle(.white)
-                .frame(width: max(0, offset))
+                .frame(width: max(0, revealedAmount))
                 .frame(maxHeight: .infinity)
                 .background(Crucible.Color.danger)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(accessibilityLabel)
-            .opacity(offset > 4 ? 1 : 0)
+            .opacity(revealedAmount > 4 ? 1 : 0)
 
             content
-                .offset(x: offset)
+                .offset(x: -revealedAmount)
                 // simultaneousGesture lets the parent ScrollView keep its
                 // vertical scroll while we still claim horizontal drags.
                 // Without this, the ScrollView's pan recognizer eats the
@@ -301,35 +303,37 @@ private struct SwipeToDeleteModifier: ViewModifier {
                     DragGesture(minimumDistance: 8)
                         .onChanged { value in
                             // First-pass direction lock: once we see a
-                            // dominantly-horizontal drag, stay in swipe mode
+                            // dominantly-leftward drag, stay in swipe mode
                             // for the rest of this gesture so vertical
                             // wobbles don't release us back to the ScrollView.
                             if !engagedHorizontal {
                                 let dx = value.translation.width
                                 let dy = value.translation.height
-                                if dx > 4, abs(dx) > abs(dy) * 1.4 {
+                                if dx < -4, abs(dx) > abs(dy) * 1.4 {
                                     engagedHorizontal = true
                                 } else if abs(dy) > abs(dx) {
                                     return
                                 }
                             }
                             guard engagedHorizontal else { return }
-                            let proposed = value.translation.width + (revealed ? revealWidth : 0)
-                            offset = max(0, min(proposed, commitThreshold))
+                            // Convert leftward drag (negative width) into
+                            // positive reveal amount.
+                            let proposed = -value.translation.width + (revealed ? revealWidth : 0)
+                            revealedAmount = max(0, min(proposed, commitThreshold))
                         }
                         .onEnded { _ in
                             defer { engagedHorizontal = false }
-                            if offset >= commitThreshold {
-                                withAnimation(.easeOut(duration: 0.18)) { offset = commitThreshold }
+                            if revealedAmount >= commitThreshold {
+                                withAnimation(.easeOut(duration: 0.18)) { revealedAmount = commitThreshold }
                                 onDelete()
-                            } else if offset > revealWidth * 0.6 {
+                            } else if revealedAmount > revealWidth * 0.6 {
                                 withAnimation(.easeOut(duration: 0.18)) {
-                                    offset = revealWidth
+                                    revealedAmount = revealWidth
                                     revealed = true
                                 }
                             } else {
                                 withAnimation(.easeOut(duration: 0.18)) {
-                                    offset = 0
+                                    revealedAmount = 0
                                     revealed = false
                                 }
                             }
