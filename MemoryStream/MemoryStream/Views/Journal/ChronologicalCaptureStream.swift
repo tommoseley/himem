@@ -258,6 +258,10 @@ private struct SwipeToDeleteModifier: ViewModifier {
 
     @State private var offset: CGFloat = 0
     @State private var revealed: Bool = false
+    /// Once the drag is dominantly horizontal, we lock into swipe mode for
+    /// the rest of the drag — otherwise the parent ScrollView's gesture can
+    /// re-claim the touch when the user's finger wobbles vertically.
+    @State private var engagedHorizontal: Bool = false
 
     private let revealWidth: CGFloat = 88
     private let commitThreshold: CGFloat = 200
@@ -289,17 +293,32 @@ private struct SwipeToDeleteModifier: ViewModifier {
 
             content
                 .offset(x: offset)
-                .gesture(
-                    DragGesture(minimumDistance: 12)
+                // simultaneousGesture lets the parent ScrollView keep its
+                // vertical scroll while we still claim horizontal drags.
+                // Without this, the ScrollView's pan recognizer eats the
+                // touch and our DragGesture's onChanged never fires.
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
                         .onChanged { value in
-                            // Only respond to right-ward drags. Vertical-
-                            // dominant drags fall through to the parent
-                            // ScrollView naturally.
-                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            // First-pass direction lock: once we see a
+                            // dominantly-horizontal drag, stay in swipe mode
+                            // for the rest of this gesture so vertical
+                            // wobbles don't release us back to the ScrollView.
+                            if !engagedHorizontal {
+                                let dx = value.translation.width
+                                let dy = value.translation.height
+                                if dx > 4, abs(dx) > abs(dy) * 1.4 {
+                                    engagedHorizontal = true
+                                } else if abs(dy) > abs(dx) {
+                                    return
+                                }
+                            }
+                            guard engagedHorizontal else { return }
                             let proposed = value.translation.width + (revealed ? revealWidth : 0)
                             offset = max(0, min(proposed, commitThreshold))
                         }
-                        .onEnded { value in
+                        .onEnded { _ in
+                            defer { engagedHorizontal = false }
                             if offset >= commitThreshold {
                                 withAnimation(.easeOut(duration: 0.18)) { offset = commitThreshold }
                                 onDelete()
