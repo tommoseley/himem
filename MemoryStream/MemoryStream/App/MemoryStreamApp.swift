@@ -8,6 +8,21 @@ final class QuickActionState: ObservableObject {
     @Published var pendingAction: String?
 }
 
+/// Process-global orientation lock. The CameraPickerView flips this on
+/// while the picker is mounted so the AppDelegate's
+/// `supportedInterfaceOrientationsFor` returns `.portrait` and iOS rotates
+/// the picker to portrait regardless of device orientation. Without this,
+/// SwiftUI's `.fullScreenCover` host overrides any
+/// `supportedInterfaceOrientations` the picker view controller declares
+/// for itself, leaving us with the broken landscape camera viewport.
+final class OrientationLock {
+    static let shared = OrientationLock()
+    /// Set to true while a screen wants to clamp the device to portrait.
+    /// Read by `AppDelegate.application(_:supportedInterfaceOrientationsFor:)`.
+    var portraitOnly: Bool = false
+    private init() {}
+}
+
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         application.registerForRemoteNotifications()
@@ -16,6 +31,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         completionHandler(.newData)
+    }
+
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        OrientationLock.shared.portraitOnly ? .portrait : .allButUpsideDown
     }
 
     func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {

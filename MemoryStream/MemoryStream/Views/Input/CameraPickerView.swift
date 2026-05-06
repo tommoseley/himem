@@ -19,13 +19,22 @@ struct CameraPickerView: UIViewControllerRepresentable {
     var onDismiss: () -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
-        // PortraitImagePickerController locks the picker to portrait
-        // orientation. UIImagePickerController is officially portrait-only
-        // (per Apple docs), and the system's landscape adaptation places a
-        // portrait-shaped camera viewport inside a landscape window — the
-        // user sees a small preview strip with controls floating in black
-        // space. Locking to portrait is what Camera, Notes scanner, and
-        // most third-party photo apps do.
+        // Two-layer portrait lock:
+        //   1. PortraitImagePickerController declares its own preferred
+        //      orientation as .portrait.
+        //   2. OrientationLock.shared.portraitOnly = true so the AppDelegate
+        //      clamps the whole window to portrait while the picker is up.
+        //      Without (2) SwiftUI's .fullScreenCover host VC overrides
+        //      any orientation a child VC requests; the picker ends up
+        //      adapted to landscape with a portrait-shaped camera viewport
+        //      and the user sees the broken-preview behavior Apple's docs
+        //      acknowledge.
+        // Plus an iOS-16 geometry request to force-rotate now if the
+        // device was already in landscape when the picker opened.
+        OrientationLock.shared.portraitOnly = true
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
+        }
         let picker = PortraitImagePickerController()
         picker.sourceType = .camera
         picker.cameraDevice = .rear
@@ -52,6 +61,12 @@ struct CameraPickerView: UIViewControllerRepresentable {
     // Once configured in makeUIViewController the picker doesn't need updates;
     // SwiftUI re-renders of the parent must not propagate to it.
     func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    /// Release the portrait lock when the picker is torn down so the rest
+    /// of the app gets its `allButUpsideDown` orientations back.
+    static func dismantleUIViewController(_ uiViewController: UIImagePickerController, coordinator: Coordinator) {
+        OrientationLock.shared.portraitOnly = false
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onCapture: onCapture, onDismiss: onDismiss)
