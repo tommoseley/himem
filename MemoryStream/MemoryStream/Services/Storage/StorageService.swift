@@ -268,4 +268,53 @@ final class StorageService {
         try save(context: ctx)
         return topic
     }
+
+    /// Merges Topic entities that share a slug into a single canonical
+    /// topic. CloudKit can't enforce uniqueness, so two devices that
+    /// independently create the same topic before they sync end up with
+    /// duplicate `Topic` rows (e.g. "Garden" 5 entries + "Garden" 10
+    /// entries in the user's settings list). This sweeps them up.
+    ///
+    /// Strategy:
+    ///   - Group all topics by slug.
+    ///   - For groups of size > 1, pick the canonical topic (most entries,
+    ///     ties broken by earliest `inferredAt` so the original "wins").
+    ///   - Move each duplicate's entries onto the canonical, then delete
+    ///     the duplicate.
+    ///
+    /// Safe to call frequently — fast path returns immediately when no
+    /// duplicates exist. Triggered from JournalViewModel on launch and on
+    /// app foregrounding.
+    func mergeDuplicateTopics(context: NSManagedObjectContext? = nil) throws {
+        let ctx = context ?? viewContext
+        let request = NSFetchRequest<Topic>(entityName: "Topic")
+        let topics = try ctx.fetch(request)
+        let bySlug = Dictionary(grouping: topics) { $0.slug }
+
+        var didMerge = false
+        for (_, group) in bySlug where group.count > 1 {
+            let sorted = group.sorted { lhs, rhs in
+                let lhsCount = (lhs.entries as? Set<JournalEntry>)?.count ?? 0
+                let rhsCount = (rhs.entries as? Set<JournalEntry>)?.count ?? 0
+                if lhsCount != rhsCount { return lhsCount > rhsCount }
+                let lhsDate = lhs.inferredAt ?? .distantPast
+                let rhsDate = rhs.inferredAt ?? .distantPast
+                return lhsDate < rhsDate
+            }
+            guard let canonical = sorted.first else { continue }
+            for duplicate in sorted.dropFirst() {
+                if let entries = duplicate.entries as? Set<JournalEntry> {
+                    for entry in entries {
+                        entry.removeFromTopics(duplicate)
+                        entry.addToTopics(canonical)
+                    }
+                }
+                ctx.delete(duplicate)
+                didMerge = true
+            }
+        }
+        if didMerge {
+            try save(context: ctx)
+        }
+    }
 }

@@ -35,6 +35,8 @@ class JournalViewModel: ObservableObject {
         observeForeground()
         observeFilterInputs()
         loadEntries()
+        // Sweep up CloudKit-induced duplicate topics on launch.
+        try? storage.mergeDuplicateTopics()
     }
 
     func refresh() {
@@ -80,7 +82,11 @@ class JournalViewModel: ObservableObject {
         )
         .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
         .sink { [weak self] _ in
-            self?.loadEntries()
+            guard let self else { return }
+            self.loadEntries()
+            // CloudKit may have pulled duplicate topics from another
+            // device; merge before they're displayed to the user.
+            try? self.storage.mergeDuplicateTopics()
         }
     }
 
@@ -89,7 +95,11 @@ class JournalViewModel: ObservableObject {
             for: UIApplication.willEnterForegroundNotification
         )
         .sink { [weak self] _ in
-            self?.refresh()
+            guard let self else { return }
+            self.refresh()
+            // Re-sweep duplicates on every foreground in case CloudKit
+            // pulled in fresh duplicates while we were backgrounded.
+            try? self.storage.mergeDuplicateTopics()
         }
     }
 
