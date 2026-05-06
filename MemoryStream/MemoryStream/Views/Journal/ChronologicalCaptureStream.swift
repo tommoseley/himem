@@ -131,7 +131,8 @@ private struct VoiceClipPanel: View {
     let onOpenSheet: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
+            CaptureTimestampLabel(date: item.createdAt)
             Text(displayText)
                 .font(.callout)
                 .foregroundStyle(item.transcript == nil || item.transcript?.isEmpty == true
@@ -168,11 +169,8 @@ private struct NotePanel: View {
     @State private var draftText = ""
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            // Spacer where the speaker icon lives on voice panels — keeps
-            // text alignment consistent across panel types.
-            Color.clear.frame(width: 18, height: 18)
-
+        VStack(alignment: .leading, spacing: 4) {
+            CaptureTimestampLabel(date: segment.createdAt)
             if editing {
                 TextEditor(text: $draftText)
                     .font(.callout)
@@ -211,6 +209,28 @@ private struct NotePanel: View {
             editAccessibilityLabel: "Edit note"
         )
     }
+}
+
+// MARK: - Capture timestamp label
+
+/// Small h:mm a label rendered above each chronological capture panel.
+/// Keeps a consistent style across voice / note panels and matches the
+/// timestamp overlay rendered by MediaTile on photo/video tiles.
+private struct CaptureTimestampLabel: View {
+    let date: Date
+
+    var body: some View {
+        Text(Self.formatter.string(from: date))
+            .font(.caption2.weight(.semibold).monospacedDigit())
+            .foregroundStyle(Crucible.Color.ink3)
+            .accessibilityLabel("Captured at \(Self.formatter.string(from: date))")
+    }
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
 }
 
 // MARK: - Swipe actions modifier (pill-style)
@@ -416,6 +436,7 @@ private struct PhotoFilmstripPanel: View {
                     MediaTile(
                         localIdentifier: item.localIdentifier,
                         mediaType: item.mediaType,
+                        createdAt: item.createdAt,
                         onRemove: { onDelete(item.id) },
                         onTap: { onTap(item) }
                     )

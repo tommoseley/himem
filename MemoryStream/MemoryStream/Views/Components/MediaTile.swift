@@ -13,9 +13,11 @@ import AVFoundation
 struct MediaTile: View {
     let localIdentifier: String
     let mediaType: MediaReference.MediaType
-    /// When provided on a voice tile, a small "HH:mm · m:ss" footer is
-    /// rendered showing the capture timestamp and audio duration. Lets the
-    /// user tell multiple audio clips on a single memory apart visually.
+    /// When provided, a small timestamp footer is rendered:
+    ///   - voice: "h:mm a · m:ss" (timestamp + audio duration).
+    ///   - image / video: "h:mm a" overlaid at the bottom of the thumbnail
+    ///     (white-on-gradient so it reads against any photo).
+    /// Lets the user tell multiple captures on a single memory apart.
     var createdAt: Date? = nil
     var onRemove: (() -> Void)? = nil
     var onTap: (() -> Void)? = nil
@@ -103,6 +105,29 @@ struct MediaTile: View {
                             .foregroundStyle(Crucible.Color.ink)
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // Capture-time overlay for image/video tiles. Voice tiles render
+            // their footer inline (above) since they have no thumbnail to
+            // sit on top of.
+            if (mediaType == .image || mediaType == .video), let createdAt {
+                LinearGradient(
+                    colors: [.black.opacity(0), .black.opacity(0.55)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 28)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .allowsHitTesting(false)
+
+                Text(Self.timeFormatter.string(from: createdAt))
+                    .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .accessibilityLabel("Captured at \(Self.timeFormatter.string(from: createdAt))")
             }
 
             // Remove button (top-left × badge)
