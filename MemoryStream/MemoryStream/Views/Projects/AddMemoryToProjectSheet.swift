@@ -21,7 +21,12 @@ struct AddMemoryToProjectSheet: View {
     @State private var searchText: String = ""
     @State private var filterToProjectTopics: Bool = true
     @State private var entries: [EntryDisplayModel] = []
-    @State private var memberIds: Set<UUID> = []
+    /// Membership at the moment the sheet opened. Read-only after load.
+    @State private var initialMemberIds: Set<UUID> = []
+    /// Toggles staged in this sheet session. `Done` applies them; `Cancel`
+    /// drops them.
+    @State private var pendingAdds: Set<UUID> = []
+    @State private var pendingRemoves: Set<UUID> = []
     @State private var projectTopicSlugs: Set<String> = []
     @State private var otherProjectMemberships: [UUID: [String]] = [:]
 
@@ -41,10 +46,18 @@ struct AddMemoryToProjectSheet: View {
             .navigationTitle("Add memory")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Crucible.Color.accent)
+                    Button("Done") {
+                        commitPendingChanges()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Crucible.Color.accent)
+                    .disabled(pendingAdds.isEmpty && pendingRemoves.isEmpty)
                 }
             }
         }
@@ -109,7 +122,7 @@ struct AddMemoryToProjectSheet: View {
     }
 
     private func memoryRow(entry: EntryDisplayModel) -> some View {
-        let isMember = memberIds.contains(entry.id)
+        let isMember = effectiveMembership(for: entry.id)
         let otherProjects = otherProjectMemberships[entry.id]?.filter { $0 != currentProjectName } ?? []
         return Button {
             toggleMembership(entry: entry)
@@ -200,15 +213,49 @@ struct AddMemoryToProjectSheet: View {
         return list
     }
 
-    // MARK: - Membership toggle
+    // MARK: - Membership (staged)
 
+    /// True if the entry would be in the project after applying pending
+    /// changes. Read by row rendering.
+    private func effectiveMembership(for entryId: UUID) -> Bool {
+        if pendingAdds.contains(entryId) { return true }
+        if pendingRemoves.contains(entryId) { return false }
+        return initialMemberIds.contains(entryId)
+    }
+
+    /// Stages a toggle. Symmetric handling so re-tapping reverts: if the
+    /// entry was originally a member, an "add" cancels a pending remove
+    /// rather than stacking up. Same in reverse.
     private func toggleMembership(entry: EntryDisplayModel) {
-        if memberIds.contains(entry.id) {
-            projectVM.removeMemory(entryId: entry.id, fromProjectId: projectId)
-            memberIds.remove(entry.id)
+        let id = entry.id
+        let wasMember = initialMemberIds.contains(id)
+        let isEffectivelyMember = effectiveMembership(for: id)
+        if isEffectivelyMember {
+            // Stage a remove.
+            if wasMember {
+                pendingRemoves.insert(id)
+            } else {
+                // Was a pending add — un-stage.
+                pendingAdds.remove(id)
+            }
         } else {
-            projectVM.addMemory(entryId: entry.id, toProjectId: projectId)
-            memberIds.insert(entry.id)
+            // Stage an add.
+            if wasMember {
+                // Was a pending remove — un-stage.
+                pendingRemoves.remove(id)
+            } else {
+                pendingAdds.insert(id)
+            }
+        }
+    }
+
+    /// Applies all staged toggles via the project view model. Called by Done.
+    private func commitPendingChanges() {
+        for id in pendingAdds {
+            projectVM.addMemory(entryId: id, toProjectId: projectId)
+        }
+        for id in pendingRemoves {
+            projectVM.removeMemory(entryId: id, fromProjectId: projectId)
         }
     }
 
@@ -239,7 +286,7 @@ struct AddMemoryToProjectSheet: View {
         projReq.predicate = NSPredicate(format: "id == %@", projectId as CVarArg)
         projReq.fetchLimit = 1
         if let project = try? storage.viewContext.fetch(projReq).first {
-            memberIds = Set(project.entriesArray.map(\.id))
+            initialMemberIds = Set(project.entriesArray.map(\.id))
             projectTopicSlugs = Set(project.topicNames.map { TopicSlugHelper.slugify($0) })
         }
         // If the project has no topics yet (empty project), default the
