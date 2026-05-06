@@ -140,16 +140,24 @@ struct EntryExpandedView: View {
 
                     if mode == .editing {
                         Menu {
-                            ForEach(availableToAdd, id: \.self) { topic in
-                                Button(topic) {
-                                    if removedTopics.contains(topic) {
-                                        removedTopics.remove(topic)
+                            // Show every topic. Currently-applied ones are
+                            // marked with a checkmark; tapping toggles
+                            // membership so the user can switch topics in
+                            // a single gesture without first having to ×
+                            // the existing chip.
+                            ForEach(allTopics, id: \.self) { topic in
+                                let isSelected = currentTopics.contains(topic)
+                                Button {
+                                    toggleTopic(topic, currentlySelected: isSelected)
+                                } label: {
+                                    if isSelected {
+                                        Label(topic, systemImage: "checkmark")
                                     } else {
-                                        addedTopics.insert(topic)
+                                        Text(topic)
                                     }
                                 }
                             }
-                            if !availableToAdd.isEmpty { Divider() }
+                            if !allTopics.isEmpty { Divider() }
                             Button {
                                 newTopicName = ""
                                 newTopicColorKey = Crucible.Color.topicPalette[0].key
@@ -664,6 +672,33 @@ struct EntryExpandedView: View {
         let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         if let url = URL(string: "https://maps.apple.com/?q=\(encoded)&ll=\(coords)") {
             UIApplication.shared.open(url)
+        }
+    }
+
+    // MARK: - Topic toggle (edit mode)
+
+    /// Flips a topic's membership on the current entry. Maintains the
+    /// staged `addedTopics` / `removedTopics` sets so the change can be
+    /// committed atomically by Done or rolled back by Cancel.
+    private func toggleTopic(_ topic: String, currentlySelected: Bool) {
+        if currentlySelected {
+            // Currently selected → remove it.
+            if entry.topicNames.contains(topic) {
+                // Was on the entry originally; stage a removal.
+                removedTopics.insert(topic)
+            } else {
+                // Was just added in this edit session; un-stage.
+                addedTopics.remove(topic)
+            }
+        } else {
+            // Not currently selected → add it.
+            if removedTopics.contains(topic) {
+                // Was originally on the entry, then staged for removal —
+                // un-stage the removal.
+                removedTopics.remove(topic)
+            } else {
+                addedTopics.insert(topic)
+            }
         }
     }
 
