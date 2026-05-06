@@ -346,6 +346,7 @@ struct EntryExpandedView: View {
                                     onTap: {
                                         if item.mediaType == .voice {
                                             audioPlayerForFile = AudioPlayerTarget(
+                                                mediaId: item.id,
                                                 filename: item.localIdentifier,
                                                 recordedAt: entry.createdAt,
                                                 transcript: item.transcript

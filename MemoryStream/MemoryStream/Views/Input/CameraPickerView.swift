@@ -19,7 +19,14 @@ struct CameraPickerView: UIViewControllerRepresentable {
     var onDismiss: () -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
+        // PortraitImagePickerController locks the picker to portrait
+        // orientation. UIImagePickerController is officially portrait-only
+        // (per Apple docs), and the system's landscape adaptation places a
+        // portrait-shaped camera viewport inside a landscape window — the
+        // user sees a small preview strip with controls floating in black
+        // space. Locking to portrait is what Camera, Notes scanner, and
+        // most third-party photo apps do.
+        let picker = PortraitImagePickerController()
         picker.sourceType = .camera
         picker.cameraDevice = .rear
         picker.allowsEditing = false
@@ -73,4 +80,18 @@ struct CameraPickerView: UIViewControllerRepresentable {
             onDismiss()
         }
     }
+}
+
+/// UIImagePickerController locked to portrait orientation. The system camera
+/// preview is portrait-shaped and doesn't adapt cleanly to landscape: in a
+/// landscape window iOS shows a small preview strip with controls floating
+/// over a black background. Locking the picker to portrait means iOS will
+/// rotate the picker view to portrait when presented, regardless of device
+/// orientation, matching the behaviour of the system Camera and Notes
+/// scanner. The captured photo/video itself respects the gravity-sensed
+/// orientation; only the picker's chrome is locked.
+final class PortraitImagePickerController: UIImagePickerController {
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
+    override var shouldAutorotate: Bool { true }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .portrait }
 }
