@@ -15,6 +15,7 @@ struct ProjectDetailView: View {
     @State private var selectedEntryId: UUID? = nil
     @State private var topicFilter: String? = nil
     @State private var showShareSheet = false
+    @State private var showAddMemorySheet = false
 
     private let storage = StorageService.shared
 
@@ -179,6 +180,12 @@ struct ProjectDetailView: View {
                     .foregroundStyle(Crucible.Color.accent)
                 } else {
                     HStack(spacing: 16) {
+                        Button { showAddMemorySheet = true } label: {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 16))
+                                .foregroundStyle(Crucible.Color.accent)
+                        }
+                        .accessibilityLabel("Add memory to project")
                         Button { showShareSheet = true } label: {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 15)) // design-token size
@@ -198,6 +205,9 @@ struct ProjectDetailView: View {
         .sheet(isPresented: $showShareSheet) {
             let composed = composeProjectText()
             ShareSheet(items: [composed])
+        }
+        .sheet(isPresented: $showAddMemorySheet, onDismiss: { loadProjectEntries() }) {
+            AddMemoryToProjectSheet(projectId: projectId, projectVM: projectVM)
         }
         .onAppear {
             loadProject()

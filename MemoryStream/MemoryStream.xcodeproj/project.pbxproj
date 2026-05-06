@@ -55,6 +55,7 @@
 		A100000050 /* ProjectCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000050 /* ProjectCardView.swift */; };
 		A100000051 /* ProjectListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000051 /* ProjectListView.swift */; };
 		A100000052 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000052 /* ProjectDetailView.swift */; };
+		A100000206 /* AddMemoryToProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000206 /* AddMemoryToProjectSheet.swift */; };
 		A100000054 /* ErrorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000054 /* ErrorService.swift */; };
 		A100000055 /* TopicSlugHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000055 /* TopicSlugHelper.swift */; };
 		A100000056 /* EntryMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000056 /* EntryMapper.swift */; };
@@ -137,6 +138,7 @@
 		B100000050 /* ProjectCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCardView.swift; sourceTree = "<group>"; };
 		B100000051 /* ProjectListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectListView.swift; sourceTree = "<group>"; };
 		B100000052 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
+		B100000206 /* AddMemoryToProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddMemoryToProjectSheet.swift; sourceTree = "<group>"; };
 		B100000053 /* MemoryStream.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MemoryStream.entitlements; sourceTree = "<group>"; };
 		B100000054 /* ErrorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorService.swift; sourceTree = "<group>"; };
 		B100000055 /* TopicSlugHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicSlugHelper.swift; sourceTree = "<group>"; };
@@ -401,6 +403,7 @@
 				B100000050 /* ProjectCardView.swift */,
 				B100000051 /* ProjectListView.swift */,
 				B100000052 /* ProjectDetailView.swift */,
+				B100000206 /* AddMemoryToProjectSheet.swift */,
 			);
 			path = Projects;
 			sourceTree = "<group>";
@@ -591,6 +594,7 @@
 				A100000050 /* ProjectCardView.swift in Sources */,
 				A100000051 /* ProjectListView.swift in Sources */,
 				A100000052 /* ProjectDetailView.swift in Sources */,
+				A100000206 /* AddMemoryToProjectSheet.swift in Sources */,
 				A100000045 /* EntryExpandedView.swift in Sources */,
 				A100000205 /* ChronologicalCaptureStream.swift in Sources */,
 				A100000028 /* TopicApprovalService.swift in Sources */,
