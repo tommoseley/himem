@@ -260,6 +260,7 @@ struct ClipInboxView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isSelected ? "Deselect clip" : "Select clip")
 
                 // Play button is always shown — even on "no speech detected"
                 // clips. The audio file exists regardless of transcription
@@ -276,6 +277,7 @@ struct ClipInboxView: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isPlaying ? "Stop playback" : "Play clip")
             }
             .padding(.top, 2)
 
@@ -467,6 +469,7 @@ struct ClipInboxView: View {
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Delete \(selected.count == 1 ? "clip" : "selected clips")")
             }
             .padding(6)
             .background(

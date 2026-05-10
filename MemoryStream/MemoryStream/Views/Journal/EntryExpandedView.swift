@@ -315,6 +315,7 @@ struct EntryExpandedView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("\(mentionsExpanded ? "Collapse" : "Expand") mentions, \(visibleTags.count) item\(visibleTags.count == 1 ? "" : "s")")
 
                         if mentionsExpanded {
                             FlowLayout(spacing: 6) {
@@ -372,6 +373,7 @@ struct EntryExpandedView: View {
                         }
                         .foregroundStyle(Crucible.Color.accent)
                     }
+                    .accessibilityLabel("Back to \(backLabel)")
                 }
             }
             ToolbarItem(placement: .principal) {
@@ -758,6 +760,7 @@ private struct ToolbarIcon: View {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
+        .accessibilityLabel(label)
     }
 }
 
@@ -847,6 +850,7 @@ private struct PendingStagingSection: View {
                             .foregroundStyle(Crucible.Color.ink4)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Remove transcript")
                 }
             }
 
@@ -864,6 +868,7 @@ private struct PendingStagingSection: View {
                             .foregroundStyle(Crucible.Color.ink4)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Clear typed text")
                 }
             }
 

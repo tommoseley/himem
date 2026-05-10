@@ -493,6 +493,8 @@ struct JournalView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(inbox.count) new clip\(inbox.count == 1 ? "" : "s") from Apple Watch")
+        .accessibilityHint("Opens the inbox to review and process pending watch recordings.")
     }
 
     // MARK: - Undo toast
