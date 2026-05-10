@@ -6,10 +6,7 @@ import AVFoundation
 /// Audio and text get a quieted placeholder + small corner fold in the media color.
 /// Tap to view, press-and-hold for context menu.
 ///
-/// Used by both the (legacy) ComposerView and the new ContributeActionBox to
-/// render captured-but-not-yet-committed media. Same visual primitive in both
-/// surfaces so the user sees the same affordance regardless of where they
-/// captured from.
+/// Renders captured-but-not-yet-committed media tiles.
 struct MediaTile: View {
     let localIdentifier: String
     let mediaType: MediaReference.MediaType
@@ -23,7 +20,7 @@ struct MediaTile: View {
     var onTap: (() -> Void)? = nil
     @State private var thumbnail: UIImage? = nil
     @State private var audioDuration: TimeInterval? = nil
-    @StateObject private var player = AudioPlayerService.shared
+    @ObservedObject private var player = AudioPlayerService.shared
 
     /// Only audio and text get a fold — photos/videos carry their own visual
     private var needsFold: Bool {
@@ -175,9 +172,12 @@ struct MediaTile: View {
         .task(id: localIdentifier) {
             // Load audio duration for the footer label. AVURLAsset.load is
             // async; the tile renders without a duration until this resolves.
+            // No `fileExists` pre-check — `try? asset.load(.duration)`
+            // returns nil for missing/unreadable files without throwing,
+            // and avoiding the synchronous disk hit keeps the per-tile
+            // `.task` off the main thread.
             guard mediaType == .voice, createdAt != nil else { return }
             let url = SpeechService.audioURL(for: localIdentifier)
-            guard FileManager.default.fileExists(atPath: url.path) else { return }
             let asset = AVURLAsset(url: url)
             if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
                 audioDuration = cm.seconds

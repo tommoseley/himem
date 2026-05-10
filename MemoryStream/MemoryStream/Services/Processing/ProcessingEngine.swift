@@ -195,8 +195,19 @@ final class ProcessingEngine {
     // MARK: - Cloud Processing Helpers
 
     private func storeEntities(from result: ClaudeAPIService.AnalysisResult, for entry: JournalEntry, in context: NSManagedObjectContext) {
+        // Snapshot existing (type, normalizedValue) on the entry so a second
+        // processing pass — whether from a CloudKit re-import after Change
+        // Token Expired, an unforeseen re-trigger, or a bg/view race —
+        // doesn't double-insert mentions the user already has.
+        let existingKeys: Set<String> = {
+            guard let entities = entry.extractedEntities as? Set<ExtractedEntity> else { return [] }
+            return Set(entities.map { Self.entityKey(type: $0.entityType, value: $0.value) })
+        }()
+
         for entityResult in result.entities {
             guard let type = ExtractedEntity.EntityType(rawValue: entityResult.type) else { continue }
+            let key = Self.entityKey(type: type.rawValue, value: entityResult.value)
+            if existingKeys.contains(key) { continue }
             let entity = ExtractedEntity(context: context)
             entity.id = UUID()
             entity.entryId = entry.id
@@ -207,6 +218,13 @@ final class ProcessingEngine {
             entity.createdAt = Date()
             entity.entry = entry
         }
+    }
+
+    /// Normalized key for entity-dedup: type plus case-folded, trimmed value.
+    /// "Sarah" / "sarah" / " Sarah " all collapse to the same key.
+    static func entityKey(type: String, value: String) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return "\(type)::\(normalized)"
     }
 
     /// Returns names of topics that need user approval (don't exist yet).

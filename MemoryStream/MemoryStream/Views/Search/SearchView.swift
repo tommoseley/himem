@@ -680,7 +680,7 @@ private struct ResultRow: View {
     private var mediaIcons: [String] {
         let media = hit.entry.mediaReferencesArray
         var icons: [String] = []
-        if media.contains(where: { $0.mediaTypeEnum == .voice }) || hit.entry.audioFilePath != nil {
+        if media.contains(where: { $0.mediaTypeEnum == .voice }) {
             icons.append("waveform")
         }
         if media.contains(where: { $0.mediaTypeEnum == .image }) {

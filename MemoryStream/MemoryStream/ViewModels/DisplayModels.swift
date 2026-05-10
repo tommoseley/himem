@@ -50,12 +50,10 @@ struct EntryDisplayModel: Identifiable {
     let progressDescription: String?
     let tags: [TagDisplayModel]
     let topicNames: [String]
-    let audioFilePath: String?
     let inferenceSummary: String?
     let feedbackState: InferenceSummary.FeedbackState?
     let userCorrection: String?
     let mediaItems: [MediaDisplayItem]
-    let textSegments: [TextSegmentDisplayItem]
     let recycledAt: Date?
     let latitude: Double?
     let longitude: Double?
@@ -109,7 +107,7 @@ struct EntryDisplayModel: Identifiable {
 
     var mediaSummary: String? {
         var parts: [String] = []
-        let audioCount = (audioFilePath != nil ? 1 : 0) + mediaItems.filter { $0.mediaType == .voice }.count
+        let audioCount = mediaItems.filter { $0.mediaType == .voice }.count
         let photoCount = mediaItems.filter { $0.mediaType == .image }.count
         let videoCount = mediaItems.filter { $0.mediaType == .video }.count
         if audioCount > 0 { parts.append("\(audioCount) audio") }
@@ -118,7 +116,7 @@ struct EntryDisplayModel: Identifiable {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    var hasAudio: Bool { audioFilePath != nil || mediaItems.contains { $0.mediaType == .voice } }
+    var hasAudio: Bool { mediaItems.contains { $0.mediaType == .voice } }
 }
 
 extension EntryDisplayModel: Equatable {
@@ -139,12 +137,10 @@ extension EntryDisplayModel: Equatable {
             && lhs.progressDescription == rhs.progressDescription
             && lhs.tags == rhs.tags
             && lhs.topicNames == rhs.topicNames
-            && lhs.audioFilePath == rhs.audioFilePath
             && lhs.inferenceSummary == rhs.inferenceSummary
             && lhs.feedbackState == rhs.feedbackState
             && lhs.userCorrection == rhs.userCorrection
             && lhs.mediaItems == rhs.mediaItems
-            && lhs.textSegments == rhs.textSegments
             && lhs.recycledAt == rhs.recycledAt
             && lhs.latitude == rhs.latitude
             && lhs.longitude == rhs.longitude
@@ -167,12 +163,10 @@ extension EntryDisplayModel {
             progressDescription: progressDescription,
             tags: tags,
             topicNames: topicNames,
-            audioFilePath: audioFilePath,
             inferenceSummary: inferenceSummary,
             feedbackState: feedbackState,
             userCorrection: userCorrection ?? self.userCorrection,
             mediaItems: mediaItems,
-            textSegments: textSegments,
             recycledAt: recycledAt,
             latitude: latitude,
             longitude: longitude,
@@ -198,15 +192,12 @@ struct MediaDisplayItem: Identifiable, Equatable {
     /// `nil` for image/video items and for legacy voice refs created before
     /// the schema gained this field.
     var transcript: String? = nil
-    /// Wall-clock timestamp the capture was taken — used to interleave with
-    /// TextSegments in the chronological capture stream.
+    /// Body text for `.note` MediaReferences. `nil` for every other media
+    /// type.
+    var text: String? = nil
+    /// Wall-clock timestamp the capture was taken — used to interleave
+    /// fragments in the chronological capture stream.
     var createdAt: Date = .distantPast
-}
-
-struct TextSegmentDisplayItem: Identifiable, Equatable {
-    let id: UUID
-    let text: String
-    let createdAt: Date
 }
 
 // MARK: - Tag Display Model

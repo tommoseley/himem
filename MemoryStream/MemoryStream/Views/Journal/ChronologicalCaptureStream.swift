@@ -36,11 +36,11 @@ struct ChronologicalCaptureStream: View {
                         onDelete: { onDeleteVoice(item.id) },
                         onOpenSheet: { onOpenVoice(item) }
                     )
-                case .note(let segment):
+                case .note(let item):
                     NotePanel(
-                        segment: segment,
-                        onDelete: { onDeleteNote(segment.id) },
-                        onEdit: { newText in onEditNote(segment.id, newText) }
+                        item: item,
+                        onDelete: { onDeleteNote(item.id) },
+                        onEdit: { newText in onEditNote(item.id, newText) }
                     )
                 case .photoStrip(let items):
                     PhotoFilmstripPanel(
@@ -53,14 +53,16 @@ struct ChronologicalCaptureStream: View {
         }
     }
 
-    /// Walks the entry's captures in `createdAt` order, grouping contiguous
+    /// Walks the entry's fragments in `createdAt` order, grouping contiguous
     /// image/video MediaReferences into a single filmstrip panel and
-    /// emitting voice/note as their own panels.
+    /// emitting voice/note as their own panels. Every fragment kind is now
+    /// a `MediaDisplayItem`; the legacy `TextSegment`-flavored note path is
+    /// gone.
     private var panels: [Panel] {
         struct Item { let createdAt: Date; let kind: ItemKind }
         enum ItemKind {
             case voice(MediaDisplayItem)
-            case note(TextSegmentDisplayItem)
+            case note(MediaDisplayItem)
             case photoOrVideo(MediaDisplayItem)
         }
 
@@ -68,11 +70,9 @@ struct ChronologicalCaptureStream: View {
         for media in entry.mediaItems {
             switch media.mediaType {
             case .voice: items.append(Item(createdAt: media.createdAt, kind: .voice(media)))
+            case .note:  items.append(Item(createdAt: media.createdAt, kind: .note(media)))
             case .image, .video: items.append(Item(createdAt: media.createdAt, kind: .photoOrVideo(media)))
             }
-        }
-        for segment in entry.textSegments {
-            items.append(Item(createdAt: segment.createdAt, kind: .note(segment)))
         }
         items.sort { $0.createdAt < $1.createdAt }
 
@@ -91,9 +91,9 @@ struct ChronologicalCaptureStream: View {
             case .voice(let media):
                 flushStrip()
                 result.append(Panel(kind: .voice(media)))
-            case .note(let segment):
+            case .note(let media):
                 flushStrip()
-                result.append(Panel(kind: .note(segment)))
+                result.append(Panel(kind: .note(media)))
             case .photoOrVideo(let media):
                 currentStrip.append(media)
             }
@@ -105,7 +105,7 @@ struct ChronologicalCaptureStream: View {
     struct Panel: Identifiable {
         enum Kind {
             case voice(MediaDisplayItem)
-            case note(TextSegmentDisplayItem)
+            case note(MediaDisplayItem)
             case photoStrip([MediaDisplayItem])
         }
         let kind: Kind
@@ -121,7 +121,10 @@ struct ChronologicalCaptureStream: View {
 
 // MARK: - Voice clip panel
 
-private struct VoiceClipPanel: View {
+/// Renders one `.voice` MediaReference — used wherever voice fragments
+/// appear in the chronological capture stream. Single shape regardless of
+/// how the clip was captured (FAB recorder, watch promotion, Contribute).
+struct VoiceClipPanel: View {
     let item: MediaDisplayItem
     let onDelete: () -> Void
     /// Opens the AudioPlayerSheet — the canonical play + edit-transcript
@@ -161,16 +164,19 @@ private struct VoiceClipPanel: View {
 // MARK: - Note panel
 
 private struct NotePanel: View {
-    let segment: TextSegmentDisplayItem
+    /// Backed by a `.note` MediaReference — `text` carries the body.
+    let item: MediaDisplayItem
     let onDelete: () -> Void
     let onEdit: (String) -> Void
 
     @State private var editing = false
     @State private var draftText = ""
 
+    private var bodyText: String { item.text ?? "" }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            CaptureTimestampLabel(date: segment.createdAt)
+            CaptureTimestampLabel(date: item.createdAt)
             if editing {
                 TextEditor(text: $draftText)
                     .font(.callout)
@@ -179,7 +185,7 @@ private struct NotePanel: View {
                     .background(Crucible.Color.paper)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Crucible.Color.hairline))
-                    .onAppear { draftText = segment.text }
+                    .onAppear { draftText = bodyText }
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
                             Spacer()
@@ -190,7 +196,7 @@ private struct NotePanel: View {
                         }
                     }
             } else {
-                Text(segment.text)
+                Text(bodyText)
                     .font(.callout)
                     .foregroundStyle(Crucible.Color.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -422,28 +428,36 @@ private struct SwipeActionPill: View {
     }
 }
 
-// MARK: - Photo filmstrip panel
+// MARK: - Photo grid panel
 
+/// Renders one chronological cluster of `.image` / `.video` MediaReferences
+/// (i.e. captures taken within ~10 minutes of each other) as a 3-column
+/// grid. Each cluster is its own grid; multiple clusters in an entry stack
+/// vertically with the chronological capture stream's other panels in
+/// between, preserving capture-time ordering.
+///
+/// Initially this was a horizontal-scrolling filmstrip — the
+/// "infinite-width row" was confusing and lost the at-a-glance overview
+/// the prior 3-wide grid layout provided. Switched back 2026-05-10.
 private struct PhotoFilmstripPanel: View {
     let items: [MediaDisplayItem]
     let onDelete: (UUID) -> Void
     let onTap: (MediaDisplayItem) -> Void
 
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(items) { item in
-                    MediaTile(
-                        localIdentifier: item.localIdentifier,
-                        mediaType: item.mediaType,
-                        createdAt: item.createdAt,
-                        onRemove: { onDelete(item.id) },
-                        onTap: { onTap(item) }
-                    )
-                    .frame(width: 110, height: 110)
-                }
+        LazyVGrid(columns: columns, spacing: 8) {
+            ForEach(items) { item in
+                MediaTile(
+                    localIdentifier: item.localIdentifier,
+                    mediaType: item.mediaType,
+                    createdAt: item.createdAt,
+                    onRemove: { onDelete(item.id) },
+                    onTap: { onTap(item) }
+                )
+                .aspectRatio(1, contentMode: .fit)
             }
-            .padding(.horizontal, 4)
         }
     }
 }

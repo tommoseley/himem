@@ -71,40 +71,22 @@ final class EntryLifecycleService {
             if shouldCaptureLocation {
                 captureLocation(for: entry)
             }
+            Task { await NotificationService.shared.refreshDailyNudge(hadEntryToday: true) }
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }
     }
 
-    /// Creates a TextSegment row attached to the entry with the given id.
-    /// Used by Contribute Mode when the user commits a typed Note — segments
-    /// are persisted immediately so they show up in the chronological capture
-    /// stream alongside voice/photo captures.
+    /// Creates a `.note` fragment (MediaReference with text body) attached
+    /// to the entry. Used by Contribute Mode when the user commits a
+    /// typed Note — fragments persist immediately so they show up in the
+    /// chronological capture stream alongside voice/photo captures.
     @discardableResult
-    func createTextSegment(forEntryId entryId: UUID, text: String) throws -> TextSegment {
+    func createNoteFragment(forEntryId entryId: UUID, text: String) throws -> MediaReference {
         guard let entry = try fetchEntry(id: entryId) else {
             throw NSError(domain: "EntryLifecycleService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry \(entryId) not found"])
         }
-        return try storage.createTextSegment(for: entry, text: text)
-    }
-
-    /// Deletes TextSegments by id. Used by Contribute Mode's X-cancel to
-    /// remove only this-session segments, leaving any pre-existing segments
-    /// on an append-anchor entry untouched.
-    func deleteTextSegments(ids: Set<UUID>) {
-        guard !ids.isEmpty else { return }
-        do {
-            for id in ids {
-                let request = NSFetchRequest<TextSegment>(entityName: "TextSegment")
-                request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
-                request.fetchLimit = 1
-                guard let segment = try storage.viewContext.fetch(request).first else { continue }
-                storage.viewContext.delete(segment)
-            }
-            try storage.save(context: storage.viewContext)
-        } catch {
-            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
-        }
+        return try storage.createNoteFragment(for: entry, text: text)
     }
 
     /// Regenerates `entry.content` from the entry's TextSegments + voice
@@ -122,16 +104,16 @@ final class EntryLifecycleService {
         }
     }
 
-    /// Updates a TextSegment's text and regenerates the parent entry's
-    /// joined content. Used by per-panel inline editing in the
+    /// Updates a `.note` MediaReference's text and regenerates the parent
+    /// entry's joined content. Used by per-panel inline editing in the
     /// chronological capture stream.
-    func updateTextSegment(id: UUID, text: String, entryId: UUID) {
+    func updateNoteFragment(id: UUID, text: String, entryId: UUID) {
         do {
-            let request = NSFetchRequest<TextSegment>(entityName: "TextSegment")
+            let request = NSFetchRequest<MediaReference>(entityName: "MediaReference")
             request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
             request.fetchLimit = 1
-            guard let segment = try storage.viewContext.fetch(request).first else { return }
-            segment.text = text
+            guard let ref = try storage.viewContext.fetch(request).first else { return }
+            ref.text = text
             try storage.save(context: storage.viewContext)
             regenerateContent(forEntryId: entryId)
         } catch {
@@ -156,20 +138,27 @@ final class EntryLifecycleService {
         }
     }
 
-    /// Pure: builds the joined-content string from an entry's segments +
-    /// voice transcripts in chronological order. Exposed as static so it
-    /// can be called from any context with a live JournalEntry.
+    /// Pure: builds the joined-content string from an entry's fragments —
+    /// voice transcripts and note bodies — in chronological order. After
+    /// the fragment migration runs, every contributable text source lives
+    /// on a `MediaReference` (`.voice` carries `transcript`, `.note`
+    /// carries `text`); the legacy `textSegments` loop is gone.
     static func joinedContent(from entry: JournalEntry) -> String {
         struct Item { let createdAt: Date; let text: String }
         var items: [Item] = []
-        for segment in entry.textSegmentsArray {
-            let trimmed = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            items.append(Item(createdAt: segment.createdAt ?? .distantPast, text: trimmed))
-        }
-        for ref in entry.mediaReferencesArray where ref.mediaTypeEnum == .voice {
-            guard let transcript = ref.transcript?.trimmingCharacters(in: .whitespacesAndNewlines), !transcript.isEmpty else { continue }
-            items.append(Item(createdAt: ref.createdAt ?? .distantPast, text: transcript))
+        for ref in entry.mediaReferencesArray {
+            switch ref.mediaTypeEnum {
+            case .voice:
+                guard let transcript = ref.transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !transcript.isEmpty else { continue }
+                items.append(Item(createdAt: ref.createdAt ?? .distantPast, text: transcript))
+            case .note:
+                guard let body = ref.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !body.isEmpty else { continue }
+                items.append(Item(createdAt: ref.createdAt ?? .distantPast, text: body))
+            case .image, .video:
+                continue
+            }
         }
         return items
             .sorted { $0.createdAt < $1.createdAt }
@@ -208,18 +197,32 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Returns the new entry's id on success. Callers that need to navigate
+    /// to the freshly-created memory (FAB capture-new path) consume this;
+    /// existing fire-and-forget call sites can ignore it via @discardableResult.
+    @discardableResult
     func save(
         content: String,
         inputType: JournalEntry.InputType,
-        audioFilePath: String? = nil,
+        voiceFilename: String? = nil,
         mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = [],
         topicName: String? = nil
-    ) {
+    ) -> UUID? {
         do {
             let entry = try storage.createEntry(content: content, inputType: inputType)
-            entry.audioFilePath = audioFilePath
             try storage.save(context: storage.viewContext)
             let _ = try storage.createProcessingTask(for: entry)
+
+            // Voice clips from the in-app FAB recorder land as a `.voice`
+            // MediaReference — same shape as Contribute Mode + watch
+            // promotions.
+            if let voiceFilename, !voiceFilename.isEmpty {
+                _ = try storage.createVoiceFragment(
+                    for: entry,
+                    audioFilename: voiceFilename,
+                    transcript: content
+                )
+            }
 
             if let topicName {
                 let paletteKey = TopicPaletteStore.shared.key(for: topicName)
@@ -232,8 +235,12 @@ final class EntryLifecycleService {
             cacheThumbnails(for: savedRefs)
             captureLocation(for: entry)
             processEntry(entry)
+            // An entry was created today — cancel any pending nudge.
+            Task { await NotificationService.shared.refreshDailyNudge(hadEntryToday: true) }
+            return entry.id
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
+            return nil
         }
     }
 
@@ -274,19 +281,20 @@ final class EntryLifecycleService {
     func edit(
         entryId: UUID,
         newContent: String,
+        newTitle: String? = nil,
         removedTagIds: Set<UUID> = [],
         removedMediaIds: Set<UUID> = [],
         addedTopicNames: Set<String> = [],
-        removedTopicNames: Set<String> = [],
-        discardAudio: Bool = false
+        removedTopicNames: Set<String> = []
     ) {
         do {
             guard let entry = try fetchEntry(id: entryId) else { return }
             let textChanged = entry.content != newContent
 
-            if discardAudio, let audioPath = entry.audioFilePath {
-                AudioPlayerService.deleteAudio(filename: audioPath)
-                entry.audioFilePath = nil
+            // nil = no change to title; "" = clear (let displayTitle fall back
+            // to the AI/derived/input-type ladder); non-empty = explicit set.
+            if let newTitle {
+                entry.title = newTitle.isEmpty ? nil : newTitle
             }
 
             removeEntities(from: entry, ids: removedTagIds)
@@ -313,7 +321,7 @@ final class EntryLifecycleService {
     func append(
         entryId: UUID,
         additionalContent: String,
-        audioFilePath: String? = nil,
+        voiceFilename: String? = nil,
         mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
     ) {
         do {
@@ -324,8 +332,12 @@ final class EntryLifecycleService {
                 entry.content = entry.content + "\n\n" + trimmed
             }
 
-            if let audioFilePath {
-                entry.audioFilePath = audioFilePath
+            if let voiceFilename, !voiceFilename.isEmpty {
+                _ = try storage.createVoiceFragment(
+                    for: entry,
+                    audioFilename: voiceFilename,
+                    transcript: trimmed
+                )
             }
 
             let savedRefs = try createMediaReferences(for: entry, mediaCaptures: mediaCaptures)

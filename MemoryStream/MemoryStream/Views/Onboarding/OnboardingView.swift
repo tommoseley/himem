@@ -6,7 +6,7 @@ import UserNotifications
 
 struct OnboardingView: View {
     let onComplete: () -> Void
-    @StateObject private var auth = AuthService.shared
+    @ObservedObject private var auth = AuthService.shared
     @State private var currentPage = 0
     @State private var selectedTopics: Set<String> = []
 

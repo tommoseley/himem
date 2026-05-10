@@ -35,7 +35,10 @@ struct EntryExpandedView: View {
     let allTopics: [String]
     let cameraService: CameraService
     @ObservedObject var speechService: SpeechService
-    let onSave: (UUID, String, Set<UUID>, Set<UUID>, Set<String>, Set<String>, Bool) -> Void
+    /// (entryId, newContent, newTitle, removedTagIds, removedMediaIds, addedTopics, removedTopics).
+    /// `newTitle == nil` means "leave the title alone"; an empty string clears it
+    /// so `displayTitle` falls back to the AI/derived ladder.
+    let onSave: (UUID, String, String?, Set<UUID>, Set<UUID>, Set<String>, Set<String>) -> Void
     var onFeedback: ((UUID, InferenceSummary.FeedbackState) -> Void)? = nil
     var onAdjust: ((UUID, String) -> Void)? = nil
     /// One-shot commit of a batch of appends. Fires at most once per session.
@@ -51,13 +54,10 @@ struct EntryExpandedView: View {
 
     // Editing state
     @State private var editedTitle = ""
-    @State private var editedText = ""
     @State private var removedTagIds: Set<UUID> = []
     @State private var removedMediaIds: Set<UUID> = []
     @State private var addedTopics: Set<String> = []
     @State private var removedTopics: Set<String> = []
-    @State private var discardAudio = false
-    @State private var isCleaningUp = false
     @State private var mentionsExpanded = false
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var audioPlayerForFile: AudioPlayerTarget? = nil
@@ -66,14 +66,12 @@ struct EntryExpandedView: View {
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
 
-    /// Append-mode Contribute session. Tapping the Contribute button on this
-    /// view enters this session anchored at the current entry; captures
-    /// persist directly to the entry as they're taken (no inline staging).
-    @StateObject private var contributeSession = ContributeSessionViewModel(lifecycle: EntryLifecycleService())
     /// Direct lifecycle reference for per-panel edit/delete operations on the
-    /// chronological capture stream. Same shared StorageService as the
-    /// session's lifecycle, just exposed at view level for synchronous calls.
+    /// chronological capture stream and for the Append spec's per-modality
+    /// capture flows (which call lifecycle.append directly when the user
+    /// finishes a pill capture).
     private let lifecycle = EntryLifecycleService()
+    @State private var activeCaptureModality: CaptureModality? = nil
     @State private var activeSheet: ExpandedSheet?
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
@@ -94,12 +92,10 @@ struct EntryExpandedView: View {
 
     private var hasChanges: Bool {
         editedTitle != entry.displayTitle
-            || editedText != entry.content
             || !removedTagIds.isEmpty
             || !removedMediaIds.isEmpty
             || !addedTopics.isEmpty
             || !removedTopics.isEmpty
-            || discardAudio
     }
 
     var body: some View {
@@ -245,45 +241,17 @@ struct EntryExpandedView: View {
                     .padding(.top, 4)
                 }
 
-                // Body — new-style entries (with TextSegments) render the
-                // chronological capture stream; legacy entries keep the
-                // single-block content text + media grid below.
-                if isLegacyEntry {
-                    if mode == .editing {
-                        TextEditor(text: $editedText)
-                            .font(.body)
-                            .foregroundStyle(Crucible.Color.ink)
-                            .frame(minHeight: 120)
-                            .padding(8)
-                            .scrollContentBackground(.hidden)
-                            .background(Crucible.Color.paper)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
-
-                        Button {
-                            cleanUpText()
-                        } label: {
-                            HStack(spacing: 4) {
-                                if isCleaningUp {
-                                    ProgressView().scaleEffect(0.7)
-                                } else {
-                                    Image(systemName: "sparkles").font(.system(size: 11))
-                                }
-                                Text("Clean up text")
-                            }
-                            .font(.footnote)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(Crucible.Color.AI.base)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isCleaningUp)
-                    } else {
-                        Text(entry.content)
-                            .font(.body)
-                            .foregroundStyle(Crucible.Color.ink)
-                            .lineSpacing(4)
-                            .onTapGesture { enterEditing() }
-                    }
+                // Body — every entry renders through ChronologicalCaptureStream
+                // post-FragmentMigration v2. Voice / note / image / video
+                // are all MediaReferences interleaved in createdAt order.
+                // Entries that the migration couldn't process (per-entry
+                // skip logged in NSLog) fall through to a plain content
+                // render so the user sees something.
+                if entry.mediaItems.isEmpty {
+                    Text(entry.content)
+                        .font(.body)
+                        .foregroundStyle(Crucible.Color.ink)
+                        .lineSpacing(4)
                 } else {
                     ChronologicalCaptureStream(
                         entry: entry,
@@ -292,14 +260,14 @@ struct EntryExpandedView: View {
                             applyEditsImmediately()
                         },
                         onDeleteNote: { id in
-                            deleteTextSegment(id: id)
+                            deleteNoteFragment(id: id)
                         },
                         onDeleteMedia: { id in
                             removedMediaIds.insert(id)
                             applyEditsImmediately()
                         },
                         onEditNote: { id, newText in
-                            updateTextSegment(id: id, text: newText)
+                            updateNoteFragment(id: id, text: newText)
                         },
                         onOpenVoice: { item in
                             audioPlayerForFile = AudioPlayerTarget(
@@ -323,51 +291,6 @@ struct EntryExpandedView: View {
                         onFeedback: { state in onFeedback?(entry.id, state) },
                         onAdjust: { correction in onAdjust?(entry.id, correction) }
                     )
-                }
-
-                // Media tile grid (legacy display only — new-style entries
-                // render media in-place via ChronologicalCaptureStream above).
-                if isLegacyEntry, entry.hasAudio || !entry.mediaItems.isEmpty || mode == .editing {
-                    let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
-                    LazyVGrid(columns: columns, spacing: 8) {
-                        // Audio tile (legacy single-audio entries — older
-                        // memories stored their voice clip on
-                        // entry.audioFilePath rather than a MediaReference).
-                        if let audioFile = entry.audioFilePath, !discardAudio {
-                            MediaTile(
-                                localIdentifier: audioFile,
-                                mediaType: .voice,
-                                createdAt: entry.createdAt,
-                                onRemove: { discardAudio = true; if mode != .editing { enterEditing() } },
-                                onTap: { audioPlayerForFile = AudioPlayerTarget(mediaId: nil, filename: audioFile, recordedAt: entry.createdAt, transcript: nil) }
-                            )
-                        }
-
-                        // Photo/video/voice tiles
-                        ForEach(entry.mediaItems) { item in
-                            if !removedMediaIds.contains(item.id) {
-                                MediaTile(
-                                    localIdentifier: item.localIdentifier,
-                                    mediaType: item.mediaType,
-                                    createdAt: item.mediaType == .voice ? entry.createdAt : nil,
-                                    onRemove: { removedMediaIds.insert(item.id); if mode != .editing { enterEditing() } },
-                                    onTap: {
-                                        if item.mediaType == .voice {
-                                            audioPlayerForFile = AudioPlayerTarget(
-                                                mediaId: item.id,
-                                                filename: item.localIdentifier,
-                                                recordedAt: entry.createdAt,
-                                                transcript: item.transcript
-                                            )
-                                        } else {
-                                            selectedMedia = item
-                                        }
-                                    }
-                                )
-                            }
-                        }
-
-                    }
                 }
 
                 // Mentions section (entity tags)
@@ -512,7 +435,6 @@ struct EntryExpandedView: View {
         }
         .onAppear {
             editedTitle = entry.displayTitle
-            editedText = entry.content
         }
         .sheet(item: $audioPlayerForFile) { target in
             // Prefer the per-clip transcript captured at recording time;
@@ -525,10 +447,12 @@ struct EntryExpandedView: View {
                 onSaveTranscript: { newText in
                     if let mediaId = target.mediaId {
                         updateMediaTranscript(id: mediaId, text: newText)
+                    } else {
+                        // Legacy voice entry — transcript IS entry.content.
+                        // Persist through lifecycle.edit so search +
+                        // inference re-derive from the new text.
+                        lifecycle.edit(entryId: entry.id, newContent: newText)
                     }
-                    // For legacy entries (no mediaId), edits aren't
-                    // persisted — the transcript is sourced from
-                    // entry.content which has its own edit path.
                 }
             )
             .presentationDetents([.medium, .large])
@@ -563,34 +487,65 @@ struct EntryExpandedView: View {
             }
         }
 
-            // Contribute button — append to this memory.
-            // Same gesture mapping as the home FAB (tap = Action Box,
-            // long-press = quick voice) for consistency across the app.
-            // Hidden while a session is active (entry/exit via Action Box).
-            if !contributeSession.isPresented && mode == .reading {
-                ContributeButton(
-                    isOpen: false,
-                    idleIcon: "plus",
-                    accessibilityLabel: "Add to memory",
-                    accessibilityHint: "Tap to choose a capture type. Long-press for quick voice capture."
-                ) {
-                    contributeSession.enter(anchor: .existingMemory(entry.id), autoStartVoice: false)
-                } onLongPress: {
-                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                    contributeSession.enter(anchor: .existingMemory(entry.id), autoStartVoice: true)
-                }
-                .padding(.trailing, 14)
-                .padding(.bottom, 14)
+            // Append-spec FAB — pick a modality, capture, append to this memory.
+            if mode == .reading {
+                AppendFAB(
+                    onSelect: { modality in
+                        activeCaptureModality = modality
+                    },
+                    accessibilityLabel: "Add to memory"
+                )
             }
         }
-        .sheet(isPresented: $contributeSession.isPresented) {
-            ContributeActionBox(
-                session: contributeSession,
-                speechService: speechService
+        .captureFlowHost(
+            activeModality: $activeCaptureModality,
+            speechService: speechService,
+            onCaptured: { item in
+                handleCapturedItemForAppend(item)
+            }
+        )
+    }
+
+    // MARK: - Append spec — single-modality capture results
+
+    /// Append the captured artifact to this memory. One pill press = one
+    /// append call. Attach with multiple selections bundles them into a
+    /// single append batch so they show as a contiguous group in the
+    /// chronological capture stream.
+    private func handleCapturedItemForAppend(_ item: CapturedItem) {
+        switch item {
+        case .voice(let filename, let transcript):
+            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard filename != nil || !trimmed.isEmpty else { return }
+            lifecycle.append(
+                entryId: entry.id,
+                additionalContent: trimmed,
+                voiceFilename: filename
             )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.hidden)
-            .interactiveDismissDisabled(true)
+
+        case .photo(let id):
+            lifecycle.append(
+                entryId: entry.id,
+                additionalContent: "",
+                mediaCaptures: [(id, .image)]
+            )
+
+        case .video(let id):
+            lifecycle.append(
+                entryId: entry.id,
+                additionalContent: "",
+                mediaCaptures: [(id, .video)]
+            )
+
+        case .note(let text):
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            lifecycle.append(entryId: entry.id, additionalContent: text)
+
+        case .attach(let ids):
+            guard !ids.isEmpty else { return }
+            let captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
+                ids.map { ($0, .image) }
+            lifecycle.append(entryId: entry.id, additionalContent: "", mediaCaptures: captures)
         }
     }
 
@@ -601,6 +556,7 @@ struct EntryExpandedView: View {
         case .image: return Crucible.Color.Media.photo
         case .video: return Crucible.Color.Media.video
         case .voice: return Crucible.Color.Media.audio
+        case .note:  return Crucible.Color.Media.text
         }
     }
 
@@ -609,6 +565,7 @@ struct EntryExpandedView: View {
         case .image: return "camera"
         case .video: return "video"
         case .voice: return "mic"
+        case .note:  return "text.alignleft"
         }
     }
 
@@ -617,6 +574,7 @@ struct EntryExpandedView: View {
         case .image: return "Photo"
         case .video: return "Video"
         case .voice: return "Audio"
+        case .note:  return "Note"
         }
     }
 
@@ -630,35 +588,26 @@ struct EntryExpandedView: View {
 
     private func cancelEditing() {
         editedTitle = entry.displayTitle
-        editedText = entry.content
         removedTagIds = []
         removedMediaIds = []
         addedTopics = []
         removedTopics = []
-        discardAudio = false
         withAnimation(.easeInOut(duration: 0.2)) {
             mode = .reading
         }
     }
 
     private func commitEdits() {
-        let trimmed = editedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        onSave(entry.id, trimmed, removedTagIds, removedMediaIds, addedTopics, removedTopics, discardAudio)
+        let trimmedTitle = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Pass nil when the title field wasn't touched so we don't overwrite
+        // the entry's actual title with the displayTitle fallback that
+        // `enterEditing` seeded into editedTitle.
+        let titleToSave: String? = (trimmedTitle == entry.displayTitle) ? nil : trimmedTitle
+        // Body editing happens per-fragment now (NotePanel inline edit,
+        // AudioPlayerSheet transcript edit). Pass entry.content unchanged so
+        // the save round-trip touches only title/tags/media/topics.
+        onSave(entry.id, entry.content, titleToSave, removedTagIds, removedMediaIds, addedTopics, removedTopics)
         dismiss()
-    }
-
-    private func cleanUpText() {
-        isCleaningUp = true
-        Task {
-            do {
-                let cleaned = try await ClaudeAPIService.shared.cleanupTranscription(editedText)
-                editedText = cleaned
-            } catch {
-                ErrorState.shared.report(.processingFailed(error.localizedDescription))
-            }
-            isCleaningUp = false
-        }
     }
 
     private var fullTimestamp: String {
@@ -704,15 +653,6 @@ struct EntryExpandedView: View {
 
     // MARK: - Chronological capture stream helpers
 
-    /// Entries with any chronological captures (voice / photo / video
-    /// MediaReferences, or typed TextSegments) use the new
-    /// ChronologicalCaptureStream view. Legacy entries — those with only a
-    /// single content blob and an optional `audioFilePath` from the old
-    /// composer — keep the original single-block + media-grid layout.
-    private var isLegacyEntry: Bool {
-        entry.textSegments.isEmpty && entry.mediaItems.isEmpty
-    }
-
     /// Removes a media reference immediately rather than batching it with
     /// title/content edits via the existing onSave path. Used by the
     /// chronological capture stream's per-panel delete.
@@ -724,13 +664,13 @@ struct EntryExpandedView: View {
         removedMediaIds = []
     }
 
-    private func deleteTextSegment(id: UUID) {
-        lifecycle.deleteTextSegments(ids: [id])
+    private func deleteNoteFragment(id: UUID) {
+        lifecycle.deleteMediaReferences(ids: [id])
         lifecycle.regenerateContent(forEntryId: entry.id)
     }
 
-    private func updateTextSegment(id: UUID, text: String) {
-        lifecycle.updateTextSegment(id: id, text: text, entryId: entry.id)
+    private func updateNoteFragment(id: UUID, text: String) {
+        lifecycle.updateNoteFragment(id: id, text: text, entryId: entry.id)
     }
 
     private func updateMediaTranscript(id: UUID, text: String) {

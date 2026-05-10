@@ -21,11 +21,9 @@ struct EntryLifecycleServiceTests {
         in storage: StorageService,
         content: String = "seed content",
         topicNames: [String] = [],
-        addEntity: Bool = false,
-        audioFilePath: String? = nil
+        addEntity: Bool = false
     ) throws -> JournalEntry {
         let entry = try storage.createEntry(content: content, inputType: .typed)
-        entry.audioFilePath = audioFilePath
         for name in topicNames {
             let topic = try storage.findOrCreateTopic(name: name)
             entry.addToTopics(topic)
@@ -108,15 +106,47 @@ struct EntryLifecycleServiceTests {
         #expect(names == ["Cooking"])
     }
 
-    @Test func edit_discardAudio_clearsAudioFilePath() throws {
+    /// Money test for the "edited title is silently dropped" bug. EntryExpandedView
+    /// captured editedTitle locally but never passed it through to lifecycle.edit,
+    /// so user title edits never persisted.
+    @Test func edit_settingNewTitle_persistsTitle() throws {
         let (storage, service) = makeService()
-        let entry = try seedEntry(in: storage, content: "with audio", audioFilePath: "fake.m4a")
-        #expect(entry.audioFilePath == "fake.m4a")
+        let entry = try seedEntry(in: storage, content: "some content")
 
-        service.edit(entryId: entry.id, newContent: "with audio", discardAudio: true)
+        service.edit(entryId: entry.id, newContent: "some content", newTitle: "My Caption")
 
         let refreshed = try #require(fetchEntry(entry.id, in: storage))
-        #expect(refreshed.audioFilePath == nil)
+        #expect(refreshed.title == "My Caption")
+    }
+
+    /// Money test for the "after first capture, return to home instead of
+    /// opening the new memory" bug. The fix path requires save() to return
+    /// the newly-created entry's id so the JournalView can navigate to it.
+    @Test func save_returnsNewEntryId() throws {
+        let (storage, service) = makeService()
+
+        let id = service.save(content: "fresh capture", inputType: .typed)
+
+        let unwrapped = try #require(id)
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "id == %@", unwrapped as CVarArg)
+        let fetched = try storage.viewContext.fetch(request)
+        #expect(fetched.count == 1)
+        #expect(fetched.first?.content == "fresh capture")
+    }
+
+    /// nil newTitle (the default) means "don't touch the title" — distinct from
+    /// "clear it." Used when the user only edits content/topics/etc.
+    @Test func edit_newTitleNil_preservesExistingTitle() throws {
+        let (storage, service) = makeService()
+        let entry = try seedEntry(in: storage, content: "original")
+        entry.title = "Original Title"
+        try storage.viewContext.save()
+
+        service.edit(entryId: entry.id, newContent: "changed content")
+
+        let refreshed = try #require(fetchEntry(entry.id, in: storage))
+        #expect(refreshed.title == "Original Title")
     }
 
     // MARK: - Delete / Recycle / Restore

@@ -26,10 +26,13 @@ enum Crucible {
         static let accentTint   = SwiftUI.Color(hex: 0xFBEAE0)
 
         // Capture colors — semantic, used across FAB, cards, filters
-        static let captureAudio = SwiftUI.Color(hex: 0xE8893A) // ochre
-        static let captureText  = SwiftUI.Color(hex: 0x3FA877) // field green
-        static let capturePhoto = SwiftUI.Color(hex: 0x2E7BD6) // signal blue
-        static let captureVideo = SwiftUI.Color(hex: 0xA935B8) // memory magenta
+        // Modality tokens — Append spec v1. Each value also dots the
+        // entry-head in the detail timeline so the modality reads at a glance.
+        static let captureAudio  = SwiftUI.Color(hex: 0xC64A1C) // voice ochre (= accent)
+        static let captureText   = SwiftUI.Color(hex: 0x1F8FB3) // note teal
+        static let capturePhoto  = SwiftUI.Color(hex: 0x2F9E6B) // photo green
+        static let captureVideo  = SwiftUI.Color(hex: 0xB8328F) // video magenta
+        static let captureAttach = SwiftUI.Color(hex: 0x5B6BF5) // attach indigo
 
         // Semantic
         static let success = SwiftUI.Color(hex: 0x2F7D4F)
@@ -49,8 +52,8 @@ enum Crucible {
             static let draftFg     = SwiftUI.Color(hex: 0x1A1612).opacity(0.64)
             static let failedBg    = SwiftUI.Color(hex: 0xF6E1DD)
             static let failedFg    = SwiftUI.Color(hex: 0xB8311E)
-            static let inferringBg = SwiftUI.Color(hex: 0xE6EEF8)
-            static let inferringFg = SwiftUI.Color(hex: 0x1E5C8E)
+            static let inferringBg = SwiftUI.Color(hex: 0xF3E4C3)
+            static let inferringFg = SwiftUI.Color(hex: 0x8A5A0E)
             static let capturedBg  = SwiftUI.Color(hex: 0xEFE6D4)
             static let capturedFg  = SwiftUI.Color(hex: 0x7A5A10)
         }
@@ -58,18 +61,21 @@ enum Crucible {
         // Media type dots — used on entry cards and inside the Composer
         // to honestly represent which kinds of media are attached.
         enum Media {
-            static let audio = captureAudio   // ochre
-            static let text  = captureText    // field green
-            static let photo = capturePhoto   // signal blue
-            static let video = captureVideo   // memory magenta
+            static let audio  = captureAudio
+            static let text   = captureText
+            static let photo  = capturePhoto
+            static let video  = captureVideo
+            static let attach = captureAttach
         }
 
-        // AI — everything the model does wears this blue.
-        // Distinct from ember (user intent) and status.info (passive).
+        // AI — everything the model does wears this warm bronze.
+        // Sits in the ochre/amber family so the AI affordance feels native to
+        // the warm/ink system, but stays distinct from ember (user intent /
+        // action accent) and from status.info (passive blue).
         enum AI {
-            static let base   = SwiftUI.Color(hex: 0x1E5C8E)
-            static let strong = SwiftUI.Color(hex: 0x144674)
-            static let tint   = SwiftUI.Color(hex: 0xE6EEF8)
+            static let base   = SwiftUI.Color(hex: 0x8A5A0E)
+            static let strong = SwiftUI.Color(hex: 0x6B4509)
+            static let tint   = SwiftUI.Color(hex: 0xF3E4C3)
         }
 
         // Topic palette — finite pool of hues users pick from when creating a Topic.

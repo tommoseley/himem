@@ -32,7 +32,6 @@ enum EntryMapper {
                 )
             },
             topicNames: dedupedNames(entry.topicsArray.map(\.name)),
-            audioFilePath: entry.audioFilePath,
             inferenceSummary: inference?.summaryText,
             feedbackState: inference?.feedbackStateEnum,
             userCorrection: inference?.userCorrection,
@@ -44,14 +43,8 @@ enum EntryMapper {
                     thumbnailCacheFilename: ref.thumbnailCacheFilename,
                     isAccessible: ref.isAccessible,
                     transcript: ref.transcript,
+                    text: ref.text,
                     createdAt: ref.createdAt ?? .distantPast
-                )
-            },
-            textSegments: entry.textSegmentsArray.map { segment in
-                TextSegmentDisplayItem(
-                    id: segment.id,
-                    text: segment.text,
-                    createdAt: segment.createdAt ?? .distantPast
                 )
             },
             recycledAt: entry.recycledAt,

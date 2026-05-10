@@ -5,12 +5,10 @@ struct JournalView: View {
     @StateObject private var viewModel = JournalViewModel()
     @StateObject private var speechService = SpeechService()
     @StateObject private var cameraService = CameraService()
-    @StateObject private var topicApproval = TopicApprovalService.shared
-    @StateObject private var albumSync = AlbumSyncService.shared
-    @StateObject private var composer = ComposerViewModel()
-    @StateObject private var contributeSession = ContributeSessionViewModel(lifecycle: EntryLifecycleService())
+    @ObservedObject private var topicApproval = TopicApprovalService.shared
+    @ObservedObject private var albumSync = AlbumSyncService.shared
     @StateObject private var projectVM = ProjectViewModel()
-    @StateObject private var errorState = ErrorState.shared
+    @ObservedObject private var errorState = ErrorState.shared
     @EnvironmentObject private var quickAction: QuickActionState
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("cardDensity") private var cardDensityRaw: String = CardDensity.standard.rawValue
@@ -22,10 +20,19 @@ struct JournalView: View {
     }
     @State private var showSearch = false
     @State private var showSettings = false
+    @State private var showInbox = false
+    /// One-shot guard: auto-open Captured Clips on launch only. Prevents
+    /// the sheet from re-popping after the user explicitly dismissed it
+    /// (and prevents in-session arrivals from triggering it — those go
+    /// through notifications instead).
+    @State private var didAutoOpenInbox = false
+    @ObservedObject private var inbox = InboxManifest.shared
     @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var undoEntry: EntryDisplayModel? = nil
     @State private var showUndo = false
+    @State private var activeCaptureModality: CaptureModality? = nil
+    @State private var pendingNoteForNewEntry: String? = nil
 
     private var cardDensity: CardDensity {
         CardDensity(rawValue: cardDensityRaw) ?? .standard
@@ -46,6 +53,16 @@ struct JournalView: View {
                 },
                 onSettingsTap: { showSettings = true }
             )
+
+            // Inbox banner — appears when there are watch clips waiting to
+            // be organized. Per the Append-Watch design rule: calm by
+            // default, but when the inbox is non-empty surface a single
+            // banner-only nag.
+            if !inbox.isEmpty && viewMode == .memories {
+                inboxBanner
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+            }
 
             // Topic bar (shared across both modes)
             TopicTabBar(
@@ -191,26 +208,15 @@ struct JournalView: View {
         }
         .background(Crucible.Color.paper)
 
-        // Add Memory button — home-page entry point to Contribute Mode.
-        // Tap = open the Action Box (deliberate "add memory"; user picks a
-        // capture type). Long-press = quick voice (auto-starts recording for
-        // the garden case). Hidden while Contribute Mode is active — entry/exit
-        // goes through the Action Box's own Done/X controls.
-        if !contributeSession.isPresented {
-            ContributeButton(
-                isOpen: false,
-                idleIcon: "plus",
-                accessibilityLabel: "Add memory",
-                accessibilityHint: "Tap to choose a capture type. Long-press for quick voice capture."
-            ) {
-                contributeSession.enter(anchor: .newMemory, autoStartVoice: false)
-            } onLongPress: {
-                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                contributeSession.enter(anchor: .newMemory, autoStartVoice: true)
-            }
-            .padding(.trailing, 14)
-            .padding(.bottom, 14)
-        }
+        // Append-spec FAB — tap opens the action stack; pick a modality and
+        // the corresponding capture surface presents. The result lands as a
+        // new memory.
+        AppendFAB(
+            onSelect: { modality in
+                activeCaptureModality = modality
+            },
+            accessibilityLabel: "Add memory"
+        )
 
         // Error banner
         if let error = errorState.current {
@@ -285,30 +291,40 @@ struct JournalView: View {
                 },
                 onCaptureNewWith: { text in
                     showSearch = false
-                    // Enter Contribute Mode and seed the search query as a
-                    // text tile so the user can keep adding captures around it.
-                    contributeSession.enter(anchor: .newMemory, autoStartVoice: false)
-                    contributeSession.trackTypedNote(text)
+                    // Seed the search query as the body of a new note. The
+                    // user can edit before hitting Done.
+                    pendingNoteForNewEntry = text
+                    activeCaptureModality = .note
                 }
             )
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
         }
-        .sheet(isPresented: $contributeSession.isPresented, onDismiss: {
-            // Refresh the journal feed so the new memory (or appended captures)
-            // appear immediately. The actual persistence already happened
-            // capture-by-capture; this just nudges the UI.
-            viewModel.refresh()
-        }) {
-            ContributeActionBox(
-                session: contributeSession,
-                speechService: speechService
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.hidden)
-            .interactiveDismissDisabled(true)
+        .sheet(isPresented: $showInbox) {
+            ClipInboxView(viewModel: viewModel)
         }
+        .onReceive(NotificationCenter.default.publisher(for: NotificationService.openInboxNotification)) { _ in
+            // Tap on inbox-arrival notification → open the inbox sheet.
+            showInbox = true
+        }
+        .task {
+            // Auto-open the inbox once on launch when the manifest has
+            // pending clips. Brief delay so the journal view renders first
+            // and the sheet animation reads as intentional, not a launch
+            // flicker.
+            guard !didAutoOpenInbox, inbox.count > 0 else { return }
+            didAutoOpenInbox = true
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            showInbox = true
+        }
+        .captureFlowHost(
+            activeModality: $activeCaptureModality,
+            speechService: speechService,
+            onCaptured: { item in
+                handleCapturedItemForNewEntry(item)
+            }
+        )
         .navigationDestination(item: $selectedEntryId) { entryId in
             if let entry = viewModel.currentEntry(id: entryId) {
                 EntryExpandedView(
@@ -317,15 +333,15 @@ struct JournalView: View {
                     allTopics: viewModel.topics,
                     cameraService: cameraService,
                     speechService: speechService,
-                    onSave: { entryId, newContent, removedTagIds, removedMediaIds, addedTopics, removedTopics, discardAudio in
+                    onSave: { entryId, newContent, newTitle, removedTagIds, removedMediaIds, addedTopics, removedTopics in
                         viewModel.editEntry(
                             entryId: entryId,
                             newContent: newContent,
+                            newTitle: newTitle,
                             removedTagIds: removedTagIds,
                             removedMediaIds: removedMediaIds,
                             addedTopicNames: addedTopics,
-                            removedTopicNames: removedTopics,
-                            discardAudio: discardAudio
+                            removedTopicNames: removedTopics
                         )
                     },
                     onFeedback: { entryId, state in
@@ -423,9 +439,11 @@ struct JournalView: View {
             quickAction.pendingAction = nil
             switch action {
             case "com.himem.app.voice-capture":
-                contributeSession.enter(anchor: .newMemory, autoStartVoice: true)
+                activeCaptureModality = .voice
             case "com.himem.app.new-entry":
-                contributeSession.enter(anchor: .newMemory, autoStartVoice: false)
+                // No specific modality — open the FAB stack equivalent: just
+                // jump to the typed-note capture as the safe default.
+                activeCaptureModality = .note
             default:
                 break
             }
@@ -443,6 +461,40 @@ struct JournalView: View {
         return formatter.string(from: date)
     }
 
+    // MARK: - Inbox banner
+
+    private var inboxBanner: some View {
+        Button {
+            showInbox = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "applewatch")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(inbox.count) new from Apple Watch")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Crucible.Color.ink)
+                    Text("Tap to review")
+                        .font(.caption)
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink3)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Crucible.Color.card)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14).stroke(Crucible.Color.accent.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Undo toast
 
     private func showUndoToast(for entry: EntryDisplayModel) {
@@ -455,25 +507,70 @@ struct JournalView: View {
         }
     }
 
-    // MARK: - Composer handlers
+    // MARK: - Capture handlers (Append spec — capture-new path)
 
-    private func handleCommit() {
-        // Snapshot the data before dismiss/reset clears it
-        let content = composer.commitContent
-        let media = composer.mediaCaptures
-        let topic = composer.selectedTopicName
-        composer.reset()
-
-        // Defer save to next run loop — lets the sheet fully dismiss
-        // before Core Data writes trigger CloudKit sync + view updates
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
-            viewModel.saveEntry(
-                content: content,
-                inputType: .composed,
-                mediaCaptures: media,
-                topicName: topic
+    /// Maps a CapturedItem from the FAB action stack to a new memory.
+    /// One pill press = one new entry. Attach with multiple selections
+    /// bundles them into a single new memory with all media on it.
+    /// On success, navigates to the new memory's detail view so the user
+    /// sees their contribution as the top item.
+    private func handleCapturedItemForNewEntry(_ item: CapturedItem) {
+        let newId: UUID?
+        switch item {
+        case .voice(let filename, let transcript):
+            // Drop empty voice if both fields are empty (user hit Done before
+            // saying anything).
+            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard filename != nil || !trimmed.isEmpty else { return }
+            newId = viewModel.saveEntry(
+                content: trimmed,
+                inputType: .voiceInApp,
+                voiceFilename: filename
             )
+
+        case .photo(let id):
+            newId = viewModel.saveEntry(
+                content: "",
+                inputType: .camera,
+                mediaCaptures: [(id, .image)]
+            )
+
+        case .video(let id):
+            newId = viewModel.saveEntry(
+                content: "",
+                inputType: .camera,
+                mediaCaptures: [(id, .video)]
+            )
+
+        case .note(let text):
+            // If we seeded a search-query value, prepend it.
+            let body: String
+            if let pending = pendingNoteForNewEntry, !pending.isEmpty {
+                pendingNoteForNewEntry = nil
+                body = pending + (text.isEmpty ? "" : "\n\n" + text)
+            } else {
+                body = text
+            }
+            guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            newId = viewModel.saveEntry(content: body, inputType: .typed)
+
+        case .attach(let ids):
+            guard !ids.isEmpty else { return }
+            // PHPicker doesn't separate photos from videos in its return
+            // shape; classify as image by default. The asset's actual type
+            // will be picked up by ThumbnailService at render time.
+            let captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
+                ids.map { ($0, .image) }
+            newId = viewModel.saveEntry(content: "", inputType: .camera, mediaCaptures: captures)
+        }
+
+        // Navigate into the new memory so the captured contribution lands as
+        // the top item rather than dropping the user back on Today. The slight
+        // dispatch lets the capture sheet finish its dismiss animation first.
+        if let newId {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                selectedEntryId = newId
+            }
         }
     }
 }
@@ -537,50 +634,6 @@ struct JournalHeaderView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
-    }
-}
-
-// MARK: - Contribute Button
-
-/// The universal entry point to Contribute Mode. The idle glyph is configurable
-/// per context — `plus` on the home page (where it reads as "Add memory") and
-/// `mic.fill` on an entry detail (where the dominant gesture is appending a
-/// quick voice clip). While Contribute Mode is active the host hides this
-/// button entirely (per spec — entry and exit are via the Action Box's
-/// Done/X). The `xmark` rendering is kept only as a transient cue during the
-/// open/close animation.
-struct ContributeButton: View {
-    let isOpen: Bool
-    var idleIcon: String = "plus"
-    var accessibilityLabel: String = "Add memory"
-    var accessibilityHint: String = "Tap to choose a capture type. Long-press for quick voice capture."
-    let onTap: () -> Void
-    let onLongPress: () -> Void
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(isOpen ? Crucible.Color.accentPressed : Crucible.Color.accent)
-                .frame(width: 56, height: 56)
-                .shadow(color: Color(red: 40/255, green: 25/255, blue: 15/255).opacity(0.22), radius: 10, y: 4)
-
-            Image(systemName: isOpen ? "xmark" : idleIcon)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.white)
-                .rotationEffect(.degrees(isOpen ? 90 : 0))
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isOpen)
-        }
-        .contentShape(Circle())
-        .onTapGesture { onTap() }
-        .highPriorityGesture(
-            LongPressGesture(minimumDuration: 0.4).onEnded { _ in
-                onLongPress()
-            }
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(isOpen ? "Close contribute mode" : accessibilityLabel)
-        .accessibilityHint(isOpen ? "" : accessibilityHint)
-        .accessibilityAddTraits(.isButton)
     }
 }
 

@@ -140,6 +140,59 @@ struct ProcessingEngineFallbackTests {
         #expect(task?.statusEnum == .completed)
     }
 
+    /// Money test for the duplicated-mentions bug: when processEntry runs a
+    /// second time on the same entry without a clearForReprocessing in
+    /// between (e.g. CloudKit re-import after a Change Token Expired reset,
+    /// or any other unforeseen re-trigger), the existing entities must NOT
+    /// be re-created. storeEntities has to be idempotent on (entry, type, value).
+    @Test func processEntry_runTwice_doesNotDuplicateEntities() async throws {
+        let storage = StorageService(inMemory: true)
+        let engine = ProcessingEngine(
+            storage: storage,
+            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden")
+        )
+
+        let entry = try storage.createEntry(content: "Met with Sarah", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+        await engine.processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+
+        // Sanity: first pass produced exactly one Sarah entity.
+        let firstFetch = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
+        firstFetch.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        #expect((try storage.viewContext.fetch(firstFetch)).count == 1)
+
+        // Re-trigger processing with no clearForReprocessing between runs.
+        _ = try storage.createProcessingTask(for: entry)
+        await engine.processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+
+        let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
+        request.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let entities = try storage.viewContext.fetch(request)
+        #expect(entities.count == 1, "storeEntities must be idempotent on (entry, type, value)")
+    }
+
+    /// Sweep test: existing duplicate ExtractedEntity rows (same entry, type,
+    /// value) get collapsed to one canonical row. Mirrors mergeDuplicateTopics.
+    @Test func mergeDuplicateEntities_collapsesDuplicates() throws {
+        let storage = StorageService(inMemory: true)
+        let entry = try storage.createEntry(content: "test", inputType: .typed)
+
+        _ = try storage.createEntity(entryId: entry.id, type: .person, value: "Sarah", confidence: 0.9, method: "cloud", entry: entry)
+        _ = try storage.createEntity(entryId: entry.id, type: .person, value: "Sarah", confidence: 0.9, method: "cloud", entry: entry)
+        _ = try storage.createEntity(entryId: entry.id, type: .nextAction, value: "Plant potatoes", confidence: 0.85, method: "cloud", entry: entry)
+        _ = try storage.createEntity(entryId: entry.id, type: .nextAction, value: "Plant potatoes", confidence: 0.85, method: "cloud", entry: entry)
+        try storage.viewContext.save()
+
+        try storage.mergeDuplicateEntities()
+
+        let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
+        request.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let entities = try storage.viewContext.fetch(request)
+        #expect(entities.count == 2, "Two unique (type, value) pairs collapse to two entities")
+    }
+
     @Test func reprocess_upgradesLocalEntriesToCloud() async throws {
         let storage = StorageService(inMemory: true)
         let offlineEngine = ProcessingEngine(storage: storage, analyzer: ThrowingAnalyzer())

@@ -22,11 +22,12 @@ struct AudioPlayerSheet: View {
     let onSaveTranscript: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var player = AudioPlayerService.shared
+    @ObservedObject private var player = AudioPlayerService.shared
     @State private var totalDuration: TimeInterval = 0
     @State private var currentTime: TimeInterval = 0
     @State private var tickTimer: Timer?
     @State private var draftTranscript: String = ""
+    @State private var isRetryingTranscription = false
 
     var body: some View {
         NavigationStack {
@@ -129,6 +130,43 @@ struct AudioPlayerSheet: View {
                 .frame(minHeight: 120)
                 .scrollContentBackground(.hidden)
                 .background(Crucible.Color.paper)
+
+            Button {
+                retryTranscription()
+            } label: {
+                if isRetryingTranscription {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Retrying…")
+                    }
+                } else {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Retry transcription")
+                    }
+                }
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Crucible.Color.accent)
+            .buttonStyle(.plain)
+            .disabled(isRetryingTranscription)
+            .padding(.top, 2)
+        }
+    }
+
+    /// Re-runs `TranscriptionService` against this clip's audio file and
+    /// replaces the draft transcript with the result. The user can still
+    /// edit the result before tapping Done, or hit Cancel to revert
+    /// everything (including the retry) and keep the original transcript.
+    private func retryTranscription() {
+        isRetryingTranscription = true
+        Task {
+            let url = SpeechService.audioURL(for: filename)
+            let result = await TranscriptionService.shared.transcribe(audioURL: url)
+            await MainActor.run {
+                draftTranscript = result.text
+                isRetryingTranscription = false
+            }
         }
     }
 
@@ -167,8 +205,10 @@ struct AudioPlayerSheet: View {
     // MARK: - Time tracking
 
     private func loadDuration() async {
+        // No `fileExists` pre-check — `try? asset.load(.duration)`
+        // returns nil for missing files; the synchronous disk hit was
+        // a needless main-thread block on sheet present.
         let url = SpeechService.audioURL(for: filename)
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
         let asset = AVURLAsset(url: url)
         if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
             totalDuration = cm.seconds

@@ -37,6 +37,7 @@ class JournalViewModel: ObservableObject {
         loadEntries()
         // Sweep up CloudKit-induced duplicate topics on launch.
         try? storage.mergeDuplicateTopics()
+        try? storage.mergeDuplicateEntities()
     }
 
     func refresh() {
@@ -87,6 +88,7 @@ class JournalViewModel: ObservableObject {
             // CloudKit may have pulled duplicate topics from another
             // device; merge before they're displayed to the user.
             try? self.storage.mergeDuplicateTopics()
+            try? self.storage.mergeDuplicateEntities()
         }
     }
 
@@ -100,23 +102,26 @@ class JournalViewModel: ObservableObject {
             // Re-sweep duplicates on every foreground in case CloudKit
             // pulled in fresh duplicates while we were backgrounded.
             try? self.storage.mergeDuplicateTopics()
+            try? self.storage.mergeDuplicateEntities()
         }
     }
 
     // MARK: - Entry Operations (delegated to EntryLifecycleService)
 
-    func saveEntry(content: String, inputType: JournalEntry.InputType, audioFilePath: String? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = [], topicName: String? = nil) {
-        lifecycle.save(content: content, inputType: inputType, audioFilePath: audioFilePath, mediaCaptures: mediaCaptures, topicName: topicName)
+    @discardableResult
+    func saveEntry(content: String, inputType: JournalEntry.InputType, voiceFilename: String? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = [], topicName: String? = nil) -> UUID? {
+        let id = lifecycle.save(content: content, inputType: inputType, voiceFilename: voiceFilename, mediaCaptures: mediaCaptures, topicName: topicName)
+        loadEntries()
+        return id
+    }
+
+    func editEntry(entryId: UUID, newContent: String, newTitle: String? = nil, removedTagIds: Set<UUID> = [], removedMediaIds: Set<UUID> = [], addedTopicNames: Set<String> = [], removedTopicNames: Set<String> = []) {
+        lifecycle.edit(entryId: entryId, newContent: newContent, newTitle: newTitle, removedTagIds: removedTagIds, removedMediaIds: removedMediaIds, addedTopicNames: addedTopicNames, removedTopicNames: removedTopicNames)
         loadEntries()
     }
 
-    func editEntry(entryId: UUID, newContent: String, removedTagIds: Set<UUID> = [], removedMediaIds: Set<UUID> = [], addedTopicNames: Set<String> = [], removedTopicNames: Set<String> = [], discardAudio: Bool = false) {
-        lifecycle.edit(entryId: entryId, newContent: newContent, removedTagIds: removedTagIds, removedMediaIds: removedMediaIds, addedTopicNames: addedTopicNames, removedTopicNames: removedTopicNames, discardAudio: discardAudio)
-        loadEntries()
-    }
-
-    func appendToEntry(entryId: UUID, additionalContent: String, audioFilePath: String? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []) {
-        lifecycle.append(entryId: entryId, additionalContent: additionalContent, audioFilePath: audioFilePath, mediaCaptures: mediaCaptures)
+    func appendToEntry(entryId: UUID, additionalContent: String, voiceFilename: String? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []) {
+        lifecycle.append(entryId: entryId, additionalContent: additionalContent, voiceFilename: voiceFilename, mediaCaptures: mediaCaptures)
         loadEntries()
     }
 

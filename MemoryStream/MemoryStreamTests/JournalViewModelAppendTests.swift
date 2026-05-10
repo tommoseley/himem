@@ -126,15 +126,11 @@ struct JournalViewModelAppendTests {
         #expect(voiceItems.count == 2)
         let voiceIds = Set(voiceItems.map(\.localIdentifier))
         #expect(voiceIds == ["voice-1.m4a", "voice-2.m4a"])
-
-        // audioFilePath is untouched — Derived vs. primary / no-silent-discard.
-        #expect(updated?.audioFilePath == nil)
     }
 
-    /// New memories created from Composer never use the legacy
-    /// `audioFilePath` slot. Voice clips captured during composition stage as
-    /// mediaCaptures and persist as MediaReference(.voice), keeping the
-    /// "any type, any count" rule satisfied for new entries too.
+    /// Composer voice clips persist as `.voice` MediaReferences alongside
+    /// any photo/video captures, satisfying the "any type, any count" rule
+    /// for new entries.
     @Test func saveEntry_withVoiceMediaCaptures_createsVoiceMediaReferences() {
         let vm = makeViewModel()
 
@@ -149,32 +145,38 @@ struct JournalViewModelAppendTests {
         )
 
         let entry = vm.entries.first
-        #expect(entry?.audioFilePath == nil)
         let voiceItems = entry?.mediaItems.filter { $0.mediaType == .voice } ?? []
         #expect(voiceItems.count == 2)
         #expect(entry?.mediaItems.filter { $0.mediaType == .image }.count == 1)
     }
 
-    /// Voice appends do NOT overwrite an existing `audioFilePath`. If the
-    /// entry has a legacy primary audio (from pre-staging days), appending
-    /// voice creates a new MediaReference and leaves the original intact.
-    @Test func appendToEntry_withVoice_preservesExistingAudioFilePath() {
+    /// FAB voice clips land as a `.voice` MediaReference via the
+    /// `voiceFilename` parameter; appending a second voice clip creates a
+    /// new fragment instead of overwriting the first. Locks in the
+    /// post-FragmentMigration single-shape semantics where every voice
+    /// capture is its own fragment.
+    @Test func saveEntry_withVoiceFilename_createsVoiceFragmentAndAppendsMore() {
         let vm = makeViewModel()
         vm.saveEntry(
-            content: "seed",
-            inputType: .typed,
-            audioFilePath: "legacy-audio.m4a"
+            content: "seed transcript",
+            inputType: .voiceInApp,
+            voiceFilename: "first-voice.m4a"
         )
         let entryId = vm.entries.first!.id
+
+        let initial = vm.currentEntry(id: entryId)
+        let initialVoice = initial?.mediaItems.filter { $0.mediaType == .voice } ?? []
+        #expect(initialVoice.count == 1)
+        #expect(initialVoice.first?.localIdentifier == "first-voice.m4a")
 
         vm.appendToEntry(
             entryId: entryId,
             additionalContent: "",
-            mediaCaptures: [(localIdentifier: "new-voice.m4a", mediaType: .voice)]
+            mediaCaptures: [(localIdentifier: "second-voice.m4a", mediaType: .voice)]
         )
 
         let updated = vm.currentEntry(id: entryId)
-        #expect(updated?.audioFilePath == "legacy-audio.m4a")
-        #expect(updated?.mediaItems.filter { $0.mediaType == .voice }.count == 1)
+        let voiceIds = Set(updated?.mediaItems.filter { $0.mediaType == .voice }.map(\.localIdentifier) ?? [])
+        #expect(voiceIds == ["first-voice.m4a", "second-voice.m4a"])
     }
 }

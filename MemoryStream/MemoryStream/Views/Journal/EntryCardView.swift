@@ -11,16 +11,26 @@ struct EntryCardView: View {
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var isContentExpanded = false
 
+    /// Cached output of `Self.computeSmartTags(_:)` — recomputed only
+    /// when `entry` actually changes. The previous implementation
+    /// re-filtered `entry.tags` with a per-tag substring search on every
+    /// render (audit 2026-05-09: MEDIUM cost, multiplicative across feed
+    /// row count).
+    @State private var smartTagsCache: [TagDisplayModel] = []
+
     /// Tags that add information beyond what's already in the content text.
     private func dotColor(for type: MediaReference.MediaType) -> Color {
         switch type {
         case .image: return Crucible.Color.Media.photo
         case .video: return Crucible.Color.Media.video
         case .voice: return Crucible.Color.Media.audio
+        case .note:  return Crucible.Color.Media.text
         }
     }
 
-    private var smartTags: [TagDisplayModel] {
+    /// Pure: tags whose value isn't already in `entry.content`. Static so
+    /// the cache-refresh `.onChange(of:)` doesn't capture `self`.
+    private static func computeSmartTags(_ entry: EntryDisplayModel) -> [TagDisplayModel] {
         entry.tags.filter { tag in
             !entry.content.localizedCaseInsensitiveContains(tag.value)
         }
@@ -34,12 +44,8 @@ struct EntryCardView: View {
             } : nil)
 
             // Media dot strip
-            if entry.hasAudio || !entry.mediaItems.isEmpty {
+            if !entry.mediaItems.isEmpty {
                 HStack(spacing: 6) {
-                    if entry.audioFilePath != nil {
-                        Circle().fill(Crucible.Color.Media.audio).frame(width: 8, height: 8)
-                            .accessibilityHidden(true)
-                    }
                     ForEach(entry.mediaItems) { item in
                         Circle()
                             .fill(dotColor(for: item.mediaType))
@@ -100,8 +106,8 @@ struct EntryCardView: View {
             }
 
             // Entity tags — only visible in Rich mode (search-only in Standard/Compact)
-            if density == .rich && !smartTags.isEmpty {
-                EntityTagsRow(tags: smartTags, onEntityTap: onEntityTap)
+            if density == .rich && !smartTagsCache.isEmpty {
+                EntityTagsRow(tags: smartTagsCache, onEntityTap: onEntityTap)
             }
 
             // Inference summary card
@@ -140,12 +146,16 @@ struct EntryCardView: View {
                     summary: inference,
                     feedbackState: feedbackState,
                     userCorrection: entry.userCorrection,
-                    audioFilePath: entry.audioFilePath
+                    voiceFilename: entry.mediaItems.first(where: { $0.mediaType == .voice })?.localIdentifier
                 )
             }
         }
         .fullScreenCover(item: $selectedMedia) { item in
             MediaViewerView(item: item)
+        }
+        .onAppear { smartTagsCache = Self.computeSmartTags(entry) }
+        .onChange(of: entry) { _, newEntry in
+            smartTagsCache = Self.computeSmartTags(newEntry)
         }
     }
 }
@@ -524,7 +534,7 @@ struct AdjustInferenceSheet: View {
 
 struct VoicePlaybackRow: View {
     let filename: String
-    @StateObject private var player = AudioPlayerService.shared
+    @ObservedObject private var player = AudioPlayerService.shared
     @State private var showShare = false
 
     private var isThisPlaying: Bool {
@@ -589,14 +599,14 @@ struct InferenceDetailSheet: View {
     let summary: String
     let feedbackState: InferenceSummary.FeedbackState
     var userCorrection: String? = nil
-    var audioFilePath: String? = nil
+    var voiceFilename: String? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 20) {
                 // Voice playback — shown first since it's what drove the inference
-                if let audioFile = audioFilePath {
+                if let audioFile = voiceFilename {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("VOICE ENTRY")
                             .font(.caption2)

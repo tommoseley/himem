@@ -1,5 +1,8 @@
 import SwiftUI
 import CoreData
+import Photos
+import AVFoundation
+import UIKit
 
 /// Project View — header + purpose + curated memory stack.
 /// Entry cards are used here (inside a project), not on the project list.
@@ -16,6 +19,8 @@ struct ProjectDetailView: View {
     @State private var topicFilter: String? = nil
     @State private var showShareSheet = false
     @State private var showAddMemorySheet = false
+    @State private var shareItems: [Any] = []
+    @State private var isPreparingShare = false
 
     private let storage = StorageService.shared
 
@@ -186,11 +191,19 @@ struct ProjectDetailView: View {
                                 .foregroundStyle(Crucible.Color.accent)
                         }
                         .accessibilityLabel("Add memory to project")
-                        Button { showShareSheet = true } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 15)) // design-token size
-                                .foregroundStyle(Crucible.Color.ink2)
+                        Button {
+                            Task { await prepareAndShowShareSheet() }
+                        } label: {
+                            if isPreparingShare {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 15)) // design-token size
+                                    .foregroundStyle(Crucible.Color.ink2)
+                            }
                         }
+                        .disabled(isPreparingShare)
                         .accessibilityLabel("Share project")
                         Button { isEditing = true } label: {
                             Image(systemName: "pencil")
@@ -203,8 +216,7 @@ struct ProjectDetailView: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            let composed = composeProjectText()
-            ShareSheet(items: [composed])
+            ShareSheet(items: shareItems)
         }
         .sheet(isPresented: $showAddMemorySheet, onDismiss: { loadProjectEntries() }) {
             AddMemoryToProjectSheet(projectId: projectId, projectVM: projectVM)
@@ -262,5 +274,94 @@ struct ProjectDetailView: View {
         guard let project else { return }
         let journalEntries = project.entriesArray.filter { !$0.isRecycled }
         entries = journalEntries.map(EntryMapper.mapToDisplayModel)
+    }
+
+    // MARK: - Share preparation
+
+    /// Builds the share-sheet payload: composed text plus full-resolution
+    /// image data, video file URLs, and voice-clip file URLs pulled from each
+    /// entry. PhotoKit lookups are async so we set a `isPreparingShare` flag
+    /// to swap the share button to a spinner while we collect items.
+    private func prepareAndShowShareSheet() async {
+        isPreparingShare = true
+        defer { isPreparingShare = false }
+
+        var items: [Any] = [composeProjectText()]
+
+        let photoKitIds: [String] = entries.flatMap { entry in
+            entry.mediaItems
+                .filter { $0.mediaType == .image || $0.mediaType == .video }
+                .map { $0.localIdentifier }
+        }
+        if !photoKitIds.isEmpty {
+            let fetch = PHAsset.fetchAssets(withLocalIdentifiers: photoKitIds, options: nil)
+            var assets: [PHAsset] = []
+            fetch.enumerateObjects { asset, _, _ in assets.append(asset) }
+            for asset in assets {
+                if asset.mediaType == .image, let image = await loadFullImage(from: asset) {
+                    items.append(image)
+                } else if asset.mediaType == .video, let url = await loadVideoURL(from: asset) {
+                    items.append(url)
+                }
+            }
+        }
+
+        // Voice clips on disk — every voice fragment lives on a `.voice`
+        // MediaReference post-FragmentMigration.
+        var voiceFilenames: [String] = []
+        for entry in entries {
+            voiceFilenames.append(contentsOf: entry.mediaItems
+                .filter { $0.mediaType == .voice }
+                .map { $0.localIdentifier })
+        }
+        for filename in voiceFilenames {
+            let url = SpeechService.audioURL(for: filename)
+            if FileManager.default.fileExists(atPath: url.path) {
+                items.append(url)
+            }
+        }
+
+        shareItems = items
+        showShareSheet = true
+    }
+
+    private func loadFullImage(from asset: PHAsset) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            let options = PHImageRequestOptions()
+            options.deliveryMode = .highQualityFormat
+            options.isNetworkAccessAllowed = true
+            options.isSynchronous = false
+            var resumed = false
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: PHImageManagerMaximumSize,
+                contentMode: .aspectFit,
+                options: options
+            ) { image, info in
+                let isDegraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+                if isDegraded { return }
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume(returning: image)
+            }
+        }
+    }
+
+    private func loadVideoURL(from asset: PHAsset) async -> URL? {
+        await withCheckedContinuation { continuation in
+            let options = PHVideoRequestOptions()
+            options.deliveryMode = .highQualityFormat
+            options.isNetworkAccessAllowed = true
+            var resumed = false
+            PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, _ in
+                guard !resumed else { return }
+                resumed = true
+                if let urlAsset = avAsset as? AVURLAsset {
+                    continuation.resume(returning: urlAsset.url)
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
     }
 }

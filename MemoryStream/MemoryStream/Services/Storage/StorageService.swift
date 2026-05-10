@@ -37,13 +37,18 @@ final class StorageService {
     private init() {
         let cloudKitContainer = NSPersistentCloudKitContainer(name: "MemoryStream")
         container = cloudKitContainer
+
+        // ALL store-description options must be set before
+        // `loadPersistentStores` so the persistent coordinator sees them
+        // when it loads the store (Apple, WWDC "Sync a Core Data store
+        // with the CloudKit public database"). Setting them after the load
+        // contributes to the spurious "different NSManagedObjectModel"
+        // warnings that Tom's launch console showed on 2026-05-09.
         let description = container.persistentStoreDescriptions.first!
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
         description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
         description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-
-        // Try with CloudKit
         description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
             containerIdentifier: "iCloud.com.himem.app"
         )
@@ -53,7 +58,9 @@ final class StorageService {
             if let error { loadError = error }
         }
 
-        // If CloudKit failed, retry without it — local-only fallback
+        // CloudKit-backed load failed (rare — typically a transient setup
+        // issue). Strip CloudKit options and try once more so the user
+        // gets a working local store; sync just won't happen this session.
         if loadError != nil {
             description.cloudKitContainerOptions = nil
             container.persistentStoreDescriptions = [description]
@@ -64,22 +71,48 @@ final class StorageService {
             }
         }
 
-        container.viewContext.automaticallyMergesChangesFromParent = true
-        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        // viewContext configuration runs AFTER `loadPersistentStores` per
+        // Apple's WWDC pattern — ensures the store coordinator has the
+        // store attached before we set merge / query-generation behavior.
+        let viewContext = container.viewContext
+        viewContext.automaticallyMergesChangesFromParent = true
+        viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        // Lets us filter changes by origin in `NSManagedObjectContextObjectsDidChange`
+        // observers — distinguishes user edits from CloudKit imports.
+        viewContext.transactionAuthor = "viewContext"
+        // Drops faults that point at deleted CloudKit records instead of
+        // throwing on access — important when sync deletes a record we
+        // had cached.
+        viewContext.shouldDeleteInaccessibleFaults = true
+        // Pins reads to the current generation so a CloudKit import in
+        // flight can't change rows out from under an in-progress query.
+        try? viewContext.setQueryGenerationFrom(.current)
 
         #if DEBUG
-        try? cloudKitContainer.initializeCloudKitSchema(options: [])
+        // Schema discovery is a CloudKit chatter bomb (multiple round
+        // trips, dozens of log lines) and only needs to run once per
+        // schema version per device. The flag is debug-only so a
+        // production user never gets here even if they install a
+        // debug build by accident.
+        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV1"
+        if !UserDefaults.standard.bool(forKey: schemaInitKey) {
+            try? cloudKitContainer.initializeCloudKitSchema(options: [])
+            UserDefaults.standard.set(true, forKey: schemaInitKey)
+        }
         #endif
 
-        // Listen for remote changes from other devices
+        // Listen for remote changes from other devices. With
+        // `automaticallyMergesChangesFromParent` true, the viewContext
+        // already absorbs CloudKit imports — the prior `refreshAllObjects`
+        // here was redundant and (per the 2026-04-29 sync-asymmetry doc)
+        // didn't help the iPad case anyway.
         NotificationCenter.default.addObserver(
-            forName: NSNotification.Name.NSPersistentStoreRemoteChange,
+            forName: .NSPersistentStoreRemoteChange,
             object: container.persistentStoreCoordinator,
             queue: .main
-        ) { [weak self] _ in
-            self?.viewContext.perform {
-                self?.viewContext.refreshAllObjects()
-            }
+        ) { _ in
+            // Hook left in place for future targeted reload work; the
+            // auto-merge above is sufficient for the common path.
         }
     }
 
@@ -196,19 +229,6 @@ final class StorageService {
         try save(context: ctx)
     }
 
-    // MARK: - Text Segment Operations
-
-    func createTextSegment(for entry: JournalEntry, text: String, createdAt: Date = Date(), context: NSManagedObjectContext? = nil) throws -> TextSegment {
-        let ctx = context ?? viewContext
-        let segment = TextSegment(context: ctx)
-        segment.id = UUID()
-        segment.text = text
-        segment.createdAt = createdAt
-        segment.entry = entry
-        try save(context: ctx)
-        return segment
-    }
-
     // MARK: - Media Reference Operations
 
     func createMediaReference(for entry: JournalEntry, localIdentifier: String, mediaType: MediaReference.MediaType, context: NSManagedObjectContext? = nil) throws -> MediaReference {
@@ -220,6 +240,43 @@ final class StorageService {
         ref.mediaType = mediaType.rawValue
         ref.isAccessible = true
         ref.createdAt = Date()
+        ref.entry = entry
+        try save(context: ctx)
+        return ref
+    }
+
+    /// Creates a `.note` fragment — a MediaReference whose body lives in
+    /// the `text` field rather than referencing an external asset. Replaces
+    /// the legacy `TextSegment` entity.
+    func createNoteFragment(for entry: JournalEntry, text: String, createdAt: Date = Date(), context: NSManagedObjectContext? = nil) throws -> MediaReference {
+        let ctx = context ?? viewContext
+        let ref = MediaReference(context: ctx)
+        ref.id = UUID()
+        ref.entryId = entry.id
+        ref.osIdentifier = ""
+        ref.mediaType = MediaReference.MediaType.note.rawValue
+        ref.isAccessible = true
+        ref.createdAt = createdAt
+        ref.text = text
+        ref.entry = entry
+        try save(context: ctx)
+        return ref
+    }
+
+    /// Creates a `.voice` fragment with the audio filename as
+    /// `osIdentifier` and the speech transcript on the ref. Replaces the
+    /// legacy `JournalEntry.audioFilePath` slot for in-app voice
+    /// captures.
+    func createVoiceFragment(for entry: JournalEntry, audioFilename: String, transcript: String, createdAt: Date = Date(), context: NSManagedObjectContext? = nil) throws -> MediaReference {
+        let ctx = context ?? viewContext
+        let ref = MediaReference(context: ctx)
+        ref.id = UUID()
+        ref.entryId = entry.id
+        ref.osIdentifier = audioFilename
+        ref.mediaType = MediaReference.MediaType.voice.rawValue
+        ref.isAccessible = true
+        ref.createdAt = createdAt
+        ref.transcript = transcript
         ref.entry = entry
         try save(context: ctx)
         return ref
@@ -309,6 +366,33 @@ final class StorageService {
                         entry.addToTopics(canonical)
                     }
                 }
+                ctx.delete(duplicate)
+                didMerge = true
+            }
+        }
+        if didMerge {
+            try save(context: ctx)
+        }
+    }
+
+    /// Collapses ExtractedEntity duplicates within each entry. Two entities
+    /// are duplicates when they share the same `(entryId, entityType, normalized value)`
+    /// — same key the ProcessingEngine uses when deciding whether to skip an
+    /// insert. The keeper is the oldest by `createdAt`; the rest are deleted.
+    /// Same trigger surface as `mergeDuplicateTopics`: launch, foreground,
+    /// remote change.
+    func mergeDuplicateEntities(context: NSManagedObjectContext? = nil) throws {
+        let ctx = context ?? viewContext
+        let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
+        let all = try ctx.fetch(request)
+        let grouped = Dictionary(grouping: all) { entity -> String in
+            let key = ProcessingEngine.entityKey(type: entity.entityType, value: entity.value)
+            return "\(entity.entryId.uuidString)|\(key)"
+        }
+        var didMerge = false
+        for (_, group) in grouped where group.count > 1 {
+            let sorted = group.sorted { $0.createdAt < $1.createdAt }
+            for duplicate in sorted.dropFirst() {
                 ctx.delete(duplicate)
                 didMerge = true
             }

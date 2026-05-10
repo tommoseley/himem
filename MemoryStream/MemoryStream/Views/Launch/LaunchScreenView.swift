@@ -167,6 +167,14 @@ struct LaunchScreenView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             DispatchQueue.global(qos: .userInitiated).async {
                 _ = StorageService.shared
+                // FragmentMigration is intentionally NOT called here —
+                // running it before CloudKit's initial import has settled
+                // races against the importer and raises an ObjC NSException
+                // from `_PFManagedObject_coerceValueForKeyWithDescription`
+                // that Swift can't catch. See
+                // docs/issues/2026-05-09-fragment-migration-cloudkit-race.md.
+                // Migration is now gated on `eventChangedNotification`
+                // import-success or the 3s safety net below.
                 DispatchQueue.main.async { onStorageLoaded() }
             }
         }
@@ -192,6 +200,15 @@ struct LaunchScreenView: View {
         withAnimation(.easeInOut(duration: 0.8)) { syncProgress = 0.7 }
 
         // Watch for CloudKit import completion — this drives the handoff
+        // AND is the gate for FragmentMigration. The two-NSManagedObjectModel
+        // race that crashes the migration only exists while CloudKit's
+        // import is in flight; once `.import .succeeded` fires, only our
+        // model is live and writes are safe. We run migration on EVERY
+        // import-success event (not just the first) because CloudKit can
+        // deliver entries across multiple batches — entries that arrive
+        // in the second batch were missed by the first migration call,
+        // and the next-launch flag won't help if the first call set it
+        // prematurely (see 2026-05-09 issue doc).
         NotificationCenter.default.addObserver(
             forName: NSPersistentCloudKitContainer.eventChangedNotification,
             object: StorageService.shared.container,
@@ -201,6 +218,7 @@ struct LaunchScreenView: View {
                 as? NSPersistentCloudKitContainer.Event else { return }
             // type 1 = import
             if event.type.rawValue == 1 && event.succeeded {
+                runMigration()
                 completeSync()
             }
         }
@@ -208,13 +226,34 @@ struct LaunchScreenView: View {
         // If entries already exist (sync happened during store load), complete
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             if !syncDone && EpigraphService.shared.entryCount() > 0 {
+                runMigration()
                 completeSync()
             }
         }
 
-        // Safety net — if CloudKit never reports, hand off after 4s total
+        // Safety net — if CloudKit never reports (no iCloud account, no
+        // network, or empty store with nothing to import), still run
+        // migration once and hand off so the user isn't stuck on the
+        // splash. The migration's own UserDefaults flag is set only when
+        // we confirm the steady state, so 0-entry runs from this path
+        // get retried on next launch.
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            runMigration()
             if !syncDone { completeSync() }
+        }
+    }
+
+    /// Schedules `FragmentMigration.runIfNeeded` on a background context.
+    /// Safe to call multiple times — the migration's internal in-flight
+    /// guard and idempotent per-entry checks make repeat calls cheap.
+    /// Per 2026-05-09 issue doc, only call after CloudKit's initial import
+    /// has settled (or the 3s safety timeout) — running concurrently with
+    /// import raises an ObjC NSException that can't be caught.
+    private func runMigration() {
+        if FragmentMigration.hasCompleted { return }
+        let context = StorageService.shared.backgroundContext()
+        context.perform {
+            FragmentMigration.runIfNeeded(in: context)
         }
     }
 

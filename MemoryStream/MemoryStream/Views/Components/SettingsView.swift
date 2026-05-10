@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import UserNotifications
 
 struct SettingsView: View {
     var viewModel: JournalViewModel? = nil
@@ -14,11 +15,18 @@ struct SettingsView: View {
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
     @AppStorage("tagMemoriesWithLocation") private var tagMemoriesWithLocation = true
+    @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
+    @AppStorage(NotificationService.Keys.notifyInboxArrival) private var notifyInboxArrival = false
+    @AppStorage(NotificationService.Keys.notifyDailyNudge) private var notifyDailyNudge = false
+    @AppStorage(NotificationService.Keys.nudgeTimeMinutes) private var nudgeTimeMinutes = 1200
+    @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
     // autoSaveDelay removed — Composer uses explicit commit
 
     private let storage = StorageService.shared
 
     @State private var displayName: String = AuthService.shared.userName
+    @ObservedObject private var inbox = InboxManifest.shared
+    @State private var showInbox = false
 
     var body: some View {
         NavigationStack {
@@ -125,6 +133,30 @@ struct SettingsView: View {
                     }
                 }
 
+                // MARK: - Captured Clips (Inbox)
+                Section {
+                    Button {
+                        showInbox = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "applewatch")
+                                .foregroundStyle(Crucible.Color.accent)
+                            Text("Captured Clips")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                            Text("\(inbox.count) pending")
+                                .font(.subheadline)
+                                .foregroundStyle(inbox.isEmpty ? Crucible.Color.ink4 : Crucible.Color.ink2)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(Crucible.Color.ink4)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } footer: {
+                    Text("Voice clips from Apple Watch land here. Review them, then create a new memory or add them to an existing one.")
+                }
+
                 // MARK: - Voice
                 Section {
                     Toggle("Save voice recordings", isOn: $saveVoiceEntries)
@@ -149,6 +181,32 @@ struct SettingsView: View {
                 } footer: {
                     Text("Location stays on your device. We never send it to the server. Turn this off and new memories will be saved without location.")
                 }
+
+                // MARK: - Notifications
+                Section {
+                    Toggle("Notify when watch clips arrive", isOn: $notifyInboxArrival)
+                    Toggle("Daily nudge", isOn: $notifyDailyNudge)
+                    if notifyDailyNudge {
+                        DatePicker(
+                            "Nudge time",
+                            selection: nudgeTimeBinding,
+                            displayedComponents: .hourAndMinute
+                        )
+                    }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    Text(notificationsFooter)
+                }
+
+                // MARK: - Handedness
+                Section {
+                    Toggle("Left-handed FAB", isOn: $fabHandednessLeft)
+                } header: {
+                    Text("Handedness")
+                } footer: {
+                    Text("Anchors the Add button to the bottom-left of the screen instead of the bottom-right. The action stack flips with it.")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -157,8 +215,34 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .sheet(isPresented: $showInbox) {
+                if let viewModel {
+                    ClipInboxView(viewModel: viewModel)
+                }
+            }
             .onAppear {
                 loadTopics()
+                Task {
+                    notificationAuthStatus = await NotificationService.shared.authorizationStatus()
+                }
+            }
+            .onChange(of: notifyInboxArrival) { _, isOn in
+                if isOn {
+                    Task { await ensurePermissionAndRefresh() }
+                }
+            }
+            .onChange(of: notifyDailyNudge) { _, isOn in
+                Task {
+                    if isOn { await ensurePermissionAndRefresh() }
+                    let hasEntry = StorageService.shared.hasEntryCreatedToday()
+                    await NotificationService.shared.refreshDailyNudge(hadEntryToday: hasEntry)
+                }
+            }
+            .onChange(of: nudgeTimeMinutes) { _, _ in
+                Task {
+                    let hasEntry = StorageService.shared.hasEntryCreatedToday()
+                    await NotificationService.shared.refreshDailyNudge(hadEntryToday: hasEntry)
+                }
             }
             .sheet(isPresented: $showRecycleBin) {
                 if let viewModel {
@@ -244,6 +328,40 @@ struct SettingsView: View {
         } catch {
             ErrorState.shared.report(.topicError(error.localizedDescription))
         }
+    }
+
+    // MARK: - Notifications helpers
+
+    /// Bridges the Int "minutes since midnight" stored in UserDefaults to
+    /// the `Date` type the SwiftUI DatePicker expects. Only the time portion
+    /// of the Date matters; the calendar day is whatever today is at read.
+    private var nudgeTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                let h = nudgeTimeMinutes / 60
+                let m = nudgeTimeMinutes % 60
+                return Calendar.current.date(
+                    bySettingHour: h, minute: m, second: 0, of: Date()
+                ) ?? Date()
+            },
+            set: { newDate in
+                let cal = Calendar.current
+                nudgeTimeMinutes = cal.component(.hour, from: newDate) * 60
+                                 + cal.component(.minute, from: newDate)
+            }
+        )
+    }
+
+    private var notificationsFooter: String {
+        if notificationAuthStatus == .denied && (notifyInboxArrival || notifyDailyNudge) {
+            return "Notifications are turned off for HiMem at the system level. Enable them in iOS Settings → Notifications → Hi Mem."
+        }
+        return "Pings when watch clips arrive at the iPhone, and an optional reminder if you haven't captured anything by your chosen time."
+    }
+
+    private func ensurePermissionAndRefresh() async {
+        _ = await NotificationService.shared.requestPermissionIfNeeded()
+        notificationAuthStatus = await NotificationService.shared.authorizationStatus()
     }
 }
 
