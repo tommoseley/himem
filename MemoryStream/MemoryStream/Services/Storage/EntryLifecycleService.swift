@@ -81,12 +81,17 @@ final class EntryLifecycleService {
     /// to the entry. Used by Contribute Mode when the user commits a
     /// typed Note — fragments persist immediately so they show up in the
     /// chronological capture stream alongside voice/photo captures.
+    ///
+    /// `createdAt` defaults to `Date()` for fresh captures. The detail-view
+    /// auto-migration path passes `entry.createdAt` so the converted note
+    /// lands at the start of the chronological stream (before any later
+    /// appends), matching its original capture order.
     @discardableResult
-    func createNoteFragment(forEntryId entryId: UUID, text: String) throws -> MediaReference {
+    func createNoteFragment(forEntryId entryId: UUID, text: String, createdAt: Date = Date()) throws -> MediaReference {
         guard let entry = try fetchEntry(id: entryId) else {
             throw NSError(domain: "EntryLifecycleService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry \(entryId) not found"])
         }
-        return try storage.createNoteFragment(for: entry, text: text)
+        return try storage.createNoteFragment(for: entry, text: text, createdAt: createdAt)
     }
 
     /// Regenerates `entry.content` from the entry's TextSegments + voice

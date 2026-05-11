@@ -125,6 +125,7 @@ struct EntryExpandedView: View {
         }
         .onAppear {
             editedTitle = entry.displayTitle
+            migrateOrphanedContentIfNeeded()
         }
         .sheet(item: $audioPlayerForFile) { target in
             // Prefer the per-clip transcript captured at recording time;
@@ -349,18 +350,19 @@ struct EntryExpandedView: View {
     /// post-FragmentMigration v2. Voice / note / image / video are all
     /// MediaReferences interleaved in createdAt order.
     ///
-    /// Three render paths:
-    ///   1. No media fragments at all → plain `entry.content` text. Covers
-    ///      pure-content entries the migration didn't convert.
-    ///   2. Has fragments AND a `.note` fragment covers the content → just
-    ///      the stream (text is already in the stream as a NotePanel).
-    ///   3. Has fragments BUT no `.note` fragment AND `entry.content` is
-    ///      non-empty → render the content text above the stream. Covers
-    ///      legacy entries created via paths that wrote `entry.content`
-    ///      directly without minting a `.note` fragment (typed-note
-    ///      capture before 2026-05-10, watch-clip merges, etc.). Without
-    ///      this fallback, the text is invisible in the detail view even
-    ///      though the feed shows it.
+    /// Render paths:
+    ///   1. No media fragments at all → plain `entry.content` text.
+    ///      Covers pure-content entries the migration didn't convert.
+    ///   2. Has fragments → ChronologicalCaptureStream renders the lot,
+    ///      with each fragment getting its own swipe-to-edit/delete
+    ///      panel (NotePanel for notes, VoiceClipPanel for voice, etc.).
+    ///
+    /// Orphaned `entry.content` (text exists but no `.note` fragment
+    /// covers it — left over from earlier code paths that wrote
+    /// `entry.content` directly) gets auto-migrated into a real `.note`
+    /// MediaReference in `.onAppear` via `migrateOrphanedContentIfNeeded`,
+    /// so the user gets the full NotePanel UX (swipe to edit, swipe to
+    /// delete) without a separate inline-Text affordance.
     @ViewBuilder
     private var bodyContent: some View {
         if entry.mediaItems.isEmpty {
@@ -369,12 +371,6 @@ struct EntryExpandedView: View {
                 .foregroundStyle(Crucible.Color.ink)
                 .lineSpacing(4)
         } else {
-            if needsOrphanedContentFallback {
-                Text(entry.content)
-                    .font(.body)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .lineSpacing(4)
-            }
             ChronologicalCaptureStream(
                 entry: entry,
                 onDeleteVoice: { id in
@@ -406,23 +402,33 @@ struct EntryExpandedView: View {
         }
     }
 
-    /// True when the entry has media fragments but `entry.content` text
-    /// isn't already represented as a `.note` (or voice transcript)
-    /// fragment. See `bodyContent` doc for the path-3 case this covers.
-    private var needsOrphanedContentFallback: Bool {
+    /// On first detail view, if the entry has `entry.content` text but no
+    /// `.note` MediaReference covers it (and no voice fragment's
+    /// transcript matches), mint a `.note` fragment so the text renders
+    /// through `NotePanel` with the same swipe-edit/delete affordances as
+    /// every other fragment. Idempotent — re-runs on every onAppear, but
+    /// short-circuits once a matching fragment exists. Created with
+    /// `createdAt = entry.createdAt` so it lands at the head of the
+    /// chronological stream, before any later appends.
+    private func migrateOrphanedContentIfNeeded() {
         let trimmed = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        // If any note carries this content, or any voice fragment's
-        // transcript matches, the stream already renders the text.
+        guard !trimmed.isEmpty else { return }
+        guard !entry.mediaItems.isEmpty else { return }  // Path 1 covers pure-content entries.
+
         let notes = entry.mediaItems.filter { $0.mediaType == .note }
         if notes.contains(where: { ($0.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == trimmed }) {
-            return false
+            return
         }
         let voices = entry.mediaItems.filter { $0.mediaType == .voice }
         if voices.contains(where: { ($0.transcript ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == trimmed }) {
-            return false
+            return
         }
-        return true
+
+        _ = try? lifecycle.createNoteFragment(
+            forEntryId: entry.id,
+            text: entry.content,
+            createdAt: entry.createdAt
+        )
     }
 
     /// AI inference card — visible while the user hasn't yet acted on
