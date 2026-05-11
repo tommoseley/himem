@@ -22,7 +22,6 @@ final class NotificationService {
 
     /// UserDefaults keys, mirrored by `@AppStorage` in SettingsView.
     enum Keys {
-        static let notifyInboxArrival = "notifyInboxArrival"
         static let notifyDailyNudge = "notifyDailyNudge"
         /// Minutes since midnight (0..1439). Default 1200 = 8:00pm.
         static let nudgeTimeMinutes = "nudgeTimeMinutes"
@@ -62,7 +61,6 @@ final class NotificationService {
     /// Call once at app launch.
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
-            Keys.notifyInboxArrival: false,
             Keys.notifyDailyNudge: false,
             Keys.nudgeTimeMinutes: 1200, // 20:00 local
         ])
@@ -108,11 +106,10 @@ final class NotificationService {
     /// fast enough that the request reaches UNN before suspension can
     /// drop it.
     func notifyInboxArrival() {
-        guard UserDefaults.standard.bool(forKey: Keys.notifyInboxArrival) else {
-            NSLog("[Himem][Notify] inbox-arrival toggle off, skipping")
-            return
-        }
-
+        // No app-side toggle gate — watch-clip arrival is a first-class
+        // event the user implicitly opts in to via the system-level
+        // notification permission. If iOS-Notifications is on, we fire;
+        // if off, the request is no-op silently by the system.
         let inboxCount = InboxManifest.shared.count
         guard inboxCount > 0 else {
             NSLog("[Himem][Notify] inbox empty, skipping")

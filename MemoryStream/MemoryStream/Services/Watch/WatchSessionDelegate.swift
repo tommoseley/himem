@@ -138,20 +138,48 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     }
 
     /// Notifies the watch that a clipId has been received and persisted.
-    /// Watch removes the row from its local pending manifest. If the watch
-    /// is unreachable right now, we drop the message — but the clip is
-    /// already in our inbox; on the next watch reachability the watch will
-    /// retransfer, hit our idempotency check, and we'll send the
-    /// confirmation again.
+    /// Watch removes the row from its local pending manifest, which
+    /// updates `WatchSharedState.pendingCount` and refreshes the
+    /// complication.
     ///
-    /// Uses `transferUserInfo` (not `sendMessage`) because the latter
-    /// requires `isReachable == true` — meaning both apps actively running.
-    /// In normal flow the iPhone is locked / backgrounded after the watch
-    /// records, so reachability is false and `sendMessage` would silently
-    /// no-op. `transferUserInfo` queues the payload and delivers it the
-    /// next time the watch app activates, which is what we want.
+    /// Dual-path delivery:
+    ///   1. **`sendMessage` (fast)** — when the watch session is currently
+    ///      reachable (user looking at watch / app recently active), the
+    ///      message lands immediately. This is the common path right
+    ///      after a fresh recording: user takes clip, watches the
+    ///      transfer, and the pending count clears in real time.
+    ///   2. **`transferUserInfo` (durable)** — always queued as backup so
+    ///      that if the watch goes to sleep or is out of range, the ack
+    ///      still delivers when the watch next activates. The watch's
+    ///      `handleAckPayload` is idempotent — re-sets of the same
+    ///      `@Published lastAckedClipId` to the same value don't re-fire
+    ///      the Combine sink, so receiving via both paths is harmless.
+    ///
+    /// Previously we used `transferUserInfo` only. Durable, but the
+    /// system delays its delivery to "when appropriate" — typically
+    /// seconds to minutes when the watch app isn't running — so the
+    /// complication's pending count stayed stale visibly long enough to
+    /// look like a bug.
     private func sendConfirmation(clipId: UUID) {
-        let transfer = WCSession.default.transferUserInfo(["confirmedClipId": clipId.uuidString])
+        let session = WCSession.default
+        let payload: [String: Any] = ["confirmedClipId": clipId.uuidString]
+
+        // Fast path — only fires when the watch is currently reachable.
+        // `sendMessage` is best-effort; the errorHandler closure runs if
+        // delivery fails, but we treat that as a no-op since the
+        // durable transferUserInfo below carries the same payload.
+        if session.isReachable {
+            session.sendMessage(payload, replyHandler: nil) { error in
+                NSLog("[Himem][WC] iPhone — sendMessage confirmation failed (will rely on transferUserInfo): \(error.localizedDescription)")
+            }
+            NSLog("[Himem][WC] iPhone — sendMessage confirmation fired for clipId=\(clipId) (reachable)")
+        } else {
+            NSLog("[Himem][WC] iPhone — watch not reachable, using transferUserInfo only for clipId=\(clipId)")
+        }
+
+        // Durable backup — always queued. System delivers when watch
+        // next activates.
+        let transfer = session.transferUserInfo(payload)
         NSLog("[Himem][WC] iPhone — transferUserInfo queued for clipId=\(clipId), transferring=\(transfer.isTransferring)")
     }
 }

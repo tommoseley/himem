@@ -16,7 +16,6 @@ struct SettingsView: View {
     @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
     @AppStorage("tagMemoriesWithLocation") private var tagMemoriesWithLocation = true
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
-    @AppStorage(NotificationService.Keys.notifyInboxArrival) private var notifyInboxArrival = false
     @AppStorage(NotificationService.Keys.notifyDailyNudge) private var notifyDailyNudge = false
     @AppStorage(NotificationService.Keys.nudgeTimeMinutes) private var nudgeTimeMinutes = 1200
     @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
@@ -184,7 +183,6 @@ struct SettingsView: View {
 
                 // MARK: - Notifications
                 Section {
-                    Toggle("Notify when watch clips arrive", isOn: $notifyInboxArrival)
                     Toggle("Daily nudge", isOn: $notifyDailyNudge)
                     if notifyDailyNudge {
                         DatePicker(
@@ -224,11 +222,6 @@ struct SettingsView: View {
                 loadTopics()
                 Task {
                     notificationAuthStatus = await NotificationService.shared.authorizationStatus()
-                }
-            }
-            .onChange(of: notifyInboxArrival) { _, isOn in
-                if isOn {
-                    Task { await ensurePermissionAndRefresh() }
                 }
             }
             .onChange(of: notifyDailyNudge) { _, isOn in
@@ -353,10 +346,10 @@ struct SettingsView: View {
     }
 
     private var notificationsFooter: String {
-        if notificationAuthStatus == .denied && (notifyInboxArrival || notifyDailyNudge) {
+        if notificationAuthStatus == .denied && notifyDailyNudge {
             return "Notifications are turned off for HiMem at the system level. Enable them in iOS Settings → Notifications → Hi Mem."
         }
-        return "Pings when watch clips arrive at the iPhone, and an optional reminder if you haven't captured anything by your chosen time."
+        return "Watch clips ping when they land on the iPhone (uses iOS notifications). The daily nudge is an optional reminder if you haven't captured anything by your chosen time."
     }
 
     private func ensurePermissionAndRefresh() async {

@@ -190,6 +190,7 @@ struct MemoryStreamApp: App {
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active, storageReady else { return }
                 Task { await refreshDailyNudge() }
+                Task { await retryPendingInboxTranscriptions() }
             }
         }
     }
@@ -201,5 +202,29 @@ struct MemoryStreamApp: App {
     private func refreshDailyNudge() async {
         let hasEntry = StorageService.shared.hasEntryCreatedToday()
         await NotificationService.shared.refreshDailyNudge(hadEntryToday: hasEntry)
+    }
+
+    /// Picks up inbox clips that the background WatchConnectivity wake-up
+    /// received but didn't finish transcribing before iOS re-suspended
+    /// the app. The `WatchSessionDelegate.didReceive` path kicks off a
+    /// transcribeAsync Task when each clip arrives; if the system only
+    /// gave us a short background slice, that Task gets cancelled before
+    /// the speech analyzer can complete, leaving the clip with
+    /// `transcript=""` and `transcriptionAttempted=false`. On next
+    /// foreground we sweep those rows and retry — cheap (typically 0
+    /// clips), idempotent (skips already-attempted), and fixes the
+    /// "still pending after watch came back in range" symptom.
+    @MainActor
+    private func retryPendingInboxTranscriptions() async {
+        let pending = InboxManifest.shared.clips.filter {
+            $0.transcript.isEmpty && !$0.transcriptionAttempted
+        }
+        guard !pending.isEmpty else { return }
+        NSLog("[Himem][Inbox] foreground: retrying \(pending.count) pending transcription\(pending.count == 1 ? "" : "s")")
+        for clip in pending {
+            let url = InboxManifest.audioURL(for: clip.audioFilename)
+            let result = await TranscriptionService.shared.transcribe(audioURL: url)
+            InboxManifest.shared.recordTranscriptionAttempt(clipId: clip.clipId, transcript: result.text)
+        }
     }
 }
