@@ -102,254 +102,15 @@ struct EntryExpandedView: View {
         ZStack(alignment: .bottomTrailing) {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Topic + status row
-                HStack(spacing: 8) {
-                    ForEach(currentTopics, id: \.self) { topic in
-                        let hue = Crucible.Color.topicHue(for: topic)
-                        HStack(spacing: 4) {
-                            Circle().fill(hue.fg).frame(width: 7, height: 7)
-                            Text(topic)
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(hue.fg)
-                            if mode == .editing {
-                                Button {
-                                    if addedTopics.contains(topic) {
-                                        addedTopics.remove(topic)
-                                    } else {
-                                        removedTopics.insert(topic)
-                                    }
-                                } label: {
-                                    Text("×")
-                                        .font(.caption)
-                                        .fontWeight(.bold)
-                                        .foregroundStyle(hue.fg.opacity(0.5))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(hue.bg)
-                        .clipShape(Capsule())
-                    }
-
-                    if mode == .editing {
-                        Menu {
-                            // Show every topic. Currently-applied ones are
-                            // marked with a checkmark; tapping toggles
-                            // membership so the user can switch topics in
-                            // a single gesture without first having to ×
-                            // the existing chip.
-                            ForEach(allTopics, id: \.self) { topic in
-                                let isSelected = currentTopics.contains(topic)
-                                Button {
-                                    toggleTopic(topic, currentlySelected: isSelected)
-                                } label: {
-                                    if isSelected {
-                                        Label(topic, systemImage: "checkmark")
-                                    } else {
-                                        Text(topic)
-                                    }
-                                }
-                            }
-                            if !allTopics.isEmpty { Divider() }
-                            Button {
-                                newTopicName = ""
-                                newTopicColorKey = Crucible.Color.topicPalette[0].key
-                                activeSheet = .newTopic
-                            } label: {
-                                Label("New Topic…", systemImage: "plus.circle")
-                            }
-                        } label: {
-                            Text("+ Add")
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(Crucible.Color.ink2)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Crucible.Color.sunk)
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(Crucible.Color.divider, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
-                        }
-                    }
-
-                    Spacer()
-
-                    if let status = entry.displayStatus, entry.inferenceSummary == nil {
-                        StatusBadge(text: status.text, style: status.style)
-                    }
-                }
-
-                // Title
-                if mode == .editing {
-                    TextField("Title", text: $editedTitle)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(Crucible.Color.ink)
-                        .padding(10)
-                        .background(Crucible.Color.paper)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
-                } else {
-                    Text(entry.displayTitle)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(Crucible.Color.ink)
-                        .onTapGesture { enterEditing() }
-                }
-
-                // Timestamp
+                topicChipsRow
+                titleSection
                 Text(fullTimestamp)
                     .font(.caption)
                     .foregroundStyle(Crucible.Color.ink3)
-
-                // Tappable location chip — variant E (Himem · Location.html).
-                // Pin glyph in accent, place name in ink, chevron implies tap.
-                // Tap opens Apple Maps centered on the entry's coordinates.
-                if let name = entry.locationName, let lat = entry.latitude, let lon = entry.longitude {
-                    Button {
-                        openInMaps(name: name, latitude: lat, longitude: lon)
-                    } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Image(systemName: "mappin")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Crucible.Color.accent)
-                            // Detail shows the full string — let it wrap to
-                            // a second line rather than truncate.
-                            Text(name)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(Crucible.Color.ink)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Crucible.Color.ink3)
-                                .padding(.leading, 2)
-                        }
-                        .padding(.leading, 10)
-                        .padding(.trailing, 14)
-                        .padding(.vertical, 8)
-                        .background(Crucible.Color.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Crucible.Color.hairline, lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 4)
-                }
-
-                // Body — every entry renders through ChronologicalCaptureStream
-                // post-FragmentMigration v2. Voice / note / image / video
-                // are all MediaReferences interleaved in createdAt order.
-                // Entries that the migration couldn't process (per-entry
-                // skip logged in NSLog) fall through to a plain content
-                // render so the user sees something.
-                if entry.mediaItems.isEmpty {
-                    Text(entry.content)
-                        .font(.body)
-                        .foregroundStyle(Crucible.Color.ink)
-                        .lineSpacing(4)
-                } else {
-                    ChronologicalCaptureStream(
-                        entry: entry,
-                        onDeleteVoice: { id in
-                            removedMediaIds.insert(id)
-                            applyEditsImmediately()
-                        },
-                        onDeleteNote: { id in
-                            deleteNoteFragment(id: id)
-                        },
-                        onDeleteMedia: { id in
-                            removedMediaIds.insert(id)
-                            applyEditsImmediately()
-                        },
-                        onEditNote: { id, newText in
-                            updateNoteFragment(id: id, text: newText)
-                        },
-                        onOpenVoice: { item in
-                            audioPlayerForFile = AudioPlayerTarget(
-                                mediaId: item.id,
-                                filename: item.localIdentifier,
-                                recordedAt: item.createdAt,
-                                transcript: item.transcript
-                            )
-                        },
-                        onTapPhoto: { item in
-                            selectedMedia = item
-                        }
-                    )
-                }
-
-                // Inference card (if pending)
-                if let inference = entry.inferenceSummary, entry.feedbackState == nil {
-                    InferenceCard(
-                        summary: inference,
-                        feedbackState: entry.feedbackState,
-                        onFeedback: { state in onFeedback?(entry.id, state) },
-                        onAdjust: { correction in onAdjust?(entry.id, correction) }
-                    )
-                }
-
-                // Mentions section (entity tags)
-                if !entry.tags.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Button {
-                            withAnimation { mentionsExpanded.toggle() }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("MENTIONS")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .tracking(0.5)
-                                    .foregroundStyle(Crucible.Color.ink3)
-                                Image(systemName: mentionsExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Crucible.Color.ink3)
-                                Spacer()
-                                Text("\(visibleTags.count)")
-                                    .font(.caption)
-                                    .foregroundStyle(Crucible.Color.ink3)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(mentionsExpanded ? "Collapse" : "Expand") mentions, \(visibleTags.count) item\(visibleTags.count == 1 ? "" : "s")")
-
-                        if mentionsExpanded {
-                            FlowLayout(spacing: 6) {
-                                ForEach(visibleTags) { tag in
-                                    HStack(spacing: 4) {
-                                        Text(tag.value)
-                                        if mode == .editing {
-                                            Button {
-                                                removedTagIds.insert(tag.id)
-                                            } label: {
-                                                Text("×")
-                                                    .fontWeight(.bold)
-                                                    .foregroundStyle(Crucible.Color.ink3)
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(Crucible.Color.ink2)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(Crucible.Color.sunk)
-                                    .clipShape(Capsule())
-                                }
-                            }
-                        }
-                    }
-                    .padding(.top, 8)
-                    .overlay(alignment: .top) {
-                        Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
-                    }
-                }
-
+                locationChip
+                bodyContent
+                inferenceCardSection
+                mentionsSection
             }
             .padding(16)
             // Bottom inset so the floating Contribute button doesn't cover content.
@@ -358,82 +119,9 @@ struct EntryExpandedView: View {
         .background(Crucible.Color.paper)
         .navigationBarBackButtonHidden(true)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                if mode == .editing {
-                    Button("Cancel") { cancelEditing() }
-                        .foregroundStyle(Crucible.Color.accent)
-                } else {
-                    Button {
-                        dismiss()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text(backLabel)
-                        }
-                        .foregroundStyle(Crucible.Color.accent)
-                    }
-                    .accessibilityLabel("Back to \(backLabel)")
-                }
-            }
-            ToolbarItem(placement: .principal) {
-                if mode == .editing {
-                    Text("Editing")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundStyle(Crucible.Color.ink)
-                }
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if mode == .editing {
-                    Button("Done") {
-                        if hasChanges {
-                            commitEdits()
-                        } else {
-                            withAnimation(.easeInOut(duration: 0.2)) { mode = .reading }
-                        }
-                    }
-                    .fontWeight(.bold)
-                    .foregroundStyle(Crucible.Color.accent)
-                } else {
-                    HStack(spacing: 16) {
-                        Button { showDeleteConfirmation = true } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 15))
-                                .foregroundStyle(Crucible.Color.ink3)
-                        }
-                        .accessibilityLabel("Delete memory")
-                        if !availableProjects.isEmpty {
-                            Menu {
-                                ForEach(availableProjects) { project in
-                                    Button {
-                                        onAddToProject?(entry.id, project.id)
-                                    } label: {
-                                        Label(project.name, systemImage: "folder")
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "folder.badge.plus")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(Crucible.Color.ink2)
-                            }
-                            .accessibilityLabel("Add to project")
-                        }
-                        Button { showShareSheet = true } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 15))
-                                .foregroundStyle(Crucible.Color.ink2)
-                        }
-                        .accessibilityLabel("Share memory")
-                        Button { enterEditing() } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 15))
-                                .foregroundStyle(Crucible.Color.ink2)
-                        }
-                        .accessibilityLabel("Edit memory")
-                    }
-                }
-            }
+            ToolbarItem(placement: .navigationBarLeading) { leadingToolbar }
+            ToolbarItem(placement: .principal) { principalToolbar }
+            ToolbarItem(placement: .navigationBarTrailing) { trailingToolbar }
         }
         .onAppear {
             editedTitle = entry.displayTitle
@@ -506,6 +194,357 @@ struct EntryExpandedView: View {
                 handleCapturedItemForAppend(item)
             }
         )
+    }
+
+    // MARK: - Body sections (decomposed from var body)
+
+    /// Topic chips + (edit-mode) Add menu + (read-mode) status badge.
+    private var topicChipsRow: some View {
+        HStack(spacing: 8) {
+            ForEach(currentTopics, id: \.self) { topic in
+                let hue = Crucible.Color.topicHue(for: topic)
+                HStack(spacing: 4) {
+                    Circle().fill(hue.fg).frame(width: 7, height: 7)
+                    Text(topic)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(hue.fg)
+                    if mode == .editing {
+                        Button {
+                            if addedTopics.contains(topic) {
+                                addedTopics.remove(topic)
+                            } else {
+                                removedTopics.insert(topic)
+                            }
+                        } label: {
+                            Text("×")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundStyle(hue.fg.opacity(0.5))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(hue.bg)
+                .clipShape(Capsule())
+            }
+
+            if mode == .editing {
+                addTopicMenu
+            }
+
+            Spacer()
+
+            if let status = entry.displayStatus, entry.inferenceSummary == nil {
+                StatusBadge(text: status.text, style: status.style)
+            }
+        }
+    }
+
+    /// Edit-mode menu for toggling existing topics or creating a new one.
+    private var addTopicMenu: some View {
+        Menu {
+            // Show every topic. Currently-applied ones are marked with a
+            // checkmark; tapping toggles membership so the user can switch
+            // topics in a single gesture without first having to × the
+            // existing chip.
+            ForEach(allTopics, id: \.self) { topic in
+                let isSelected = currentTopics.contains(topic)
+                Button {
+                    toggleTopic(topic, currentlySelected: isSelected)
+                } label: {
+                    if isSelected {
+                        Label(topic, systemImage: "checkmark")
+                    } else {
+                        Text(topic)
+                    }
+                }
+            }
+            if !allTopics.isEmpty { Divider() }
+            Button {
+                newTopicName = ""
+                newTopicColorKey = Crucible.Color.topicPalette[0].key
+                activeSheet = .newTopic
+            } label: {
+                Label("New Topic…", systemImage: "plus.circle")
+            }
+        } label: {
+            Text("+ Add")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(Crucible.Color.ink2)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Crucible.Color.sunk)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(Crucible.Color.divider, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+        }
+    }
+
+    /// Title field swaps between an editable `TextField` and a read-mode
+    /// `Text` that taps into editing.
+    @ViewBuilder
+    private var titleSection: some View {
+        if mode == .editing {
+            TextField("Title", text: $editedTitle)
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundStyle(Crucible.Color.ink)
+                .padding(10)
+                .background(Crucible.Color.paper)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
+        } else {
+            Text(entry.displayTitle)
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundStyle(Crucible.Color.ink)
+                .onTapGesture { enterEditing() }
+        }
+    }
+
+    /// Tappable location chip — variant E (Himem · Location.html). Pin
+    /// glyph in accent, place name in ink, chevron implies tap. Tap opens
+    /// Apple Maps centered on the entry's coordinates.
+    @ViewBuilder
+    private var locationChip: some View {
+        if let name = entry.locationName, let lat = entry.latitude, let lon = entry.longitude {
+            Button {
+                openInMaps(name: name, latitude: lat, longitude: lon)
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "mappin")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.accent)
+                    // Detail shows the full string — let it wrap to
+                    // a second line rather than truncate.
+                    Text(name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Crucible.Color.ink)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.ink3)
+                        .padding(.leading, 2)
+                }
+                .padding(.leading, 10)
+                .padding(.trailing, 14)
+                .padding(.vertical, 8)
+                .background(Crucible.Color.card)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Crucible.Color.hairline, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+        }
+    }
+
+    /// Body — every entry renders through ChronologicalCaptureStream
+    /// post-FragmentMigration v2. Voice / note / image / video are all
+    /// MediaReferences interleaved in createdAt order. Entries that the
+    /// migration couldn't process (per-entry skip logged in NSLog) fall
+    /// through to a plain content render so the user sees something.
+    @ViewBuilder
+    private var bodyContent: some View {
+        if entry.mediaItems.isEmpty {
+            Text(entry.content)
+                .font(.body)
+                .foregroundStyle(Crucible.Color.ink)
+                .lineSpacing(4)
+        } else {
+            ChronologicalCaptureStream(
+                entry: entry,
+                onDeleteVoice: { id in
+                    removedMediaIds.insert(id)
+                    applyEditsImmediately()
+                },
+                onDeleteNote: { id in
+                    deleteNoteFragment(id: id)
+                },
+                onDeleteMedia: { id in
+                    removedMediaIds.insert(id)
+                    applyEditsImmediately()
+                },
+                onEditNote: { id, newText in
+                    updateNoteFragment(id: id, text: newText)
+                },
+                onOpenVoice: { item in
+                    audioPlayerForFile = AudioPlayerTarget(
+                        mediaId: item.id,
+                        filename: item.localIdentifier,
+                        recordedAt: item.createdAt,
+                        transcript: item.transcript
+                    )
+                },
+                onTapPhoto: { item in
+                    selectedMedia = item
+                }
+            )
+        }
+    }
+
+    /// AI inference card — visible while the user hasn't yet acted on
+    /// the suggestion (no feedback state set).
+    @ViewBuilder
+    private var inferenceCardSection: some View {
+        if let inference = entry.inferenceSummary, entry.feedbackState == nil {
+            InferenceCard(
+                summary: inference,
+                feedbackState: entry.feedbackState,
+                onFeedback: { state in onFeedback?(entry.id, state) },
+                onAdjust: { correction in onAdjust?(entry.id, correction) }
+            )
+        }
+    }
+
+    /// Mentions section — collapsible row of extracted entity tags.
+    @ViewBuilder
+    private var mentionsSection: some View {
+        if !entry.tags.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    withAnimation { mentionsExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("MENTIONS")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .tracking(0.5)
+                            .foregroundStyle(Crucible.Color.ink3)
+                        Image(systemName: mentionsExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Crucible.Color.ink3)
+                        Spacer()
+                        Text("\(visibleTags.count)")
+                            .font(.caption)
+                            .foregroundStyle(Crucible.Color.ink3)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(mentionsExpanded ? "Collapse" : "Expand") mentions, \(visibleTags.count) item\(visibleTags.count == 1 ? "" : "s")")
+
+                if mentionsExpanded {
+                    FlowLayout(spacing: 6) {
+                        ForEach(visibleTags) { tag in
+                            HStack(spacing: 4) {
+                                Text(tag.value)
+                                if mode == .editing {
+                                    Button {
+                                        removedTagIds.insert(tag.id)
+                                    } label: {
+                                        Text("×")
+                                            .fontWeight(.bold)
+                                            .foregroundStyle(Crucible.Color.ink3)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(Crucible.Color.ink2)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Crucible.Color.sunk)
+                            .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+            .padding(.top, 8)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
+            }
+        }
+    }
+
+    // MARK: - Toolbar items (decomposed from var body)
+
+    @ViewBuilder
+    private var leadingToolbar: some View {
+        if mode == .editing {
+            Button("Cancel") { cancelEditing() }
+                .foregroundStyle(Crucible.Color.accent)
+        } else {
+            Button {
+                dismiss()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(backLabel)
+                }
+                .foregroundStyle(Crucible.Color.accent)
+            }
+            .accessibilityLabel("Back to \(backLabel)")
+        }
+    }
+
+    @ViewBuilder
+    private var principalToolbar: some View {
+        if mode == .editing {
+            Text("Editing")
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundStyle(Crucible.Color.ink)
+        }
+    }
+
+    @ViewBuilder
+    private var trailingToolbar: some View {
+        if mode == .editing {
+            Button("Done") {
+                if hasChanges {
+                    commitEdits()
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) { mode = .reading }
+                }
+            }
+            .fontWeight(.bold)
+            .foregroundStyle(Crucible.Color.accent)
+        } else {
+            HStack(spacing: 16) {
+                Button { showDeleteConfirmation = true } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
+                .accessibilityLabel("Delete memory")
+                if !availableProjects.isEmpty {
+                    Menu {
+                        ForEach(availableProjects) { project in
+                            Button {
+                                onAddToProject?(entry.id, project.id)
+                            } label: {
+                                Label(project.name, systemImage: "folder")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "folder.badge.plus")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Crucible.Color.ink2)
+                    }
+                    .accessibilityLabel("Add to project")
+                }
+                Button { showShareSheet = true } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
+                .accessibilityLabel("Share memory")
+                Button { enterEditing() } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
+                .accessibilityLabel("Edit memory")
+            }
+        }
     }
 
     // MARK: - Append spec — single-modality capture results
