@@ -1337,6 +1337,8 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = HiMem;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "HiMem tags watch clips with where you were so they can be grouped by place when you organize them on the iPhone.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "HiMem uses the microphone to record voice clips on your watch.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.himem.app;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1408,6 +1410,8 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = HiMem;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "HiMem tags watch clips with where you were so they can be grouped by place when you organize them on the iPhone.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "HiMem uses the microphone to record voice clips on your watch.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.himem.app;
 				LD_RUNPATH_SEARCH_PATHS = (
