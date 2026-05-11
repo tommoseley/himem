@@ -4,9 +4,10 @@ import SwiftUI
 /// media grid" block with per-capture panels rendered in `createdAt` order.
 ///
 /// Three panel kinds:
-///   - **Voice clip**: × delete + ▶︎ play + transcript text. Tap to open the
-///     full audio player. Edit-tap on the transcript edits in place.
-///   - **Note** (typed): × delete + text. Edit-tap edits in place.
+///   - **Voice clip**: × delete + ▶︎ play + transcript text. Swipe-edit
+///     opens the AudioPlayerSheet (play + transcript editor).
+///   - **Note** (typed): × delete + text. Swipe-edit opens the
+///     NoteEditorSheet (full-screen text editor).
 ///   - **Photo filmstrip**: contiguous image/video MediaReferences (no
 ///     voice/note between them) group into one panel; horizontal scroll if
 ///     it overflows.
@@ -19,11 +20,14 @@ struct ChronologicalCaptureStream: View {
     let onDeleteVoice: (UUID) -> Void
     let onDeleteNote: (UUID) -> Void
     let onDeleteMedia: (UUID) -> Void
-    let onEditNote: (UUID, String) -> Void
     /// Opens the AudioPlayerSheet for a voice clip — fires on swipe-edit.
     /// Sheet is the canonical surface for playing AND editing the
     /// transcript; the panel itself doesn't have a tap-to-play affordance.
     let onOpenVoice: (MediaDisplayItem) -> Void
+    /// Opens the NoteEditorSheet for a note fragment — fires on tap or
+    /// swipe-edit. Sheet is the canonical surface for editing note text;
+    /// the panel no longer has an inline edit affordance.
+    let onOpenNote: (MediaDisplayItem) -> Void
     let onTapPhoto: (MediaDisplayItem) -> Void
 
     var body: some View {
@@ -40,7 +44,7 @@ struct ChronologicalCaptureStream: View {
                     NotePanel(
                         item: item,
                         onDelete: { onDeleteNote(item.id) },
-                        onEdit: { newText in onEditNote(item.id, newText) }
+                        onOpenSheet: { onOpenNote(item) }
                     )
                 case .photoStrip(let items):
                     PhotoFilmstripPanel(
@@ -136,7 +140,7 @@ struct VoiceClipPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             CaptureTimestampLabel(date: item.createdAt)
-            Text(displayText)
+            Text(displayText.attributedWithLinks())
                 .font(.callout)
                 .foregroundStyle(item.transcript == nil || item.transcript?.isEmpty == true
                                  ? Crucible.Color.ink4 : Crucible.Color.ink)
@@ -167,42 +171,22 @@ private struct NotePanel: View {
     /// Backed by a `.note` MediaReference — `text` carries the body.
     let item: MediaDisplayItem
     let onDelete: () -> Void
-    let onEdit: (String) -> Void
-
-    @State private var editing = false
-    @State private var draftText = ""
+    /// Opens the NoteEditorSheet — fires on swipe-right (Edit pill). The
+    /// panel itself has no tap-to-edit affordance, matching `VoiceClipPanel`,
+    /// so a vertical drag on the note text scrolls the parent feed without
+    /// fighting a tap recognizer.
+    let onOpenSheet: () -> Void
 
     private var bodyText: String { item.text ?? "" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             CaptureTimestampLabel(date: item.createdAt)
-            if editing {
-                TextEditor(text: $draftText)
-                    .font(.callout)
-                    .frame(minHeight: 60)
-                    .scrollContentBackground(.hidden)
-                    .background(Crucible.Color.paper)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Crucible.Color.hairline))
-                    .onAppear { draftText = bodyText }
-                    .toolbar {
-                        ToolbarItemGroup(placement: .keyboard) {
-                            Spacer()
-                            Button("Done") {
-                                onEdit(draftText.trimmingCharacters(in: .whitespacesAndNewlines))
-                                editing = false
-                            }
-                        }
-                    }
-            } else {
-                Text(bodyText)
-                    .font(.callout)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.leading)
-                    .onTapGesture(count: 2) { editing = true }
-            }
+            Text(bodyText.attributedWithLinks())
+                .font(.callout)
+                .foregroundStyle(Crucible.Color.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(.leading)
         }
         .padding(12)
         .background(Crucible.Color.card)
@@ -210,7 +194,7 @@ private struct NotePanel: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
         .swipeActions(
             onDelete: onDelete,
-            onEdit: { editing = true },
+            onEdit: onOpenSheet,
             deleteAccessibilityLabel: "Delete note",
             editAccessibilityLabel: "Edit note"
         )

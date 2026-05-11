@@ -109,6 +109,48 @@ final class EntryLifecycleService {
         }
     }
 
+    /// On detail-view onAppear, mints a `.note` MediaReference for an entry
+    /// whose `content` text exists with no fragment covering it — the last
+    /// stop for legacy entries that slipped past `FragmentMigration`. No-op
+    /// when the migration isn't required, so it's safe to call on every
+    /// open.
+    ///
+    /// **Critical guard**: skips if the entry already has *any* `.note`
+    /// fragment. After a note is edited, `regenerateContent` rewrites
+    /// `entry.content` to the joined output of all fragments — the joined
+    /// blob no longer matches any single note's text, so an
+    /// "exact-match-or-mint" guard mints a duplicate every open, and each
+    /// subsequent regen joins the duplicate back in, compounding the
+    /// growth. Skipping when any `.note` exists treats `entry.content` as
+    /// "joined output, not orphaned" — which it always is post-migration.
+    func migrateOrphanedContentIfNeeded(entryId: UUID) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            let trimmed = (entry.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            let refs = entry.mediaReferencesArray
+            guard !refs.isEmpty else { return }  // Pure-content entries render `entry.content` directly.
+
+            // Any `.note` fragment present → migration already happened,
+            // `entry.content` is the joined output, nothing to do.
+            if refs.contains(where: { $0.mediaTypeEnum == .note }) { return }
+
+            // Voice transcript already covers the content text → no orphan.
+            if refs.contains(where: {
+                $0.mediaTypeEnum == .voice
+                    && ($0.transcript?.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed)
+            }) { return }
+
+            _ = try storage.createNoteFragment(
+                for: entry,
+                text: entry.content ?? "",
+                createdAt: entry.createdAt ?? Date()
+            )
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
     /// Updates a `.note` MediaReference's text and regenerates the parent
     /// entry's joined content. Used by per-panel inline editing in the
     /// chronological capture stream.
@@ -357,6 +399,21 @@ final class EntryLifecycleService {
     }
 
     // MARK: - Delete / Recycle
+
+    /// Returns true when an entry has no media fragments left — i.e. every
+    /// `.note`, `.voice`, `.image`, and `.video` MediaReference has been
+    /// removed. Used by the detail view to prompt "delete this empty
+    /// memory?" after the user removes the last fragment via swipe-delete.
+    /// Returns `false` if the entry can't be found (callers shouldn't
+    /// re-prompt on a missing entry).
+    func isEntryEmpty(entryId: UUID) -> Bool {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return false }
+            return entry.mediaReferencesArray.isEmpty
+        } catch {
+            return false
+        }
+    }
 
     func delete(entryId: UUID) {
         do {

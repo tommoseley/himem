@@ -85,6 +85,8 @@
 		A100000316 /* AddClipsToMemorySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000316 /* AddClipsToMemorySheet.swift */; };
 		A100000320 /* WatchSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000320 /* WatchSharedState.swift */; };
 		A100000321 /* WatchSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000320 /* WatchSharedState.swift */; };
+		A100000322 /* NoteEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000322 /* NoteEditorSheet.swift */; };
+		A100000323 /* Linkify.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000323 /* Linkify.swift */; };
 		A100000500 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000500 /* NotificationService.swift */; };
 		A100000501 /* StorageService+EntryQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000501 /* StorageService+EntryQueries.swift */; };
 		A100000502 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000502 /* TranscriptionService.swift */; };
@@ -238,6 +240,8 @@
 		B100000315 /* CreateMemoryFromClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateMemoryFromClipsSheet.swift; sourceTree = "<group>"; };
 		B100000316 /* AddClipsToMemorySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddClipsToMemorySheet.swift; sourceTree = "<group>"; };
 		B100000320 /* WatchSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchSharedState.swift; path = Shared/WatchSharedState.swift; sourceTree = "<group>"; };
+		B100000322 /* NoteEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorSheet.swift; sourceTree = "<group>"; };
+		B100000323 /* Linkify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Linkify.swift; sourceTree = "<group>"; };
 		B100000500 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		B100000501 /* StorageService+EntryQueries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StorageService+EntryQueries.swift"; sourceTree = "<group>"; };
 		B100000502 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
@@ -475,6 +479,8 @@
 				B100000046 /* RecycleBinView.swift */,
 				B100000201 /* MediaTile.swift */,
 				B100000203 /* AudioPlayerSheet.swift */,
+				B100000322 /* NoteEditorSheet.swift */,
+				B100000323 /* Linkify.swift */,
 				B100000302 /* AppendFAB.swift */,
 				B100000305 /* CaptureFlowHost.swift */,
 			);
@@ -972,6 +978,8 @@
 				A100000302 /* AppendFAB.swift in Sources */,
 				A100000305 /* CaptureFlowHost.swift in Sources */,
 				A100000203 /* AudioPlayerSheet.swift in Sources */,
+				A100000322 /* NoteEditorSheet.swift in Sources */,
+				A100000323 /* Linkify.swift in Sources */,
 				A100000046 /* RecycleBinView.swift in Sources */,
 				A100000047 /* PhotoLibraryPicker.swift in Sources */,
 				A100000303 /* VoiceCaptureScreen.swift in Sources */,

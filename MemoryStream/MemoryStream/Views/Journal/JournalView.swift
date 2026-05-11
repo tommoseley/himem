@@ -349,15 +349,16 @@ struct JournalView: View {
         }
     }
 
-    /// Permanent pinned footer at the bottom of the feed: hairline
-    /// divider + "N memories · M in Recently Deleted". Replaces the
-    /// previous footer-as-list-row which only became visible when the
-    /// user scrolled to the bottom. Extra clearance below the text keeps
-    /// the FAB from crowding the count.
+    /// Permanent pinned footer at the very bottom of the feed: hairline
+    /// divider + centered "N memories · M in Recently Deleted". The
+    /// background and hairline ignore the home-indicator safe area so
+    /// the footer extends to the actual bottom edge of the screen. The
+    /// text itself uses an explicit small bottom padding so it doesn't
+    /// overlap the home indicator's gesture surface.
     @ViewBuilder
     private var memoriesPinnedFooter: some View {
-        VStack(spacing: 0) {
-            if !viewModel.filteredEntries.isEmpty || viewModel.selectedTopic != nil {
+        if !viewModel.filteredEntries.isEmpty || viewModel.selectedTopic != nil {
+            VStack(spacing: 0) {
                 Divider()
                 HStack(spacing: 4) {
                     Text("\(viewModel.filteredEntries.count) memor\(viewModel.filteredEntries.count == 1 ? "y" : "ies")")
@@ -371,17 +372,14 @@ struct JournalView: View {
                             .font(.caption)
                             .foregroundStyle(Crucible.Color.ink4)
                     }
-                    Spacer()
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 6)
+                .padding(.bottom, 4)
             }
-            // Clearance for the floating Append FAB, which is positioned
-            // bottom-trailing in the parent ZStack and overlaps this
-            // safe-area inset region.
-            Color.clear.frame(height: 60)
+            .background(Crucible.Color.paper)
+            .ignoresSafeArea(.container, edges: .bottom)
         }
-        .background(Crucible.Color.paper)
     }
 
     // MARK: - Entity filter chip

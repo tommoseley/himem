@@ -29,6 +29,18 @@ struct AudioPlayerTarget: Identifiable {
     var id: String { filename }
 }
 
+/// Identifies the note fragment a user tapped, so `NoteEditorSheet` can be
+/// presented via SwiftUI's `sheet(item:)` API. `mediaId` is the
+/// MediaReference id so the sheet's save callback can persist back to the
+/// right `.note` fragment; `text` seeds the editor; `createdAt` is shown as
+/// a header timestamp.
+struct NoteEditorTarget: Identifiable {
+    let mediaId: UUID
+    let text: String
+    let createdAt: Date
+    var id: UUID { mediaId }
+}
+
 struct EntryExpandedView: View {
     let entry: EntryDisplayModel
     var backLabel: String = "Today"
@@ -61,7 +73,9 @@ struct EntryExpandedView: View {
     @State private var mentionsExpanded = false
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var audioPlayerForFile: AudioPlayerTarget? = nil
+    @State private var noteEditorTarget: NoteEditorTarget? = nil
     @State private var showDeleteConfirmation = false
+    @State private var showEmptyMemoryDeletePrompt = false
     @State private var showShareSheet = false
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
@@ -148,6 +162,16 @@ struct EntryExpandedView: View {
             )
             .presentationDetents([.medium, .large])
         }
+        .sheet(item: $noteEditorTarget) { target in
+            NoteEditorSheet(
+                recordedAt: target.createdAt,
+                initialText: target.text,
+                onSave: { newText in
+                    updateNoteFragment(id: target.mediaId, text: newText)
+                }
+            )
+            .presentationDetents([.large])
+        }
         .fullScreenCover(item: $selectedMedia) { item in
             MediaViewerView(item: item)
         }
@@ -163,6 +187,15 @@ struct EntryExpandedView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This memory will be moved to the Recently Deleted. You can restore it from Settings.")
+        }
+        .alert("Delete this memory?", isPresented: $showEmptyMemoryDeletePrompt) {
+            Button("Delete", role: .destructive) {
+                lifecycle.delete(entryId: entry.id)
+                dismiss()
+            }
+            Button("Keep", role: .cancel) {}
+        } message: {
+            Text("All content has been removed. This will permanently delete the memory — it won't go to Recently Deleted.")
         }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
@@ -366,7 +399,7 @@ struct EntryExpandedView: View {
     @ViewBuilder
     private var bodyContent: some View {
         if entry.mediaItems.isEmpty {
-            Text(entry.content)
+            Text(entry.content.attributedWithLinks())
                 .font(.body)
                 .foregroundStyle(Crucible.Color.ink)
                 .lineSpacing(4)
@@ -384,15 +417,19 @@ struct EntryExpandedView: View {
                     removedMediaIds.insert(id)
                     applyEditsImmediately()
                 },
-                onEditNote: { id, newText in
-                    updateNoteFragment(id: id, text: newText)
-                },
                 onOpenVoice: { item in
                     audioPlayerForFile = AudioPlayerTarget(
                         mediaId: item.id,
                         filename: item.localIdentifier,
                         recordedAt: item.createdAt,
                         transcript: item.transcript
+                    )
+                },
+                onOpenNote: { item in
+                    noteEditorTarget = NoteEditorTarget(
+                        mediaId: item.id,
+                        text: item.text ?? "",
+                        createdAt: item.createdAt
                     )
                 },
                 onTapPhoto: { item in
@@ -402,33 +439,15 @@ struct EntryExpandedView: View {
         }
     }
 
-    /// On first detail view, if the entry has `entry.content` text but no
-    /// `.note` MediaReference covers it (and no voice fragment's
-    /// transcript matches), mint a `.note` fragment so the text renders
-    /// through `NotePanel` with the same swipe-edit/delete affordances as
-    /// every other fragment. Idempotent — re-runs on every onAppear, but
-    /// short-circuits once a matching fragment exists. Created with
-    /// `createdAt = entry.createdAt` so it lands at the head of the
-    /// chronological stream, before any later appends.
+    /// On first detail view, mint a `.note` fragment for orphaned
+    /// `entry.content` text so it renders through `NotePanel` with the
+    /// same swipe-edit/delete affordances as every other fragment.
+    /// Delegates to `EntryLifecycleService` so the guard logic is
+    /// unit-tested — see `migrateOrphanedContentIfNeeded_*` tests for the
+    /// "any `.note` fragment present → skip" rule that prevents
+    /// duplicate-mint compounding on every open.
     private func migrateOrphanedContentIfNeeded() {
-        let trimmed = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        guard !entry.mediaItems.isEmpty else { return }  // Path 1 covers pure-content entries.
-
-        let notes = entry.mediaItems.filter { $0.mediaType == .note }
-        if notes.contains(where: { ($0.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == trimmed }) {
-            return
-        }
-        let voices = entry.mediaItems.filter { $0.mediaType == .voice }
-        if voices.contains(where: { ($0.transcript ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == trimmed }) {
-            return
-        }
-
-        _ = try? lifecycle.createNoteFragment(
-            forEntryId: entry.id,
-            text: entry.content,
-            createdAt: entry.createdAt
-        )
+        lifecycle.migrateOrphanedContentIfNeeded(entryId: entry.id)
     }
 
     /// AI inference card — visible while the user hasn't yet acted on
@@ -745,11 +764,23 @@ struct EntryExpandedView: View {
         lifecycle.deleteMediaReferences(ids: ids)
         lifecycle.regenerateContent(forEntryId: entry.id)
         removedMediaIds = []
+        promptForPermanentDeleteIfEmpty()
     }
 
     private func deleteNoteFragment(id: UUID) {
         lifecycle.deleteMediaReferences(ids: [id])
         lifecycle.regenerateContent(forEntryId: entry.id)
+        promptForPermanentDeleteIfEmpty()
+    }
+
+    /// Surfaces the "delete this empty memory?" prompt when the just-deleted
+    /// fragment was the entry's last one. A memory that has lost every
+    /// fragment renders as a blank shell — recycle would just defer the
+    /// problem to the bin, so we offer a permanent delete instead.
+    private func promptForPermanentDeleteIfEmpty() {
+        if lifecycle.isEntryEmpty(entryId: entry.id) {
+            showEmptyMemoryDeletePrompt = true
+        }
     }
 
     private func updateNoteFragment(id: UUID, text: String) {

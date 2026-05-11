@@ -278,4 +278,123 @@ struct EntryLifecycleServiceTests {
         let remaining = (entry.mediaReferences as? Set<MediaReference>) ?? []
         #expect(remaining.count == 1)
     }
+
+    // MARK: - migrateOrphanedContentIfNeeded
+    //
+    // Money test for the duplicate-note compounding bug observed
+    // 2026-05-11: opening a detail view repeatedly minted new `.note`
+    // fragments whose body was the joined output of the existing notes,
+    // because the old guard only skipped on an exact match between
+    // `entry.content` and a single note's text. After `regenerateContent`
+    // joined two notes, the joined string matched neither, so each open
+    // added one more duplicate, and the next regenerateContent folded it
+    // back in.
+
+    @Test func migrateOrphanedContentIfNeeded_skipsWhenAnyNoteFragmentExists() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        let refA = try storage.createNoteFragment(for: entry, text: "A", createdAt: Date(timeIntervalSinceReferenceDate: 0))
+        let refB = try storage.createNoteFragment(for: entry, text: "B", createdAt: Date(timeIntervalSinceReferenceDate: 1))
+        // Simulate post-regenerateContent state: entry.content is the
+        // joined output of the two notes, matching neither individually.
+        entry.content = "A\n\nB"
+        try storage.viewContext.save()
+
+        service.migrateOrphanedContentIfNeeded(entryId: entry.id)
+
+        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let noteRefs = refs.filter { $0.mediaTypeEnum == .note }
+        #expect(noteRefs.count == 2)
+        #expect(noteRefs.map(\.id).sorted() == [refA.id, refB.id].sorted())
+    }
+
+    @Test func migrateOrphanedContentIfNeeded_repeatedCalls_doNotCompound() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        _ = try storage.createNoteFragment(for: entry, text: "original", createdAt: Date())
+        entry.content = "original"
+        try storage.viewContext.save()
+
+        // Simulate opening the detail view 5 times in a row.
+        for _ in 0..<5 {
+            service.migrateOrphanedContentIfNeeded(entryId: entry.id)
+        }
+
+        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        #expect(refs.filter { $0.mediaTypeEnum == .note }.count == 1)
+    }
+
+    @Test func migrateOrphanedContentIfNeeded_legacyVoiceOnly_mintsNoteForOrphanedContent() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        let voiceRef = try storage.createMediaReference(for: entry, localIdentifier: "v.m4a", mediaType: .voice)
+        voiceRef.transcript = "voice transcript"
+        // Orphaned typed content that the voice transcript does NOT cover.
+        entry.content = "typed body unrelated to voice"
+        try storage.viewContext.save()
+
+        service.migrateOrphanedContentIfNeeded(entryId: entry.id)
+
+        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let noteRefs = refs.filter { $0.mediaTypeEnum == .note }
+        #expect(noteRefs.count == 1)
+        #expect(noteRefs.first?.text == "typed body unrelated to voice")
+    }
+
+    @Test func migrateOrphanedContentIfNeeded_voiceTranscriptMatchesContent_doesNotMint() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        let voiceRef = try storage.createMediaReference(for: entry, localIdentifier: "v.m4a", mediaType: .voice)
+        voiceRef.transcript = "shared text"
+        entry.content = "shared text"
+        try storage.viewContext.save()
+
+        service.migrateOrphanedContentIfNeeded(entryId: entry.id)
+
+        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        #expect(refs.filter { $0.mediaTypeEnum == .note }.isEmpty)
+    }
+
+    // MARK: - isEntryEmpty
+    //
+    // Drives the "delete this memory?" prompt that fires after the user
+    // removes the last fragment via swipe-delete in the detail view.
+
+    @Test func isEntryEmpty_returnsTrueWhenNoFragments() throws {
+        let (_, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        #expect(service.isEntryEmpty(entryId: entry.id) == true)
+    }
+
+    @Test func isEntryEmpty_returnsFalseWithAnyFragment() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        _ = try storage.createNoteFragment(for: entry, text: "x", createdAt: Date())
+        try storage.viewContext.save()
+        #expect(service.isEntryEmpty(entryId: entry.id) == false)
+    }
+
+    @Test func isEntryEmpty_returnsTrueAfterDeletingLastFragment() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        let note = try storage.createNoteFragment(for: entry, text: "only fragment", createdAt: Date())
+        try storage.viewContext.save()
+        #expect(service.isEntryEmpty(entryId: entry.id) == false)
+
+        service.deleteMediaReferences(ids: [note.id])
+
+        #expect(service.isEntryEmpty(entryId: entry.id) == true)
+    }
+
+    @Test func delete_removesEntryFromStore() throws {
+        let (storage, service) = makeService()
+        let entry = try seedEntry(in: storage)
+        // Snapshot the id — once the entry is deleted, reading `@NSManaged`
+        // properties off the tombstone object crashes in the UUID bridge.
+        let entryId = entry.id
+
+        service.delete(entryId: entryId)
+
+        #expect(fetchEntry(entryId, in: storage) == nil)
+    }
 }
