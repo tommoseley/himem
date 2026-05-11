@@ -191,6 +191,7 @@ struct MemoryStreamApp: App {
                 guard newPhase == .active, storageReady else { return }
                 Task { await refreshDailyNudge() }
                 Task { await retryPendingInboxTranscriptions() }
+                Task { await promptForNotificationsIfFirstTime() }
             }
         }
     }
@@ -226,5 +227,19 @@ struct MemoryStreamApp: App {
             let result = await TranscriptionService.shared.transcribe(audioURL: url)
             InboxManifest.shared.recordTranscriptionAttempt(clipId: clip.clipId, transcript: result.text)
         }
+    }
+
+    /// Fires the iOS notification permission prompt exactly once per
+    /// install, the first time the app becomes active in a state where
+    /// it could plausibly post a notification. `requestPermissionIfNeeded`
+    /// is idempotent — iOS only ever shows the system dialog when status
+    /// is `.notDetermined`. After Allow / Don't Allow, future calls
+    /// return the existing status without re-prompting, so calling this
+    /// on every scene-activation is harmless and ensures users who
+    /// installed before the watch-clip notification path was wired up
+    /// still get the prompt.
+    @MainActor
+    private func promptForNotificationsIfFirstTime() async {
+        _ = await NotificationService.shared.requestPermissionIfNeeded()
     }
 }

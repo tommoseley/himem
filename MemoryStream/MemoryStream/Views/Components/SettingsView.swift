@@ -183,6 +183,7 @@ struct SettingsView: View {
 
                 // MARK: - Notifications
                 Section {
+                    notificationPermissionRow
                     Toggle("Daily nudge", isOn: $notifyDailyNudge)
                     if notifyDailyNudge {
                         DatePicker(
@@ -346,10 +347,64 @@ struct SettingsView: View {
     }
 
     private var notificationsFooter: String {
-        if notificationAuthStatus == .denied && notifyDailyNudge {
-            return "Notifications are turned off for HiMem at the system level. Enable them in iOS Settings → Notifications → Hi Mem."
+        switch notificationAuthStatus {
+        case .denied:
+            return "Notifications are turned off for HiMem at the system level. Tap above or open iOS Settings → Notifications → Hi Mem to enable."
+        case .authorized, .provisional, .ephemeral:
+            return "Watch clips ping when they land on the iPhone. The daily nudge is an optional reminder if you haven't captured anything by your chosen time."
+        case .notDetermined:
+            return "Notifications haven't been requested yet. Tap above to enable banner pings for watch-clip arrivals."
+        @unknown default:
+            return ""
         }
-        return "Watch clips ping when they land on the iPhone (uses iOS notifications). The daily nudge is an optional reminder if you haven't captured anything by your chosen time."
+    }
+
+    /// Permission row in the Notifications section. State-aware:
+    ///   - `.notDetermined` → tap fires the iOS system permission prompt
+    ///   - `.denied` → tap opens iOS Settings (system prompt is one-shot;
+    ///      after a denial only Settings can re-enable)
+    ///   - `.authorized` / `.provisional` / `.ephemeral` → static "On"
+    ///      label (no action; iOS Settings is the disable path)
+    @ViewBuilder
+    private var notificationPermissionRow: some View {
+        switch notificationAuthStatus {
+        case .notDetermined:
+            Button {
+                Task { await ensurePermissionAndRefresh() }
+            } label: {
+                HStack {
+                    Text("Allow Notifications")
+                        .foregroundStyle(Crucible.Color.accent)
+                    Spacer()
+                }
+            }
+            .buttonStyle(.plain)
+        case .denied:
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                HStack {
+                    Text("Notifications Off — Open Settings")
+                        .foregroundStyle(Crucible.Color.accent)
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .foregroundStyle(Crucible.Color.ink3)
+                        .accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(.plain)
+        case .authorized, .provisional, .ephemeral:
+            HStack {
+                Text("Notifications")
+                Spacer()
+                Text("On")
+                    .foregroundStyle(Crucible.Color.ink3)
+            }
+        @unknown default:
+            EmptyView()
+        }
     }
 
     private func ensurePermissionAndRefresh() async {
