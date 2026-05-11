@@ -593,6 +593,14 @@ struct JournalView: View {
             }
             guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             newId = viewModel.saveEntry(content: body, inputType: .typed)
+            // Also create a `.note` MediaReference so the text shows up
+            // in the chronological capture stream alongside any later
+            // appends. Without this, the detail view would only show
+            // photos/videos and the typed text would be invisible until
+            // the user enters edit mode.
+            if let id = newId {
+                viewModel.createNoteFragment(forEntryId: id, text: body)
+            }
 
         case .attach(let ids):
             guard !ids.isEmpty else { return }

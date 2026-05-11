@@ -125,6 +125,21 @@ class JournalViewModel: ObservableObject {
         loadEntries()
     }
 
+    /// Creates a `.note` MediaReference attached to `entryId`. Used by
+    /// the typed-note capture flow so the text shows up as a fragment in
+    /// the chronological capture stream alongside any photos/videos.
+    /// Without this, `entry.content` would render in the feed (which
+    /// reads it directly) but disappear from the detail view's stream
+    /// (which walks only `mediaReferences`).
+    @discardableResult
+    func createNoteFragment(forEntryId entryId: UUID, text: String) -> UUID? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let ref = try? lifecycle.createNoteFragment(forEntryId: entryId, text: trimmed)
+        loadEntries()
+        return ref?.id
+    }
+
     func deleteEntry(entryId: UUID) {
         lifecycle.delete(entryId: entryId)
         loadEntries()
