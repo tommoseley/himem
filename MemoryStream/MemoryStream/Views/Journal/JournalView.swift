@@ -507,7 +507,7 @@ struct JournalView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "applewatch")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(Crucible.Color.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(inbox.count) new from Apple Watch")
@@ -519,7 +519,7 @@ struct JournalView: View {
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(Crucible.Color.ink3)
             }
             .padding(.horizontal, 14)
@@ -638,7 +638,7 @@ struct JournalHeaderView: View {
             // Left: HI MEM
             HStack {
                 Text("HI MEM")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.caption2.bold())
                     .tracking(2.0)
                     .foregroundStyle(Crucible.Color.ink3)
                 Spacer()

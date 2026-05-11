@@ -57,7 +57,7 @@ struct ClipInboxView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("Captured Clips")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.caption2.bold())
                         .tracking(1.4)
                         .foregroundStyle(Crucible.Color.ink3)
                         .textCase(.uppercase)
@@ -125,11 +125,11 @@ struct ClipInboxView: View {
     private var inboxHeader: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(headerTitle)
-                .font(.system(size: 28, design: .serif))
+                .font(.system(.title, design: .serif))
                 .foregroundStyle(Crucible.Color.ink)
                 .padding(.top, 6)
             Text(headerSubtitle)
-                .font(.system(size: 13))
+                .font(.footnote)
                 .foregroundStyle(Crucible.Color.ink2)
                 .lineLimit(2)
         }
@@ -171,10 +171,10 @@ struct ClipInboxView: View {
         return HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(groupTitle(for: group))
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.footnote.bold())
                     .foregroundStyle(Crucible.Color.ink)
                 Text(groupMeta(for: group))
-                    .font(.system(size: 11))
+                    .font(.caption2)
                     .foregroundStyle(Crucible.Color.ink3)
                     .monospacedDigit()
             }
@@ -182,7 +182,7 @@ struct ClipInboxView: View {
             Button(allInGroupSelected ? "Deselect" : "Select all") {
                 toggleGroupSelection(group, selectAll: !allInGroupSelected)
             }
-            .font(.system(size: 13, weight: .medium))
+            .font(.footnote.weight(.medium))
             .foregroundStyle(Crucible.Color.accent)
         }
         .padding(.horizontal, 20)
@@ -287,25 +287,25 @@ struct ClipInboxView: View {
                 switch state {
                 case .hasTranscript:
                     Text("\u{201C}\(clip.transcript)\u{201D}")
-                        .font(.system(size: 15, design: .serif))
+                        .font(.system(.subheadline, design: .serif))
                         .foregroundStyle(Crucible.Color.ink)
                         .lineLimit(isExpanded ? nil : collapsedLineLimit)
                         .fixedSize(horizontal: false, vertical: true)
                 case .pending:
                     Text("Transcript pending")
-                        .font(.system(size: 13))
+                        .font(.footnote)
                         .italic()
                         .foregroundStyle(Crucible.Color.ink3)
                 case .noSpeech:
                     Text("No speech detected · likely accidental")
-                        .font(.system(size: 13))
+                        .font(.footnote)
                         .italic()
                         .foregroundStyle(Crucible.Color.ink3)
                     Button {
                         retryTranscription(clip)
                     } label: {
                         Text("Retry transcription")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(Crucible.Color.accent)
                     }
                     .buttonStyle(.plain)
@@ -317,7 +317,7 @@ struct ClipInboxView: View {
                         else { expandedClipIds.insert(clip.clipId) }
                     } label: {
                         Text(isExpanded ? "Show less" : "Show more")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(Crucible.Color.accent)
                     }
                     .buttonStyle(.plain)
@@ -349,20 +349,20 @@ struct ClipInboxView: View {
         let timeFmt = DateFormatter(); timeFmt.dateFormat = "h:mm a"
         return HStack(spacing: 6) {
             Text(timeFmt.string(from: clip.capturedAt))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(Crucible.Color.ink2)
                 .monospacedDigit()
             Circle().fill(Crucible.Color.ink4).frame(width: 3, height: 3)
             HStack(spacing: 3) {
                 Image(systemName: "applewatch")
-                    .font(.system(size: 10))
+                    .font(.caption2)
                 Text("Watch")
-                    .font(.system(size: 11))
+                    .font(.caption2)
             }
             .foregroundStyle(Crucible.Color.ink3)
             Circle().fill(Crucible.Color.ink4).frame(width: 3, height: 3)
             Text(durationLabel(clip.duration))
-                .font(.system(size: 11))
+                .font(.caption2)
                 .monospacedDigit()
                 .foregroundStyle(Crucible.Color.ink3)
         }
@@ -397,10 +397,10 @@ struct ClipInboxView: View {
                     .foregroundStyle(Crucible.Color.ink3)
             }
             Text("All organized")
-                .font(.system(size: 22, design: .serif))
+                .font(.system(.title2, design: .serif))
                 .foregroundStyle(Crucible.Color.ink)
             Text("When you record on your Apple Watch and it syncs back, fragments will land here for review.")
-                .font(.system(size: 14))
+                .font(.subheadline)
                 .foregroundStyle(Crucible.Color.ink2)
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
@@ -416,7 +416,7 @@ struct ClipInboxView: View {
             // Selection-count pill aligned to the leading edge of the bar.
             HStack {
                 Text(selected.count == 1 ? "1 selected" : "\(selected.count) selected")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(Crucible.Color.card)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
@@ -432,10 +432,10 @@ struct ClipInboxView: View {
                 } label: {
                     Label {
                         Text("New memory")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.footnote.weight(.semibold))
                     } icon: {
                         Image(systemName: "plus")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.footnote.weight(.semibold))
                     }
                     .foregroundStyle(Crucible.Color.card)
                     .frame(maxWidth: .infinity)
@@ -449,10 +449,10 @@ struct ClipInboxView: View {
                 } label: {
                     Label {
                         Text("Add to…")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.footnote.weight(.semibold))
                     } icon: {
                         Image(systemName: "tray.and.arrow.down")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.footnote.weight(.semibold))
                     }
                     .foregroundStyle(Crucible.Color.ink)
                     .frame(maxWidth: .infinity)
@@ -464,7 +464,7 @@ struct ClipInboxView: View {
                     pendingDeleteIds = selected
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Crucible.Color.danger)
                         .frame(width: 44, height: 44)
                 }

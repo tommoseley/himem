@@ -54,7 +54,7 @@ struct AddClipsToMemorySheet: View {
     private func row(for entry: JournalEntry) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "plus.circle")
-                .font(.system(size: 20))
+                .font(.title3)
                 .foregroundStyle(Crucible.Color.accent)
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.displayTitle)

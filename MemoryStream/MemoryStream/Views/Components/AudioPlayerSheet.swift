@@ -146,7 +146,7 @@ struct AudioPlayerSheet: View {
                     }
                 }
             }
-            .font(.system(size: 13, weight: .semibold))
+            .font(.footnote.weight(.semibold))
             .foregroundStyle(Crucible.Color.accent)
             .buttonStyle(.plain)
             .disabled(isRetryingTranscription)

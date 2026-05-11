@@ -13,7 +13,7 @@ struct NoteCaptureScreen: View {
     var body: some View {
         NavigationStack {
             TextEditor(text: $text)
-                .font(.system(size: 18))
+                .font(.title3)
                 .foregroundStyle(Crucible.Color.ink)
                 .scrollContentBackground(.hidden)
                 .background(Crucible.Color.paper)

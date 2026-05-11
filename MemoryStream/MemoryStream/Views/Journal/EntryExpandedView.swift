@@ -316,17 +316,17 @@ struct EntryExpandedView: View {
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "mappin")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(Crucible.Color.accent)
                     // Detail shows the full string — let it wrap to
                     // a second line rather than truncate.
                     Text(name)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.subheadline.weight(.medium))
                         .foregroundStyle(Crucible.Color.ink)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(Crucible.Color.ink3)
                         .padding(.leading, 2)
                 }
@@ -418,7 +418,7 @@ struct EntryExpandedView: View {
                             .tracking(0.5)
                             .foregroundStyle(Crucible.Color.ink3)
                         Image(systemName: mentionsExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 10))
+                            .font(.caption2)
                             .foregroundStyle(Crucible.Color.ink3)
                         Spacer()
                         Text("\(visibleTags.count)")
@@ -476,7 +476,7 @@ struct EntryExpandedView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                     Text(backLabel)
                 }
                 .foregroundStyle(Crucible.Color.accent)
@@ -511,7 +511,7 @@ struct EntryExpandedView: View {
             HStack(spacing: 16) {
                 Button { showDeleteConfirmation = true } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 15))
+                        .font(.subheadline)
                         .foregroundStyle(Crucible.Color.ink3)
                 }
                 .accessibilityLabel("Delete memory")
@@ -526,20 +526,20 @@ struct EntryExpandedView: View {
                         }
                     } label: {
                         Image(systemName: "folder.badge.plus")
-                            .font(.system(size: 15))
+                            .font(.subheadline)
                             .foregroundStyle(Crucible.Color.ink2)
                     }
                     .accessibilityLabel("Add to project")
                 }
                 Button { showShareSheet = true } label: {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 15))
+                        .font(.subheadline)
                         .foregroundStyle(Crucible.Color.ink2)
                 }
                 .accessibilityLabel("Share memory")
                 Button { enterEditing() } label: {
                     Image(systemName: "pencil")
-                        .font(.system(size: 15))
+                        .font(.subheadline)
                         .foregroundStyle(Crucible.Color.ink2)
                 }
                 .accessibilityLabel("Edit memory")
@@ -941,7 +941,7 @@ private struct CommitFooter: View {
         Button(action: onCommit) {
             HStack(spacing: 6) {
                 Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.subheadline.bold())
                 Text("Attach \(pendingItemCount) item\(pendingItemCount == 1 ? "" : "s")")
                     .fontWeight(.bold)
             }

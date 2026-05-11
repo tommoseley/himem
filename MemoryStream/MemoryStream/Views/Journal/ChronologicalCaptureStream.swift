@@ -413,7 +413,7 @@ private struct SwipeActionPill: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                 Text(label)
                     .font(.caption.weight(.semibold))
             }

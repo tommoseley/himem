@@ -89,7 +89,7 @@ struct VoiceCaptureScreen: View {
             Text(speechService.transcribedText.isEmpty
                  ? "Listening…"
                  : speechService.transcribedText)
-                .font(.system(size: 22))
+                .font(.title2)
                 .foregroundStyle(speechService.transcribedText.isEmpty ? Crucible.Color.ink4 : Crucible.Color.ink)
                 .lineSpacing(4)
                 .frame(maxWidth: .infinity, alignment: .leading)

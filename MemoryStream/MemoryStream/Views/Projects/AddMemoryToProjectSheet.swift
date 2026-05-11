@@ -129,7 +129,7 @@ struct AddMemoryToProjectSheet: View {
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: isMember ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22))
+                    .font(.title2)
                     .foregroundStyle(isMember ? Crucible.Color.accent : Crucible.Color.ink4)
                     .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 4) {
