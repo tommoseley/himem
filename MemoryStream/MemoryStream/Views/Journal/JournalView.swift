@@ -71,28 +71,7 @@ struct JournalView: View {
             )
             .padding(.vertical, 4)
 
-            // Entity filter indicator
-            if let filter = viewModel.entityFilter, viewMode == .memories {
-                HStack(spacing: 8) {
-                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                        .foregroundStyle(Crucible.Color.accent)
-                        .accessibilityHidden(true)
-                    Text(filter)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Spacer()
-                    Button {
-                        withAnimation { viewModel.entityFilter = nil }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear filter")
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
-            }
+            entityFilterChip
 
             if viewMode == .projects {
                 ProjectListView(
@@ -100,111 +79,8 @@ struct JournalView: View {
                     selectedTopic: viewModel.selectedTopic
                 )
             } else {
-
-            List {
-                if viewModel.filteredEntries.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "text.book.closed")
-                            .font(.largeTitle)
-                            .foregroundStyle(.tertiary)
-                            .accessibilityHidden(true)
-                        Text("No entries yet")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Text("Tap + to create a memory, or hold for hands-free voice.")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                }
-
-                if viewMode == .memories {
-                ForEach(viewModel.groupedEntries) { group in
-                    Section {
-                        ForEach(group.entries) { entry in
-                            EntryCardView(
-                                entry: entry,
-                                density: cardDensity,
-                                onFeedback: { entryId, state in
-                                    viewModel.submitFeedback(entryId: entryId, state: state)
-                                },
-                                onAdjust: { entryId, correction in
-                                    viewModel.submitFeedback(entryId: entryId, state: .edited, correction: correction)
-                                },
-                                onEntityTap: { value in
-                                    withAnimation { viewModel.entityFilter = value }
-                                },
-                                onAppend: { entry in
-                                    selectedEntryId = entry.id
-                                }
-                            )
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button {
-                                    viewModel.recycleEntry(entryId: entry.id)
-                                    showUndoToast(for: entry)
-                                } label: {
-                                    Label("Remove", systemImage: "tray.and.arrow.down")
-                                }
-                                .tint(Color(.systemGray))
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture { selectedEntryId = entry.id }
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button {
-                                    selectedEntryId = entry.id
-                                } label: {
-                                    Label("View", systemImage: "eye")
-                                }
-                                .tint(.blue)
-                            }
-                        }
-                    } header: {
-                        Text(group.label)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.primary)
-                            .textCase(nil)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
-                    }
-                }
-
-                // Summary with recycled count (below all entries)
-                if !viewModel.filteredEntries.isEmpty || viewModel.selectedTopic != nil {
-                    HStack {
-                        Text("\(viewModel.filteredEntries.count) memor\(viewModel.filteredEntries.count == 1 ? "y" : "ies")")
-                            .font(.caption)
-                            .foregroundStyle(Crucible.Color.ink3)
-                        if viewModel.recycledCount > 0 {
-                            Text("·")
-                                .foregroundStyle(Crucible.Color.ink4)
-                            Text("\(viewModel.recycledCount) in Recently Deleted")
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink4)
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                }
-                } // if viewMode == .memories
+                memoriesList
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .refreshable { viewModel.refresh() }
-            .safeAreaInset(edge: .bottom) {
-                Color.clear.frame(height: 90)
-            }
-            } // else (memories mode)
         }
         .background(Crucible.Color.paper)
 
@@ -218,69 +94,9 @@ struct JournalView: View {
             accessibilityLabel: "Add memory"
         )
 
-        // Error banner
-        if let error = errorState.current {
-            VStack {
-                HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Crucible.Color.danger)
-                        .accessibilityHidden(true)
-                    Text(error.errorDescription ?? "Something went wrong")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Spacer()
-                    Button {
-                        errorState.dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Dismiss error")
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Crucible.Color.ink)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .padding(.horizontal, 16)
-                Spacer()
-            }
-            .padding(.top, 8)
-            .transition(.move(edge: .top).combined(with: .opacity))
-            .animation(.spring(response: 0.3), value: errorState.current?.id)
-        }
+        errorBannerOverlay
 
-        // Undo toast
-        if showUndo, let entry = undoEntry {
-            VStack {
-                Spacer()
-                HStack(spacing: 12) {
-                    Text("Moved to Recently Deleted")
-                        .font(.subheadline)
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Button {
-                        viewModel.restoreEntry(entryId: entry.id)
-                        withAnimation { showUndo = false }
-                    } label: {
-                        Text("Undo")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundStyle(Crucible.Color.accent)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Crucible.Color.ink)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 16)
-                .padding(.bottom, 100)
-            }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
+        undoToastOverlay
 
         } // ZStack
         .navigationDestination(isPresented: $showSearch) {
@@ -459,6 +275,228 @@ struct JournalView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d"
         return formatter.string(from: date)
+    }
+
+    // MARK: - Memories list
+
+    /// The List of grouped memory entries. Mirrors the original inline
+    /// layout: empty-state placeholder, grouped Sections with swipe
+    /// actions, and a summary footer with the Recently-Deleted count.
+    private var memoriesList: some View {
+        List {
+            emptyMemoriesState
+
+            if viewMode == .memories {
+                ForEach(viewModel.groupedEntries) { group in
+                    Section {
+                        ForEach(group.entries) { entry in
+                            EntryCardView(
+                                entry: entry,
+                                density: cardDensity,
+                                onFeedback: { entryId, state in
+                                    viewModel.submitFeedback(entryId: entryId, state: state)
+                                },
+                                onAdjust: { entryId, correction in
+                                    viewModel.submitFeedback(entryId: entryId, state: .edited, correction: correction)
+                                },
+                                onEntityTap: { value in
+                                    withAnimation { viewModel.entityFilter = value }
+                                },
+                                onAppend: { entry in
+                                    selectedEntryId = entry.id
+                                }
+                            )
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button {
+                                    viewModel.recycleEntry(entryId: entry.id)
+                                    showUndoToast(for: entry)
+                                } label: {
+                                    Label("Remove", systemImage: "tray.and.arrow.down")
+                                }
+                                .tint(Color(.systemGray))
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedEntryId = entry.id }
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button {
+                                    selectedEntryId = entry.id
+                                } label: {
+                                    Label("View", systemImage: "eye")
+                                }
+                                .tint(.blue)
+                            }
+                        }
+                    } header: {
+                        Text(group.label)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.primary)
+                            .textCase(nil)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+                    }
+                }
+
+                memoriesSummaryFooter
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .refreshable { viewModel.refresh() }
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 90)
+        }
+    }
+
+    /// Bottom-of-feed pill: "N memories · M in Recently Deleted".
+    @ViewBuilder
+    private var memoriesSummaryFooter: some View {
+        if !viewModel.filteredEntries.isEmpty || viewModel.selectedTopic != nil {
+            HStack {
+                Text("\(viewModel.filteredEntries.count) memor\(viewModel.filteredEntries.count == 1 ? "y" : "ies")")
+                    .font(.caption)
+                    .foregroundStyle(Crucible.Color.ink3)
+                if viewModel.recycledCount > 0 {
+                    Text("·")
+                        .foregroundStyle(Crucible.Color.ink4)
+                    Text("\(viewModel.recycledCount) in Recently Deleted")
+                        .font(.caption)
+                        .foregroundStyle(Crucible.Color.ink4)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+        }
+    }
+
+    // MARK: - Entity filter chip
+
+    @ViewBuilder
+    private var entityFilterChip: some View {
+        if let filter = viewModel.entityFilter, viewMode == .memories {
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                    .foregroundStyle(Crucible.Color.accent)
+                    .accessibilityHidden(true)
+                Text(filter)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Spacer()
+                Button {
+                    withAnimation { viewModel.entityFilter = nil }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear filter")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+        }
+    }
+
+    // MARK: - Empty memories state
+
+    @ViewBuilder
+    private var emptyMemoriesState: some View {
+        if viewModel.filteredEntries.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "text.book.closed")
+                    .font(.largeTitle)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+                Text("No entries yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("Tap + to create a memory, or hold for hands-free voice.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 40)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+        }
+    }
+
+    // MARK: - Error banner overlay
+
+    @ViewBuilder
+    private var errorBannerOverlay: some View {
+        if let error = errorState.current {
+            VStack {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Crucible.Color.danger)
+                        .accessibilityHidden(true)
+                    Text(error.errorDescription ?? "Something went wrong")
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                    Spacer()
+                    Button {
+                        errorState.dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss error")
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Crucible.Color.ink)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 16)
+                Spacer()
+            }
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .animation(.spring(response: 0.3), value: errorState.current?.id)
+        }
+    }
+
+    // MARK: - Undo toast overlay
+
+    @ViewBuilder
+    private var undoToastOverlay: some View {
+        if showUndo, let entry = undoEntry {
+            VStack {
+                Spacer()
+                HStack(spacing: 12) {
+                    Text("Moved to Recently Deleted")
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Button {
+                        viewModel.restoreEntry(entryId: entry.id)
+                        withAnimation { showUndo = false }
+                    } label: {
+                        Text("Undo")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundStyle(Crucible.Color.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Crucible.Color.ink)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 100)
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 
     // MARK: - Inbox banner
