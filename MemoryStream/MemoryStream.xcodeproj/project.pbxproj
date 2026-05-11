@@ -1103,7 +1103,7 @@
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";
+				INFOPLIST_KEY_CFBundleDisplayName = HiMem;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Hi Mem uses the camera to capture photos and videos as part of your memories.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Hi Mem tags your memories with where you were, so you can find them by place later.";
@@ -1144,7 +1144,7 @@
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Hi Mem";
+				INFOPLIST_KEY_CFBundleDisplayName = HiMem;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Hi Mem uses the camera to capture photos and videos as part of your memories.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Hi Mem tags your memories with where you were, so you can find them by place later.";
@@ -1336,7 +1336,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Himem Watch";
+				INFOPLIST_KEY_CFBundleDisplayName = HiMem;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.himem.app;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1407,7 +1407,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Himem Watch";
+				INFOPLIST_KEY_CFBundleDisplayName = HiMem;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.himem.app;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1713,7 +1713,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Himem Watch Widgets/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Himem Watch Widgets";
+				INFOPLIST_KEY_CFBundleDisplayName = HiMem;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1784,7 +1784,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Himem Watch Widgets/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Himem Watch Widgets";
+				INFOPLIST_KEY_CFBundleDisplayName = HiMem;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -349,7 +349,7 @@ struct SettingsView: View {
     private var notificationsFooter: String {
         switch notificationAuthStatus {
         case .denied:
-            return "Notifications are turned off for HiMem at the system level. Tap above or open iOS Settings → Notifications → Hi Mem to enable."
+            return "Notifications are turned off for HiMem at the system level. Tap above or open iOS Settings → Notifications → HiMem to enable."
         case .authorized, .provisional, .ephemeral:
             return "Watch clips ping when they land on the iPhone. The daily nudge is an optional reminder if you haven't captured anything by your chosen time."
         case .notDetermined:

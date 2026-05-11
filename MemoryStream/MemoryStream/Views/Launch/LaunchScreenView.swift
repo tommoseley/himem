@@ -56,13 +56,16 @@ struct LaunchScreenView: View {
                 .opacity(showGreeting ? 1 : 0)
                 .padding(.top, 14)
 
-                // Wordmark — expands to "Hi, Memories!" on sync complete
-                HStack(alignment: .firstTextBaseline, spacing: wordmarkExpanded ? 0 : 4) {
+                // Wordmark — collapsed reads "HiMem"; expanded reads
+                // "HiMemories!" on sync complete. The two-Text
+                // construction preserves the brand's bold/italic + color
+                // split across the transition.
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
                     Text("Hi")
                         .font(.custom("Georgia-Bold", size: 56))
                         .foregroundStyle(ink)
                     Text(wordmarkExpanded ? "Memories!" : "Mem")
-                        .font(.custom("Georgia-Italic", size: wordmarkExpanded ? 56 : 56))
+                        .font(.custom("Georgia-Italic", size: 56))
                         .foregroundStyle(ochre)
                 }
                 .padding(.top, 18)

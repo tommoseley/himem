@@ -117,7 +117,7 @@ final class NotificationService {
         }
 
         let content = UNMutableNotificationContent()
-        content.title = "Hi Mem"
+        content.title = "HiMem"
         content.body = inboxCount == 1
             ? "1 voice clip ready to organize"
             : "\(inboxCount) voice clips ready to organize"
@@ -179,7 +179,7 @@ final class NotificationService {
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
 
         let content = UNMutableNotificationContent()
-        content.title = "Hi Mem"
+        content.title = "HiMem"
         content.body = "Anything to remember from today?"
         content.sound = .default
         content.categoryIdentifier = Category.dailyNudge.rawValue

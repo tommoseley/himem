@@ -63,7 +63,7 @@ struct HimemComplication: Widget {
                 .widgetURL(URL(string: "himem://record"))
                 .containerBackground(.clear, for: .widget)
         }
-        .configurationDisplayName("Hi Mem")
+        .configurationDisplayName("HiMem Recorder")
         .description("Tap to record a voice clip. Shows pending sync count.")
         .supportedFamilies([
             .accessoryCircular,
@@ -165,9 +165,9 @@ struct ComplicationView: View {
         if entry.isRecording {
             Text("Recording")
         } else if entry.pendingCount > 0 {
-            Text("Hi Mem · \(countLabel) pending")
+            Text("HiMem · \(countLabel) pending")
         } else {
-            Text("Hi Mem · Tap to record")
+            Text("HiMem · Tap to record")
         }
     }
 
@@ -187,7 +187,7 @@ struct ComplicationView: View {
     }
 
     private var statusLine: String {
-        if entry.isRecording { return "Hi Mem is recording" }
+        if entry.isRecording { return "HiMem is recording" }
         if entry.pendingCount > 0 { return "\(countLabel) pending" }
         return "All synced"
     }
