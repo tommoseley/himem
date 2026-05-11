@@ -4,8 +4,8 @@ import Foundation
 // MARK: - Create Entry Intent
 
 struct CreateEntryIntent: AppIntent {
-    static var title: LocalizedStringResource = "Capture a thought in Hi Mem"
-    static var description: IntentDescription = "Save a journal entry to Hi Mem"
+    static var title: LocalizedStringResource = "Capture a thought in HiMem"
+    static var description: IntentDescription = "Save a journal entry to HiMem"
     static var openAppWhenRun: Bool = false
 
     @Parameter(title: "What happened?")
@@ -30,7 +30,7 @@ struct CreateEntryIntent: AppIntent {
             await ProcessingEngine.shared.processEntry(entry)
         }
 
-        return .result(dialog: "Got it. Saved to Hi Mem.")
+        return .result(dialog: "Got it. Saved to HiMem.")
     }
 }
 

@@ -339,40 +339,49 @@ struct JournalView: View {
                     }
                 }
 
-                memoriesSummaryFooter
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .refreshable { viewModel.refresh() }
-        .safeAreaInset(edge: .bottom) {
-            Color.clear.frame(height: 90)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            memoriesPinnedFooter
         }
     }
 
-    /// Bottom-of-feed pill: "N memories · M in Recently Deleted".
+    /// Permanent pinned footer at the bottom of the feed: hairline
+    /// divider + "N memories · M in Recently Deleted". Replaces the
+    /// previous footer-as-list-row which only became visible when the
+    /// user scrolled to the bottom. Extra clearance below the text keeps
+    /// the FAB from crowding the count.
     @ViewBuilder
-    private var memoriesSummaryFooter: some View {
-        if !viewModel.filteredEntries.isEmpty || viewModel.selectedTopic != nil {
-            HStack {
-                Text("\(viewModel.filteredEntries.count) memor\(viewModel.filteredEntries.count == 1 ? "y" : "ies")")
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink3)
-                if viewModel.recycledCount > 0 {
-                    Text("·")
-                        .foregroundStyle(Crucible.Color.ink4)
-                    Text("\(viewModel.recycledCount) in Recently Deleted")
+    private var memoriesPinnedFooter: some View {
+        VStack(spacing: 0) {
+            if !viewModel.filteredEntries.isEmpty || viewModel.selectedTopic != nil {
+                Divider()
+                HStack(spacing: 4) {
+                    Text("\(viewModel.filteredEntries.count) memor\(viewModel.filteredEntries.count == 1 ? "y" : "ies")")
                         .font(.caption)
-                        .foregroundStyle(Crucible.Color.ink4)
+                        .foregroundStyle(Crucible.Color.ink3)
+                    if viewModel.recycledCount > 0 {
+                        Text("·")
+                            .font(.caption)
+                            .foregroundStyle(Crucible.Color.ink4)
+                        Text("\(viewModel.recycledCount) in Recently Deleted")
+                            .font(.caption)
+                            .foregroundStyle(Crucible.Color.ink4)
+                    }
+                    Spacer()
                 }
-                Spacer()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
+            // Clearance for the floating Append FAB, which is positioned
+            // bottom-trailing in the parent ZStack and overlaps this
+            // safe-area inset region.
+            Color.clear.frame(height: 60)
         }
+        .background(Crucible.Color.paper)
     }
 
     // MARK: - Entity filter chip
@@ -645,7 +654,7 @@ struct JournalHeaderView: View {
 
             // Left: HI MEM
             HStack {
-                Text("HI MEM")
+                Text("HiMem")
                     .font(.caption2.bold())
                     .tracking(2.0)
                     .foregroundStyle(Crucible.Color.ink3)

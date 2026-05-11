@@ -11,7 +11,7 @@ struct WatchHomeView: View {
     var body: some View {
         VStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("HI MEM")
+                Text("HiMem")
                     .font(.system(size: 9, weight: .bold))
                     .tracking(1.4)
                     .foregroundStyle(Color.white.opacity(0.55))
