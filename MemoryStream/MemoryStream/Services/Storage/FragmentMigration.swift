@@ -27,13 +27,19 @@ import CryptoKit
 /// fetched" outcome (CloudKit hasn't imported yet) does NOT set the flag,
 /// so the next launch tries again.
 enum FragmentMigration {
-    /// v4 adds a per-entry dedup pass + deterministic UUIDs for migration-
-    /// created MediaReferences. Two devices migrating the same legacy
-    /// entry independently used to mint two separate `.note` rows with
-    /// identical text; after CloudKit settled, the user saw doubles.
-    /// Bumping the key forces every device to re-evaluate, which runs
-    /// the dedup pass and cleans up any existing duplicates.
-    private static let completionFlagKey = "fragmentMigration.v4.completed"
+    /// v5 (2026-05-11) bump: previous versions could resurrect deleted
+    /// `.note` fragments every launch because (a) the strict flag-set
+    /// condition kept the migration re-running indefinitely on stores
+    /// with any legacy work, and (b) path 3 minted a fresh `.note`
+    /// whenever a pure-content entry had no matching note — including
+    /// entries where the user had intentionally deleted the prior mint.
+    /// Across multiple relaunches, a new `.note` was created each time,
+    /// piling up as visible duplicate panels. v5 relaxes the flag-set
+    /// to fire after any successful walk and guards path 3 to truly
+    /// empty entries; bumping the key forces every device to re-walk
+    /// once with the new logic so the dedup pass clears existing
+    /// duplicates and the new flag locks future launches out.
+    internal static let completionFlagKey = "fragmentMigration.v5.completed"
 
     /// Runs the migration on the supplied context. Cheap (idempotent fetch
     /// + per-entry no-op) when called repeatedly — `LaunchScreenView`
@@ -50,8 +56,8 @@ enum FragmentMigration {
     /// the live MemoryStream app, so its launch screen would otherwise
     /// fire migration mid-test against the user's real store. Each
     /// `@Test` constructs its own `StorageService(inMemory: true)`.
-    static func runIfNeeded(in context: NSManagedObjectContext) {
-        if isRunningTests { return }
+    static func runIfNeeded(in context: NSManagedObjectContext, force: Bool = false) {
+        if isRunningTests && !force { return }
         let defaults = UserDefaults.standard
         if defaults.bool(forKey: completionFlagKey) { return }
 
@@ -71,16 +77,20 @@ enum FragmentMigration {
         context.performAndWait {
             do {
                 try migrate(in: context, stats: stats)
-                // Steady state requires: walked entries AND nothing left
-                // to migrate AND no duplicates were merged. A 0-entry
-                // fetch (CloudKit hasn't synced yet) or any work done
-                // leaves the flag unset so the next launch tries again.
-                if stats.entriesFetched > 0
-                    && stats.entriesTouched == 0
-                    && stats.entriesSkipped == 0
-                    && stats.duplicatesRemoved == 0 {
+                // Flag set after any walk where CloudKit had actually
+                // delivered entries — the migration's per-entry idempotency
+                // means a single successful walk is enough; subsequent
+                // launches with the flag set short-circuit. The earlier
+                // condition (`touched == 0 && skipped == 0 && duplicates == 0`)
+                // kept the flag unset on every launch where any legacy work
+                // happened, which caused user-deleted fragments to resurrect:
+                // path 3 sees pure-content + no `.note` and re-mints. Flagged
+                // launches don't re-mint because they don't run migration.
+                // Empty-store launches (CloudKit hasn't synced yet) still
+                // leave the flag unset so the next launch retries the walk.
+                if stats.entriesFetched > 0 {
                     defaults.set(true, forKey: completionFlagKey)
-                    NSLog("[Himem][Migration] steady state — flag set")
+                    NSLog("[Himem][Migration] flag set after walk of \(stats.entriesFetched) entries")
                 }
                 NSLog(
                     "[Himem][Migration] completed: fetched=\(stats.entriesFetched) voice=\(stats.voiceCreated) note=\(stats.noteCreated) entriesTouched=\(stats.entriesTouched) skipped=\(stats.entriesSkipped) duplicatesRemoved=\(stats.duplicatesRemoved)"
@@ -266,32 +276,17 @@ enum FragmentMigration {
             }
         }
 
-        // 3. Pure-content entries (no audioFile, no segments) →
-        //    single `.note` MediaReference holding entry.content. This
-        //    covers Siri intents, AI-generated test entries, and any
-        //    other path that wrote directly to `entry.content`.
-        let trimmedContent = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasAudio = (entry.audioFilePath?.isEmpty == false)
-        let hasSegments = !segments.isEmpty
-        let alreadyHasContentNote = existingRefs.contains { ref in
-            ref.mediaTypeEnum == .note && ref.text == entry.content
-        }
-        if !trimmedContent.isEmpty
-            && !hasAudio
-            && !hasSegments
-            && !alreadyHasContentNote {
-            let ref = MediaReference(context: context)
-            ref.id = deterministicUUID("fragment-migration-v4", "note-content", entry.id.uuidString)
-            ref.entryId = entry.id
-            ref.mediaType = MediaReference.MediaType.note.rawValue
-            ref.osIdentifier = ""
-            ref.isAccessible = true
-            ref.createdAt = entry.createdAt
-            ref.text = entry.content
-            ref.entry = entry
-            stats.noteCreated += 1
-            touched = true
-        }
+        // Path 3 (pure-content → single `.note` mint) removed 2026-05-11.
+        // It was the consolidation source the user complained about: every
+        // launch saw a pure-content entry with no `.note`, minted one
+        // containing the whole `entry.content` (often multi-paragraph
+        // from an old concat-into-content append flow), and when the user
+        // deleted it, the next launch resurrected it. With path 3 gone,
+        // pure-content entries render via the detail view's plain-text
+        // fallback (`entry.mediaItems.isEmpty → Text(entry.content)`),
+        // and `EntryLifecycleService.append` already creates per-capture
+        // fragments for new typed text so no path produces consolidated
+        // notes anymore.
 
         return touched
     }

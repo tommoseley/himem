@@ -341,6 +341,34 @@ struct EntryLifecycleServiceTests {
         #expect(noteRefs.first?.text == "typed body unrelated to voice")
     }
 
+    /// Money test for 2026-05-12: an entry with multiple voice fragments
+    /// whose joined transcripts ARE `entry.content` was triggering the
+    /// auto-migrator to mint a consolidated `.note` containing the joined
+    /// blob — the old guard only matched single-voice equality, so a
+    /// 3-voice entry's joined content matched none of the transcripts
+    /// individually and the migrator minted. Every detail-view open
+    /// recreated it after the user deleted it, including in CloudKit.
+    @Test func migrateOrphanedContentIfNeeded_skipsWhenContentEqualsJoinedFromMultipleVoices() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        let v1 = try storage.createMediaReference(for: entry, localIdentifier: "v1.m4a", mediaType: .voice)
+        v1.transcript = "first voice"
+        v1.createdAt = Date(timeIntervalSinceReferenceDate: 0)
+        let v2 = try storage.createMediaReference(for: entry, localIdentifier: "v2.m4a", mediaType: .voice)
+        v2.transcript = "second voice"
+        v2.createdAt = Date(timeIntervalSinceReferenceDate: 1)
+        let v3 = try storage.createMediaReference(for: entry, localIdentifier: "v3.m4a", mediaType: .voice)
+        v3.transcript = "third voice"
+        v3.createdAt = Date(timeIntervalSinceReferenceDate: 2)
+        entry.content = "first voice\n\nsecond voice\n\nthird voice"
+        try storage.viewContext.save()
+
+        service.migrateOrphanedContentIfNeeded(entryId: entry.id)
+
+        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        #expect(refs.filter { $0.mediaTypeEnum == .note }.isEmpty)
+    }
+
     @Test func migrateOrphanedContentIfNeeded_voiceTranscriptMatchesContent_doesNotMint() throws {
         let (storage, service) = makeService()
         let entry = try service.createEmptyEntry(inputType: .composed)
@@ -396,5 +424,81 @@ struct EntryLifecycleServiceTests {
         service.delete(entryId: entryId)
 
         #expect(fetchEntry(entryId, in: storage) == nil)
+    }
+
+    // MARK: - append (per-capture fragments)
+    //
+    // Money tests for the "captures accumulate in one panel" bug observed
+    // 2026-05-11: the user dictated/typed multiple paragraphs into the
+    // same entry and the detail view rendered them all stacked inside a
+    // single note panel. Root cause was that `append` concatenated text
+    // into `entry.content` instead of minting a fragment per capture,
+    // then `migrateOrphanedContentIfNeeded` (pre-fix) saw the joined
+    // blob as orphaned and minted one big `.note` containing every
+    // paragraph. Time is the spine of the memory — each capture should
+    // be its own fragment, its own row, its own timestamp.
+
+    @Test func append_typedNote_createsOwnFragmentPerCall() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+
+        service.append(entryId: entry.id, additionalContent: "First thought")
+        service.append(entryId: entry.id, additionalContent: "Second thought")
+        service.append(entryId: entry.id, additionalContent: "Third thought")
+
+        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let notes = refs.filter { $0.mediaTypeEnum == .note }
+        #expect(notes.count == 3)
+        let texts = Set(notes.compactMap(\.text))
+        #expect(texts == ["First thought", "Second thought", "Third thought"])
+    }
+
+    @Test func append_voiceClip_storesTranscriptOnVoiceFragmentNotInContent() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+
+        service.append(
+            entryId: entry.id,
+            additionalContent: "spoken words here",
+            voiceFilename: "clip.m4a"
+        )
+
+        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let voices = refs.filter { $0.mediaTypeEnum == .voice }
+        let notes = refs.filter { $0.mediaTypeEnum == .note }
+        #expect(voices.count == 1)
+        #expect(voices.first?.transcript == "spoken words here")
+        // No phantom note fragment for voice transcripts — the transcript
+        // lives on the voice ref and renders through VoiceClipPanel.
+        #expect(notes.isEmpty)
+    }
+
+    @Test func append_emptyText_withoutMedia_doesNotMintNote() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+
+        service.append(entryId: entry.id, additionalContent: "   ")
+
+        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        #expect(refs.isEmpty)
+    }
+
+    @Test func append_preservesLegacyOrphanContent_byPromotingItToNoteFragment() throws {
+        // Legacy entry: typed-only `save` left text in `entry.content` with
+        // no `.note` fragment. When the user later appends, the new path
+        // regenerates `entry.content` from fragments — if we don't promote
+        // the orphan first, the original text disappears.
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        entry.content = "legacy typed text"
+        try storage.viewContext.save()
+
+        service.append(entryId: entry.id, additionalContent: "new thought")
+
+        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let notes = refs.filter { $0.mediaTypeEnum == .note }
+        let texts = Set(notes.compactMap(\.text))
+        #expect(notes.count == 2)
+        #expect(texts == ["legacy typed text", "new thought"])
     }
 }

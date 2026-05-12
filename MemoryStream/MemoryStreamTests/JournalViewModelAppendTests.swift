@@ -18,6 +18,11 @@ struct JournalViewModelAppendTests {
     /// Regression guard for the single-media append path that the new inline
     /// auto-attach UI will drive. The old flow went through Composer staging;
     /// the new flow calls appendToEntry with exactly one media capture.
+    ///
+    /// Post-fragment-per-capture: the seed's typed-only content ("seed") gets
+    /// promoted to its own `.note` fragment when the photo append lands, so
+    /// the photo capture's timing isn't conflated with the seed's. Two
+    /// chronological panels: the note then the photo.
     @Test func appendToEntry_withSingleMedia_persistsMediaReference() {
         let vm = makeViewModel()
         let entryId = seedEntry(on: vm)
@@ -29,9 +34,9 @@ struct JournalViewModelAppendTests {
         )
 
         let updated = vm.currentEntry(id: entryId)
-        #expect(updated?.mediaItems.count == 1)
-        #expect(updated?.mediaItems.first?.localIdentifier == "photo-asset-1")
-        #expect(updated?.mediaItems.first?.mediaType == .image)
+        let photos = updated?.mediaItems.filter { $0.mediaType == .image } ?? []
+        #expect(photos.count == 1)
+        #expect(photos.first?.localIdentifier == "photo-asset-1")
     }
 
     @Test func appendToEntry_preservesExistingMedia() {
@@ -50,9 +55,9 @@ struct JournalViewModelAppendTests {
         )
 
         let updated = vm.currentEntry(id: entryId)
-        #expect(updated?.mediaItems.count == 2)
-        let ids = Set(updated?.mediaItems.map(\.localIdentifier) ?? [])
-        #expect(ids == ["first", "second"])
+        let ids = Set(updated?.mediaItems.compactMap(\.localIdentifier) ?? [])
+        #expect(ids.contains("first"))
+        #expect(ids.contains("second"))
     }
 
     /// Money test for Bug 2 (stale snapshot). The view previously held
@@ -82,9 +87,10 @@ struct JournalViewModelAppendTests {
         #expect(snapshot.mediaItems.isEmpty)
 
         // A fresh lookup reflects the append — this is the fix path the view
-        // must adopt.
+        // must adopt. Count is non-empty (seed-content promotion + new
+        // photo); the specific count isn't the contract this test guards.
         let fresh = vm.currentEntry(id: entryId)
-        #expect(fresh?.mediaItems.count == 1)
+        #expect(!(fresh?.mediaItems.isEmpty ?? true))
     }
 
     @Test func appendToEntry_appendsTextContent() {
@@ -102,6 +108,11 @@ struct JournalViewModelAppendTests {
     /// batch (photo + video + voice) — one `appendToEntry` call, so the
     /// downstream ProcessingEngine runs exactly once per user-intent commit,
     /// per the Crucible "one inference per commit" rule.
+    ///
+    /// Each text-bearing capture becomes its own fragment so the chronological
+    /// stream renders one panel per capture event: the seed's text gets
+    /// promoted to a `.note`, the assembled-text becomes another `.note`, and
+    /// the four media captures each get their own MediaReference.
     @Test func appendToEntry_commitsMixedMediaBatch() {
         let vm = makeViewModel()
         let entryId = seedEntry(on: vm, content: "seed note")
@@ -119,13 +130,22 @@ struct JournalViewModelAppendTests {
         )
 
         let updated = vm.currentEntry(id: entryId)
-        #expect(updated?.content == "seed note\n\n" + assembledText)
-        #expect(updated?.mediaItems.count == 4)
-
         let voiceItems = updated?.mediaItems.filter { $0.mediaType == .voice } ?? []
         #expect(voiceItems.count == 2)
         let voiceIds = Set(voiceItems.map(\.localIdentifier))
         #expect(voiceIds == ["voice-1.m4a", "voice-2.m4a"])
+
+        let photoItems = updated?.mediaItems.filter { $0.mediaType == .image } ?? []
+        #expect(photoItems.map(\.localIdentifier) == ["photo-1"])
+
+        let videoItems = updated?.mediaItems.filter { $0.mediaType == .video } ?? []
+        #expect(videoItems.map(\.localIdentifier) == ["video-1"])
+
+        // Seed text promoted + assembled text appended as separate notes.
+        let noteTexts = Set(updated?.mediaItems
+            .filter { $0.mediaType == .note }
+            .compactMap(\.text) ?? [])
+        #expect(noteTexts == ["seed note", assembledText])
     }
 
     /// Composer voice clips persist as `.voice` MediaReferences alongside

@@ -1,66 +1,88 @@
 import SwiftUI
+import UIKit
 
-/// Chronological capture stream: replaces the entry-detail "content text +
-/// media grid" block with per-capture panels rendered in `createdAt` order.
+/// Chronological capture stream: emits one List row per capture in
+/// `createdAt` order. The parent view embeds this inside a `List`, which
+/// is why each row carries `.listRowSeparator`, `.listRowBackground`, and
+/// `.listRowInsets` modifiers — List is responsible for both scrolling
+/// and swipe-action coordination, so vertical drags scroll while
+/// horizontal drags reveal the swipe pills.
 ///
 /// Three panel kinds:
-///   - **Voice clip**: × delete + ▶︎ play + transcript text. Swipe-edit
-///     opens the AudioPlayerSheet (play + transcript editor).
-///   - **Note** (typed): × delete + text. Swipe-edit opens the
-///     NoteEditorSheet (full-screen text editor).
-///   - **Photo filmstrip**: contiguous image/video MediaReferences (no
-///     voice/note between them) group into one panel; horizontal scroll if
-///     it overflows.
+///   - **Voice clip**: timestamp + transcript text. Leading swipe opens the
+///     AudioPlayerSheet (play + transcript editor); trailing swipe deletes.
+///   - **Note** (typed): timestamp + text. Leading swipe opens the
+///     NoteEditorSheet; trailing swipe deletes.
+///   - **Photo grid**: contiguous image/video MediaReferences group into
+///     one row rendered as a 3-wide `LazyVGrid`. Per-tile X buttons handle
+///     delete; the row itself doesn't have swipe actions.
 ///
 /// Photo grouping rule: walk captures sorted by createdAt, accumulate
-/// consecutive image/video items into the current filmstrip; flush the
-/// filmstrip whenever a voice or note breaks the run.
+/// consecutive image/video items into the current strip; flush the strip
+/// whenever a voice or note breaks the run.
 struct ChronologicalCaptureStream: View {
     let entry: EntryDisplayModel
     let onDeleteVoice: (UUID) -> Void
     let onDeleteNote: (UUID) -> Void
     let onDeleteMedia: (UUID) -> Void
-    /// Opens the AudioPlayerSheet for a voice clip — fires on swipe-edit.
-    /// Sheet is the canonical surface for playing AND editing the
-    /// transcript; the panel itself doesn't have a tap-to-play affordance.
+    /// Opens the AudioPlayerSheet for a voice clip — fires on leading swipe.
     let onOpenVoice: (MediaDisplayItem) -> Void
-    /// Opens the NoteEditorSheet for a note fragment — fires on tap or
-    /// swipe-edit. Sheet is the canonical surface for editing note text;
-    /// the panel no longer has an inline edit affordance.
+    /// Opens the NoteEditorSheet for a note fragment — fires on leading swipe.
     let onOpenNote: (MediaDisplayItem) -> Void
     let onTapPhoto: (MediaDisplayItem) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(panels) { panel in
-                switch panel.kind {
-                case .voice(let item):
-                    VoiceClipPanel(
-                        item: item,
-                        onDelete: { onDeleteVoice(item.id) },
-                        onOpenSheet: { onOpenVoice(item) }
-                    )
-                case .note(let item):
-                    NotePanel(
-                        item: item,
-                        onDelete: { onDeleteNote(item.id) },
-                        onOpenSheet: { onOpenNote(item) }
-                    )
-                case .photoStrip(let items):
-                    PhotoFilmstripPanel(
-                        items: items,
-                        onDelete: onDeleteMedia,
-                        onTap: onTapPhoto
-                    )
-                }
+        ForEach(panels) { panel in
+            switch panel.kind {
+            case .voice(let item):
+                VoiceClipPanel(item: item)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button { onOpenVoice(item) } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(Crucible.Color.accent)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) { onDeleteVoice(item.id) } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+            case .note(let item):
+                NotePanel(item: item)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button { onOpenNote(item) } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(Crucible.Color.accent)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) { onDeleteNote(item.id) } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+            case .photoStrip(let items):
+                PhotoFilmstripPanel(
+                    items: items,
+                    onDelete: onDeleteMedia,
+                    onTap: onTapPhoto
+                )
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
             }
         }
     }
 
     /// Walks the entry's fragments in `createdAt` order, grouping contiguous
-    /// image/video MediaReferences into a single filmstrip panel and
-    /// emitting voice/note as their own panels. Every fragment kind is now
-    /// a `MediaDisplayItem`; the legacy `TextSegment`-flavored note path is
+    /// image/video MediaReferences into a single grid panel and emitting
+    /// voice/note as their own panels. Every fragment kind is now a
+    /// `MediaDisplayItem`; the legacy `TextSegment`-flavored note path is
     /// gone.
     private var panels: [Panel] {
         struct Item { let createdAt: Date; let kind: ItemKind }
@@ -125,17 +147,11 @@ struct ChronologicalCaptureStream: View {
 
 // MARK: - Voice clip panel
 
-/// Renders one `.voice` MediaReference — used wherever voice fragments
-/// appear in the chronological capture stream. Single shape regardless of
-/// how the clip was captured (FAB recorder, watch promotion, Contribute).
+/// Renders one `.voice` MediaReference as the visual content of a List row.
+/// Swipe actions are configured by the parent List context — this view
+/// just owns the timestamp + transcript layout.
 struct VoiceClipPanel: View {
     let item: MediaDisplayItem
-    let onDelete: () -> Void
-    /// Opens the AudioPlayerSheet — the canonical play + edit-transcript
-    /// surface for a voice clip. Tap on the panel and swipe-right both
-    /// route here; the sheet's transcript editor is the only way to edit
-    /// the clip's transcript now.
-    let onOpenSheet: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -151,12 +167,6 @@ struct VoiceClipPanel: View {
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
-        .swipeActions(
-            onDelete: onDelete,
-            onEdit: onOpenSheet,
-            deleteAccessibilityLabel: "Delete voice clip",
-            editAccessibilityLabel: "Edit transcript"
-        )
     }
 
     private var displayText: String {
@@ -170,12 +180,6 @@ struct VoiceClipPanel: View {
 private struct NotePanel: View {
     /// Backed by a `.note` MediaReference — `text` carries the body.
     let item: MediaDisplayItem
-    let onDelete: () -> Void
-    /// Opens the NoteEditorSheet — fires on swipe-right (Edit pill). The
-    /// panel itself has no tap-to-edit affordance, matching `VoiceClipPanel`,
-    /// so a vertical drag on the note text scrolls the parent feed without
-    /// fighting a tap recognizer.
-    let onOpenSheet: () -> Void
 
     private var bodyText: String { item.text ?? "" }
 
@@ -192,12 +196,6 @@ private struct NotePanel: View {
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
-        .swipeActions(
-            onDelete: onDelete,
-            onEdit: onOpenSheet,
-            deleteAccessibilityLabel: "Delete note",
-            editAccessibilityLabel: "Edit note"
-        )
     }
 }
 
@@ -223,215 +221,45 @@ private struct CaptureTimestampLabel: View {
     }()
 }
 
-// MARK: - Swipe actions modifier (pill-style)
-
-extension View {
-    /// Outlook-style swipe action pills.
-    ///
-    /// Right-to-left swipe → trailing red Delete pill.
-    /// Left-to-right swipe → leading accent Edit pill (only if `onEdit` is
-    /// non-nil — pure delete-only panels just don't reveal anything on the
-    /// rightward drag).
-    ///
-    /// Tap the pill to fire its action; drag past `commitThreshold` and
-    /// release to fire in one motion.
-    func swipeActions(
-        onDelete: @escaping () -> Void,
-        onEdit: (() -> Void)? = nil,
-        deleteAccessibilityLabel: String = "Delete",
-        editAccessibilityLabel: String = "Edit"
-    ) -> some View {
-        modifier(SwipeActionsModifier(
-            onDelete: onDelete,
-            onEdit: onEdit,
-            deleteAccessibilityLabel: deleteAccessibilityLabel,
-            editAccessibilityLabel: editAccessibilityLabel
-        ))
-    }
-}
-
-private struct SwipeActionsModifier: ViewModifier {
-    let onDelete: () -> Void
-    let onEdit: (() -> Void)?
-    let deleteAccessibilityLabel: String
-    let editAccessibilityLabel: String
-
-    /// Signed offset: negative = revealing trailing Delete, positive =
-    /// revealing leading Edit. Magnitude clamped to `commitThreshold`.
-    @State private var offset: CGFloat = 0
-    @State private var revealed: RevealedSide? = nil
-    /// Once the drag is dominantly horizontal, lock for the rest of the
-    /// gesture so vertical wobbles don't yield to the parent ScrollView.
-    @State private var engagedHorizontal: Bool = false
-
-    private enum RevealedSide { case leading, trailing }
-
-    private let revealWidth: CGFloat = 84
-    private let commitThreshold: CGFloat = 200
-
-    func body(content: Content) -> some View {
-        ZStack {
-            // Leading Edit pill — visible only on positive offset.
-            if let onEdit, offset > 4 {
-                HStack(spacing: 0) {
-                    SwipeActionPill(
-                        icon: "pencil",
-                        label: "Edit",
-                        color: .blue,
-                        action: {
-                            // Snap closed before firing — the panel may swap
-                            // to a taller editing layout, and a lingering
-                            // pill stretches with it.
-                            withAnimation(.easeOut(duration: 0.18)) {
-                                offset = 0
-                                revealed = nil
-                            }
-                            onEdit()
-                        }
-                    )
-                    .frame(width: offset)
-                    .accessibilityLabel(editAccessibilityLabel)
-                    Spacer(minLength: 0)
-                }
-            }
-
-            // Trailing Delete pill — visible only on negative offset.
-            if offset < -4 {
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    SwipeActionPill(
-                        icon: "trash",
-                        label: "Delete",
-                        color: Crucible.Color.danger,
-                        action: {
-                            withAnimation(.easeOut(duration: 0.18)) {
-                                offset = 0
-                                revealed = nil
-                            }
-                            onDelete()
-                        }
-                    )
-                    .frame(width: -offset)
-                    .accessibilityLabel(deleteAccessibilityLabel)
-                }
-            }
-
-            content
-                .offset(x: offset)
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 8)
-                        .onChanged { value in
-                            if !engagedHorizontal {
-                                let dx = value.translation.width
-                                let dy = value.translation.height
-                                if abs(dx) > 4, abs(dx) > abs(dy) * 1.4 {
-                                    engagedHorizontal = true
-                                } else if abs(dy) > abs(dx) {
-                                    return
-                                }
-                            }
-                            guard engagedHorizontal else { return }
-
-                            let base: CGFloat = {
-                                switch revealed {
-                                case .leading: return revealWidth
-                                case .trailing: return -revealWidth
-                                case .none: return 0
-                                }
-                            }()
-                            var proposed = value.translation.width + base
-                            // If no Edit handler, can't drag rightward.
-                            if onEdit == nil { proposed = min(0, proposed) }
-                            offset = max(-commitThreshold, min(proposed, commitThreshold))
-                        }
-                        .onEnded { _ in
-                            defer { engagedHorizontal = false }
-                            // Negative = trailing/Delete.
-                            if offset <= -commitThreshold {
-                                withAnimation(.easeOut(duration: 0.18)) { offset = -commitThreshold }
-                                onDelete()
-                            } else if offset < -revealWidth * 0.6 {
-                                withAnimation(.easeOut(duration: 0.18)) {
-                                    offset = -revealWidth
-                                    revealed = .trailing
-                                }
-                            }
-                            // Positive = leading/Edit.
-                            else if offset >= commitThreshold, onEdit != nil {
-                                withAnimation(.easeOut(duration: 0.18)) { offset = commitThreshold }
-                                onEdit?()
-                                // Snap back so pill doesn't linger.
-                                withAnimation(.easeOut(duration: 0.18).delay(0.05)) {
-                                    offset = 0
-                                    revealed = nil
-                                }
-                            } else if offset > revealWidth * 0.6, onEdit != nil {
-                                withAnimation(.easeOut(duration: 0.18)) {
-                                    offset = revealWidth
-                                    revealed = .leading
-                                }
-                            }
-                            // Snap closed.
-                            else {
-                                withAnimation(.easeOut(duration: 0.18)) {
-                                    offset = 0
-                                    revealed = nil
-                                }
-                            }
-                        }
-                )
-        }
-    }
-}
-
-/// Outlook-style swipe action pill — vertically stacked icon over label,
-/// inset from the row edges so it reads as a separate button rather than
-/// a flush stripe.
-private struct SwipeActionPill: View {
-    let icon: String
-    let label: String
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.title3.weight(.semibold))
-                Text(label)
-                    .font(.caption.weight(.semibold))
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(color)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .padding(.vertical, 4)
-            .padding(.horizontal, 4)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 // MARK: - Photo grid panel
 
-/// Renders one chronological cluster of `.image` / `.video` MediaReferences
-/// (i.e. captures taken within ~10 minutes of each other) as a 3-column
-/// grid. Each cluster is its own grid; multiple clusters in an entry stack
-/// vertically with the chronological capture stream's other panels in
-/// between, preserving capture-time ordering.
+/// Pure column-count rule for the chronological capture stream's photo
+/// grid. Exposed for unit tests — runtime callers go through
+/// `PhotoFilmstripPanel`, which reads device + scene orientation.
 ///
-/// Initially this was a horizontal-scrolling filmstrip — the
-/// "infinite-width row" was confusing and lost the at-a-glance overview
-/// the prior 3-wide grid layout provided. Switched back 2026-05-10.
+/// Column counts pinned 2026-05-11 per Tom: iPhone tilesy stay smaller
+/// for thumb scanning (3 portrait / 5 landscape); iPad tiles are larger
+/// because the tablet is for review, not capture (4 portrait / 6 landscape).
+enum PhotoGridLayout {
+    static func columnCount(isPad: Bool, isLandscape: Bool) -> Int {
+        if isPad {
+            return isLandscape ? 6 : 4
+        } else {
+            return isLandscape ? 5 : 3
+        }
+    }
+}
+
+/// Renders one chronological cluster of `.image` / `.video` MediaReferences
+/// (i.e. captures taken within ~10 minutes of each other) as a responsive
+/// grid: 3 cols on iPhone portrait, 5 on iPhone landscape, 4 on iPad
+/// portrait, 6 on iPad landscape. Each cluster is its own grid; multiple
+/// clusters in an entry stack vertically with the chronological capture
+/// stream's other panels in between, preserving capture-time ordering.
+///
+/// Reactivity: SwiftUI's `horizontalSizeClass` / `verticalSizeClass` don't
+/// distinguish iPad portrait from landscape (both `.regular`), so we read
+/// the active scene's `interfaceOrientation` and refresh on
+/// `UIDevice.orientationDidChangeNotification`.
 private struct PhotoFilmstripPanel: View {
     let items: [MediaDisplayItem]
     let onDelete: (UUID) -> Void
     let onTap: (MediaDisplayItem) -> Void
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+    @State private var isLandscape: Bool = PhotoFilmstripPanel.currentSceneIsLandscape()
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 8) {
+        LazyVGrid(columns: gridColumns, spacing: 8) {
             ForEach(items) { item in
                 MediaTile(
                     localIdentifier: item.localIdentifier,
@@ -443,5 +271,26 @@ private struct PhotoFilmstripPanel: View {
                 .aspectRatio(1, contentMode: .fit)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            isLandscape = PhotoFilmstripPanel.currentSceneIsLandscape()
+        }
+    }
+
+    private var gridColumns: [GridItem] {
+        let cols = PhotoGridLayout.columnCount(
+            isPad: UIDevice.current.userInterfaceIdiom == .pad,
+            isLandscape: isLandscape
+        )
+        return Array(repeating: GridItem(.flexible(), spacing: 8), count: cols)
+    }
+
+    private static func currentSceneIsLandscape() -> Bool {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+            ?? UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first
+        return scene?.interfaceOrientation.isLandscape ?? false
     }
 }

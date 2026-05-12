@@ -34,12 +34,15 @@ struct AppendFAB: View {
 
     var body: some View {
         ZStack(alignment: alignment) {
-            // Scrim — tap to dismiss. Sits between the host content and the
-            // stack. The status bar isn't covered because the FAB lives
-            // inside the host's safe area, not over it.
+            // Scrim — tap to dismiss. Uses `.ultraThinMaterial` for the
+            // dim-plus-blur effect: the host content sits clearly muted
+            // behind a translucent layer while the FAB stack stays crisp
+            // above. The scrim is the first ZStack child so the action
+            // pills and FAB remain on top of the blur.
             if isOpen {
-                Color.black.opacity(0.18)
-                    .background(.ultraThinMaterial.opacity(0.0001)) // tiny material for the 2pt blur feel
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.75)
                     .ignoresSafeArea()
                     .transition(.opacity)
                     .onTapGesture { close() }

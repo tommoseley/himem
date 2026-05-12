@@ -114,22 +114,34 @@ struct EntryExpandedView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                topicChipsRow
-                titleSection
+        // Detail screen renders as a `List` (not a `ScrollView + VStack`)
+        // so the chronological capture stream rows can use Apple's native
+        // `.swipeActions`. List + native swipe is the only configuration
+        // that coordinates scroll and swipe correctly — a `simultaneousGesture`
+        // over a custom swipe modifier traps vertical drags before the
+        // parent `ScrollView` can claim them.
+        List {
+            sectionRow { topicChipsRow }
+            sectionRow { titleSection }
+            sectionRow {
                 Text(fullTimestamp)
                     .font(.caption)
                     .foregroundStyle(Crucible.Color.ink3)
-                locationChip
-                bodyContent
-                inferenceCardSection
-                mentionsSection
             }
-            .padding(16)
-            // Bottom inset so the floating Contribute button doesn't cover content.
-            .padding(.bottom, 80)
+            sectionRow { locationChip }
+            bodyContent
+            sectionRow { inferenceCardSection }
+            sectionRow { mentionsSection }
+            // Bottom inset so the floating Contribute FAB doesn't cover the
+            // last row.
+            Color.clear
+                .frame(height: 80)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .background(Crucible.Color.paper)
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -379,30 +391,47 @@ struct EntryExpandedView: View {
         }
     }
 
+    /// Wraps a non-row view in a list row with the standard chrome — no
+    /// separator, no row background, the same horizontal margin
+    /// `ScrollView`-era used. Keeps the per-section view code identical
+    /// to its pre-List form while letting the parent List context manage
+    /// scrolling.
+    @ViewBuilder
+    private func sectionRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+    }
+
     /// Body — every entry renders through ChronologicalCaptureStream
     /// post-FragmentMigration v2. Voice / note / image / video are all
     /// MediaReferences interleaved in createdAt order.
     ///
     /// Render paths:
-    ///   1. No media fragments at all → plain `entry.content` text.
-    ///      Covers pure-content entries the migration didn't convert.
-    ///   2. Has fragments → ChronologicalCaptureStream renders the lot,
-    ///      with each fragment getting its own swipe-to-edit/delete
-    ///      panel (NotePanel for notes, VoiceClipPanel for voice, etc.).
+    ///   1. No media fragments at all → plain `entry.content` text, as a
+    ///      single list row. Covers pure-content entries the migration
+    ///      didn't convert.
+    ///   2. Has fragments → ChronologicalCaptureStream emits one List row
+    ///      per fragment, each with its own native `.swipeActions`
+    ///      (NotePanel for notes, VoiceClipPanel for voice, photo grid
+    ///      for image/video clusters).
     ///
     /// Orphaned `entry.content` (text exists but no `.note` fragment
     /// covers it — left over from earlier code paths that wrote
     /// `entry.content` directly) gets auto-migrated into a real `.note`
     /// MediaReference in `.onAppear` via `migrateOrphanedContentIfNeeded`,
-    /// so the user gets the full NotePanel UX (swipe to edit, swipe to
-    /// delete) without a separate inline-Text affordance.
+    /// so the user gets the full NotePanel UX without a separate
+    /// inline-Text affordance.
     @ViewBuilder
     private var bodyContent: some View {
         if entry.mediaItems.isEmpty {
-            Text(entry.content.attributedWithLinks())
-                .font(.body)
-                .foregroundStyle(Crucible.Color.ink)
-                .lineSpacing(4)
+            sectionRow {
+                Text(entry.content.attributedWithLinks())
+                    .font(.body)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .lineSpacing(4)
+            }
         } else {
             ChronologicalCaptureStream(
                 entry: entry,

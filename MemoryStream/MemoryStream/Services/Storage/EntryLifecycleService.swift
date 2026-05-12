@@ -126,7 +126,7 @@ final class EntryLifecycleService {
     func migrateOrphanedContentIfNeeded(entryId: UUID) {
         do {
             guard let entry = try fetchEntry(id: entryId) else { return }
-            let trimmed = (entry.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             let refs = entry.mediaReferencesArray
             guard !refs.isEmpty else { return }  // Pure-content entries render `entry.content` directly.
@@ -135,17 +135,36 @@ final class EntryLifecycleService {
             // `entry.content` is the joined output, nothing to do.
             if refs.contains(where: { $0.mediaTypeEnum == .note }) { return }
 
-            // Voice transcript already covers the content text → no orphan.
+            // Content is already the joined output of the entry's text
+            // fragments (multi-voice transcripts post-regenerate, or
+            // content that drifted into the joined shape via the old
+            // append path). Not orphan — skip. This is the guard the
+            // 3-voice consolidation bug needed: previously each open
+            // re-minted a `.note` containing the joined transcripts
+            // because no single voice's transcript matched the joined
+            // content individually.
+            let joined = Self.joinedContent(from: entry)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == joined { return }
+
+            // Single-voice case where the transcript IS the content.
             if refs.contains(where: {
                 $0.mediaTypeEnum == .voice
                     && ($0.transcript?.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed)
             }) { return }
 
+            // Genuine orphan content — text in `entry.content` that no
+            // fragment covers. Mint a `.note` and regenerate so future
+            // calls see content == joined and skip.
             _ = try storage.createNoteFragment(
                 for: entry,
-                text: entry.content ?? "",
-                createdAt: entry.createdAt ?? Date()
+                text: entry.content,
+                createdAt: entry.createdAt
             )
+            if let updated = try fetchEntry(id: entryId) {
+                updated.content = Self.joinedContent(from: updated)
+                try storage.save(context: storage.viewContext)
+            }
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }
@@ -365,6 +384,20 @@ final class EntryLifecycleService {
 
     // MARK: - Append
 
+    /// Adds new captures to an entry as their own fragments — one
+    /// MediaReference per call so the chronological capture stream renders
+    /// one panel per capture event. Voice with transcript becomes a
+    /// `.voice` ref; typed text with no voice becomes a `.note` ref;
+    /// photos/videos become `.image` / `.video` refs. Time is the spine
+    /// of the memory — concatenating multiple captures into a single
+    /// fragment would collapse separate moments into one block.
+    ///
+    /// `entry.content` is refreshed from the joined fragments after the
+    /// new refs are attached so search + AI input see the combined text.
+    /// Direct concatenation into `entry.content` is intentionally avoided:
+    /// it lost per-capture timing AND, combined with the pre-fix
+    /// auto-migrator, caused the joined blob to be re-minted as one giant
+    /// `.note` on the next detail-view open.
     func append(
         entryId: UUID,
         additionalContent: String,
@@ -375,8 +408,21 @@ final class EntryLifecycleService {
             guard let entry = try fetchEntry(id: entryId) else { return }
 
             let trimmed = additionalContent.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                entry.content = entry.content + "\n\n" + trimmed
+
+            // Promote any text living only in `entry.content` (legacy
+            // typed-only `save` calls, or pre-fragment-per-capture entries)
+            // to its own `.note` fragment BEFORE adding the new capture.
+            // Without this, the regenerate step at the end of `append`
+            // would overwrite `entry.content` with just the joined
+            // fragment text and silently drop the original.
+            let priorContent = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let priorJoined = Self.joinedContent(from: entry).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !priorContent.isEmpty, priorContent != priorJoined {
+                _ = try storage.createNoteFragment(
+                    for: entry,
+                    text: entry.content,
+                    createdAt: entry.createdAt
+                )
             }
 
             if let voiceFilename, !voiceFilename.isEmpty {
@@ -385,9 +431,12 @@ final class EntryLifecycleService {
                     audioFilename: voiceFilename,
                     transcript: trimmed
                 )
+            } else if !trimmed.isEmpty {
+                _ = try storage.createNoteFragment(for: entry, text: trimmed)
             }
 
             let savedRefs = try createMediaReferences(for: entry, mediaCaptures: mediaCaptures)
+            entry.content = Self.joinedContent(from: entry)
             clearForReprocessing(entry)
             let _ = try storage.createProcessingTask(for: entry)
             try storage.save(context: storage.viewContext)
