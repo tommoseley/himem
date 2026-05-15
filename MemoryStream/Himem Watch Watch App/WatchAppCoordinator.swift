@@ -19,6 +19,12 @@ final class WatchAppCoordinator: ObservableObject {
 
     @Published var route: Route = .home
 
+    /// True for ~0.5s after a recording is discarded. Drives a brief
+    /// "Discarded" toast on the home view per the Watch → Memory flow
+    /// spec (Edge E): "Confirmed by haptic + half-second toast." The
+    /// haptic itself fires inside `WatchRecordingService.stop(save:false)`.
+    @Published var showDiscardedToast: Bool = false
+
     let recording = WatchRecordingService()
     let transfer = WatchTransferService()
     let pending = WatchPendingManifest.shared
@@ -52,6 +58,17 @@ final class WatchAppCoordinator: ObservableObject {
         NSLog("[Himem][WC] watch — retryPendingTransfers running, manifest has \(pending.count) clip(s)")
         for clip in pending.clips {
             transfer.send(clip: clip)
+        }
+    }
+
+    /// Triggers the "Discarded" toast — called from
+    /// `WatchRecordingView.discard()` right before routing home. The
+    /// toast auto-clears after 0.5s.
+    func flashDiscardedToast() {
+        showDiscardedToast = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            self?.showDiscardedToast = false
         }
     }
 }

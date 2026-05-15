@@ -109,6 +109,7 @@ struct WatchPendingListView: View {
         VStack(spacing: 0) {
             header
                 .padding(.bottom, 4)
+            capacityChip
             // List (not LazyVStack) so `.swipeActions(edge: .trailing)`
             // works. watchOS swipe-to-reveal-delete is List-row-only;
             // LazyVStack rows ignore the modifier silently.
@@ -118,7 +119,7 @@ struct WatchPendingListView: View {
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
                 }
-                Text("Will sync when phone is near")
+                Text(footerText)
                     .font(.system(size: 10))
                     .foregroundStyle(Color.white.opacity(0.45))
                     .frame(maxWidth: .infinity)
@@ -130,6 +131,54 @@ struct WatchPendingListView: View {
             .animation(.easeOut(duration: 0.3), value: pending.clips.map(\.clipId))
             .animation(.easeOut(duration: 0.3), value: pending.syncingClipIds)
         }
+    }
+
+    /// Spec Edge B + C: amber chip at 45–49 unsynced clips, red chip at
+    /// 50 (cap) or when the iPhone hasn't confirmed receipt for >24h.
+    /// At most one chip renders; the more-severe state wins.
+    @ViewBuilder
+    private var capacityChip: some View {
+        if pending.isAtCap {
+            chipBanner(
+                icon: "exclamationmark.circle.fill",
+                text: "Pending full — sync with iPhone",
+                tint: Color(red: 0.78, green: 0.20, blue: 0.20)
+            )
+        } else if pending.isSyncStuck {
+            chipBanner(
+                icon: "exclamationmark.circle.fill",
+                text: "Hasn't reached your phone in a day",
+                tint: Color(red: 0.78, green: 0.20, blue: 0.20)
+            )
+        } else if pending.isNearCap {
+            chipBanner(
+                icon: "exclamationmark.triangle.fill",
+                text: "Almost full · \(WatchPendingManifest.storageCap - pending.count) left",
+                tint: Color(red: 0.92, green: 0.62, blue: 0.10)
+            )
+        }
+    }
+
+    private func chipBanner(icon: String, text: String, tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(text)
+                .font(.system(size: 10, weight: .semibold))
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(tint.opacity(0.14))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 6)
+        .padding(.bottom, 4)
+    }
+
+    private var footerText: String {
+        if pending.isSyncStuck { return "Check your iPhone is near and unlocked" }
+        return "Will sync when phone is near"
     }
 
     private func rowView(for clip: WatchPendingClip) -> some View {

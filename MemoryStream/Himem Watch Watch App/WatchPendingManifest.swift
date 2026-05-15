@@ -68,6 +68,19 @@ final class WatchPendingManifest: ObservableObject {
     /// Hard cap from the spec — start warning the user at this many
     /// unsynced clips.
     static let storageCap = 50
+    /// Soft warning threshold — amber chip surfaces at this count and
+    /// above (spec: "Warning at 45, hard block at 50").
+    static let storageWarnCount = 45
+    /// Sync-stuck threshold (spec Edge C): after 24h without an
+    /// iPhone-confirmed receipt, surface the red sync-issue indicator.
+    static let syncStuckSeconds: TimeInterval = 24 * 3600
+
+    /// Last time the iPhone confirmed receipt of any clip from this
+    /// watch. Updated in `performRemoval` (which only runs on the ack
+    /// path or explicit user delete — both indicate the system is
+    /// alive). Persisted alongside the manifest so the stuck indicator
+    /// survives launches.
+    @Published private(set) var lastConfirmedReceiptAt: Date?
 
     private init() {
         load()
@@ -76,6 +89,19 @@ final class WatchPendingManifest: ObservableObject {
     var count: Int { clips.count }
     var isEmpty: Bool { clips.isEmpty }
     var isAtCap: Bool { clips.count >= Self.storageCap }
+    /// True when the pending count is at or above the soft warning
+    /// threshold (45) but below the hard cap (50). UI surfaces an amber
+    /// "almost full" chip in this range.
+    var isNearCap: Bool { clips.count >= Self.storageWarnCount && clips.count < Self.storageCap }
+    /// True when at least one clip is in the manifest *and* the iPhone
+    /// hasn't confirmed any receipt for > 24h. If `lastConfirmedReceiptAt`
+    /// is nil (fresh install / no prior sync), use the oldest clip's
+    /// capture time as the baseline.
+    var isSyncStuck: Bool {
+        guard !clips.isEmpty else { return false }
+        let baseline = lastConfirmedReceiptAt ?? clips.map(\.capturedAt).min() ?? Date()
+        return Date().timeIntervalSince(baseline) > Self.syncStuckSeconds
+    }
 
     /// Adds a freshly-recorded clip to the pending manifest.
     func append(_ clip: WatchPendingClip) {
@@ -113,6 +139,22 @@ final class WatchPendingManifest: ObservableObject {
         try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
         let next = clips.filter { $0.clipId != clipId }
         replace(with: next)
+        // Successful confirmed-receipt — record so the sync-stuck timer
+        // resets. Survives across launches via the manifest persistence.
+        lastConfirmedReceiptAt = Date()
+        persistLastConfirmedReceipt()
+    }
+
+    /// Persistence for `lastConfirmedReceiptAt` — small enough to stash
+    /// in UserDefaults rather than inflate the manifest JSON.
+    private static let lastReceiptKey = "watchPending.lastConfirmedReceiptAt"
+
+    private func persistLastConfirmedReceipt() {
+        UserDefaults.standard.set(lastConfirmedReceiptAt, forKey: Self.lastReceiptKey)
+    }
+
+    private func loadLastConfirmedReceipt() {
+        lastConfirmedReceiptAt = UserDefaults.standard.object(forKey: Self.lastReceiptKey) as? Date
     }
 
     /// User-initiated delete from the pending list. Same effect as a
@@ -157,6 +199,7 @@ final class WatchPendingManifest: ObservableObject {
     }
 
     private func load() {
+        loadLastConfirmedReceipt()
         let url = Self.manifestURL
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {

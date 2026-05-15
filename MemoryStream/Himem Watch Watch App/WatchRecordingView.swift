@@ -167,6 +167,7 @@ struct WatchRecordingView: View {
 
     private func discard() {
         _ = recording.stop(save: false)
+        coordinator.flashDiscardedToast()
         coordinator.route = .home
     }
 }

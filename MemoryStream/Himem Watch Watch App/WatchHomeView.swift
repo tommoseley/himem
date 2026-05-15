@@ -47,22 +47,39 @@ struct WatchHomeView: View {
         // alongside the system clock — that's where the design (Image
         // 21) places it. The TabView below stays within the normal
         // content area; only the header strip extends upward.
-        VStack(spacing: 0) {
-            WatchPageHeader(pageTitle: title(for: selection))
+        ZStack(alignment: .top) {
+            VStack(spacing: 0) {
+                WatchPageHeader(pageTitle: title(for: selection))
 
-            TabView(selection: $selection) {
-                WatchLatestPage()
-                    .tag(Page.latest)
+                TabView(selection: $selection) {
+                    WatchLatestPage()
+                        .tag(Page.latest)
 
-                WatchCapturePage(onTap: {
-                    coordinator.route = .recording
-                })
-                .tag(Page.capture)
+                    WatchCapturePage(onTap: {
+                        coordinator.route = .recording
+                    })
+                    .tag(Page.capture)
 
-                WatchPendingListView(pending: pending, embedded: true)
-                    .tag(Page.pending)
+                    WatchPendingListView(pending: pending, embedded: true)
+                        .tag(Page.pending)
+                }
+                .tabViewStyle(.page)
             }
-            .tabViewStyle(.page)
+
+            // Discard toast — overlaid on home for 0.5s after the user
+            // hits the corner ✕ on the recording screen. Pairs with the
+            // existing `.click` haptic on the discard path.
+            if coordinator.showDiscardedToast {
+                Text("Discarded")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(Color.black.opacity(0.78)))
+                    .padding(.top, 32)
+                    .transition(.opacity)
+                    .animation(.easeOut(duration: 0.15), value: coordinator.showDiscardedToast)
+            }
         }
         .ignoresSafeArea(.container, edges: .top)
     }
