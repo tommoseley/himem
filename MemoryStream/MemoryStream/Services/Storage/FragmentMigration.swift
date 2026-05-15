@@ -72,7 +72,7 @@ enum FragmentMigration {
         }
         defer { runQueue.sync { inFlight = false } }
 
-        NSLog("[Himem][Migration] starting fragment migration v4")
+        NSLog("[Himem][Migration] starting fragment migration v5")
         let stats = MigrationStats()
         context.performAndWait {
             do {
