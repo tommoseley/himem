@@ -192,6 +192,12 @@ struct MemoryStreamApp: App {
                 Task { await refreshDailyNudge() }
                 Task { await retryPendingInboxTranscriptions() }
                 Task { await promptForNotificationsIfFirstTime() }
+                // Re-assert inbox clips to the watch so any ack that was
+                // queued in transferUserInfo (because the iPhone was
+                // backgrounded when the file arrived) drains immediately
+                // when the user opens the app. Watch's `pending.remove`
+                // is idempotent — already-removed clips are no-ops.
+                WatchSessionDelegate.shared.reconcileWatchAcks()
             }
         }
     }

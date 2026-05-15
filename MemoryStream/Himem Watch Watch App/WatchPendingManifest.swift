@@ -40,6 +40,17 @@ final class WatchPendingManifest: ObservableObject {
     /// Newest-first; drives the pending list UI.
     @Published private(set) var clips: [WatchPendingClip] = []
 
+    /// Clips currently in the "Synced ✓ → slide out" pre-removal flash.
+    /// Populated by `remove(clipId:viaSync:)` when `viaSync == true`; the
+    /// list view checks this set to render the green confirmation badge
+    /// on each row for a beat before the row removal animation fires.
+    @Published private(set) var syncingClipIds: Set<UUID> = []
+
+    /// How long the "Synced ✓" badge stays on the row before the clip is
+    /// pulled from the manifest. Matched to the design spec's "brief 1s
+    /// pulse before slide-out".
+    private static let syncFlashDuration: TimeInterval = 1.0
+
     static var pendingRoot: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let dir = docs.appendingPathComponent("Pending", isDirectory: true)
@@ -77,7 +88,27 @@ final class WatchPendingManifest: ObservableObject {
 
     /// Called by the coordinator when the iPhone confirms receipt of a
     /// clip. Removes both the manifest row and the audio file.
-    func remove(clipId: UUID) {
+    ///
+    /// When `viaSync` is true (iPhone ack path), the row stays in the
+    /// manifest for `syncFlashDuration` with its id in `syncingClipIds`
+    /// so the list can flash a "Synced ✓" badge before the removal
+    /// animation fires. User-initiated deletes skip the badge — the swipe
+    /// is the user's own confirmation, no need to celebrate.
+    func remove(clipId: UUID, viaSync: Bool = true) {
+        guard clips.contains(where: { $0.clipId == clipId }) else { return }
+        if viaSync {
+            syncingClipIds.insert(clipId)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(Self.syncFlashDuration * 1_000_000_000))
+                self?.performRemoval(clipId: clipId)
+            }
+        } else {
+            performRemoval(clipId: clipId)
+        }
+    }
+
+    private func performRemoval(clipId: UUID) {
+        syncingClipIds.remove(clipId)
         guard let clip = clips.first(where: { $0.clipId == clipId }) else { return }
         try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
         let next = clips.filter { $0.clipId != clipId }
@@ -86,9 +117,9 @@ final class WatchPendingManifest: ObservableObject {
 
     /// User-initiated delete from the pending list. Same effect as a
     /// confirmation-driven removal but without iPhone involvement —
-    /// nothing was sent.
+    /// nothing was sent, so no "Synced ✓" badge either.
     func userDelete(clipId: UUID) {
-        remove(clipId: clipId)
+        remove(clipId: clipId, viaSync: false)
     }
 
     func audioURL(for clipId: UUID) -> URL? {

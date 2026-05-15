@@ -343,7 +343,14 @@ struct JournalView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .refreshable { viewModel.refresh() }
+        .refreshable {
+            // Reload journal AND nudge the watch to re-send any pending
+            // clips — covers the "watch was out of range" case where the
+            // system's automatic retry hasn't fired yet. No-op when the
+            // watch isn't reachable.
+            viewModel.refresh()
+            WatchSessionDelegate.shared.requestWatchPendingFlush()
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             memoriesPinnedFooter
         }

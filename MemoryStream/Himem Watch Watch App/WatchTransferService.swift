@@ -74,7 +74,26 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// the fast-path case (e.g., user actively interacting with both).
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         NSLog("[Himem][WC] watch — didReceiveMessage keys=\(Array(message.keys))")
+        if message["command"] as? String == "flushPending" {
+            Task { @MainActor in self.flushPendingManifest() }
+            return
+        }
         handleAckPayload(message)
+    }
+
+    /// Re-attempts `transferFile` for every clip in the manifest. Wired
+    /// to the iPhone's pull-to-refresh via the `"flushPending"` command.
+    /// `transferFile` is durable across launches and the system retries
+    /// on its own, but the user has no signal that the system is
+    /// retrying; this gives them a manual trigger. De-dupes via the
+    /// system — pinging a clip that's already in flight is a no-op.
+    @MainActor
+    func flushPendingManifest() {
+        let clips = WatchPendingManifest.shared.clips
+        NSLog("[Himem][WC] watch — flushPendingManifest (phone-requested), \(clips.count) clip(s)")
+        for clip in clips {
+            send(clip: clip)
+        }
     }
 
     /// Ack via `transferUserInfo` — the background-reliable delivery path.

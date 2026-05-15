@@ -160,26 +160,82 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// seconds to minutes when the watch app isn't running — so the
     /// complication's pending count stayed stale visibly long enough to
     /// look like a bug.
+    /// Asks the watch to re-attempt every clip in its pending manifest.
+    /// Wired to the journal's pull-to-refresh so the user has an
+    /// explicit "kick the watch" affordance for the case where the
+    /// watch queued clips while out of range. `transferFile` is
+    /// already durable and the system retries when reachability
+    /// returns, but the user can't see that — this gives them a way
+    /// to nudge it, and the watch's `retryPendingTransfers` is a
+    /// cheap no-op when nothing's queued.
+    ///
+    /// Best-effort: requires the watch app to be currently reachable.
+    /// If the watch is offline (the very case the user is hedging
+    /// against), the message can't be delivered — the system's own
+    /// background retry is the fallback. We don't queue this via
+    /// `transferUserInfo` because by the time the watch becomes
+    /// reachable to receive it, the system has already retried the
+    /// pending transfers on its own.
+    func requestWatchPendingFlush() {
+        let session = WCSession.default
+        guard session.activationState == .activated else {
+            NSLog("[Himem][WC] iPhone — flush request skipped: session not activated")
+            return
+        }
+        guard session.isReachable else {
+            NSLog("[Himem][WC] iPhone — flush request skipped: watch not reachable")
+            return
+        }
+        let payload: [String: Any] = ["command": "flushPending"]
+        session.sendMessage(payload, replyHandler: nil) { error in
+            NSLog("[Himem][WC] iPhone — flush request failed: \(error.localizedDescription)")
+        }
+        NSLog("[Himem][WC] iPhone — flush request sent")
+    }
+
     private func sendConfirmation(clipId: UUID) {
         let session = WCSession.default
         let payload: [String: Any] = ["confirmedClipId": clipId.uuidString]
 
-        // Fast path — only fires when the watch is currently reachable.
-        // `sendMessage` is best-effort; the errorHandler closure runs if
-        // delivery fails, but we treat that as a no-op since the
-        // durable transferUserInfo below carries the same payload.
-        if session.isReachable {
-            session.sendMessage(payload, replyHandler: nil) { error in
-                NSLog("[Himem][WC] iPhone — sendMessage confirmation failed (will rely on transferUserInfo): \(error.localizedDescription)")
-            }
-            NSLog("[Himem][WC] iPhone — sendMessage confirmation fired for clipId=\(clipId) (reachable)")
-        } else {
-            NSLog("[Himem][WC] iPhone — watch not reachable, using transferUserInfo only for clipId=\(clipId)")
+        // Fast path — try `sendMessage` unconditionally. We previously
+        // guarded on `session.isReachable`, but the iPhone's view of
+        // reachability is stale when the iPhone has been backgrounded
+        // and only briefly woken by WC to handle `didReceive(file:)` —
+        // `isReachable` reports false even when the watch is actively
+        // foreground. `sendMessage` itself succeeds in some of those
+        // windows the guard rejects, and when it fails it just calls
+        // the errorHandler (no exception, no side effect) — the
+        // durable transferUserInfo below covers either way.
+        session.sendMessage(payload, replyHandler: nil) { error in
+            NSLog("[Himem][WC] iPhone — sendMessage confirmation failed for clipId=\(clipId): \(error.localizedDescription) (transferUserInfo backup will deliver)")
         }
+        NSLog("[Himem][WC] iPhone — sendMessage confirmation attempted for clipId=\(clipId)")
 
         // Durable backup — always queued. System delivers when watch
-        // next activates.
+        // next activates / both apps next become reachable.
         let transfer = session.transferUserInfo(payload)
         NSLog("[Himem][WC] iPhone — transferUserInfo queued for clipId=\(clipId), transferring=\(transfer.isTransferring)")
+    }
+
+    /// Re-asserts every clip the iPhone already holds in its inbox to the
+    /// watch via the ack pipeline. Called on iPhone scene-active so any
+    /// clip whose ack got stuck in the system's transferUserInfo queue
+    /// while the iPhone was backgrounded clears on the watch the moment
+    /// the user opens the iPhone app.
+    ///
+    /// `pending.remove(clipId:)` on the watch side is idempotent — clips
+    /// already removed are a no-op, so re-sending acks costs only the
+    /// per-message bandwidth.
+    @MainActor
+    func reconcileWatchAcks() {
+        let clipIds = InboxManifest.shared.clips.map(\.clipId)
+        guard !clipIds.isEmpty else {
+            NSLog("[Himem][WC] iPhone — reconcileWatchAcks: inbox empty, nothing to assert")
+            return
+        }
+        NSLog("[Himem][WC] iPhone — reconcileWatchAcks: re-asserting \(clipIds.count) clip(s) to watch")
+        for clipId in clipIds {
+            sendConfirmation(clipId: clipId)
+        }
     }
 }

@@ -19,6 +19,19 @@ final class WatchRecordingService: NSObject, ObservableObject, AVAudioRecorderDe
     @Published private(set) var isRecording = false
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var transcript: String = ""
+    /// Normalised mic input level in 0...1, sampled from
+    /// `AVAudioRecorder.averagePower(forChannel:)` and mapped to a
+    /// perceptually-flat range so the recording disc breathes with real
+    /// loudness. Quiet room ≈ 0; conversational speech ≈ 0.4–0.7;
+    /// shouting ≈ ~1.0. Driven by the same `tick` loop as `elapsed`.
+    @Published private(set) var audioLevel: CGFloat = 0
+
+    /// Maximum `audioLevel` reached during the current recording. Reset
+    /// to 0 on every `start()`. The cancel path uses this to decide
+    /// whether the recording captured any real audio — if the peak never
+    /// crossed the speech-floor threshold, the clip is effectively
+    /// silence and can be discarded without the "Discard?" confirm.
+    @Published private(set) var peakAudioLevel: CGFloat = 0
 
     /// Hard cap — the spec's 5-minute auto-stop.
     static let maxDuration: TimeInterval = 5 * 60
@@ -69,6 +82,7 @@ final class WatchRecordingService: NSObject, ObservableObject, AVAudioRecorderDe
             ]
             let recorder = try AVAudioRecorder(url: url, settings: settings)
             recorder.delegate = self
+            recorder.isMeteringEnabled = true
             recorder.prepareToRecord()
             recorder.record()
             self.recorder = recorder
@@ -76,9 +90,17 @@ final class WatchRecordingService: NSObject, ObservableObject, AVAudioRecorderDe
             startedAt = Date()
             elapsed = 0
             transcript = ""
+            audioLevel = 0
+            peakAudioLevel = 0
             isRecording = true
             WatchSharedState.isRecording = true
             Task { await WidgetTimelineRefresher.refresh() }
+
+            // Haptic confirms the mic is hot — the user feels the start
+            // through the wrist even if they aren't looking at the watch.
+            // `.click` is the briefest / quietest watchOS haptic; the
+            // louder `.start` was perceived as intrusive.
+            WKInterfaceDevice.current().play(.click)
 
             startTimer()
         } catch {
@@ -118,6 +140,13 @@ final class WatchRecordingService: NSObject, ObservableObject, AVAudioRecorderDe
             try? FileManager.default.removeItem(at: audioURL)
             elapsed = 0
             transcript = ""
+            audioLevel = 0
+            peakAudioLevel = 0
+            // Brief haptic mirrors the start tap. Earlier we used
+            // `.failure` to differentiate save vs discard, but the
+            // pattern was too long / too loud — Tom wants the minimal
+            // tactile signal only.
+            WKInterfaceDevice.current().play(.click)
             return nil
         }
 
@@ -133,6 +162,10 @@ final class WatchRecordingService: NSObject, ObservableObject, AVAudioRecorderDe
         WatchPendingManifest.shared.append(clip)
         elapsed = 0
         transcript = ""
+        audioLevel = 0
+        peakAudioLevel = 0
+        // Brief save-stop tap — same minimal pattern as the start.
+        WKInterfaceDevice.current().play(.click)
         return clip
     }
 
@@ -150,7 +183,11 @@ final class WatchRecordingService: NSObject, ObservableObject, AVAudioRecorderDe
 
     private func startTimer() {
         stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        // 100ms cadence — fast enough that the meter ring feels live but
+        // slow enough that updating `@Published audioLevel` doesn't churn
+        // SwiftUI. The elapsed-time label only needs 500ms-ish granularity
+        // but we tick at 100ms so the level animation stays smooth.
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
     }
@@ -163,10 +200,37 @@ final class WatchRecordingService: NSObject, ObservableObject, AVAudioRecorderDe
     private func tick() {
         guard let started = startedAt else { return }
         elapsed = Date().timeIntervalSince(started)
+
+        // Sample the recorder's averagePower (dBFS, typically ~-60 quiet
+        // to 0 max) and map to a normalised 0...1 for the meter ring.
+        // AVAudioRecorder needs explicit updateMeters() each read.
+        if let r = recorder, r.isRecording {
+            r.updateMeters()
+            let avgDb = r.averagePower(forChannel: 0)
+            audioLevel = normalisedLevel(forDb: avgDb)
+            if audioLevel > peakAudioLevel {
+                peakAudioLevel = audioLevel
+            }
+        }
+
         if elapsed >= Self.maxDuration {
             // Hard cap — auto-save and exit recording.
             stop(save: true)
         }
+    }
+
+    /// Maps an `AVAudioRecorder` average-power dBFS reading to a
+    /// perceptually-flat 0...1 amplitude for the UI. The recorder's range
+    /// is roughly -60 dB (silent) to 0 dB (clipping); below -55 dB we
+    /// treat as ambient noise floor and floor the output at 0 so the meter
+    /// doesn't twitch in a quiet room.
+    private func normalisedLevel(forDb db: Float) -> CGFloat {
+        let minDb: Float = -55
+        let maxDb: Float = -5
+        if db < minDb { return 0 }
+        if db > maxDb { return 1 }
+        // Linear in dB → roughly perceptual for speech-band loudness.
+        return CGFloat((db - minDb) / (maxDb - minDb))
     }
 
     private func cleanupAfterError() {
@@ -182,6 +246,8 @@ final class WatchRecordingService: NSObject, ObservableObject, AVAudioRecorderDe
         isRecording = false
         elapsed = 0
         transcript = ""
+        audioLevel = 0
+        peakAudioLevel = 0
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 

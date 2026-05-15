@@ -8,6 +8,11 @@ struct WatchPendingListView: View {
     /// Observed directly so the list re-renders when clips arrive or get
     /// confirmed-and-removed.
     @ObservedObject var pending: WatchPendingManifest
+    /// When embedded inside the home TabView, swipe-back replaces the
+    /// chevron — render the header without it. Deep-link entry points
+    /// (e.g., `himem://pending`) pass `false` so the explicit back affordance
+    /// stays.
+    var embedded: Bool = false
     @State private var clipPendingDelete: WatchPendingClip?
     @State private var clipForPlayback: WatchPendingClip?
 
@@ -42,29 +47,36 @@ struct WatchPendingListView: View {
         }
     }
 
+    /// Inline header for the deep-link route only — `PENDING · <count>`
+    /// with a back chevron. Suppressed in the embedded swipe-page
+    /// context: there the shared `HIMEM · PENDING` header is provided by
+    /// the `EmbeddedHeaderModifier` via `safeAreaInset`.
+    @ViewBuilder
     private var header: some View {
-        HStack {
-            Text("PENDING")
-                .font(.system(size: 9, weight: .bold))
-                .tracking(1.4)
-                .foregroundStyle(Color.white.opacity(0.55))
-            if !pending.isEmpty {
-                Text("· \(pending.count)")
+        if !embedded {
+            HStack {
+                Text("PENDING")
                     .font(.system(size: 9, weight: .bold))
                     .tracking(1.4)
                     .foregroundStyle(Color.white.opacity(0.55))
+                if !pending.isEmpty {
+                    Text("· \(pending.count)")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.4)
+                        .foregroundStyle(Color.white.opacity(0.55))
+                }
+                Spacer()
+                Button {
+                    coordinator.route = .home
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                }
+                .buttonStyle(.plain)
             }
-            Spacer()
-            Button {
-                coordinator.route = .home
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.55))
-            }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 4)
         }
-        .padding(.horizontal, 4)
     }
 
     private var emptyState: some View {
@@ -74,11 +86,12 @@ struct WatchPendingListView: View {
             ZStack {
                 Circle()
                     .fill(WatchTheme.syncedGreen.opacity(0.14))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 28, height: 28)
                 Image(systemName: "checkmark")
-                    .font(.system(size: 18, weight: .heavy))
+                    .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(WatchTheme.syncedGreen)
             }
+            .transition(.scale(scale: 0.6).combined(with: .opacity))
             Text("All caught up")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
@@ -89,52 +102,77 @@ struct WatchPendingListView: View {
                 .lineSpacing(2)
             Spacer()
         }
+        .padding(.bottom, embedded ? 22 : 0)
     }
 
     private var populatedList: some View {
         VStack(spacing: 0) {
             header
                 .padding(.bottom, 4)
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(pending.clips) { clip in
-                        rowView(for: clip)
-                    }
-                    Text("Will sync when phone is near")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.white.opacity(0.45))
-                        .padding(.top, 6)
+            // List (not LazyVStack) so `.swipeActions(edge: .trailing)`
+            // works. watchOS swipe-to-reveal-delete is List-row-only;
+            // LazyVStack rows ignore the modifier silently.
+            List {
+                ForEach(pending.clips) { clip in
+                    rowView(for: clip)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
                 }
+                Text("Will sync when phone is near")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 6)
+                    .padding(.bottom, embedded ? 18 : 0)
+                    .listRowBackground(Color.clear)
             }
+            .listStyle(.plain)
+            .animation(.easeOut(duration: 0.3), value: pending.clips.map(\.clipId))
+            .animation(.easeOut(duration: 0.3), value: pending.syncingClipIds)
         }
     }
 
     private func rowView(for clip: WatchPendingClip) -> some View {
-        Button {
+        let isSyncing = pending.syncingClipIds.contains(clip.clipId)
+        return Button {
             clipForPlayback = clip
         } label: {
             HStack(spacing: 8) {
-                Circle().fill(WatchTheme.accent).frame(width: 6, height: 6)
-                VStack(alignment: .leading, spacing: 1) {
+                Circle()
+                    .fill(isSyncing ? WatchTheme.syncedGreen : WatchTheme.accent)
+                    .frame(width: 6, height: 6)
+                if isSyncing {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .heavy))
+                        Text("Synced")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(WatchTheme.syncedGreen)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
                     Text(timeLabel(for: clip.capturedAt))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white)
-                    Text("Saved on watch")
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(Color.white.opacity(0.55))
+                    Spacer(minLength: 4)
+                    Text(durationLabel(clip.duration))
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(Color.white.opacity(0.7))
                 }
-                Spacer(minLength: 4)
-                Text(durationLabel(clip.duration))
-                    .font(.system(size: 10.5).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.7))
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 14)
             .background(Color.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .swipeActions(edge: .trailing) {
+        .transition(
+            .asymmetric(
+                insertion: .opacity,
+                removal: .move(edge: .leading).combined(with: .opacity)
+            )
+        )
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 clipPendingDelete = clip
             } label: {
