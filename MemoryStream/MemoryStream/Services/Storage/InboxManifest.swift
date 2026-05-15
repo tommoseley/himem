@@ -165,6 +165,7 @@ final class InboxManifest: ObservableObject {
         try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
         let next = clips.filter { $0.clipId != clipId }
         replace(with: next)
+        WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: clipId)
     }
 
     /// Removes a batch — used when the user creates a memory from N clips
@@ -174,6 +175,9 @@ final class InboxManifest: ObservableObject {
         let idSet = Set(clipIds)
         let next = clips.filter { !idSet.contains($0.clipId) }
         replace(with: next)
+        for id in clipIds {
+            WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: id)
+        }
     }
 
     /// Finds the on-disk audio URL for a clip. Returns nil if the file is

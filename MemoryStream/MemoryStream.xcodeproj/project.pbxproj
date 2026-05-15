@@ -88,6 +88,7 @@
 		A100000322 /* NoteEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000322 /* NoteEditorSheet.swift */; };
 		A100000323 /* Linkify.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000323 /* Linkify.swift */; };
 		A100000500 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000500 /* NotificationService.swift */; };
+		A100000510 /* WatchInboxNotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000510 /* WatchInboxNotificationCoordinator.swift */; };
 		A100000501 /* StorageService+EntryQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000501 /* StorageService+EntryQueries.swift */; };
 		A100000502 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000502 /* TranscriptionService.swift */; };
 		A100000503 /* FragmentMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000503 /* FragmentMigration.swift */; };
@@ -243,6 +244,7 @@
 		B100000322 /* NoteEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorSheet.swift; sourceTree = "<group>"; };
 		B100000323 /* Linkify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Linkify.swift; sourceTree = "<group>"; };
 		B100000500 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		B100000510 /* WatchInboxNotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchInboxNotificationCoordinator.swift; sourceTree = "<group>"; };
 		B100000501 /* StorageService+EntryQueries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StorageService+EntryQueries.swift"; sourceTree = "<group>"; };
 		B100000502 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		B100000503 /* FragmentMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FragmentMigration.swift; sourceTree = "<group>"; };
@@ -641,6 +643,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000500 /* NotificationService.swift */,
+				B100000510 /* WatchInboxNotificationCoordinator.swift */,
 			);
 			path = Notifications;
 			sourceTree = "<group>";
@@ -954,6 +957,7 @@
 				A100000301 /* CaptureModality.swift in Sources */,
 				A100000008 /* StorageService.swift in Sources */,
 				A100000500 /* NotificationService.swift in Sources */,
+				A100000510 /* WatchInboxNotificationCoordinator.swift in Sources */,
 				A100000501 /* StorageService+EntryQueries.swift in Sources */,
 				A100000502 /* TranscriptionService.swift in Sources */,
 				A100000503 /* FragmentMigration.swift in Sources */,

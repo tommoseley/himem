@@ -54,26 +54,67 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    /// Without this, foreground deliveries are suppressed (no banner). Banner
-    /// + sound matches the lock-screen presentation; `.list` keeps the
-    /// notification in Notification Center for in-place updates.
+    /// Without this, foreground deliveries are suppressed (no banner).
+    /// For the watch-inbox category specifically, we suppress the banner
+    /// when the app is foregrounded *or* when the coordinator's
+    /// re-evaluation says the trigger no longer holds (stale clip got
+    /// reviewed before the 24h fire, etc.). For everything else, we
+    /// show the standard banner + sound presentation.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        let cat = notification.request.content.categoryIdentifier
+        let userInfo = notification.request.content.userInfo
+        if cat == WatchInboxNotificationCoordinator.categoryIdentifier {
+            let reason = userInfo["reason"] as? String
+            if reason == "stale",
+               let clipIdString = userInfo["clipId"] as? String,
+               let clipId = UUID(uuidString: clipIdString) {
+                Task { @MainActor in
+                    let shouldPresent = WatchInboxNotificationCoordinator.shared
+                        .handleStaleFire(clipId: clipId, now: Date())
+                    completionHandler(shouldPresent ? [.banner, .sound, .list, .badge] : [.badge])
+                }
+                return
+            }
+            // App in foreground = no push (banner on Today does the work).
+            completionHandler([.badge])
+            return
+        }
         completionHandler([.banner, .sound, .list, .badge])
     }
 
-    /// Tap routing — posts a NotificationCenter event keyed by category. The
-    /// JournalView observes the inbox-arrival post and presents the inbox
-    /// sheet. Daily nudge taps just open the app (no further routing).
+    /// Tap and inline-action routing.
+    ///   - Tap on the inbox-arrival push (any reason) → open the inbox.
+    ///   - Snooze 4h / Mute for today → coordinator records the state.
+    ///   - Legacy `inboxArrival` category from `NotificationService` is
+    ///     kept for backward compatibility but the coordinator's new
+    ///     `watch_inbox_arrival` category supersedes it in new code.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let rawCategory = response.notification.request.content.categoryIdentifier
+        let actionId = response.actionIdentifier
+
+        if rawCategory == WatchInboxNotificationCoordinator.categoryIdentifier {
+            Task { @MainActor in
+                if actionId == WatchInboxNotificationCoordinator.actionSnooze4hIdentifier
+                    || actionId == WatchInboxNotificationCoordinator.actionMuteTodayIdentifier {
+                    WatchInboxNotificationCoordinator.shared.handleAction(identifier: actionId)
+                } else {
+                    // Default tap (or `UNNotificationDefaultActionIdentifier`):
+                    // route to inbox.
+                    NotificationCenter.default.post(name: NotificationService.openInboxNotification, object: nil)
+                }
+                completionHandler()
+            }
+            return
+        }
+
         switch NotificationService.Category(rawValue: rawCategory) {
         case .inboxArrival:
             NotificationCenter.default.post(name: NotificationService.openInboxNotification, object: nil)
@@ -133,6 +174,12 @@ struct MemoryStreamApp: App {
         // Seed UserDefaults with notification setting defaults (toggles off,
         // 8pm nudge time) before any @AppStorage in SettingsView reads them.
         NotificationService.registerDefaults()
+        // Register the inbox-arrival notification category + inline
+        // actions (Snooze 4h / Mute for today) so when the coordinator
+        // fires a push, the actions are surfaced.
+        DispatchQueue.main.async {
+            WatchInboxNotificationCoordinator.shared.registerCategories()
+        }
         // Pre-warm the en-US SpeechTranscriber model so the first watch
         // clip transcription isn't a blocking download. Best-effort —
         // logs and moves on if the install fails (no network, etc.); the

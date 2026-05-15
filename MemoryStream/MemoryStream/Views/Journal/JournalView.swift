@@ -25,7 +25,6 @@ struct JournalView: View {
     /// the sheet from re-popping after the user explicitly dismissed it
     /// (and prevents in-session arrivals from triggering it — those go
     /// through notifications instead).
-    @State private var didAutoOpenInbox = false
     @ObservedObject private var inbox = InboxManifest.shared
     @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
@@ -124,16 +123,11 @@ struct JournalView: View {
             // Tap on inbox-arrival notification → open the inbox sheet.
             showInbox = true
         }
-        .task {
-            // Auto-open the inbox once on launch when the manifest has
-            // pending clips. Brief delay so the journal view renders first
-            // and the sheet animation reads as intentional, not a launch
-            // flicker.
-            guard !didAutoOpenInbox, inbox.count > 0 else { return }
-            didAutoOpenInbox = true
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            showInbox = true
-        }
+        // Per the Watch → Memory flow spec (2026-05-14): the iPhone app
+        // always lands on Today. No auto-open of the inbox; the
+        // inboxBanner pinned above the topic filter chips is the only
+        // nag. Tapping a notification still opens Captured Clips
+        // directly (`openInboxNotification` handler above).
         .captureFlowHost(
             activeModality: $activeCaptureModality,
             speechService: speechService,
@@ -515,22 +509,27 @@ struct JournalView: View {
 
     // MARK: - Inbox banner
 
+    /// Pinned banner above the topic filter chips. Per the Watch →
+    /// Memory flow spec: single line, count-leading, dot-separated, no
+    /// emoji, no app subtitle. Hidden when the inbox is empty — the
+    /// banner is the only nag (no auto-open, no per-clip push for v1).
     private var inboxBanner: some View {
         Button {
             showInbox = true
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: "applewatch")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Crucible.Color.accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(inbox.count) new from Apple Watch")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Crucible.Color.ink)
-                    Text("Tap to review")
-                        .font(.caption)
-                        .foregroundStyle(Crucible.Color.ink3)
-                }
+                Text("\(inbox.count) new from Apple Watch")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Crucible.Color.ink)
+                Text("·")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Crucible.Color.ink4)
+                Text("Tap to review")
+                    .font(.subheadline)
+                    .foregroundStyle(Crucible.Color.ink3)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))

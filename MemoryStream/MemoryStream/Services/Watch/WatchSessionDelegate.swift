@@ -109,7 +109,15 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             )
             InboxManifest.shared.acceptClip(clip)
             NSLog("[Himem][WC] manifest now contains \(InboxManifest.shared.count) clip(s)")
-            NotificationService.shared.notifyInboxArrival()
+            // Drive the inbox notification through the policy
+            // coordinator (burst / threshold / stale). It owns
+            // foreground suppression, daily cap, quiet hours, snooze /
+            // mute state, and per-clip stale scheduling — so we no
+            // longer fire a push on every clip arrival.
+            WatchInboxNotificationCoordinator.shared.clipArrived(
+                clipId: clipId,
+                capturedAt: clipMetadata.capturedAt
+            )
             self.sendConfirmation(clipId: clipId)
             NSLog("[Himem][WC] confirmation sent for clipId=\(clipId)")
 
