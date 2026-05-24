@@ -5,6 +5,10 @@ import CoreData
 public class Project: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID
     @NSManaged public var name: String
+    /// UI calls this "goal" — renaming to `goal` would require a
+    /// CloudKit schema deploy across Development → Production (see
+    /// CLAUDE.md "CloudKit Schema Changes" rule). The divergence
+    /// is intentional and well-contained.
     @NSManaged public var purpose: String?
     @NSManaged public var createdAt: Date
     @NSManaged public var updatedAt: Date

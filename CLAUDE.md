@@ -156,6 +156,30 @@ Setting configuration properties like `cameraCaptureMode` or `mediaTypes` on a l
 
 ---
 
+### Wake Lock (Idle Timer)
+
+HiMem holds the system wake lock (iOS: `UIApplication.shared.isIdleTimerDisabled`; watchOS equivalent) **only during active capture** — recording in progress, photo composer open, video composer active. Everything else respects the system idle timer.
+
+**Wake lock ON:**
+
+- Recording audio (watch or phone) — until stop or wrist-off auto-stop.
+- Photo or video composer open — until commit or cancel.
+
+**Wake lock OFF (the default — never override here):**
+
+- Browsing memories, viewing a memory, watching the inbox, reading transcripts.
+- Listening back to your own audio. Audio plays through the system audio session, which keeps audio running through screen-off; the screen sleeps on schedule and the user can wake to scrub.
+- Editing a memory's text fields. The keyboard already keeps the screen alive while typing; we don't override beyond that.
+
+**Two corollaries worth naming:**
+
+- **Playback is not capture.** Listening back doesn't hold the wake lock. The audio session handles continuity.
+- **The watch's recording UI being foreground ≠ recording.** If the user opened the recording screen but hasn't tapped to start, no wake lock. Only `recording == true` flips it on.
+
+The system idle timer is a trust contract. HiMem isn't special enough to override it for casual reading.
+
+---
+
 ### Test Concurrency and Shared Singletons
 
 Swift Testing runs `@Test` methods inside a `@Suite` in parallel by default. Tests that touch non-thread-safe shared singletons crash with `libsystem_malloc.dylib: Abort Cause` errors when run concurrently.

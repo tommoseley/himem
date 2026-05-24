@@ -1,0 +1,1475 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Himem — Watch (lo-fi)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..900&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --paper: #EFECE5;
+    --card: #FFFCF6;
+    --sunk: #E8E4DB;
+    --ink: #1A1612;
+    --ink2: rgba(26,22,18,0.66);
+    --ink3: rgba(26,22,18,0.45);
+    --ink4: rgba(26,22,18,0.22);
+    --hairline: rgba(26,22,18,0.10);
+    --accent: #C64A1C;
+    --accent-tint: rgba(198,74,28,0.10);
+    --confirmed-bg: #DDEBE1;
+    --confirmed-text: #1F5A35;
+    --warn-bg: #F6E6CC;
+    --warn-text: #7A4A0E;
+    --danger-bg: #F4D9D9;
+    --danger-text: #8C2424;
+    --serif: "Source Serif 4", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  html, body { margin: 0; padding: 0; min-height: 100vh; background: var(--paper); font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+
+  .stage { min-height: 100vh; display: flex; flex-direction: column; padding: 0; gap: 0; }
+
+  /* Stage bands — alternating tonal panels.
+     Each section is a full-bleed band so the page reads as a sequence of
+     "rooms" rather than a single cream sheet. Charcoal sits under the
+     complications gallery (watchOS context); the record section gets an
+     ochre top-strip so the brand color anchors the design's central moment. */
+  .band { padding: 72px 80px; position: relative; }
+  .band-cream { background: var(--paper); color: var(--ink); }
+  .band-sand  { background: #DCD3BB; color: var(--ink); }
+  .band-dark  { background: #15120F; color: #F2EEE5; }
+  .band-header { padding: 80px 80px 64px; }
+
+  /* Record band — ochre top strip; the brand's only architectural moment */
+  .band-record { padding-top: 88px; }
+  .band-record::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 12px;
+    background: var(--accent);
+  }
+  .band-record::after {
+    content: ''; position: absolute; top: 12px; left: 0; right: 0; height: 1px;
+    background: rgba(0,0,0,0.08);
+  }
+
+  /* Dark band — flip ink-scale text colors to read on charcoal */
+  .band-dark .section-label { color: rgba(242,238,229,0.50); }
+  .band-dark .section-label::after { background: rgba(255,255,255,0.12); }
+  .band-dark .section-sub { color: rgba(242,238,229,0.72); }
+  .band-dark .section-sub strong { color: #fff; }
+  .band-dark .specimen-label { color: rgba(242,238,229,0.50); }
+  .band-dark .specimen-num { background: rgba(255,142,90,0.20); color: #FF8E5A; }
+  .band-dark .specimen-caption { color: rgba(242,238,229,0.72); }
+  .band-dark .specimen-caption strong { color: #fff; }
+  .band-dark .verdict.neutral { background: rgba(255,255,255,0.08); color: rgba(242,238,229,0.78); }
+  .band-dark .verdict.recommend { background: rgba(95,170,120,0.18); color: #9FD8B3; }
+  .band-dark .verdict.reject { background: rgba(255,142,90,0.16); color: #FF8E5A; }
+
+  /* Sand band — slightly stronger separators so they read on the warmer surface */
+  .band-sand .section-label::after { background: rgba(26,22,18,0.14); }
+
+  .header { display: flex; flex-direction: column; gap: 6px; }
+  .header .title, .header .desc { max-width: 760px; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--ink3); }
+  .title { font-family: var(--serif); font-weight: 400; font-size: 38px; line-height: 1.15; letter-spacing: -0.4px; margin: 0; color: var(--ink); }
+  .desc { font-size: 15px; line-height: 1.55; color: var(--ink2); max-width: 660px; margin: 0; }
+  .desc strong { color: var(--ink); font-weight: 600; }
+  .desc em { font-style: italic; color: var(--ink2); }
+
+  .section { display: flex; flex-direction: column; gap: 28px; }
+  .section-label { display: flex; align-items: baseline; gap: 14px; font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--ink3); }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--hairline); }
+  .section-sub { font-size: 14px; line-height: 1.55; color: var(--ink2); max-width: 720px; margin: -10px 0 0; }
+  .section-sub strong { color: var(--ink); font-weight: 600; }
+
+  /* Watch frame — Apple Watch Ultra (49mm) proportions, scaled */
+  .row { display: flex; flex-wrap: wrap; gap: 36px 28px; align-items: flex-start; }
+  .specimen { display: flex; flex-direction: column; gap: 12px; align-items: center; width: 220px; }
+  .specimen-label { font-size: 11px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--ink3); align-self: flex-start; display: flex; align-items: center; gap: 8px; }
+  .specimen-num { width: 20px; height: 20px; border-radius: 999px; background: var(--accent-tint); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; }
+  .specimen-caption { font-size: 12.5px; line-height: 1.55; color: var(--ink2); align-self: flex-start; }
+  .specimen-caption strong { color: var(--ink); font-weight: 600; }
+
+  /* Ultra dimensions — 49mm, ~410×502pt logical, drawn at ~210×258 */
+  .watch {
+    width: 210px; height: 258px;
+    border-radius: 50px;
+    background: #000;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 9px #2A2823,
+      0 0 0 10px #54493A,
+      0 0 0 12px #1A1612,
+      0 28px 60px rgba(20,12,6,0.30),
+      0 8px 18px rgba(20,12,6,0.16);
+    color: #fff;
+  }
+  /* Ultra side button + crown bumps (purely decorative, hint at form) */
+  .watch::before {
+    content: ''; position: absolute; right: -16px; top: 78px;
+    width: 12px; height: 30px; border-radius: 3px;
+    background: #54493A;
+  }
+  .watch::after {
+    content: ''; position: absolute; right: -18px; top: 122px;
+    width: 14px; height: 22px; border-radius: 4px;
+    background: #54493A;
+  }
+  .watch.alpine::before, .watch.alpine::after { background: #FE6A1F; }
+
+  /* watchOS top time — orange on left for Ultra wayfinder; brand uses ochre right for app */
+  .w-time {
+    position: absolute; top: 8px; right: 14px;
+    font-size: 14px; font-weight: 600; color: var(--accent); letter-spacing: -0.2px;
+  }
+  .w-mark {
+    position: absolute; top: 8px; left: 14px;
+    font-size: 9px; font-weight: 700; letter-spacing: 1.4px; color: rgba(255,255,255,0.55);
+  }
+  .w-body { position: absolute; inset: 28px 12px 12px; }
+
+  /* generic watch text */
+  .w-h { font-size: 14px; font-weight: 700; line-height: 1.15; letter-spacing: -0.2px; }
+  .w-sub { font-size: 11px; color: rgba(255,255,255,0.6); line-height: 1.3; }
+  .w-mono { font-family: var(--mono); font-size: 13px; }
+
+  /* Action buttons (full-width, watchOS standard) */
+  .w-btn {
+    width: 100%; padding: 12px 14px; border-radius: 24px;
+    background: rgba(255,255,255,0.10);
+    color: #fff;
+    font-size: 14px; font-weight: 600; letter-spacing: -0.2px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .w-btn.accent { background: var(--accent); }
+  .w-btn.danger { background: #B83232; }
+  .w-btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,0.18); }
+
+  /* Mic disc — used in record + complications */
+  .w-mic {
+    width: 86px; height: 86px; border-radius: 999px;
+    background: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 10px rgba(198,74,28,0.18), 0 0 0 20px rgba(198,74,28,0.08);
+  }
+  .w-mic.lg { width: 96px; height: 96px; }
+  .w-mic.pulsing { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 8px rgba(198,74,28,0.18), 0 0 0 16px rgba(198,74,28,0.08); }
+    50%     { box-shadow: 0 0 0 14px rgba(198,74,28,0.30), 0 0 0 28px rgba(198,74,28,0.10); }
+  }
+
+  /* Wave bars */
+  .w-bars { display: inline-flex; gap: 2px; align-items: center; height: 18px; }
+  .w-bars span { width: 2px; border-radius: 1px; background: var(--accent); }
+
+  /* Pending list rows */
+  .w-row {
+    background: rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 8px 10px;
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 4px;
+  }
+  .w-row .pip { width: 6px; height: 6px; border-radius: 999px; background: var(--accent); flex-shrink: 0; }
+  .w-row .pip.synced { background: #2F9E6B; }
+  .w-row .pip.failed { background: #E2553A; }
+  .w-row .meta { flex: 1; min-width: 0; }
+  .w-row .meta .t { font-size: 11px; font-weight: 600; color: #fff; }
+  .w-row .meta .s { font-size: 9.5px; color: rgba(255,255,255,0.55); margin-top: 1px; }
+  .w-row .dur { font-family: var(--mono); font-size: 10.5px; color: rgba(255,255,255,0.7); }
+
+  /* Inline pill (status / chips inside watch) */
+  .w-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.2px;
+  }
+  .w-chip.warn   { background: rgba(255,176,90,0.16); color: #F0B25A; }
+  .w-chip.synced { background: rgba(89,200,140,0.16); color: #59C88C; }
+  .w-chip.fail   { background: rgba(232,90,70,0.16); color: #FF8A75; }
+  .w-chip.dot::before { content: ''; width: 5px; height: 5px; border-radius: 999px; background: currentColor; }
+
+  /* Swipe affordance on a row */
+  .w-row-swipe {
+    position: relative; overflow: hidden;
+    background: rgba(255,255,255,0.08); border-radius: 14px;
+    margin-bottom: 4px;
+  }
+  .w-row-swipe .row-inner {
+    transform: translateX(-44px);
+    background: rgba(34,34,34,1);
+    padding: 8px 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .w-row-swipe .delete {
+    position: absolute; right: 0; top: 0; bottom: 0;
+    width: 44px;
+    background: #B83232; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Watch face mock — abstract analog dial */
+  .w-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .dial {
+    width: 156px; height: 156px; border-radius: 999px;
+    background: radial-gradient(circle, #1B1B1B 0%, #050505 70%);
+    position: relative;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  .tick {
+    position: absolute; top: 4px; left: 50%; width: 1.5px; height: 6px;
+    background: rgba(255,255,255,0.4);
+    transform-origin: 50% 74px;
+  }
+  .hand {
+    position: absolute; left: 50%; top: 50%;
+    transform-origin: 50% 100%;
+    background: #fff; border-radius: 2px;
+  }
+  .hand.h { width: 3px; height: 38px; transform: translate(-50%,-100%) rotate(34deg); }
+  .hand.m { width: 2px; height: 56px; transform: translate(-50%,-100%) rotate(180deg); background: var(--accent); }
+  .hub { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 8px; height: 8px; border-radius: 999px; background: var(--accent); }
+
+  /* Complication slots on the face — corner / circular / rectangular hints */
+  .comp-corner-tl { position: absolute; top: 14px; left: 18px; width: 30px; height: 30px; border-radius: 8px; background: rgba(198,74,28,0.18); display: flex; align-items: center; justify-content: center; }
+  .comp-corner-tr { position: absolute; top: 8px; right: 12px; width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 700; color: #fff; }
+  .comp-corner-bl { position: absolute; bottom: 14px; left: 12px; width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1px; }
+  .comp-corner-br { position: absolute; bottom: 14px; right: 12px; width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; }
+
+  /* Standalone complication previews */
+  .comp-card {
+    background: #000; color: #fff;
+    border-radius: 16px;
+    padding: 14px;
+    width: 152px;
+    display: flex; flex-direction: column; gap: 8px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 4px 14px rgba(40,25,15,0.10);
+  }
+  .comp-card .name { font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; color: rgba(255,255,255,0.45); text-transform: uppercase; }
+  .comp-card .frame { background: #1A1A1A; border-radius: 12px; padding: 10px; min-height: 64px; display: flex; align-items: center; justify-content: center; position: relative; }
+  .comp-card .sub { font-size: 9.5px; line-height: 1.4; color: rgba(255,255,255,0.38); letter-spacing: 0.2px; text-transform: none; font-weight: 500; }
+
+  /* Graphic Corner — quarter-arc anchored bottom-right */
+  .comp-corner { width: 56px; height: 56px; border-radius: 12px; background: rgba(198,74,28,0.18); display: inline-flex; align-items: center; justify-content: center; }
+
+  /* Graphic Circular — disc + optional ring + pending count badge */
+  .comp-circ {
+    width: 60px; height: 60px; border-radius: 999px;
+    background: rgba(198,74,28,0.18);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 0 0 1.5px rgba(198,74,28,0.45);
+    position: relative;
+  }
+  .comp-circ.with-ring { box-shadow: inset 0 0 0 2.5px var(--accent); }
+  .comp-circ.recording {
+    box-shadow: inset 0 0 0 2.5px #FF5A3C;
+    animation: comp-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes comp-pulse {
+    0%,100% { box-shadow: inset 0 0 0 2px #FF5A3C, 0 0 0 0 rgba(255,90,60,0.6); }
+    50%     { box-shadow: inset 0 0 0 3px #FF5A3C, 0 0 0 4px rgba(255,90,60,0.18); }
+  }
+  .comp-badge {
+    position: absolute; top: -4px; right: -4px;
+    min-width: 18px; height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10.5px; font-weight: 700; letter-spacing: -0.2px;
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 2px #1A1A1A;
+  }
+  .comp-badge.fail { background: #E2553A; min-width: 12px; height: 12px; padding: 0; }
+
+  /* Modular Small — square with icon + tiny count */
+  .comp-mod-sm {
+    width: 56px; height: 56px; border-radius: 8px;
+    background: rgba(198,74,28,0.14);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 4px; position: relative;
+  }
+  .comp-mod-sm .count {
+    font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: 0.2px;
+  }
+
+  /* Rectangular — full-row text + glyph */
+  .comp-rect {
+    width: 100%; padding: 6px 10px;
+    background: rgba(198,74,28,0.14); border-radius: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .comp-rect .icon { width: 22px; height: 22px; border-radius: 999px; background: var(--accent); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .comp-rect .text { font-size: 10.5px; line-height: 1.2; }
+  .comp-rect .text .l1 { color: #fff; font-weight: 600; }
+  .comp-rect .text .l2 { color: rgba(255,255,255,0.55); font-size: 9px; }
+
+  /* Smart Stack widget — taller card with title + body */
+  .comp-stack {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(198,74,28,0.14);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .comp-stack .head { display: flex; align-items: center; gap: 6px; }
+  .comp-stack .head .icon { width: 18px; height: 18px; border-radius: 999px; background: var(--accent); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .comp-stack .head .name { font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; color: rgba(255,255,255,0.55); text-transform: uppercase; }
+  .comp-stack .body { font-size: 12.5px; font-weight: 600; color: #fff; line-height: 1.2; letter-spacing: -0.2px; }
+  .comp-stack .meta { font-size: 9.5px; color: rgba(255,255,255,0.5); }
+
+  /* Settings — tap-behavior panel */
+  .settings-panel {
+    background: var(--card);
+    border-radius: 18px;
+    padding: 18px 20px;
+    width: 360px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 4px 14px rgba(40,25,15,0.06);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .settings-panel h4 { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink); letter-spacing: -0.1px; }
+  .settings-panel .opt {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 10px 12px; border-radius: 12px;
+    border: 1px solid var(--hairline);
+    background: var(--paper);
+  }
+  .settings-panel .opt.selected {
+    border-color: var(--accent);
+    background: var(--accent-tint);
+  }
+  .settings-panel .opt .radio {
+    width: 18px; height: 18px; border-radius: 999px;
+    border: 1.5px solid var(--ink4);
+    flex-shrink: 0; margin-top: 2px;
+    position: relative;
+  }
+  .settings-panel .opt.selected .radio { border-color: var(--accent); }
+  .settings-panel .opt.selected .radio::after {
+    content: ''; position: absolute; inset: 3px;
+    border-radius: 999px; background: var(--accent);
+  }
+  .settings-panel .opt .text { font-size: 12.5px; line-height: 1.45; color: var(--ink2); }
+  .settings-panel .opt .text strong { color: var(--ink); font-weight: 600; display: block; margin-bottom: 2px; }
+  .settings-panel .note {
+    font-size: 11.5px; line-height: 1.5; color: var(--ink3);
+    padding: 8px 12px; background: var(--sunk); border-radius: 8px;
+  }
+
+  /* Notes panels (lo-fi paper notes between watches) */
+  .notes {
+    background: var(--card);
+    border: 1px dashed var(--ink4);
+    border-radius: 14px;
+    padding: 16px 18px;
+    font-size: 13px; line-height: 1.55; color: var(--ink2);
+    max-width: 320px;
+    align-self: stretch;
+  }
+  .notes h4 { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--ink3); }
+  .notes ul { margin: 0; padding-left: 18px; }
+  .notes ul li { margin-bottom: 4px; }
+  .notes strong { color: var(--ink); font-weight: 600; }
+
+  /* Decision panel */
+  .decision {
+    background: var(--card);
+    border-radius: 24px;
+    padding: 28px 32px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 8px 24px rgba(40,25,15,0.06);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 28px 48px;
+  }
+  .decision h3 { font-family: var(--serif); font-size: 22px; font-weight: 400; margin: 0 0 8px; color: var(--ink); letter-spacing: -0.2px; }
+  .decision p { font-size: 13.5px; line-height: 1.6; color: var(--ink2); margin: 0 0 10px; }
+  .decision ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+  .decision li { font-size: 13px; line-height: 1.5; color: var(--ink2); padding-left: 20px; position: relative; }
+  .decision li::before { content: ''; position: absolute; left: 4px; top: 7px; width: 6px; height: 6px; border-radius: 999px; background: var(--accent); }
+  .decision li strong { color: var(--ink); font-weight: 600; }
+
+  /* Verdict pill (under specimens) */
+  .verdict {
+    font-size: 11px; font-weight: 600;
+    align-self: flex-start;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 9px; border-radius: 999px;
+  }
+  .verdict.recommend { background: var(--confirmed-bg); color: var(--confirmed-text); }
+  .verdict.neutral { background: var(--sunk); color: var(--ink2); }
+  .verdict.reject { background: rgba(198,74,28,0.10); color: var(--accent); }
+  .verdict::before { content: ''; width: 5px; height: 5px; border-radius: 999px; background: currentColor; }
+
+  footer { margin-top: 16px; font-size: 12px; color: var(--ink3); display: flex; justify-content: space-between; border-top: 1px solid var(--hairline); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <header class="header band band-cream band-header">
+    <div class="eyebrow">Himem · watchOS · Lo-fi</div>
+    <h1 class="title">A glanceable mic.</h1>
+    <p class="desc">
+      Two features for v1: <strong>capture a voice contribution</strong> (online or off, the watch always
+      stores locally first), and <strong>see/manage what's pending sync</strong>. Three ways in
+      &mdash; complication, app icon, Siri. The canonical recording UI is a big centered timer,
+      a live waveform, and a Stop &amp; save / Next pair at the bottom &mdash; with a corner ✕ for Cancel.
+      Black background, ochre accent, no chrome the wrist doesn't earn. Drawn for the 49mm Ultra;
+      designs flex down to 45mm without rework. See <code>Watch · spec.md</code> for locked rules.
+    </p>
+  </header>
+
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- 1. ENTRY POINTS                                                   -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <section class="section band band-sand">
+    <div class="section-label">1 · Entry points</div>
+    <p class="section-sub">
+      Three ways the user starts a recording. The complication is the <strong>fastest path</strong>
+      &mdash; one tap from the watch face. The app icon is the obvious fallback. Siri is the
+      hands-free path; we treat it as a third option, not a primary surface.
+    </p>
+
+    <div class="row">
+
+      <!-- Watch face with corner complication -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">A</span> Face · corner complication</div>
+        <div class="watch alpine">
+          <div class="w-time">9:41</div>
+          <div class="w-face">
+            <div class="dial">
+              <span class="tick" style="transform: rotate(0deg) translateX(-50%);"></span>
+              <span class="tick" style="transform: rotate(30deg);"></span>
+              <span class="tick" style="transform: rotate(60deg);"></span>
+              <span class="tick" style="transform: rotate(90deg);"></span>
+              <span class="tick" style="transform: rotate(120deg);"></span>
+              <span class="tick" style="transform: rotate(150deg);"></span>
+              <span class="tick" style="transform: rotate(180deg);"></span>
+              <span class="tick" style="transform: rotate(210deg);"></span>
+              <span class="tick" style="transform: rotate(240deg);"></span>
+              <span class="tick" style="transform: rotate(270deg);"></span>
+              <span class="tick" style="transform: rotate(300deg);"></span>
+              <span class="tick" style="transform: rotate(330deg);"></span>
+              <div class="hand h"></div>
+              <div class="hand m"></div>
+              <div class="hub"></div>
+            </div>
+          </div>
+          <!-- Complication slots: TL = Himem mic (active), others stub -->
+          <div class="comp-corner-tl" title="Himem · tap to record">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF8E5A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+          </div>
+          <div class="comp-corner-tr">82°</div>
+          <div class="comp-corner-bl">
+            <svg width="14" height="10" viewBox="0 0 24 16" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.6" stroke-linecap="round"><path d="M2 12 L8 5 L13 9 L22 2"/></svg>
+          </div>
+          <div class="comp-corner-br" style="font-size:9px;font-weight:700;color:#fff;">7,210</div>
+        </div>
+        <span class="verdict recommend">Primary</span>
+        <p class="specimen-caption">
+          Mic glyph in <strong>top-left corner</strong>. Tap → app launches directly into Recording (skips home).
+          Designed for the corner-complication faces (Modular, Infograph, Wayfinder).
+        </p>
+      </div>
+
+      <!-- App grid icon -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">B</span> App icon · honeycomb / list</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-body" style="display:flex;align-items:center;justify-content:center;">
+            <!-- 7-cell honeycomb ish -->
+            <div style="position:relative;width:170px;height:200px;">
+              <div style="position:absolute;left:60px;top:6px;width:50px;height:50px;border-radius:999px;background:rgba(255,255,255,0.10);"></div>
+              <div style="position:absolute;left:6px;top:46px;width:50px;height:50px;border-radius:999px;background:rgba(255,255,255,0.10);"></div>
+              <div style="position:absolute;left:114px;top:46px;width:50px;height:50px;border-radius:999px;background:rgba(255,255,255,0.10);"></div>
+              <!-- Himem icon — center -->
+              <div style="position:absolute;left:60px;top:86px;width:50px;height:50px;border-radius:999px;background:#C64A1C;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px rgba(198,74,28,0.18);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+              </div>
+              <div style="position:absolute;left:6px;top:126px;width:50px;height:50px;border-radius:999px;background:rgba(255,255,255,0.10);"></div>
+              <div style="position:absolute;left:114px;top:126px;width:50px;height:50px;border-radius:999px;background:rgba(255,255,255,0.10);"></div>
+              <div style="position:absolute;left:60px;top:166px;width:50px;height:50px;border-radius:999px;background:rgba(255,255,255,0.10);"></div>
+            </div>
+          </div>
+        </div>
+        <span class="verdict neutral">Required</span>
+        <p class="specimen-caption">
+          Standard watchOS launch. Tap the Himem app icon → opens to <strong>Home</strong>
+          (record button + pending list link). One extra tap vs. complication, but always available.
+        </p>
+      </div>
+
+      <!-- Siri -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">C</span> Siri · "Hey Siri, remember…"</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">
+            <!-- Siri orb-ish -->
+            <div style="width:48px;height:48px;border-radius:999px;background:radial-gradient(circle at 30% 30%, #B6B6F8, #5E72E4 60%, #2A4FB1);box-shadow:0 0 18px rgba(94,114,228,0.5);"></div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.85);text-align:center;line-height:1.25;font-style:italic;">"…remember to water the<br/>tomatoes tomorrow"</div>
+            <div class="w-chip warn dot">App Intent v1+</div>
+          </div>
+        </div>
+        <span class="verdict neutral">Stretch · feasible</span>
+        <p class="specimen-caption">
+          watchOS 11 <code>RecordContributionIntent</code>. Confirmation toast (Section 4) lands after.
+          Same pipeline as tap-to-record &mdash; offline-queues identically. Ship after the tap-flow is solid.
+        </p>
+      </div>
+
+      <div class="notes">
+        <h4>Hierarchy</h4>
+        <ul>
+          <li><strong>Complication tap</strong> &mdash; ~2 seconds from glance to recording. Goal state.</li>
+          <li><strong>App icon</strong> &mdash; ~4 seconds. Always available, always works.</li>
+          <li><strong>Siri</strong> &mdash; hands-free. Imprecise but liberating. Optional v1 if scope is tight.</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- 1b. FRESH-START COUNTDOWN — STEAL FROM WORKOUT                    -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <section class="section band band-cream band-record">
+    <div class="section-label">1b · Fresh-start countdown · 3 · 2 · 1 · Listening</div>
+    <p class="section-sub">
+      A <strong>3-second gather-yourself pause</strong> after the user taps to start. Borrowed wholesale from
+      Apple Workout: bright ochre ring draws in clockwise from 180° while "Ready" sits centered, then a
+      dim ochre overlay <em>overwrites</em> it counter-clockwise from 180° during the 3-second countdown.
+      Continuous sweep. Soft haptic per second. No loud counting, no ticking, no "Listening" beat — the ring
+      closing at the top is the "go." Tap anywhere to cancel instantly.
+      <strong>Fresh starts only.</strong> The <em>Next</em> button on a roll bypasses the countdown
+      &mdash; the whole point of Next is the mic never pauses, and a 3-second wait would kill that contract.
+    </p>
+
+    <div class="row">
+
+      <!-- C0: "Ready" — ring drawing in clockwise from 180° -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">C0</span> "Ready" · ring drawing in (cw from 180°)</div>
+        <div class="watch">
+          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </div>
+          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
+          <div class="w-body" style="padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;margin-top:6px;">
+              <!-- Ring drawing in: clockwise from 180° (bottom). At ~70% drawn. -->
+              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(90deg);">
+                <circle cx="64" cy="64" r="60" fill="none" stroke="#E55A22" stroke-width="12" stroke-linecap="round" stroke-dasharray="377" stroke-dashoffset="113"/>
+              </svg>
+              <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:30px;letter-spacing:-0.6px;font-weight:500;line-height:1;">Ready</div>
+            </div>
+          </div>
+        </div>
+        <span class="verdict recommend">Frame 1</span>
+        <p class="specimen-caption">
+          <strong>Bright ochre ring draws in clockwise from 180°</strong> (6 o'clock) over ~600ms while
+          "Ready" sits centered. Steal from Apple Workout's pre-countdown beat. Anchoring the
+          eye before the numbers arrive.
+        </p>
+      </div>
+
+      <!-- C1: "3" — bright ring full, dim sweep starts counter-clockwise from 180° -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">C1</span> "3" · dim sweep starts (ccw from 180°)</div>
+        <div class="watch">
+          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </div>
+          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
+          <div class="w-body" style="padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;margin-top:6px;">
+              <svg width="128" height="128" style="position:absolute;inset:0;">
+                <!-- Bright ochre full ring (base) -->
+                <circle cx="64" cy="64" r="60" fill="none" stroke="#E55A22" stroke-width="12"/>
+              </svg>
+              <!-- Dim ochre overlay sweeping CCW from 180°. At ~8% (just starting). -->
+              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(90deg) scaleX(-1);">
+                <circle cx="64" cy="64" r="60" fill="none" stroke="#9A3815" stroke-width="12" stroke-linecap="butt" stroke-dasharray="377" stroke-dashoffset="347"/>
+              </svg>
+              <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:64px;letter-spacing:-2.2px;font-weight:200;line-height:1;font-variant-numeric:tabular-nums;position:relative;">3</div>
+            </div>
+          </div>
+        </div>
+        <span class="verdict recommend">Frame 2</span>
+        <p class="specimen-caption">
+          Bright ochre ring is now <strong>full</strong>. As the user reads "3", the dim ochre
+          overlay <strong>starts sweeping counter-clockwise from 180°</strong>, eating into the
+          bright ring as time elapses. Continuous sweep, not steps.
+        </p>
+      </div>
+
+      <!-- C2: "2" — dim sweep at ~38% (one second elapsed) -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">C2</span> "2" · dim sweep at ~38%</div>
+        <div class="watch">
+          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </div>
+          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
+          <div class="w-body" style="padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;margin-top:6px;">
+              <svg width="128" height="128" style="position:absolute;inset:0;">
+                <circle cx="64" cy="64" r="60" fill="none" stroke="#E55A22" stroke-width="12"/>
+              </svg>
+              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(90deg) scaleX(-1);">
+                <circle cx="64" cy="64" r="60" fill="none" stroke="#9A3815" stroke-width="12" stroke-linecap="butt" stroke-dasharray="377" stroke-dashoffset="234"/>
+              </svg>
+              <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:64px;letter-spacing:-2.2px;font-weight:200;line-height:1;font-variant-numeric:tabular-nums;position:relative;">2</div>
+            </div>
+          </div>
+        </div>
+        <span class="verdict neutral">Frame 3</span>
+        <p class="specimen-caption">
+          One second in. Dim ochre has eaten ~38% of the ring, sweeping symmetrically up both
+          sides from 180°. Soft <code>.click</code> haptic on each second-tick. Numeral changes
+          from 3 to 2 to 1 — the ring keeps sweeping smoothly through the transitions.
+        </p>
+      </div>
+
+      <!-- C3: "1" — dim sweep at ~72%, just a bright crescent at the top -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">C3</span> "1" · bright crescent at top</div>
+        <div class="watch">
+          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </div>
+          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
+          <div class="w-body" style="padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;margin-top:6px;">
+              <svg width="128" height="128" style="position:absolute;inset:0;">
+                <circle cx="64" cy="64" r="60" fill="none" stroke="#E55A22" stroke-width="12"/>
+              </svg>
+              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(90deg) scaleX(-1);">
+                <circle cx="64" cy="64" r="60" fill="none" stroke="#9A3815" stroke-width="12" stroke-linecap="butt" stroke-dasharray="377" stroke-dashoffset="106"/>
+              </svg>
+              <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:64px;letter-spacing:-2.2px;font-weight:200;line-height:1;font-variant-numeric:tabular-nums;position:relative;">1</div>
+            </div>
+          </div>
+        </div>
+        <span class="verdict neutral">Frame 4</span>
+        <p class="specimen-caption">
+          Two seconds in. Only a bright ochre <strong>crescent at 12 o'clock</strong> remains — the
+          eye is naturally drawn upward as the bright shrinks toward the apex. When the crescent
+          closes at 0°, recording begins. No "Listening" beat needed; the ring closing is the "go."
+        </p>
+      </div>
+
+    </div>
+
+    <div class="notes">
+      <h4>Countdown rules</h4>
+      <ul>
+        <li><strong>Two-phase ring, Workout-style.</strong> Phase 1 (~600ms): bright ochre ring <em>draws in clockwise from 180°</em> while "Ready" is centered. Phase 2 (~3000ms): dim ochre <em>overwrites</em> the bright ring counter-clockwise from 180°, eating it down to a crescent at 12 o'clock. Continuous sweep, not steps. When the crescent closes at 0°, recording begins.</li>
+        <li><strong>No "Listening" beat.</strong> The ring closing at the top <em>is</em> the "go." Don't double the signal.</li>
+        <li><strong>Numerals are passengers.</strong> 3 → 2 → 1 swap in time with the second-ticks, but the ring's continuous sweep is the primary signal. The numbers help the user count down; the ring is what the eye actually tracks.</li>
+        <li><strong>Fresh-start only.</strong> Tapping the mic complication / app icon / Siri opens directly into the countdown. The on-a-roll <em>Next</em> button bypasses it &mdash; the mic-never-pauses contract holds.</li>
+        <li><strong>Soft haptic per second.</strong> <code>.click</code> on watch, <code>UISelectionFeedbackGenerator.selectionChanged</code> on phone. Three pulses total. <em>Not</em> a buzz, <em>not</em> ticking audio.</li>
+        <li><strong>Tap anywhere to cancel.</strong> No ✕ press required &mdash; the whole screen is the cancel target. Returns to the previous surface (Capture page on watch, Today on phone, parent Memory on append).</li>
+        <li><strong>Color palette.</strong> Bright = <code>#E55A22</code> (a brightened ochre, more saturated than the brand <code>--accent</code> for countdown readability on cream). Dim = <code>#9A3815</code>. Clear contrast between the two so the sweep edge reads.</li>
+        <li><strong>Settings opt-out.</strong> Power users can disable in <em>Settings → Capture → Skip countdown</em>. Default on. Reduced Motion users see the numbers without ring animation but countdown still runs.</li>
+      </ul>
+    </div>
+
+  </section>
+
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- 2. RECORDING UI — 3 VARIANTS                                      -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <section class="section band band-cream band-record">
+    <div class="section-label">2 · Recording UI · canonical</div>
+    <p class="section-sub">
+      <strong>Big centered timer, live waveform, persistent <em>Clip N · on a roll</em> line once a roll begins.</strong>
+      <em>Stop &amp; save</em> is the cream hero pill; <em>Next</em> is its ochre peer to the right for on-a-roll splitting.
+      Cancel lives top-left as a ✕ corner glyph &mdash; always reachable, visually demoted from the commit row.
+      The mic-disc-with-counter-inside design from earlier drafts is retired (waveform is a better
+      &ldquo;audio is rolling&rdquo; signal than a pulsing disc &mdash; it responds to the user's voice).
+    </p>
+
+    <div class="row">
+
+      <!-- V1: Canonical recording screen (single clip, no roll yet) -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">V1</span> Canonical · single clip</div>
+        <div class="watch">
+          <!-- Cancel ✕ corner glyph -->
+          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </div>
+          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
+          <div class="w-body" style="padding-top:22px;display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="display:flex;align-items:center;gap:4px;color:var(--accent);">
+              <span style="width:6px;height:6px;border-radius:999px;background:var(--accent);"></span>
+              <span style="font-size:9px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700;">Rec</span>
+            </div>
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:42px;letter-spacing:-1.2px;font-weight:300;line-height:1;margin-top:22px;font-variant-numeric:tabular-nums;">0:23</div>
+            <!-- live waveform -->
+            <div class="w-bars" style="height:30px;gap:2.5px;margin-top:22px;width:88%;justify-content:center;">
+              <span style="width:2.5px;height:8px;"></span><span style="width:2.5px;height:16px;"></span><span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:21px;"></span><span style="width:2.5px;height:13px;"></span><span style="width:2.5px;height:25px;"></span><span style="width:2.5px;height:17px;"></span><span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:22px;"></span><span style="width:2.5px;height:14px;"></span><span style="width:2.5px;height:26px;"></span><span style="width:2.5px;height:16px;"></span><span style="width:2.5px;height:10px;"></span><span style="width:2.5px;height:19px;"></span><span style="width:2.5px;height:14px;"></span><span style="width:2.5px;height:24px;"></span><span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:18px;background:rgba(198,74,28,0.35);"></span><span style="width:2.5px;height:9px;background:rgba(198,74,28,0.25);"></span>
+            </div>
+            <!-- Stop & save + Next -->
+            <div style="display:flex;gap:5px;width:100%;margin-top:auto;">
+              <button class="w-btn" style="flex:1;font-size:13px;font-weight:600;padding:10px 6px;border-radius:18px;background:#F1ECE3;color:#1A1612;letter-spacing:-0.2px;">Stop &amp; save</button>
+              <button class="w-btn" style="width:36px;height:36px;padding:0;border-radius:18px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex:none;">
+                <svg width="16" height="11" viewBox="0 0 20 14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2l5 5-5 5"/><circle cx="14" cy="7" r="1.5" fill="#fff" stroke="none"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <span class="verdict recommend">Shipping</span>
+        <p class="specimen-caption">
+          Big tabular timer is the visual hero. Live waveform underneath is the &ldquo;audio is rolling&rdquo;
+          contract &mdash; bars move with the user's voice; past samples scroll left. The bottom row pairs
+          <strong>Stop &amp; save (cream hero, flex:1)</strong> with the <strong>Next-clip ochre glyph</strong>
+          &mdash; both commit actions, both at the bottom. Cancel ✕ sits top-left as a demoted corner glyph,
+          never as a peer pill to Stop.
+        </p>
+      </div>
+
+      <!-- V2: Cancel confirm sheet -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">V2</span> Cancel ✕ confirm</div>
+        <div class="watch">
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:6px;">
+            <div class="w-h" style="color:#fff;font-size:13px;line-height:1.2;">Discard this clip?</div>
+            <div class="w-sub" style="font-size:10px;line-height:1.4;">Earlier clips in this<br/>recording are already saved.</div>
+            <div style="display:flex;flex-direction:column;gap:5px;width:100%;margin-top:6px;">
+              <button class="w-btn danger" style="font-size:12px;padding:8px;">Discard</button>
+              <button class="w-btn ghost" style="font-size:12px;padding:8px;">Keep recording</button>
+            </div>
+          </div>
+        </div>
+        <span class="verdict recommend">Confirm step</span>
+        <p class="specimen-caption">
+          Tapping the ✕ corner glyph opens this confirm. <strong>Two-tap commit on destructive
+          actions</strong> &mdash; the corner glyph is one tap, Discard is the second. Copy specifically says
+          <em>"this clip,"</em> not <em>"this recording,"</em> because earlier Next-clips were already
+          committed and are safe.
+        </p>
+      </div>
+
+      <!-- V3: 5-minute cap warning -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">V3</span> 5-min cap · 30s left</div>
+        <div class="watch">
+          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </div>
+          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
+          <div class="w-body" style="padding-top:22px;display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="display:flex;align-items:center;gap:4px;color:#E8946B;">
+              <span style="width:6px;height:6px;border-radius:999px;background:#E8946B;"></span>
+              <span style="font-size:9px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700;">Rec</span>
+            </div>
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#E8946B;font-size:42px;letter-spacing:-1.2px;font-weight:300;line-height:1;margin-top:18px;font-variant-numeric:tabular-nums;">4:45</div>
+            <div style="font-size:10px;color:#E8946B;font-weight:600;margin-top:4px;letter-spacing:-0.1px;">30s left</div>
+            <div class="w-bars" style="height:30px;gap:2.5px;margin-top:14px;width:88%;justify-content:center;">
+              <span style="width:2.5px;height:8px;background:#E8946B;"></span><span style="width:2.5px;height:16px;background:#E8946B;"></span><span style="width:2.5px;height:11px;background:#E8946B;"></span><span style="width:2.5px;height:21px;background:#E8946B;"></span><span style="width:2.5px;height:13px;background:#E8946B;"></span><span style="width:2.5px;height:25px;background:#E8946B;"></span><span style="width:2.5px;height:17px;background:#E8946B;"></span><span style="width:2.5px;height:11px;background:#E8946B;"></span><span style="width:2.5px;height:22px;background:#E8946B;"></span><span style="width:2.5px;height:14px;background:#E8946B;"></span><span style="width:2.5px;height:26px;background:#E8946B;"></span><span style="width:2.5px;height:16px;background:#E8946B;"></span><span style="width:2.5px;height:10px;background:#E8946B;"></span><span style="width:2.5px;height:19px;background:#E8946B;"></span><span style="width:2.5px;height:14px;background:#E8946B;"></span><span style="width:2.5px;height:24px;background:#E8946B;"></span><span style="width:2.5px;height:11px;background:#E8946B;"></span><span style="width:2.5px;height:18px;background:rgba(232,148,107,0.35);"></span><span style="width:2.5px;height:9px;background:rgba(232,148,107,0.25);"></span>
+            </div>
+            <div style="display:flex;gap:5px;width:100%;margin-top:auto;">
+              <button class="w-btn" style="flex:1;font-size:13px;font-weight:600;padding:10px 6px;border-radius:18px;background:#F1ECE3;color:#1A1612;letter-spacing:-0.2px;">Stop &amp; save</button>
+              <button class="w-btn" style="width:36px;height:36px;padding:0;border-radius:18px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex:none;">
+                <svg width="16" height="11" viewBox="0 0 20 14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2l5 5-5 5"/><circle cx="14" cy="7" r="1.5" fill="#fff" stroke="none"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <span class="verdict neutral">Edge state</span>
+        <p class="specimen-caption">
+          At 4:45, timer + waveform shift to <strong>warn amber</strong>; a small &ldquo;30s left&rdquo; label
+          appears under the timer. At 5:00, auto-stop fires with <em>Stop &amp; save</em> semantics. The
+          roll continues &mdash; user can tap Next any time to chain another 5-min clip. Never blocks commit.
+        </p>
+      </div>
+
+      <div class="notes">
+        <h4>Recording rules</h4>
+        <ul>
+          <li><strong>Stop &amp; save</strong> is the only intentional commit path. Cream hero pill, bottom-left.</li>
+          <li><strong>Next</strong> is the on-a-roll affordance. Ochre glyph button, bottom-right of Stop. See §2b.</li>
+          <li><strong>Cancel</strong> is the top-left ✕ corner glyph &mdash; demoted from the commit row. Two-tap confirm before discard.</li>
+          <li><strong>Palm-cover</strong> dims the watch but <em>does not discard</em>. Earlier &ldquo;palm = cancel&rdquo; behavior is retired (destructive + undiscoverable).</li>
+          <li><strong>Wrist-off auto-stops and saves</strong>. We never discard a recording the user walked away from.</li>
+          <li><strong>Live waveform</strong> is the &ldquo;audio is rolling&rdquo; contract. Never resets across Next; never pauses mid-record.</li>
+          <li><strong>Hard cap</strong> at 5 minutes per clip. Warning at 4:45 (amber + &ldquo;30s left&rdquo;); auto-stop at 5:00.</li>
+          <li><strong>Local storage cap</strong>: 50 unsynced clips. Next dims at 49/50; recording blocked at 50.</li>
+          <li><strong>Counter is the signal capture is alive.</strong> Drive from <code>Date()</code> since clip start, not recorder <code>currentTime</code>.</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- 2b. NEXT CLIP — KEEP THE ROLL                                     -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <section class="section band band-cream band-record">
+    <div class="section-label">2b · Next clip · keep the roll</div>
+    <p class="section-sub">
+      <strong>One button: end this clip, start a new one.</strong> No screen change. No confirm. The user
+      is on a roll &mdash; we don't make them stop, navigate back, re-tap to record. Each tap of <em>Next</em>
+      commits the current clip, resets the counter to <code>0:00</code>, and increments the persistent
+      <em>Clip N · on a roll</em> line under the timer. Recording continues uninterrupted; the
+      waveform never resets. Clips group into one Memory on phone via existing session rules + <code>rollGroupId</code>.
+    </p>
+
+    <div class="row">
+
+      <!-- N1: Recording mid-roll, persistent "Clip 2 · on a roll" line visible -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">N1</span> Mid-roll · clip 2</div>
+        <div class="watch">
+          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </div>
+          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
+          <div class="w-body" style="padding-top:22px;display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="display:flex;align-items:center;gap:4px;color:var(--accent);">
+              <span style="width:6px;height:6px;border-radius:999px;background:var(--accent);"></span>
+              <span style="font-size:9px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700;">Rec</span>
+            </div>
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:42px;letter-spacing:-1.2px;font-weight:300;line-height:1;margin-top:18px;font-variant-numeric:tabular-nums;">1:42</div>
+            <!-- persistent state line -->
+            <div style="font-size:11px;font-weight:600;color:#E8946B;margin-top:6px;letter-spacing:0;">Clip 2 · on a roll</div>
+            <div class="w-bars" style="height:30px;gap:2.5px;margin-top:14px;width:88%;justify-content:center;">
+              <span style="width:2.5px;height:8px;"></span><span style="width:2.5px;height:18px;"></span><span style="width:2.5px;height:12px;"></span><span style="width:2.5px;height:23px;"></span><span style="width:2.5px;height:14px;"></span><span style="width:2.5px;height:25px;"></span><span style="width:2.5px;height:16px;"></span><span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:20px;"></span><span style="width:2.5px;height:13px;"></span><span style="width:2.5px;height:26px;"></span><span style="width:2.5px;height:17px;"></span><span style="width:2.5px;height:10px;"></span><span style="width:2.5px;height:19px;"></span><span style="width:2.5px;height:15px;"></span><span style="width:2.5px;height:24px;"></span><span style="width:2.5px;height:12px;"></span><span style="width:2.5px;height:18px;background:rgba(198,74,28,0.35);"></span><span style="width:2.5px;height:9px;background:rgba(198,74,28,0.25);"></span>
+            </div>
+            <div style="display:flex;gap:5px;width:100%;margin-top:auto;">
+              <button class="w-btn" style="flex:1;font-size:13px;font-weight:600;padding:10px 6px;border-radius:18px;background:#F1ECE3;color:#1A1612;letter-spacing:-0.2px;">Stop &amp; save</button>
+              <button class="w-btn" style="width:36px;height:36px;padding:0;border-radius:18px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex:none;">
+                <svg width="16" height="11" viewBox="0 0 20 14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2l5 5-5 5"/><circle cx="14" cy="7" r="1.5" fill="#fff" stroke="none"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <span class="verdict recommend">Shipping</span>
+        <p class="specimen-caption">
+          One tap of Next has happened. <strong>Persistent <em>Clip 2 · on a roll</em> line</strong> sits
+          under the timer in ochre &mdash; the user has visual confirmation they're rolling, without a flashy
+          transient eyebrow that disappears mid-thought. Waveform keeps rolling unbroken.
+        </p>
+      </div>
+
+      <!-- N2: Moment of Next tap · button briefly fills bright, counter at 0:00 -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">N2</span> Moment of tap</div>
+        <div class="watch">
+          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </div>
+          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
+          <div class="w-body" style="padding-top:22px;display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="display:flex;align-items:center;gap:4px;color:var(--accent);">
+              <span style="width:6px;height:6px;border-radius:999px;background:var(--accent);"></span>
+              <span style="font-size:9px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700;">Rec</span>
+            </div>
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:42px;letter-spacing:-1.2px;font-weight:300;line-height:1;margin-top:18px;font-variant-numeric:tabular-nums;">0:00</div>
+            <div style="font-size:11px;font-weight:600;color:#E8946B;margin-top:6px;letter-spacing:0;">Clip 3 · on a roll</div>
+            <!-- Waveform stays rolling — doesn't reset -->
+            <div class="w-bars" style="height:30px;gap:2.5px;margin-top:14px;width:88%;justify-content:center;">
+              <span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:20px;"></span><span style="width:2.5px;height:13px;"></span><span style="width:2.5px;height:19px;"></span><span style="width:2.5px;height:15px;"></span><span style="width:2.5px;height:25px;"></span><span style="width:2.5px;height:14px;"></span><span style="width:2.5px;height:18px;"></span><span style="width:2.5px;height:22px;"></span><span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:19px;"></span><span style="width:2.5px;height:15px;"></span><span style="width:2.5px;height:9px;"></span><span style="width:2.5px;height:16px;"></span><span style="width:2.5px;height:23px;"></span><span style="width:2.5px;height:13px;"></span><span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:18px;background:rgba(198,74,28,0.35);"></span><span style="width:2.5px;height:9px;background:rgba(198,74,28,0.25);"></span>
+            </div>
+            <div style="display:flex;gap:5px;width:100%;margin-top:auto;">
+              <button class="w-btn" style="flex:1;font-size:13px;font-weight:600;padding:10px 6px;border-radius:18px;background:#F1ECE3;color:#1A1612;letter-spacing:-0.2px;">Stop &amp; save</button>
+              <!-- Next button briefly fills bright + halo for ~250ms post-tap -->
+              <button class="w-btn" style="width:36px;height:36px;padding:0;border-radius:18px;background:#E07A4E;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 0 0 3px rgba(198,74,28,0.40);">
+                <svg width="16" height="11" viewBox="0 0 20 14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2l5 5-5 5"/><circle cx="14" cy="7" r="1.5" fill="#fff" stroke="none"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <span class="verdict recommend">~250ms after tap</span>
+        <p class="specimen-caption">
+          <strong>Haptic <code>.click</code> pulse</strong>. Counter snaps <code>1:42 → 0:00</code> (no
+          animation; the reset is the signal). Next button fills brighter ochre with a 3px halo for
+          ~250ms, then returns to resting fill. State line increments to <em>Clip 3</em>. The mic never
+          stops capturing &mdash; the swap is sub-100ms in the audio session.
+        </p>
+      </div>
+
+      <!-- N3: Storage near full · Next dimmed -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">N3</span> 49/50 unsynced · Next dimmed</div>
+        <div class="watch">
+          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </div>
+          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
+          <div class="w-body" style="padding-top:22px;display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div style="display:flex;align-items:center;gap:4px;color:var(--accent);">
+              <span style="width:6px;height:6px;border-radius:999px;background:var(--accent);"></span>
+              <span style="font-size:9px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700;">Rec</span>
+            </div>
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:42px;letter-spacing:-1.2px;font-weight:300;line-height:1;margin-top:18px;font-variant-numeric:tabular-nums;">2:08</div>
+            <div style="font-size:11px;font-weight:600;color:#E8946B;margin-top:6px;letter-spacing:0;">Clip 5 · on a roll</div>
+            <div class="w-bars" style="height:30px;gap:2.5px;margin-top:14px;width:88%;justify-content:center;">
+              <span style="width:2.5px;height:8px;"></span><span style="width:2.5px;height:16px;"></span><span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:21px;"></span><span style="width:2.5px;height:13px;"></span><span style="width:2.5px;height:25px;"></span><span style="width:2.5px;height:17px;"></span><span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:22px;"></span><span style="width:2.5px;height:14px;"></span><span style="width:2.5px;height:26px;"></span><span style="width:2.5px;height:16px;"></span><span style="width:2.5px;height:10px;"></span><span style="width:2.5px;height:19px;"></span><span style="width:2.5px;height:14px;"></span><span style="width:2.5px;height:24px;"></span><span style="width:2.5px;height:11px;"></span><span style="width:2.5px;height:18px;background:rgba(198,74,28,0.35);"></span><span style="width:2.5px;height:9px;background:rgba(198,74,28,0.25);"></span>
+            </div>
+            <div style="display:flex;gap:5px;width:100%;margin-top:auto;align-items:flex-end;">
+              <button class="w-btn" style="flex:1;font-size:13px;font-weight:600;padding:10px 6px;border-radius:18px;background:#F1ECE3;color:#1A1612;letter-spacing:-0.2px;">Stop &amp; save</button>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:none;">
+                <button class="w-btn" style="width:36px;height:36px;padding:0;border-radius:18px;background:rgba(198,74,28,0.18);display:flex;align-items:center;justify-content:center;opacity:0.45;">
+                  <svg width="16" height="11" viewBox="0 0 20 14" fill="none" stroke="#E07A4E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2l5 5-5 5"/><circle cx="14" cy="7" r="1.5" fill="#E07A4E" stroke="none"/></svg>
+                </button>
+                <span style="font-size:8px;color:rgba(232,148,107,0.55);letter-spacing:0.2px;font-weight:600;line-height:1;">Sync soon</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span class="verdict neutral">Edge state</span>
+        <p class="specimen-caption">
+          At 49/50 unsynced, the Next button dims to 45% opacity and a small <em>Sync soon</em> label
+          appears under it. Tap is ignored. The current clip can still finish via <strong>Stop &amp; save</strong>
+          &mdash; commit is never blocked. At 50/50, recording is blocked altogether (screen-level warning).
+        </p>
+      </div>
+
+      <div class="notes">
+        <h4>On-a-roll rules</h4>
+        <ul>
+          <li><strong>Each tap of Next = one new Clip</strong> &mdash; not a new Memory. Clips group into one Memory on phone via session rules + <code>rollGroupId</code>.</li>
+          <li><strong>Persistent state line</strong> (<em>Clip N · on a roll</em>) replaces the earlier 1.5s flash eyebrow. A user mid-thought won't catch a transient.</li>
+          <li><strong>Min clip length 2s.</strong> Double-tap below the threshold is silently debounced &mdash; no haptic, no save, no reset. Protects against rolling-thumb taps.</li>
+          <li><strong>5-min cap is per clip</strong>, not per roll. Splitting works <em>with</em> the cap, not around it.</li>
+          <li><strong>Cancel during a roll</strong> discards only the current unfinished clip. Earlier Next-clips are already committed. Copy: &ldquo;Discard this clip? Earlier clips in this recording are already saved.&rdquo;</li>
+          <li><strong>Wrist-off auto-stops the current clip</strong> and saves it; earlier clips in the roll were committed at each Next tap, so nothing is at risk.</li>
+          <li><strong>Storage near full</strong> (49/50 unsynced): Next dims with <em>Sync soon</em> label. Stop &amp; save still works.</li>
+          <li><strong>Phone equivalent</strong>: same gesture, different model &mdash; on phone, Next creates a new audio segment <em>within</em> one direct-to-memory recording. See <code>On a roll · spec.md</code>.</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- 3. POST-RECORD CONFIRMATION                                       -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <section class="section band band-sand">
+    <div class="section-label">3 · After tap-to-stop · confirmation</div>
+    <p class="section-sub">
+      You wanted <strong>explicit confirmation when offline</strong>. We show the same affordance for
+      both states &mdash; what changes is the supporting line, not the layout. <em>Trust through
+      repetition.</em> Sync state is otherwise quiet (per your &ldquo;only when wrong&rdquo; preference).
+    </p>
+
+    <div class="row">
+
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">A</span> Online · saved &amp; syncing</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;">
+            <div style="width:48px;height:48px;border-radius:999px;background:#1F5A35;display:flex;align-items:center;justify-content:center;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>
+            </div>
+            <div class="w-h" style="color:#fff;">Saved</div>
+            <div class="w-sub">0:14 · Syncing now</div>
+          </div>
+        </div>
+        <p class="specimen-caption">
+          Auto-dismisses after ~2s. No tap required. Sync chip <em>not</em> shown unless something fails.
+        </p>
+      </div>
+
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">B</span> Offline · local save</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:0 6px;">
+            <div style="width:48px;height:48px;border-radius:999px;background:rgba(240,178,90,0.16);display:flex;align-items:center;justify-content:center;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F0B25A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>
+            </div>
+            <div class="w-h" style="color:#fff;font-size:13px;">Saved on Watch</div>
+            <div class="w-sub" style="font-size:10.5px;line-height:1.35;">Will sync when your<br/>phone is near</div>
+            <div class="w-chip warn dot" style="margin-top:2px;">Pending</div>
+          </div>
+        </div>
+        <span class="verdict recommend">Critical state</span>
+        <p class="specimen-caption">
+          Reassures the user the data isn't lost. Stays on screen until the user dismisses
+          (or wrist drops &mdash; ~5s). Same checkmark glyph, different tint &amp; supporting copy.
+        </p>
+      </div>
+
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">C</span> Failed · storage full</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:0 6px;">
+            <div style="width:44px;height:44px;border-radius:999px;background:rgba(232,90,70,0.16);display:flex;align-items:center;justify-content:center;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF8A75" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12" y2="17"/></svg>
+            </div>
+            <div class="w-h" style="color:#fff;font-size:13px;">Watch is full</div>
+            <div class="w-sub" style="font-size:10.5px;line-height:1.35;">Free space by syncing<br/>or open app on phone</div>
+            <button class="w-btn ghost" style="font-size:11px;padding:8px 10px;border-radius:18px;margin-top:2px;">View pending</button>
+          </div>
+        </div>
+        <span class="verdict reject">Edge state</span>
+        <p class="specimen-caption">
+          Hard cap on local storage (~50 recordings before warning). User taps through to the
+          pending list (Section 4) where they can delete unwanted captures.
+        </p>
+      </div>
+
+      <div class="notes">
+        <h4>Sync confidence rules</h4>
+        <ul>
+          <li><strong>Online success</strong>: 2s toast, auto-dismiss.</li>
+          <li><strong>Offline save</strong>: explicit toast, stays until wrist drops or tap.</li>
+          <li><strong>Failure</strong>: full-screen alert, requires acknowledgement.</li>
+          <li><strong>No persistent badge</strong> on home screen for healthy pending items &mdash; trust by default.</li>
+          <li><strong>Persistent indicator</strong> only when something is broken (failed sync &gt; 24h, storage full).</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- 4. PENDING LIST                                                   -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <section class="section band band-cream">
+    <div class="section-label">4 · Pending sync · list &amp; delete</div>
+    <p class="section-sub">
+      Reachable from the app home, or from the failure-state CTA. <strong>Lists only locally-stored,
+      unsynced recordings</strong> &mdash; once synced, they leave this list (they live on the phone
+      from then on). Swipe left on a row to delete.
+    </p>
+
+    <div class="row">
+
+      <!-- Empty -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">A</span> Empty · all synced</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-mark">PENDING</div>
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:14px;">
+            <div style="width:36px;height:36px;border-radius:999px;background:rgba(89,200,140,0.14);display:flex;align-items:center;justify-content:center;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#59C88C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>
+            </div>
+            <div class="w-h" style="color:#fff;font-size:13px;">All caught up</div>
+            <div class="w-sub" style="font-size:10.5px;line-height:1.4;">Recordings appear here<br/>when phone isn&rsquo;t near.</div>
+          </div>
+        </div>
+        <p class="specimen-caption">
+          Default state for most users most of the time. Calm, confirmation-y.
+        </p>
+      </div>
+
+      <!-- 1-2 items -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">B</span> A few items</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-mark">PENDING · 2</div>
+          <div class="w-body" style="padding-top:8px;">
+            <div class="w-row">
+              <span class="pip"></span>
+              <div class="meta">
+                <div class="t">9:32 AM · today</div>
+                <div class="s">Saved on watch</div>
+              </div>
+              <span class="dur">0:14</span>
+            </div>
+            <div class="w-row">
+              <span class="pip"></span>
+              <div class="meta">
+                <div class="t">8:18 AM · today</div>
+                <div class="s">Saved on watch</div>
+              </div>
+              <span class="dur">0:42</span>
+            </div>
+            <div style="margin-top:6px;font-size:10px;color:rgba(255,255,255,0.45);text-align:center;">Will sync when phone is near</div>
+          </div>
+        </div>
+        <p class="specimen-caption">
+          Each row: <strong>capture time, status, duration</strong>. No transcript on watch.
+          Tap a row to play back &amp; confirm; swipe-left to delete.
+        </p>
+      </div>
+
+      <!-- Many items, scrollable -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">C</span> Many · scroll with crown</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-mark">PENDING · 12</div>
+          <div class="w-body" style="padding-top:8px;">
+            <div class="w-row"><span class="pip"></span><div class="meta"><div class="t">9:32 AM · today</div></div><span class="dur">0:14</span></div>
+            <div class="w-row"><span class="pip"></span><div class="meta"><div class="t">8:18 AM · today</div></div><span class="dur">0:42</span></div>
+            <div class="w-row"><span class="pip"></span><div class="meta"><div class="t">7:55 AM · today</div></div><span class="dur">1:03</span></div>
+            <div class="w-row" style="opacity:0.55;"><span class="pip"></span><div class="meta"><div class="t">6:11 PM · yesterday</div></div><span class="dur">0:21</span></div>
+            <div style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:28px;height:3px;background:rgba(255,255,255,0.18);border-radius:2px;"></div>
+          </div>
+        </div>
+        <p class="specimen-caption">
+          Crown scrolls. Faded last row hints at more below. Bottom indicator = scroll position.
+        </p>
+      </div>
+
+      <!-- Swipe to delete -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">D</span> Swipe · delete affordance</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-mark">PENDING · 2</div>
+          <div class="w-body" style="padding-top:8px;">
+            <div class="w-row-swipe">
+              <div class="row-inner">
+                <span class="pip"></span>
+                <div class="meta">
+                  <div class="t" style="color:#fff;">9:32 AM · today</div>
+                  <div class="s" style="color:rgba(255,255,255,0.55);">Saved on watch</div>
+                </div>
+                <span class="dur" style="color:rgba(255,255,255,0.7);">0:14</span>
+              </div>
+              <div class="delete">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6 17.5 20A2 2 0 0 1 15.5 22h-7A2 2 0 0 1 6.5 20L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              </div>
+            </div>
+            <div class="w-row">
+              <span class="pip"></span>
+              <div class="meta">
+                <div class="t">8:18 AM · today</div>
+              </div>
+              <span class="dur">0:42</span>
+            </div>
+          </div>
+        </div>
+        <p class="specimen-caption">
+          Drag-left to reveal delete. Standard watchOS swipe. Required tap on red icon to confirm
+          (no auto-delete).
+        </p>
+      </div>
+
+      <!-- Delete confirm -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">E</span> Delete · confirm</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:6px;">
+            <div class="w-h" style="color:#fff;font-size:13px;line-height:1.2;">Delete this<br/>recording?</div>
+            <div class="w-sub" style="font-size:10px;">0:14 &middot; not synced yet</div>
+            <div style="display:flex;flex-direction:column;gap:6px;width:100%;margin-top:6px;">
+              <button class="w-btn danger" style="font-size:12px;padding:8px;">Delete</button>
+              <button class="w-btn ghost" style="font-size:12px;padding:8px;">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <span class="verdict recommend">Always confirm</span>
+        <p class="specimen-caption">
+          Two-tap delete &mdash; this audio is not yet on the phone, so deletion is permanent.
+          <strong>Ask explicitly.</strong>
+        </p>
+      </div>
+
+      <!-- Playback peek -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">F</span> Tap row · playback</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:6px;">
+            <div class="w-bars">
+              <span style="height:6px;"></span><span style="height:11px;"></span><span style="height:14px;"></span><span style="height:8px;"></span><span style="height:13px;"></span><span style="height:6px;"></span><span style="height:9px;"></span><span style="height:14px;"></span><span style="height:11px;"></span><span style="height:7px;"></span><span style="height:12px;"></span><span style="height:9px;"></span><span style="height:5px;"></span><span style="height:11px;"></span><span style="height:14px;"></span><span style="height:8px;"></span><span style="height:6px;"></span><span style="height:10px;"></span><span style="height:13px;"></span><span style="height:7px;"></span>
+            </div>
+            <div class="w-mono" style="color:#fff;font-size:14px;">0:06 / 0:14</div>
+            <div style="display:flex;gap:14px;">
+              <button style="width:34px;height:34px;border-radius:999px;background:rgba(255,255,255,0.10);display:flex;align-items:center;justify-content:center;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+              </button>
+              <button style="width:34px;height:34px;border-radius:999px;background:rgba(232,90,70,0.16);display:flex;align-items:center;justify-content:center;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF8A75" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6 17.5 20A2 2 0 0 1 15.5 22h-7A2 2 0 0 1 6.5 20L5 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <p class="specimen-caption">
+          Quick playback peek &mdash; pause / delete. Audio routes to AirPods if connected, watch
+          speaker otherwise.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- 5. COMPLICATIONS GALLERY                                          -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <section class="section band band-dark">
+    <div class="section-label">5 · Complications · the only Himem affordance on the watch face</div>
+    <p class="section-sub">
+      <strong>One job:</strong> from glance to recording in one tap. We slot the mic into <strong>five complication families</strong> &mdash; covers every modern face. Pending count surfaces only when there's something unsynced; otherwise the glyph stands alone. <em>Quiet by default.</em>
+    </p>
+
+    <div class="row" style="gap: 24px; align-items: stretch;">
+
+      <!-- Graphic Circular — primary -->
+      <div class="comp-card">
+        <div class="name">Graphic Circular</div>
+        <div class="frame">
+          <div class="comp-circ with-ring">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF8E5A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+            <span class="comp-badge">2</span>
+          </div>
+        </div>
+        <div class="sub">Infograph &middot; Photo Faces &middot; Modular</div>
+        <span class="verdict recommend" style="align-self:flex-start;">Primary</span>
+      </div>
+
+      <!-- Graphic Corner -->
+      <div class="comp-card">
+        <div class="name">Graphic Corner</div>
+        <div class="frame">
+          <div class="comp-corner">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF8E5A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+          </div>
+        </div>
+        <div class="sub">Infograph corners &middot; Wayfinder</div>
+      </div>
+
+      <!-- Modular Small -->
+      <div class="comp-card">
+        <div class="name">Modular Small</div>
+        <div class="frame">
+          <div class="comp-mod-sm">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8E5A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+            <span class="count">2</span>
+          </div>
+        </div>
+        <div class="sub">Modular &middot; Utility (older faces)</div>
+      </div>
+
+      <!-- Rectangular -->
+      <div class="comp-card" style="width:200px;">
+        <div class="name">Rectangular</div>
+        <div class="frame">
+          <div class="comp-rect">
+            <span class="icon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+            </span>
+            <span class="text">
+              <span class="l1">Tap to record</span>
+              <span class="l2">2 pending</span>
+            </span>
+          </div>
+        </div>
+        <div class="sub">Infograph &middot; Modular Duo</div>
+      </div>
+
+      <!-- Smart Stack widget -->
+      <div class="comp-card" style="width:200px;">
+        <div class="name">Smart Stack widget</div>
+        <div class="frame" style="padding: 6px;">
+          <div class="comp-stack">
+            <div class="head">
+              <span class="icon">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+              </span>
+              <span class="name">Himem</span>
+            </div>
+            <div class="body">Tap to record</div>
+            <div class="meta">2 pending &middot; 0:56 captured today</div>
+          </div>
+        </div>
+        <div class="sub">watchOS 10+ &middot; surfaced contextually</div>
+      </div>
+
+    </div>
+
+    <p class="section-sub" style="margin-top: 8px;">
+      <strong>State variants</strong> &mdash; shown on Graphic Circular for legibility; same logic across families.
+    </p>
+
+    <div class="row" style="gap: 24px;">
+
+      <!-- Idle -->
+      <div class="comp-card">
+        <div class="name">Idle</div>
+        <div class="frame">
+          <div class="comp-circ">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF8E5A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+          </div>
+        </div>
+        <div class="sub">Nothing pending. Glyph alone. The most common state.</div>
+      </div>
+
+      <!-- Pending count -->
+      <div class="comp-card">
+        <div class="name">Pending</div>
+        <div class="frame">
+          <div class="comp-circ with-ring">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF8E5A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+            <span class="comp-badge">9+</span>
+          </div>
+        </div>
+        <div class="sub">Count badge in ochre. <strong>0&ndash;9</strong>, &ldquo;9+&rdquo; beyond. Reassuring, not alarming.</div>
+      </div>
+
+      <!-- Recording -->
+      <div class="comp-card">
+        <div class="name">Recording</div>
+        <div class="frame">
+          <div class="comp-circ recording">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#FF5A3C"><circle cx="12" cy="12" r="6"/></svg>
+          </div>
+        </div>
+        <div class="sub">Pulsing red ring &mdash; only when app is actively recording in the background. <em>Rare.</em></div>
+      </div>
+
+      <!-- Sync failed -->
+      <div class="comp-card">
+        <div class="name">Sync issue</div>
+        <div class="frame">
+          <div class="comp-circ">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF8E5A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+            <span class="comp-badge fail"></span>
+          </div>
+        </div>
+        <div class="sub">Small red dot &mdash; sync has been failing for &gt;24h. Tap routes to pending list with explainer.</div>
+      </div>
+
+    </div>
+
+    <p class="section-sub" style="margin-top: 8px;">
+      <strong>Tap behavior</strong> &mdash; the real design question.
+    </p>
+
+    <div class="row" style="gap: 24px; align-items: stretch;">
+
+      <div class="settings-panel">
+        <h4>From the complication, when I tap…</h4>
+        <div class="opt selected">
+          <span class="radio"></span>
+          <span class="text">
+            <strong>Open Himem ready to record</strong>
+            One tap to record &mdash; explicit Stop &amp; save commits. Safer; one extra step.
+          </span>
+        </div>
+        <div class="opt">
+          <span class="radio"></span>
+          <span class="text">
+            <strong>Press &amp; hold to record immediately</strong>
+            Walkie-Talkie style. Faster; risks accidental recordings on wrist bumps.
+          </span>
+        </div>
+        <div class="note">
+          <strong>Default A.</strong> Power users opt into B once they trust the gesture. Setting lives in iPhone &rarr; Himem &rarr; Watch.
+        </div>
+      </div>
+
+      <div class="notes">
+        <h4>Complication rules</h4>
+        <ul>
+          <li><strong>Glyph &amp; ochre only.</strong> No live transcription, battery state, duration on face.</li>
+          <li><strong>Pending count appears only when &gt; 0.</strong> Calm by default.</li>
+          <li><strong>Recording state is rare</strong> &mdash; complication only shows it if Himem is actively recording in the background.</li>
+          <li><strong>Sync issue dot</strong> only after 24h of failure. Don't cry wolf.</li>
+          <li><strong>Tap routing</strong> respects the user's setting (default: open to record-ready, not auto-record).</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- 6. APP HOME                                                        -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <section class="section band band-cream">
+    <div class="section-label">6 · App home · two screens, that's it</div>
+    <p class="section-sub">
+      The app does <em>two things</em>. Show that. No tabs, no settings buried inside &mdash;
+      settings live in the iPhone app.
+    </p>
+
+    <div class="row">
+
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">A</span> Home · default</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-mark">HI MEM</div>
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+            <div class="w-mic lg">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </div>
+            <div class="w-sub">Tap to record</div>
+            <div style="height:1px;width:80%;background:rgba(255,255,255,0.10);"></div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.65);text-align:center;">Pending &middot; <strong style="color:#fff;">0</strong></div>
+          </div>
+        </div>
+        <p class="specimen-caption">
+          Big mic, single hint. Pending count subtle below. Tap mic → Recording. Tap "Pending"
+          area → list (Section 4).
+        </p>
+      </div>
+
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">B</span> Home · with pending</div>
+        <div class="watch">
+          <div class="w-time">9:41</div>
+          <div class="w-mark">HI MEM</div>
+          <div class="w-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+            <div class="w-mic lg">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </div>
+            <div class="w-sub">Tap to record</div>
+            <div style="height:1px;width:80%;background:rgba(255,255,255,0.10);"></div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.65);text-align:center;">
+              Pending &middot; <strong style="color:#F0B25A;">2</strong>
+              <div style="font-size:9.5px;color:rgba(255,255,255,0.45);margin-top:1px;">Tap to view</div>
+            </div>
+          </div>
+        </div>
+        <p class="specimen-caption">
+          Pending count goes warm-amber when &gt; 0. <strong>Not red.</strong> Pending is normal,
+          not a problem.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <!-- DECISIONS                                                          -->
+  <!-- ──────────────────────────────────────────────────────────────── -->
+  <section class="section band band-sand">
+    <div class="section-label">Decisions to validate</div>
+    <div class="decision">
+      <div>
+        <h3>Settled</h3>
+        <ul>
+          <li><strong>Recording surface</strong>: V1 (centered mic + counter + Stop &amp; save, with demoted Cancel link).</li>
+          <li><strong>Wrist-off</strong> stops and saves automatically. Never discards.</li>
+          <li><strong>Local storage cap</strong>: 50 unsynced recordings.</li>
+          <li><strong>Watch is a capture queue, not a viewer</strong> &mdash; pending list only, no Memory Box browsing.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Open questions</h3>
+        <ul>
+          <li><strong>App closed mid-recording</strong> &mdash; watchOS backgrounds drop the mic. Reach for the background-task API, or surface as &ldquo;keep watch on wrist while recording.&rdquo;</li>
+          <li><strong>Siri (App Intent)</strong> &mdash; ship in v1 alongside complication, or follow-up release?</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer class="band band-cream">
+    <span style="font-weight: 500; color: var(--ink2);">Himem · Watch · v1 lo-fi</span>
+    <span>For 49mm Ultra · scales to 45mm</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,64 +1,164 @@
 import SwiftUI
+import AVFoundation
+import CoreLocation
 
-/// Single-modality voice capture, presented when the user picks the Voice
-/// pill from the Append FAB. Records via SpeechService, shows the live
-/// transcript, finishes with the audio filename + transcript.
+/// Phone voice composer — **v1 canonical** (`docs/Voice Composer/Himem · Voice Composer.html`).
 ///
-/// On Done the host appends/saves the result. On Cancel the host discards.
+/// Mirrors the watch's capture surface: big tabular timer + live
+/// waveform are the visual hero; persistent "Clip N · on a roll"
+/// state line under the timer; Stop & save (84pt ochre circle) +
+/// Next satellite (56pt ochre-tinted) at the bottom; ✕ corner
+/// glyph for cancel; optional "Adding to · [Memory]" header pill
+/// when the screen is presented from inside an existing Memory.
+///
+/// **No transcript card.** The composer is a capture surface, not
+/// an editor. The transcript renders on the resulting Memory once
+/// the user commits with Done. Same model as the watch — uniform
+/// across surfaces so users don't relearn the gesture.
+///
+/// "On a roll" support (`docs/watch/On a roll · spec.md`): the Next
+/// button records an offset from session start at each tap. On
+/// Done, the master audio file is split at those offsets into N
+/// per-clip files and each is re-transcribed locally. Mic NEVER
+/// pauses across Next — the engine + analyzer + AVAudioFile keep
+/// running; per-clip splitting is a Save-time post-process.
 struct VoiceCaptureScreen: View {
-    /// Fired when the user finishes a recording. Empty filename or transcript
-    /// is possible if the user hits Done before saying anything; the host
-    /// decides whether to drop or persist a degenerate capture.
-    let onFinish: (_ audioFilename: String?, _ transcript: String) -> Void
+    /// Fired when the user finishes a recording. Always at least one
+    /// fragment unless the recording produced nothing — caller decides
+    /// what to do with a zero-clip session (typically: nothing).
+    let onFinish: (_ clips: [VoiceClipFragment], _ rollGroupId: UUID) -> Void
     let onCancel: () -> Void
 
     @ObservedObject var speechService: SpeechService
+    /// When non-nil, renders an "Adding to · X" pill in place of the
+    /// "VOICE" eyebrow. Tells the user the clips will append to that
+    /// Memory rather than start a fresh one.
+    let appendingTo: String?
+
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var nextController: NextClipController
     @State private var startedAt: Date? = nil
     @State private var elapsed: TimeInterval = 0
     @State private var timer: Timer? = nil
     @State private var didAutoStart = false
-    @State private var pulseScale: CGFloat = 1.0
+    @State private var isFinalizing = false
+    @State private var finalizingClipCount = 0
+    /// REC dot pulse phase (~1.4s ease-in-out per watch spec; mirrored
+    /// here for visual continuity between capture surfaces).
+    @State private var recPulse: Bool = false
+    /// Rolling history of audio levels for the live waveform.
+    /// Newest at the end; capped at `Self.waveBarCount`.
+    @State private var waveSamples: [CGFloat] = []
+    /// One-shot location fix captured at recording start; stamped
+    /// onto every `VoiceClipFragment` in this session at Done so the
+    /// resulting `MediaReference`s carry their own place name. Nil
+    /// when the user hasn't granted location, the request times out,
+    /// or the global `tagMemoriesWithLocation` default is off. The
+    /// fetch races recording — recording proceeds either way.
+    @State private var sessionLocation: CLLocation? = nil
+    /// Two-phase entry per the v2 spec. Every fresh start lands on
+    /// the "Ready" phase first (bright ring draws in clockwise from
+    /// 180° over ~600ms), then transitions to the 3·2·1 phase (dim
+    /// overlay sweeps CCW from 180° continuously over 3s). No
+    /// "Listening" beat — the ring closing at 12 o'clock is the
+    /// "go." Cancel during countdown dismisses the composer.
+    /// Recording cancel is the existing two-tap path via Cancel ✕.
+    @State private var phase: ComposerPhase = .ready
+    @State private var countdownTask: Task<Void, Never>? = nil
+    /// Phase 1 progress — bright stroke drawing in.
+    @State private var drawProgress: CGFloat = 0
+    /// Phase 2 progress — dim overlay sweep over the bright ring.
+    @State private var sweepProgress: CGFloat = 0
+
+    enum ComposerPhase: Equatable {
+        case ready            // Phase 1 — bright draw-in (~600ms)
+        case countdown(Int)   // Phase 2 — 3, 2, 1 with CCW dim sweep
+        case recording
+        case denied
+    }
+
+    /// Phone composer has more horizontal room than the watch, so the
+    /// band carries more bars. 56 keeps each bar at ~3pt + 1pt gap
+    /// across the typical iPhone composer width with 16pt side
+    /// padding.
+    private static let waveBarCount: Int = 56
+
+    init(
+        onFinish: @escaping (_ clips: [VoiceClipFragment], _ rollGroupId: UUID) -> Void,
+        onCancel: @escaping () -> Void,
+        speechService: SpeechService,
+        appendingTo: String? = nil
+    ) {
+        self.onFinish = onFinish
+        self.onCancel = onCancel
+        self.speechService = speechService
+        self.appendingTo = appendingTo
+        self._nextController = StateObject(wrappedValue: NextClipController(handoff: speechService))
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                transcriptArea
-                Spacer(minLength: 0)
-                recordButton
-                Text(timerLabel)
-                    .font(.system(size: 14, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(Crucible.Color.ink3)
-                    .padding(.bottom, 12)
+            ZStack {
+                Crucible.Color.paper.ignoresSafeArea()
+                Group {
+                    switch phase {
+                    case .ready, .countdown:
+                        countdownContent
+                    case .denied:
+                        permissionDeniedContent
+                    case .recording:
+                        composerBody
+                    }
+                }
+                .opacity(isFinalizing ? 0.4 : 1.0)
+                .disabled(isFinalizing)
+
+                if isFinalizing {
+                    finalizingOverlay
+                }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Crucible.Color.paper)
-            .navigationTitle("Voice")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        finishOrAbandon(saveResult: false)
+                // Per v2 spec: ✕ corner glyph is hidden during the
+                // countdown — the whole screen is the cancel target
+                // (single affordance). ✕ re-appears once we're in
+                // the recording phase as the explicit discard path.
+                if phase == .recording {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        cancelGlyph
                     }
-                    .foregroundStyle(Crucible.Color.ink2)
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        finishOrAbandon(saveResult: true)
+                ToolbarItem(placement: .principal) {
+                    headerCenter
+                }
+                if phase == .recording {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            Task { await finishOrAbandon(saveResult: true) }
+                        }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Crucible.Color.accent)
+                        .disabled(isFinalizing)
                     }
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Crucible.Color.accent)
                 }
             }
         }
         .onAppear {
-            // Auto-start recording on first appearance — the user picked
-            // Voice; they want to talk, not tap a second button.
+            // Run the fresh-start countdown the first time the
+            // composer appears. Recording begins only after the
+            // countdown finishes its "Listening" beat — see
+            // `runCountdown()`.
             if !didAutoStart {
                 didAutoStart = true
-                startRecording()
+                countdownTask = Task { @MainActor in
+                    let granted = await speechService.requestAuthorization()
+                    guard !Task.isCancelled else { return }
+                    guard granted else { phase = .denied; return }
+                    await runCountdown()
+                }
+            }
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
+                recPulse = true
             }
         }
         .onDisappear {
@@ -69,81 +169,459 @@ struct VoiceCaptureScreen: View {
                 speechService.stopRecording()
             }
         }
-        .onChange(of: speechService.isRecording) { _, recording in
-            if recording {
-                withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                    pulseScale = 1.18
-                }
-            } else {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    pulseScale = 1.0
-                }
+        .onReceive(speechService.$audioLevel) { sample in
+            ingest(sample: sample)
+        }
+    }
+
+    // MARK: - Body layout
+
+    /// Vertical stack: REC indicator → big timer → state line →
+    /// waveform → bottom action row. The bottom row is pinned via
+    /// `Spacer`s so the timer/waveform breathe in the middle.
+    private var composerBody: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            recIndicator
+                .padding(.top, 16)
+            timerLabel
+                .padding(.top, 18)
+            stateLine
+                .padding(.top, 10)
+                // Reserve the slot even when hidden so layout doesn't
+                // bounce when the user crosses into clip 2.
+                .frame(height: 20)
+            Spacer(minLength: 24)
+            waveform
+            Spacer(minLength: 32)
+            bottomActionRow
+                .padding(.bottom, 28)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Countdown content (phase = .countdown / .listening)
+
+    /// Two-phase countdown panel per the v2 spec. Phase 1 shows
+    /// "Ready" with the bright ring drawing in clockwise from 180°
+    /// (~600ms); Phase 2 shows 3 → 2 → 1 with a dim overlay sweeping
+    /// CCW from 180° continuously over 3s. Tap anywhere cancels and
+    /// dismisses the composer.
+    @ViewBuilder
+    private var countdownContent: some View {
+        let display = countdownLabel
+        let isWord = phase == .ready
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            Text("TAP TO CANCEL")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1.2)
+                .foregroundStyle(Crucible.Color.ink3)
+                .padding(.top, 12)
+            Spacer(minLength: 24)
+            ZStack {
+                CountdownRing(
+                    phase: phase,
+                    drawProgress: drawProgress,
+                    sweepProgress: sweepProgress,
+                    stroke: 15
+                )
+                Text(display)
+                    .font(.system(size: isWord ? 44 : 108,
+                                  weight: isWord ? .medium : .thin)
+                        .monospacedDigit())
+                    .tracking(isWord ? -0.6 : -3.6)
+                    .foregroundStyle(Crucible.Color.ink)
             }
+            .frame(width: 200, height: 200)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { cancelCountdown() }
+    }
+
+    /// Permission denied. Composer can't do anything — show a clear
+    /// message and let the user dismiss to Settings via the ✕.
+    private var permissionDeniedContent: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "mic.slash")
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(Crucible.Color.ink3)
+            Text("Microphone access denied")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink)
+            Text("Enable in Settings to record voice memories.")
+                .font(.footnote)
+                .foregroundStyle(Crucible.Color.ink2)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .padding(.horizontal, 32)
+    }
+
+    private var countdownLabel: String {
+        switch phase {
+        case .ready:            return "Ready"
+        case .countdown(let n): return "\(n)"
+        default:                return ""
         }
     }
 
-    // MARK: - Subviews
+    // MARK: - Header chrome (toolbar items)
 
-    private var transcriptArea: some View {
-        ScrollView {
-            Text(speechService.transcribedText.isEmpty
-                 ? "Listening…"
-                 : speechService.transcribedText)
-                .font(.title2)
-                .foregroundStyle(speechService.transcribedText.isEmpty ? Crucible.Color.ink4 : Crucible.Color.ink)
-                .lineSpacing(4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-        }
-        .frame(minHeight: 180)
-        .background(Crucible.Color.card)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-
-    /// Watch-style record button: solid ochre mic disc, pulsing
-    /// concentric rings while recording, mic.fill / stop.fill icon morph
-    /// so a single tap stays unambiguous (mic = start, stop = stop).
-    private var recordButton: some View {
+    /// ✕ glyph in a subtle circle. Replaces the previous text "Cancel"
+    /// button — the spec demotes destructive escapes to a corner glyph
+    /// across every capture surface.
+    private var cancelGlyph: some View {
         Button {
-            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-            if speechService.isRecording {
-                speechService.stopRecording()
-                stopTimer()
-            } else {
-                startRecording()
+            // During ready / countdown / denied, the recorder isn't
+            // hot — cancel just dismisses the composer back to its
+            // presenter. In the recording phase, fall through to the
+            // existing discard path (which deletes any captured
+            // audio and re-uses finishOrAbandon's cleanup).
+            switch phase {
+            case .ready, .countdown, .denied:
+                cancelCountdown()
+            case .recording:
+                Task { await finishOrAbandon(saveResult: false) }
             }
         } label: {
-            ZStack {
-                if speechService.isRecording {
-                    Circle()
-                        .fill(Crucible.Color.accent.opacity(0.18))
-                        .frame(width: 130, height: 130)
-                        .scaleEffect(pulseScale)
-                    Circle()
-                        .fill(Crucible.Color.accent.opacity(0.08))
-                        .frame(width: 160, height: 160)
-                        .scaleEffect(pulseScale)
-                }
-                Circle()
-                    .fill(Crucible.Color.accent)
-                    .frame(width: 100, height: 100)
-                    .shadow(color: Crucible.Color.accent.opacity(0.32), radius: 16, x: 0, y: 4)
-                Image(systemName: speechService.isRecording ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 38, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
+            Image(systemName: "xmark")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink2)
+                .frame(width: 32, height: 32)
+                .background(Crucible.Color.ink.opacity(0.06))
+                .clipShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(speechService.isRecording ? "Stop recording" : "Start recording")
+        .disabled(isFinalizing)
+        .accessibilityLabel("Cancel recording")
     }
 
-    // MARK: - Timer / lifecycle
+    /// "VOICE" eyebrow when starting fresh, or "Adding to · <Memory>"
+    /// pill when appending. The pill clips with ellipsis on long
+    /// Memory titles so the toolbar never wraps.
+    @ViewBuilder
+    private var headerCenter: some View {
+        if let appendingTo, !appendingTo.isEmpty {
+            HStack(spacing: 6) {
+                Text("Adding to ·")
+                    .foregroundStyle(Crucible.Color.ink3)
+                Text(appendingTo)
+                    .fontWeight(.medium)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .font(.system(size: 12))
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(Crucible.Color.card)
+            .overlay(
+                Capsule().stroke(Crucible.Color.hairline, lineWidth: 1)
+            )
+            .clipShape(Capsule())
+        } else {
+            Text("VOICE")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1.4)
+                .foregroundStyle(Crucible.Color.ink)
+        }
+    }
 
-    private var timerLabel: String {
+    // MARK: - REC indicator
+
+    /// ● REC — ochre dot + small-caps "REC" label. Pulses 1.4s
+    /// ease-in-out so the user has a tactile-feeling "audio is alive"
+    /// cue independent of the waveform.
+    private var recIndicator: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(Crucible.Color.accent)
+                .frame(width: 7, height: 7)
+                .opacity(recPulse ? 0.4 : 1.0)
+            Text("REC")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(1.6)
+                .foregroundStyle(Crucible.Color.accent)
+        }
+        .accessibilityLabel("Recording")
+    }
+
+    // MARK: - Timer hero
+
+    /// 72pt SF Pro Display thin tabular — the visual hero. Reads
+    /// from across the room.
+    private var timerLabel: some View {
+        Text(timerString)
+            .font(.system(size: 72, weight: .thin).monospacedDigit())
+            .tracking(-2.4)
+            .foregroundStyle(Crucible.Color.ink)
+            .accessibilityLabel("Recording \(timerString)")
+    }
+
+    /// Persistent "Clip N · on a roll" line. Visible from the first
+    /// Next tap until the user commits or cancels; hidden during the
+    /// initial clip (`currentClipIndex == 1`). Same rule as watch
+    /// (`currentClipIndex > 1`).
+    @ViewBuilder
+    private var stateLine: some View {
+        if nextController.currentClipIndex > 1 {
+            Text("Clip \(nextController.currentClipIndex) · on a roll")
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(-0.1)
+                .foregroundStyle(Crucible.Color.accent)
+        }
+    }
+
+    // MARK: - Live waveform
+
+    /// 56 bars, full-width, scaled to fill horizontally so the band
+    /// reads as the hero the watch spec calls for. Bars are 3pt wide
+    /// at 1pt gap nominally but scale to the container; right edge
+    /// = newest sample. All bars at full ochre — the recency cue
+    /// comes from values sliding left, not a dim gradient. No
+    /// SwiftUI animation: each 100ms tick snaps to the new state for
+    /// max apparent liveness (animating between 56-element arrays
+    /// merges adjacent frames visually into ~1 Hz motion).
+    private var waveform: some View {
+        GeometryReader { geo in
+            let barCount = Self.waveBarCount
+            let gap: CGFloat = 1
+            let barWidth = max(
+                2,
+                (geo.size.width - gap * CGFloat(barCount - 1)) / CGFloat(barCount)
+            )
+            HStack(alignment: .center, spacing: gap) {
+                ForEach(0..<barCount, id: \.self) { idx in
+                    let level = sampleAt(displayIndex: idx)
+                    let h = barHeight(for: level, available: geo.size.height)
+                    Capsule(style: .continuous)
+                        .fill(Crucible.Color.accent)
+                        .frame(width: barWidth, height: h)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+        .frame(height: 56)
+        .padding(.horizontal, 16)
+    }
+
+    /// Reads the audio level for a display position. Right-anchored:
+    /// `idx == waveBarCount - 1` is the newest sample. Positions
+    /// before the buffer's filled length read 0 (a 3pt stub) so the
+    /// band has a stable width while warming up.
+    private func sampleAt(displayIndex idx: Int) -> CGFloat {
+        let offsetFromRight = (Self.waveBarCount - 1) - idx
+        let bufIdx = waveSamples.count - 1 - offsetFromRight
+        return bufIdx >= 0 ? waveSamples[bufIdx] : 0
+    }
+
+    /// Maps 0…1 level to a bar height. Floor of 3pt so a quiet room
+    /// still shows a faint pulse — a perfectly flat row reads as
+    /// "stopped recording," which is the exact signal we don't want.
+    private func barHeight(for level: CGFloat, available: CGFloat) -> CGFloat {
+        let minH: CGFloat = 3
+        let scaled = max(level, 0.0)
+        return max(minH, min(available, scaled * available))
+    }
+
+    /// Appends a fresh sample to the rolling buffer; trims to the
+    /// visible window. Driven by `speechService.$audioLevel` ticks
+    /// at the service's 10 Hz throttle.
+    private func ingest(sample: CGFloat) {
+        guard speechService.isRecording else { return }
+        waveSamples.append(sample)
+        if waveSamples.count > Self.waveBarCount {
+            waveSamples.removeFirst(waveSamples.count - Self.waveBarCount)
+        }
+    }
+
+    // MARK: - Bottom action row (Stop & save + Next satellite)
+
+    /// Centered Stop button with the Next satellite at a fixed gap
+    /// to its right. ZStack so the Stop button sits horizontally
+    /// centered regardless of Next's presence; Next is positioned
+    /// `Stop.center + Stop.radius + 36pt` per spec.
+    private var bottomActionRow: some View {
+        ZStack {
+            stopColumn
+            HStack {
+                Spacer()
+                nextColumn
+                    .padding(.trailing, 28)
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    /// 84pt ochre circle with a rounded-square stop glyph inside.
+    /// Tap = commit + dismiss (same as Done). "Stop & save" caption
+    /// below at 11pt weight 600 in ink2.
+    private var stopColumn: some View {
+        VStack(spacing: 8) {
+            Button {
+                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                Task { await finishOrAbandon(saveResult: true) }
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Crucible.Color.accent)
+                        .frame(width: 84, height: 84)
+                        .shadow(color: Crucible.Color.accent.opacity(0.40),
+                                radius: 22, x: 0, y: 6)
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color(hex: 0xFFFCF6))
+                        .frame(width: 26, height: 26)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Stop and save")
+            Text("Stop & save")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.3)
+                .foregroundStyle(Crucible.Color.ink2)
+        }
+    }
+
+    /// 56×56 ochre-tinted button with a chevron + trailing dot
+    /// glyph. "Next" caption in 11pt weight 600 ochre below.
+    /// Disabled (35% opacity) before recording begins — the gesture
+    /// only means something mid-record.
+    private var nextColumn: some View {
+        VStack(spacing: 6) {
+            Button {
+                handleNextTap()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Crucible.Color.accent.opacity(0.18))
+                        .frame(width: 56, height: 56)
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 16, weight: .bold))
+                        Circle()
+                            .frame(width: 4, height: 4)
+                    }
+                    .foregroundStyle(Crucible.Color.accent)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Next clip — end this clip, start a new one")
+            .opacity(speechService.isRecording ? 1.0 : 0.35)
+            .disabled(!speechService.isRecording)
+            Text("Next")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.3)
+                .foregroundStyle(Crucible.Color.accent)
+        }
+    }
+
+    // MARK: - Finalizing overlay
+
+    /// Shown when Done is tapped — split + re-transcribe runs
+    /// locally; clips are short and transcription is fast.
+    private var finalizingOverlay: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .scaleEffect(1.2)
+            Text(finalizingClipCount > 1
+                 ? "Transcribing \(finalizingClipCount) clips…"
+                 : "Saving…")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .background(Crucible.Color.card)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.15), radius: 16, y: 4)
+    }
+
+    // MARK: - Countdown driver
+
+    /// Two-phase countdown per the v2 spec:
+    ///  • Phase 1 ("Ready"): bright ring draws in clockwise from
+    ///    180° over 600ms.
+    ///  • Phase 2 (3 → 2 → 1): bright ring stays full; dim overlay
+    ///    sweeps CCW from 180° continuously over 3s. Numerals swap
+    ///    at second ticks with a `selectionChanged` haptic. When the
+    ///    bright crescent closes at 12 o'clock, recording starts —
+    ///    no "Listening" beat.
+    ///
+    /// Reduced Motion: progress values snap instead of animating;
+    /// numerals still change per spec.
+    @MainActor
+    private func runCountdown() async {
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        let selection = UISelectionFeedbackGenerator()
+        selection.prepare()
+
+        // Phase 1: Ready (600ms, bright ring draws in). Animation
+        // is declared at the view level — just assign the target
+        // value. For Reduced Motion, wrap in a no-animation
+        // transaction so the view modifier doesn't interpolate.
+        phase = .ready
+        snap(&drawProgress, to: 0, animated: false)
+        snap(&sweepProgress, to: 0, animated: false)
+        snap(&drawProgress, to: 1, animated: !reduceMotion)
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        if Task.isCancelled { return }
+
+        // Phase 2: 3 · 2 · 1 (3s continuous dim sweep CCW).
+        phase = .countdown(3)
+        selection.selectionChanged()
+        snap(&sweepProgress, to: 1, animated: !reduceMotion)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        if Task.isCancelled { return }
+
+        phase = .countdown(2)
+        selection.selectionChanged()
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        if Task.isCancelled { return }
+
+        phase = .countdown(1)
+        selection.selectionChanged()
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        if Task.isCancelled { return }
+
+        // Ring crescent has closed — recording begins now.
+        phase = .recording
+        startRecording()
+    }
+
+    /// Assigns `value` to `target`. When `animated` is false, wraps
+    /// the assignment in a no-animation transaction so the view-
+    /// level `.animation(...)` modifier doesn't interpolate. Reduced
+    /// Motion users get instant value changes.
+    @MainActor
+    private func snap(_ target: inout CGFloat, to value: CGFloat, animated: Bool) {
+        if animated {
+            target = value
+        } else {
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { target = value }
+        }
+    }
+
+    /// Cancel the countdown before the recorder fires. Dismisses the
+    /// composer back to its presenter. Recording cancellation in the
+    /// `.recording` phase uses the existing `finishOrAbandon(saveResult:
+    /// false)` path.
+    private func cancelCountdown() {
+        countdownTask?.cancel()
+        countdownTask = nil
+        dismiss()
+    }
+
+    // MARK: - Timer + recording lifecycle
+
+    private var timerString: String {
         let total = Int(elapsed)
-        let minutes = total / 60
-        let seconds = total % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 
     private func startRecording() {
@@ -151,8 +629,25 @@ struct VoiceCaptureScreen: View {
         startedAt = Date()
         elapsed = 0
         stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+        // 100ms cadence so the timer is fluid — counter and waveform
+        // share visual rhythm.
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
             if let s = startedAt { elapsed = Date().timeIntervalSince(s) }
+        }
+        nextController.sessionDidStart()
+        // Snapshot a one-shot location fix in parallel with the
+        // recording. The result lands in `sessionLocation` whenever
+        // CoreLocation returns; if Done fires before the fix arrives
+        // the clips ship without coords (and the clip-row header
+        // falls back to date + time). Mirrors the watch's
+        // `WatchLocationProvider.requestOneShot` pattern.
+        sessionLocation = nil
+        Task { @MainActor in
+            let toggleOn = UserDefaults.standard.object(forKey: "tagMemoriesWithLocation") as? Bool ?? true
+            guard toggleOn else { return }
+            let granted = await LocationService.shared.requestWhenInUseAuthorization()
+            guard granted else { return }
+            sessionLocation = await LocationService.shared.currentLocation()
         }
     }
 
@@ -161,21 +656,236 @@ struct VoiceCaptureScreen: View {
         timer = nil
     }
 
-    private func finishOrAbandon(saveResult: Bool) {
+    /// Routes a Next tap. `NextClipController` handles the 2s
+    /// debounce — silent no-op if too soon. After a fired tap, write
+    /// the offsets sidecar so a recovery split can run on relaunch
+    /// if we crash.
+    private func handleNextTap() {
+        guard speechService.isRecording else { return }
+        let prevCount = nextController.nextTapOffsets.count
+        _ = nextController.handleNextTap()
+        if nextController.nextTapOffsets.count > prevCount {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            writeOffsetsSidecarIfPossible()
+        }
+    }
+
+    /// Crash-safety sidecar — JSON file `<sessionId>.offsets.json`
+    /// next to the master audio file. Recovery on relaunch: if both
+    /// master file and sidecar exist for an in-progress session, run
+    /// the split + transcribe pass and surface the clips. (Recovery
+    /// wiring is forward-looking; this method writes the sidecar.)
+    private func writeOffsetsSidecarIfPossible() {
+        guard let masterFilename = speechService.lastRecordingPath else { return }
+        let baseURL = SpeechService.audioURL(for: masterFilename)
+            .deletingPathExtension()
+        let sidecarURL = baseURL.appendingPathExtension("offsets.json")
+        let payload: [String: Any] = [
+            "rollGroupId": nextController.rollGroupId?.uuidString ?? "",
+            "offsets": nextController.nextTapOffsets
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: payload, options: []) {
+            try? data.write(to: sidecarURL, options: [.atomic])
+        }
+    }
+
+    private func deleteOffsetsSidecarIfAny(masterFilename: String) {
+        let baseURL = SpeechService.audioURL(for: masterFilename)
+            .deletingPathExtension()
+        let sidecarURL = baseURL.appendingPathExtension("offsets.json")
+        try? FileManager.default.removeItem(at: sidecarURL)
+    }
+
+    /// Save: stop recording, split the master file, re-transcribe
+    /// each clip, emit the session. Cancel: stop and delete
+    /// everything.
+    private func finishOrAbandon(saveResult: Bool) async {
         if speechService.isRecording {
             speechService.stopRecording()
         }
         stopTimer()
-        if saveResult {
-            onFinish(speechService.lastRecordingPath, speechService.transcribedText)
-        } else {
-            // Discard the audio file from disk so we don't leak abandoned
-            // recordings into the app sandbox.
+
+        guard saveResult else {
             if let path = speechService.lastRecordingPath {
                 AudioPlayerService.deleteAudio(filename: path)
+                deleteOffsetsSidecarIfAny(masterFilename: path)
             }
+            nextController.sessionDidEnd()
             onCancel()
+            dismiss()
+            return
         }
+
+        guard let masterFilename = speechService.lastRecordingPath else {
+            nextController.sessionDidEnd()
+            onFinish([], nextController.rollGroupId ?? UUID())
+            dismiss()
+            return
+        }
+
+        let masterURL = SpeechService.audioURL(for: masterFilename)
+        let offsets = nextController.nextTapOffsets
+        let rollId = nextController.rollGroupId ?? UUID()
+        let liveTranscript = speechService.transcribedText
+        finalizingClipCount = offsets.count + 1
+        isFinalizing = true
+
+        let fragments = await runSplitAndTranscribe(
+            masterURL: masterURL,
+            offsets: offsets,
+            rollGroupId: rollId,
+            liveTranscript: liveTranscript
+        )
+
+        AudioPlayerService.deleteAudio(filename: masterFilename)
+        deleteOffsetsSidecarIfAny(masterFilename: masterFilename)
+        nextController.sessionDidEnd()
+
+        onFinish(fragments, rollId)
         dismiss()
+    }
+
+    /// Splits the master file at the recorded offsets and runs a
+    /// local transcription pass on each split. Single-clip case (no
+    /// Next taps) short-circuits the split work and reuses the live
+    /// transcript, since splitting a 1-clip session would just
+    /// re-encode the same audio for no benefit.
+    private func runSplitAndTranscribe(
+        masterURL: URL,
+        offsets: [TimeInterval],
+        rollGroupId: UUID,
+        liveTranscript: String
+    ) async -> [VoiceClipFragment] {
+        let lat = sessionLocation?.coordinate.latitude
+        let lon = sessionLocation?.coordinate.longitude
+        if offsets.isEmpty {
+            let duration = audioDuration(at: masterURL)
+            return [VoiceClipFragment(
+                audioFilename: masterURL.lastPathComponent,
+                transcript: liveTranscript,
+                duration: duration,
+                latitude: lat,
+                longitude: lon
+            )]
+        }
+        do {
+            let outputDir = masterURL.deletingLastPathComponent()
+            let splits = try await VoiceClipSplitter.split(
+                masterURL: masterURL,
+                nextTapOffsets: offsets,
+                outputDir: outputDir,
+                rollGroupId: rollGroupId
+            )
+            var fragments: [VoiceClipFragment] = []
+            if #available(iOS 26.0, *) {
+                for split in splits {
+                    let url = SpeechService.audioURL(for: split.audioFilename)
+                    let result = await TranscriptionService.shared.transcribe(audioURL: url)
+                    fragments.append(VoiceClipFragment(
+                        audioFilename: split.audioFilename,
+                        transcript: result.text,
+                        duration: split.duration,
+                        latitude: lat,
+                        longitude: lon
+                    ))
+                }
+            } else {
+                fragments = splits.map {
+                    VoiceClipFragment(
+                        audioFilename: $0.audioFilename,
+                        transcript: "",
+                        duration: $0.duration,
+                        latitude: lat,
+                        longitude: lon
+                    )
+                }
+            }
+            return fragments
+        } catch {
+            ErrorState.shared.report(.mediaError("Voice clip split failed: \(error.localizedDescription)"))
+            let duration = audioDuration(at: masterURL)
+            return [VoiceClipFragment(
+                audioFilename: masterURL.lastPathComponent,
+                transcript: liveTranscript,
+                duration: duration,
+                latitude: lat,
+                longitude: lon
+            )]
+        }
+    }
+
+    private func audioDuration(at url: URL) -> TimeInterval {
+        guard let file = try? AVAudioFile(forReading: url) else { return 0 }
+        let sampleRate = file.processingFormat.sampleRate
+        return TimeInterval(file.length) / sampleRate
+    }
+}
+
+/// Two-phase fresh-start countdown ring per the v2 spec — phone
+/// composer side. Mirrors `WatchRecordingView.CountdownRing` so
+/// both surfaces share the visual vocabulary, scaled up for the
+/// phone (200pt diameter, 15pt stroke).
+///
+///  • Phase 1 (`.ready`): bright ochre stroke draws in clockwise
+///    from 180° as `drawProgress` goes 0 → 1.
+///  • Phase 2 (`.countdown`): bright full ring is the base; a dim
+///    ochre overlay (`#6B2510`) sweeps CCW from 180° as
+///    `sweepProgress` goes 0 → 1.
+struct CountdownRing: View {
+    var phase: VoiceCaptureScreen.ComposerPhase
+    var drawProgress: CGFloat
+    var sweepProgress: CGFloat
+    var stroke: CGFloat = 15
+
+    /// Countdown-specific ochre palette — intentionally brighter
+    /// than the brand `Crucible.Color.accent` (`#C64A1C`) per spec
+    /// `Watch · spec-2.md`: "a brightened ochre, more saturated
+    /// than the brand --accent for countdown readability." Both
+    /// values inlined here rather than in `CrucibleTheme` because
+    /// they only exist for the countdown surface.
+    private var brightOchre: Color {
+        Color(red: 0xE5/255, green: 0x5A/255, blue: 0x22/255)
+    }
+    private var dimOchre: Color {
+        Color(red: 0x9A/255, green: 0x38/255, blue: 0x15/255)
+    }
+
+    private var isCountdown: Bool {
+        if case .countdown = phase { return true } else { return false }
+    }
+
+    var body: some View {
+        // All three layers are ALWAYS rendered, just opacity-gated
+        // per phase. Stable view identity across phase transitions
+        // lets the `.animation(value:)` modifier interpolate trim
+        // changes cleanly — the previous switch-based version
+        // created the dim overlay fresh on phase change, leaving it
+        // with no prior value to animate from.
+        ZStack {
+            // Phase 1: bright stroke drawing in clockwise from 180°.
+            Circle()
+                .trim(from: 0, to: drawProgress)
+                .stroke(brightOchre,
+                        style: StrokeStyle(lineWidth: stroke, lineCap: .round))
+                .rotationEffect(.degrees(90))
+                .opacity(phase == .ready ? 1 : 0)
+                .animation(.linear(duration: 0.6), value: drawProgress)
+
+            // Phase 2: bright full base ring.
+            Circle()
+                .stroke(brightOchre, lineWidth: stroke)
+                .opacity(isCountdown ? 1 : 0)
+
+            // Phase 2: dim overlay — single arc, CCW from 12
+            // o'clock, 120°/sec (full circle in 3s).
+            Circle()
+                .trim(from: 0, to: sweepProgress)
+                .stroke(dimOchre,
+                        style: StrokeStyle(lineWidth: stroke, lineCap: .butt))
+                .rotationEffect(.degrees(-90))
+                .scaleEffect(x: -1, y: 1)
+                .opacity(isCountdown ? 1 : 0)
+                .animation(.linear(duration: 3.0), value: sweepProgress)
+        }
     }
 }

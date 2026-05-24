@@ -38,6 +38,23 @@ struct ClipMetadata: Codable, Equatable {
     /// schema for other sources (Siri shortcut, AirPods voice memo, etc.).
     let source: String
 
+    /// On-a-roll session signal. Stamped at recording-session start;
+    /// every clip in the same roll (between Record → Stop) carries the
+    /// same `rollGroupId`. Phone-side inbox grouper uses this as a
+    /// deterministic override over the time+location heuristic — a long
+    /// walk with location drift still lands as one Memory. Nil for
+    /// clips captured before the feature (and for any one-off clip
+    /// where the recorder didn't stamp a roll id).
+    /// See `docs/design/on-a-roll-spec.md` § Implementation notes.
+    let rollGroupId: UUID?
+
+    /// Next-tap offsets (seconds from session start) for an on-a-roll
+    /// session shipped as a single continuous master file. iPhone
+    /// splits the master into per-clip files on receive — same
+    /// `VoiceClipSplitter` used by the phone direct-voice composer.
+    /// Empty for single-clip sessions (no splitting needed).
+    let nextTapOffsets: [TimeInterval]
+
     /// Convenience init for the watch side. The iPhone never constructs
     /// these; it only decodes them.
     init(
@@ -47,7 +64,9 @@ struct ClipMetadata: Codable, Equatable {
         transcript: String,
         latitude: Double? = nil,
         longitude: Double? = nil,
-        source: String = "watch"
+        source: String = "watch",
+        rollGroupId: UUID? = nil,
+        nextTapOffsets: [TimeInterval] = []
     ) {
         self.clipId = clipId
         self.capturedAt = capturedAt
@@ -56,6 +75,8 @@ struct ClipMetadata: Codable, Equatable {
         self.latitude = latitude
         self.longitude = longitude
         self.source = source
+        self.rollGroupId = rollGroupId
+        self.nextTapOffsets = nextTapOffsets
     }
 
     // MARK: - Wire format
@@ -74,6 +95,10 @@ struct ClipMetadata: Codable, Equatable {
         ]
         if let latitude { dict["latitude"] = latitude }
         if let longitude { dict["longitude"] = longitude }
+        if let rollGroupId { dict["rollGroupId"] = rollGroupId.uuidString }
+        if !nextTapOffsets.isEmpty {
+            dict["nextTapOffsets"] = nextTapOffsets
+        }
         return dict
     }
 
@@ -87,6 +112,8 @@ struct ClipMetadata: Codable, Equatable {
             let transcript = dict["transcript"] as? String,
             let source = dict["source"] as? String
         else { return nil }
+        let rollGroupId: UUID? = (dict["rollGroupId"] as? String).flatMap(UUID.init(uuidString:))
+        let offsets = (dict["nextTapOffsets"] as? [TimeInterval]) ?? []
         return ClipMetadata(
             clipId: clipId,
             capturedAt: capturedAt,
@@ -94,7 +121,9 @@ struct ClipMetadata: Codable, Equatable {
             transcript: transcript,
             latitude: dict["latitude"] as? Double,
             longitude: dict["longitude"] as? Double,
-            source: source
+            source: source,
+            rollGroupId: rollGroupId,
+            nextTapOffsets: offsets
         )
     }
 }

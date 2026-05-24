@@ -9,6 +9,12 @@ struct MediaViewerView: View {
     @State private var fullImage: UIImage? = nil
     @State private var player: AVPlayer? = nil
     @State private var isLoading = true
+    /// Tracks whether `load()` activated the AVAudioSession (video
+    /// path only). Used by `onDisappear` to deactivate symmetrically
+    /// — without this, the session leaked into `.playback` mode
+    /// indefinitely after any video viewing, which on a plugged-in
+    /// iPhone made the device feel like it was refusing to sleep.
+    @State private var activatedAudioSession = false
 
     var body: some View {
         NavigationStack {
@@ -55,6 +61,10 @@ struct MediaViewerView: View {
         }
         .onDisappear {
             player?.pause()
+            if activatedAudioSession {
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+                activatedAudioSession = false
+            }
         }
     }
 
@@ -68,10 +78,14 @@ struct MediaViewerView: View {
         }
 
         if item.mediaType == .video {
-            // Configure audio session for video playback
+            // Configure audio session for video playback. The matching
+            // `setActive(false)` lives in `onDisappear`, gated on
+            // `activatedAudioSession` so an image-only viewing (which
+            // never activates) doesn't churn the HAL.
             let audioSession = AVAudioSession.sharedInstance()
             try? audioSession.setCategory(.playback, mode: .moviePlayback)
             try? audioSession.setActive(true)
+            activatedAudioSession = true
 
             let options = PHVideoRequestOptions()
             options.isNetworkAccessAllowed = true

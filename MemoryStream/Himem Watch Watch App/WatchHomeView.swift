@@ -1,30 +1,28 @@
 import SwiftUI
 
-/// Watch · Pages (swipe model). Three pages around capture-as-center,
+/// Watch · Pages (swipe model). Two pages around capture-as-center,
 /// in the spirit of Apple's Workout app: each page is *adjacent context*
 /// for the same continuous activity, not navigation through the app.
 ///
 /// Pages, left → right:
-///   1. **LATEST** — replay the most recent memory (read-only).
-///   2. **CAPTURE** — the job. Watch lands here on wrist-raise / app open.
-///   3. **PENDING** — queue + sync status, earned when clips wait for phone.
+///   1. **CAPTURE** — the job. Watch lands here on wrist-raise / app open.
+///   2. **PENDING** — queue + sync status, earned when clips wait for phone.
+///
+/// The Latest page (replay of the most recent clip) was retired —
+/// watch is a capture device, not a viewer. Browsing memories
+/// happens on phone.
 ///
 /// Recording state: the route switches to `.recording` (handled by
 /// `WatchRootView`), which replaces the TabView entirely. Page dots
 /// vanish because the TabView isn't mounted — the user can't accidentally
 /// swipe off a recording in progress. Stop & save or ✕ are the only exits.
-///
-/// The old "Pending · N · Tap to view" footer is retired: the page dots
-/// imply Pending exists, and a deliberate swipe is the explicit
-/// affordance.
 struct WatchHomeView: View {
     @EnvironmentObject var coordinator: WatchAppCoordinator
     @ObservedObject var pending: WatchPendingManifest
 
-    /// Identifies the three pages. Conformance to `Hashable` is what
+    /// Identifies the two pages. Conformance to `Hashable` is what
     /// `TabView.selection` needs.
     enum Page: Hashable {
-        case latest
         case capture
         case pending
     }
@@ -40,21 +38,18 @@ struct WatchHomeView: View {
         // guarantee identical slot tops across pages because each page's
         // vertical centering depends on its own content height. One
         // header above the TabView, title driven by `selection`, is the
-        // only way to get all three pages aligned.
+        // only way to get both pages aligned.
         //
         // The outer VStack ignores the top container safe area so the
         // `HIMEM · <PAGE>` header sits in the watchOS status-bar band
-        // alongside the system clock — that's where the design (Image
-        // 21) places it. The TabView below stays within the normal
-        // content area; only the header strip extends upward.
+        // alongside the system clock — that's where the design places
+        // it. The TabView below stays within the normal content area;
+        // only the header strip extends upward.
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
                 WatchPageHeader(pageTitle: title(for: selection))
 
                 TabView(selection: $selection) {
-                    WatchLatestPage()
-                        .tag(Page.latest)
-
                     WatchCapturePage(onTap: {
                         coordinator.route = .recording
                     })
@@ -86,7 +81,6 @@ struct WatchHomeView: View {
 
     private func title(for page: Page) -> String {
         switch page {
-        case .latest: return "LATEST"
         case .capture: return "RECORD"
         case .pending: return "PENDING"
         }

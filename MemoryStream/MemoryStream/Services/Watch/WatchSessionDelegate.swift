@@ -97,51 +97,98 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 return
             }
 
-            let clip = InboxClip(
-                clipId: clipId,
-                capturedAt: clipMetadata.capturedAt,
-                duration: clipMetadata.duration,
-                transcript: clipMetadata.transcript,
-                latitude: clipMetadata.latitude,
-                longitude: clipMetadata.longitude,
-                source: clipMetadata.source,
-                audioFilename: filename
+            await Self.acceptArrivedClip(
+                metadata: clipMetadata,
+                masterFilename: filename
             )
-            InboxManifest.shared.acceptClip(clip)
-            NSLog("[Himem][WC] manifest now contains \(InboxManifest.shared.count) clip(s)")
-            // Drive the inbox notification through the policy
-            // coordinator (burst / threshold / stale). It owns
-            // foreground suppression, daily cap, quiet hours, snooze /
-            // mute state, and per-clip stale scheduling — so we no
-            // longer fire a push on every clip arrival.
+
             WatchInboxNotificationCoordinator.shared.clipArrived(
                 clipId: clipId,
                 capturedAt: clipMetadata.capturedAt
             )
             self.sendConfirmation(clipId: clipId)
             NSLog("[Himem][WC] confirmation sent for clipId=\(clipId)")
-
-            // Watch ships clips with empty transcripts (on-watch
-            // transcription was deferred). Kick off iPhone-side
-            // transcription so the inbox row gets its preview text.
-            if clipMetadata.transcript.isEmpty {
-                Task { await self.transcribeAsync(clipId: clipId, audioURL: dest) }
-            }
         }
     }
 
-    /// Run on-device transcription over the saved audio file and update
-    /// the inbox manifest. Uses the iOS-26 `TranscriptionService`
-    /// (SpeechAnalyzer-backed) — handles long-form audio without the
-    /// SFSpeechRecognizer 60-second / multi-final-callback failure modes
-    /// the legacy path was prone to. Result is recorded as "attempted"
-    /// regardless of outcome so the inbox UI distinguishes pending from
-    /// no-speech.
-    private func transcribeAsync(clipId: UUID, audioURL: URL) async {
-        let result = await TranscriptionService.shared.transcribe(audioURL: audioURL)
-        await MainActor.run {
-            InboxManifest.shared.recordTranscriptionAttempt(clipId: clipId, transcript: result.text)
-            NSLog("[Himem][WC] transcription attempted for clipId=\(clipId), length=\(result.text.count)")
+    /// Routes a freshly-received watch clip into the inbox. Single-clip
+    /// sessions (no `nextTapOffsets`) become one `InboxClip` referencing
+    /// the master audio file. Roll sessions (with offsets) are split
+    /// via `VoiceClipSplitter` into N per-clip files + N `InboxClip`
+    /// rows, all sharing the master's `rollGroupId`. The master file
+    /// is removed after a successful split so disk doesn't carry both.
+    @MainActor
+    static func acceptArrivedClip(metadata: ClipMetadata, masterFilename: String) async {
+        NSLog("[Himem][WC] phone — acceptArrivedClip clipId=\(metadata.clipId) rollGroupId=\(metadata.rollGroupId?.uuidString ?? "nil") offsets=\(metadata.nextTapOffsets.count)")
+        let masterURL = InboxManifest.audioURL(for: masterFilename)
+        let offsets = metadata.nextTapOffsets
+        if offsets.isEmpty {
+            let clip = InboxClip(
+                clipId: metadata.clipId,
+                capturedAt: metadata.capturedAt,
+                duration: metadata.duration,
+                transcript: metadata.transcript,
+                latitude: metadata.latitude,
+                longitude: metadata.longitude,
+                source: metadata.source,
+                audioFilename: masterFilename,
+                rollGroupId: metadata.rollGroupId
+            )
+            InboxManifest.shared.acceptClip(clip)
+            NSLog("[Himem][WC] manifest now contains \(InboxManifest.shared.count) clip(s)")
+            return
+        }
+
+        // Roll session — split the master into per-clip InboxClips
+        // sharing the master's rollGroupId. Each split clip gets a
+        // fresh clipId so manifest-side dedup keys stay unique.
+        let rollGroupId = metadata.rollGroupId ?? metadata.clipId
+        let outputDir = InboxManifest.audioDirectory
+        do {
+            let fragments = try await VoiceClipSplitter.split(
+                masterURL: masterURL,
+                nextTapOffsets: offsets,
+                outputDir: outputDir,
+                rollGroupId: rollGroupId
+            )
+            let sessionStart = metadata.capturedAt
+            // Per-clip start times: clip 1 = sessionStart;
+            // clip i (i>1) = sessionStart + offsets[i-2].
+            let starts: [Date] = [sessionStart] + offsets.map { sessionStart.addingTimeInterval($0) }
+            for (idx, fragment) in fragments.enumerated() {
+                let clip = InboxClip(
+                    clipId: UUID(),
+                    capturedAt: idx < starts.count ? starts[idx] : sessionStart,
+                    duration: fragment.duration,
+                    transcript: "",
+                    latitude: metadata.latitude,
+                    longitude: metadata.longitude,
+                    source: metadata.source,
+                    audioFilename: fragment.audioFilename,
+                    rollGroupId: rollGroupId
+                )
+                InboxManifest.shared.acceptClip(clip)
+            }
+            // The master file's contents now live in the N fragments.
+            try? FileManager.default.removeItem(at: masterURL)
+            NSLog("[Himem][WC] split master into \(fragments.count) clips (rollGroupId=\(rollGroupId))")
+        } catch {
+            // Split failed — fall back to one inbox row pointing at
+            // the master, so we don't lose audio. User sees the
+            // unsplit recording; rollGroupId still attached.
+            NSLog("[Himem][WC] split failed (\(error.localizedDescription)), surfacing master as one clip")
+            let clip = InboxClip(
+                clipId: metadata.clipId,
+                capturedAt: metadata.capturedAt,
+                duration: metadata.duration,
+                transcript: metadata.transcript,
+                latitude: metadata.latitude,
+                longitude: metadata.longitude,
+                source: metadata.source,
+                audioFilename: masterFilename,
+                rollGroupId: metadata.rollGroupId
+            )
+            InboxManifest.shared.acceptClip(clip)
         }
     }
 

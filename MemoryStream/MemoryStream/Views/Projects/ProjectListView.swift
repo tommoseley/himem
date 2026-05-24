@@ -5,9 +5,11 @@ struct ProjectListView: View {
     @ObservedObject var projectVM: ProjectViewModel
     var selectedTopic: String?
     @State private var showNewProject = false
+    @State private var showProjectCap = false
     @State private var newProjectName = ""
     @State private var newProjectPurpose = ""
     @State private var selectedProjectId: UUID? = nil
+    @ObservedObject private var entitlement = EntitlementService.shared
 
     private var filteredProjects: [ProjectDisplayModel] {
         guard let topic = selectedTopic else { return projectVM.projects }
@@ -31,11 +33,9 @@ struct ProjectListView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                     Button {
-                        newProjectName = ""
-                        newProjectPurpose = ""
-                        showNewProject = true
+                        attemptCreateProject()
                     } label: {
-                        Text("Create your first Project")
+                        Text("Create your first project")
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundStyle(.white)
@@ -65,19 +65,27 @@ struct ProjectListView: View {
                             }
                     }
 
-                    // "New Project" row at the bottom
+                    // Inline "+ New project" row. Per the JSX
+                    // (`ScrProjectsList`) this is the single creation
+                    // affordance — no FAB. Lowercase "project" matches
+                    // the spec's vocabulary ("New project" everywhere).
                     Button {
-                        newProjectName = ""
-                        newProjectPurpose = ""
-                        showNewProject = true
+                        attemptCreateProject()
                     } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus.circle.fill")
+                        HStack(spacing: 10) {
+                            ZStack {
+                                Circle()
+                                    .fill(Crucible.Color.accent)
+                                    .frame(width: 22, height: 22)
+                                Image(systemName: "plus")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.white)
+                            }
+                            .accessibilityHidden(true)
+                            Text("New project")
+                                .font(.system(size: 15, weight: .medium))
+                                .tracking(-0.2)
                                 .foregroundStyle(Crucible.Color.accent)
-                                .accessibilityHidden(true)
-                            Text("New Project")
-                                .foregroundStyle(Crucible.Color.accent)
-                                .fontWeight(.semibold)
                         }
                     }
                     .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
@@ -97,11 +105,33 @@ struct ProjectListView: View {
                 }
             )
         }
+        .sheet(isPresented: $showProjectCap) {
+            ProjectCapSheet()
+                .presentationDetents([.medium])
+        }
         .navigationDestination(item: $selectedProjectId) { projectId in
             if let project = projectVM.projects.first(where: { $0.id == projectId }) {
                 ProjectDetailView(projectId: project.id, projectVM: projectVM)
             }
         }
+    }
+
+    /// Free users get one project. The "New Project" affordance routes
+    /// to the cap sheet instead of opening the creation form when the
+    /// user is already at the limit. Plus/Founders skip the check.
+    /// The decision is pure — see `ProjectCapPolicy.canCreate`.
+    private func attemptCreateProject() {
+        let allowed = ProjectCapPolicy.canCreate(
+            isPlus: entitlement.isPlus,
+            currentCount: projectVM.projects.count
+        )
+        guard allowed else {
+            showProjectCap = true
+            return
+        }
+        newProjectName = ""
+        newProjectPurpose = ""
+        showNewProject = true
     }
 }
 
@@ -126,14 +156,17 @@ private struct NewProjectSheet: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    TextField("What are you building toward?", text: $purpose)
+                    // UI label "goal" — Core Data attribute remains
+                    // `Project.purpose` for backward-compat (renaming
+                    // would force a CloudKit schema deploy).
+                    TextField("Goal", text: $purpose)
                         .font(.subheadline)
                         .foregroundStyle(Crucible.Color.ink)
                         .padding(12)
                         .background(Crucible.Color.paper)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
-                    Text("A video? A post? An idea?")
+                    Text("What are you building toward? A video, a post, an idea.")
                         .font(.caption)
                         .foregroundStyle(Crucible.Color.ink4)
                         .padding(.leading, 4)
@@ -142,7 +175,7 @@ private struct NewProjectSheet: View {
                 Spacer()
             }
             .padding(24)
-            .navigationTitle("New Project")
+            .navigationTitle("New project")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

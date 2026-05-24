@@ -128,10 +128,29 @@ struct AddMemoryToProjectSheet: View {
             toggleMembership(entry: entry)
         } label: {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: isMember ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(isMember ? Crucible.Color.accent : Crucible.Color.ink4)
-                    .padding(.top, 1)
+                // Crucible: selection = ring; the check appears
+                // *inside* the filled ring to mark "yes, this row
+                // is the answer." Bare `checkmark.circle.fill`
+                // alone is the violation called out in the
+                // Projects MVP spec (Bugs fixed by this design).
+                ZStack {
+                    Circle()
+                        .strokeBorder(
+                            isMember ? Crucible.Color.accent : Crucible.Color.ink4,
+                            lineWidth: 1.5
+                        )
+                        .background(
+                            Circle()
+                                .fill(isMember ? Crucible.Color.accent : Color.clear)
+                        )
+                        .frame(width: 22, height: 22)
+                    if isMember {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.displayTitle)
                         .font(.subheadline.weight(.semibold))

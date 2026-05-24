@@ -53,6 +53,11 @@ struct CameraPickerView: UIViewControllerRepresentable {
             picker.videoMaximumDuration = 120
         }
         picker.delegate = context.coordinator
+        // Photo / video composer is active — disable the system idle
+        // timer per the CLAUDE.md "Wake Lock (Idle Timer)" rule.
+        // Released in `dismantleUIViewController` so the lock lifts on
+        // commit, cancel, or any other dismissal path.
+        WakeLock.shared.acquire()
         return picker
     }
 
@@ -66,6 +71,15 @@ struct CameraPickerView: UIViewControllerRepresentable {
     /// of the app gets its `allButUpsideDown` orientations back.
     static func dismantleUIViewController(_ uiViewController: UIImagePickerController, coordinator: Coordinator) {
         OrientationLock.shared.portraitOnly = false
+        // Symmetric release of the wake lock acquired in
+        // `makeUIViewController`. SwiftUI guarantees dismantle fires
+        // on every dismissal path (commit, cancel, scene change), so
+        // there's no leak window. MainActor-hop because dismantle is
+        // synchronous-nonisolated by the protocol but the wake lock
+        // is main-actor-isolated.
+        Task { @MainActor in
+            WakeLock.shared.release()
+        }
     }
 
     func makeCoordinator() -> Coordinator {

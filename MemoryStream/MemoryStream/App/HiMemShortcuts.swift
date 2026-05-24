@@ -1,5 +1,38 @@
 import AppIntents
 import Foundation
+import Combine
+
+// MARK: - Capture-request bus
+
+/// In-process signal that something (today: a Siri AppIntent) asked
+/// HiMem to open its voice composer. `JournalView` observes
+/// `pendingVoiceRecord` and, when it flips true, presents the voice
+/// composer (which auto-starts recording on appear). View clears the
+/// flag after handling so the next intent invocation re-triggers.
+///
+/// Lives in-process because AppIntents with `openAppWhenRun: true`
+/// run in the app's main process after launch — no cross-process /
+/// UserDefaults plumbing is necessary.
+@MainActor
+final class CaptureRequestBus: ObservableObject {
+    static let shared = CaptureRequestBus()
+    @Published var pendingVoiceRecord: Bool = false
+    private init() {}
+}
+
+// MARK: - Start Voice Recording Intent
+
+struct StartVoiceRecordingIntent: AppIntent {
+    static var title: LocalizedStringResource = "Record a memory in HiMem"
+    static var description: IntentDescription = "Open HiMem and start recording a voice memory."
+    static var openAppWhenRun: Bool = true
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        CaptureRequestBus.shared.pendingVoiceRecord = true
+        return .result(dialog: "Recording.")
+    }
+}
 
 // MARK: - Create Entry Intent
 
@@ -26,7 +59,19 @@ struct CreateEntryIntent: AppIntent {
         )
         let _ = try storage.createProcessingTask(for: entry)
 
+        // Same gate as EntryLifecycleService.processEntry — Free
+        // skips auto-org; Plus/Founders precheck assists vs. the
+        // user's auto-organize threshold. Engine deducts on success.
         Task.detached {
+            let shouldProcess: Bool = await MainActor.run {
+                let entitlement = EntitlementService.shared
+                switch entitlement.tier {
+                case .free: return false
+                case .plusMonthly, .plusYearly, .founders:
+                    return entitlement.canAutoOrganize
+                }
+            }
+            guard shouldProcess else { return }
             await ProcessingEngine.shared.processEntry(entry)
         }
 
@@ -39,6 +84,17 @@ struct CreateEntryIntent: AppIntent {
 struct HiMemShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
+            intent: StartVoiceRecordingIntent(),
+            phrases: [
+                "Record in \(.applicationName)",
+                "Record a memory in \(.applicationName)",
+                "Start recording in \(.applicationName)",
+                "Voice memo in \(.applicationName)",
+            ],
+            shortTitle: "Record a memory",
+            systemImageName: "mic.fill"
+        )
+        AppShortcut(
             intent: CreateEntryIntent(),
             phrases: [
                 "Capture in \(.applicationName)",
@@ -47,7 +103,6 @@ struct HiMemShortcuts: AppShortcutsProvider {
                 "Remember in \(.applicationName)",
                 "Note in \(.applicationName)",
                 "New entry in \(.applicationName)",
-                "Record in \(.applicationName)",
             ],
             shortTitle: "Capture a thought",
             systemImageName: "text.bubble"

@@ -22,12 +22,30 @@ final class AuthService: ObservableObject {
         keychain.retrieve(key: userIDKey) != nil
     }
 
+    /// Re-reads the Keychain into `isAuthenticated` / `userName`.
+    /// Called by `MemoryStreamApp` on `scenePhase → .active` so an
+    /// AuthService instance that was created during a locked-device
+    /// background launch (where the Keychain was unreadable, leaving
+    /// `isAuthenticated=false`) recovers as soon as the user
+    /// foregrounds the app. Idempotent: a no-op when state is
+    /// already correct.
+    func refresh() {
+        loadStoredCredentials()
+    }
+
     private func loadStoredCredentials() {
         if let name = keychain.retrieve(key: userNameKey) {
             userName = name
+            // In-place migration: re-saving rewrites the entry with
+            // the current `KeychainService` access class
+            // (`AfterFirstUnlockThisDeviceOnly`). Entries written
+            // under the previous `WhenUnlockedThisDeviceOnly` class
+            // get upgraded the first time we successfully read them.
+            _ = keychain.save(key: userNameKey, value: name)
         }
-        if keychain.retrieve(key: userIDKey) != nil {
+        if let userID = keychain.retrieve(key: userIDKey) {
             isAuthenticated = true
+            _ = keychain.save(key: userIDKey, value: userID)
         }
     }
 

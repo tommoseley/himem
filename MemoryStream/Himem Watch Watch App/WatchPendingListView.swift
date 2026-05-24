@@ -222,10 +222,15 @@ struct WatchPendingListView: View {
             )
         )
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            // Text-only label: the system collapses Label into a
+            // huge edge-filling trash glyph on watchOS, which looks
+            // disproportionate at chip-row scale. Matches Mail and
+            // Messages' watchOS swipe-delete idiom — short word in
+            // destructive red, no icon.
             Button(role: .destructive) {
                 clipPendingDelete = clip
             } label: {
-                Label("Delete", systemImage: "trash")
+                Text("Delete")
             }
         }
     }

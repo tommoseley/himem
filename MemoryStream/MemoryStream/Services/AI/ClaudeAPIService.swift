@@ -12,6 +12,17 @@ final class ClaudeAPIService {
         let topics: [String]
         let summary: String
         let title: String?
+        /// Server-returned next-step bullets — short, verb-first,
+        /// concrete actions / commitments / reminders / follow-ups.
+        /// Optional so responses from servers that haven't yet been
+        /// updated to emit this field decode cleanly (treated the same
+        /// as an empty array — Next steps row hides in the UI).
+        ///
+        /// Server contract (see `docs/design/next-steps-server-prompt.md`):
+        /// only populated when the memory contains a concrete action.
+        /// No invented "consider reflecting on…" filler. Strings
+        /// suitable as Reminders/Calendar titles down the line.
+        let nextSteps: [String]?
     }
 
     struct EntityResult: Codable {
@@ -26,7 +37,11 @@ final class ClaudeAPIService {
 
     // MARK: - Analyze
 
-    func analyzeEntry(_ text: String, existingTopics: [String] = []) async throws -> AnalysisResult {
+    func analyzeEntry(
+        _ text: String,
+        existingTopics: [String] = [],
+        existingMentions: [String] = []
+    ) async throws -> AnalysisResult {
         var request = URLRequest(url: analyzeURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -35,6 +50,9 @@ final class ClaudeAPIService {
         var body: [String: Any] = ["text": text]
         if !existingTopics.isEmpty {
             body["existing_topics"] = existingTopics
+        }
+        if !existingMentions.isEmpty {
+            body["existing_mentions"] = existingMentions
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

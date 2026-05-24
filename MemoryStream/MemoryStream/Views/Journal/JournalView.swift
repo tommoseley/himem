@@ -26,6 +26,12 @@ struct JournalView: View {
     /// (and prevents in-session arrivals from triggering it — those go
     /// through notifications instead).
     @ObservedObject private var inbox = InboxManifest.shared
+    @ObservedObject private var upgradePromptCoord = UpgradePromptCoordinator.shared
+    /// Set by `StartVoiceRecordingIntent` when Siri ("Record in
+    /// HiMem") fires. Observed below to present the voice composer
+    /// automatically. The composer auto-starts recording on appear,
+    /// so flipping this flag is enough to land in mic-hot state.
+    @ObservedObject private var captureRequests = CaptureRequestBus.shared
     @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var undoEntry: EntryDisplayModel? = nil
@@ -52,6 +58,12 @@ struct JournalView: View {
                 },
                 onSettingsTap: { showSettings = true }
             )
+
+            // Soft 75% AI-assist banner — once per monthly period for
+            // Plus / Founders. Free users never see this.
+            Soft75Banner()
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
 
             // Inbox banner — appears when there are watch clips waiting to
             // be organized. Per the Append-Watch design rule: calm by
@@ -85,13 +97,16 @@ struct JournalView: View {
 
         // Append-spec FAB — tap opens the action stack; pick a modality and
         // the corresponding capture surface presents. The result lands as a
-        // new memory.
-        AppendFAB(
-            onSelect: { modality in
-                activeCaptureModality = modality
-            },
-            accessibilityLabel: "Add memory"
-        )
+        // new memory. Hidden in Projects tab — the inline "+ New project"
+        // row is the create affordance there (per Projects MVP design).
+        if viewMode == .memories {
+            AppendFAB(
+                onSelect: { modality in
+                    activeCaptureModality = modality
+                },
+                accessibilityLabel: "Add memory"
+            )
+        }
 
         errorBannerOverlay
 
@@ -116,8 +131,14 @@ struct JournalView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
         }
-        .sheet(isPresented: $showInbox) {
-            ClipInboxView(viewModel: viewModel)
+        .sheet(isPresented: $upgradePromptCoord.shouldShow, onDismiss: {
+            upgradePromptCoord.markShown()
+        }) {
+            UpgradePromptSheet()
+                .presentationDetents([.large])
+        }
+        .navigationDestination(isPresented: $showInbox) {
+            SessionListView(viewModel: viewModel)
         }
         .onReceive(NotificationCenter.default.publisher(for: NotificationService.openInboxNotification)) { _ in
             // Tap on inbox-arrival notification → open the inbox sheet.
@@ -209,6 +230,13 @@ struct JournalView: View {
                 let _ = await speechService.requestAuthorization()
                 await cameraService.requestAuthorization()
             }
+            // Check whether the upgrade prompt should fire on launch.
+            // Idempotent — won't re-fire if already shown.
+            upgradePromptCoord.evaluate()
+            handlePendingVoiceRecordRequest()
+        }
+        .onChange(of: captureRequests.pendingVoiceRecord) { _, pending in
+            if pending { handlePendingVoiceRecordRequest() }
         }
         .onChange(of: speechService.error) { _, error in
             speechErrorMessage = error?.localizedDescription
@@ -269,6 +297,22 @@ struct JournalView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d"
         return formatter.string(from: date)
+    }
+
+    /// Drains a pending `StartVoiceRecordingIntent` request by
+    /// presenting the voice composer. Clears the bus flag so the
+    /// next Siri invocation re-triggers. Called both on `.onAppear`
+    /// (cold-launch path: Siri fires the intent, app opens, the bus
+    /// already has the flag set) and on `.onChange` of the flag
+    /// (warm path: app is already foreground, Siri flips the flag).
+    private func handlePendingVoiceRecordRequest() {
+        guard captureRequests.pendingVoiceRecord else { return }
+        captureRequests.pendingVoiceRecord = false
+        // Defer one tick so any in-flight sheet/cover dismiss can
+        // settle before we present the voice composer.
+        DispatchQueue.main.async {
+            activeCaptureModality = .voice
+        }
     }
 
     // MARK: - Memories list
@@ -623,6 +667,41 @@ struct JournalView: View {
             let captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
                 ids.map { ($0, .image) }
             newId = viewModel.saveEntry(content: "", inputType: .camera, mediaCaptures: captures)
+
+        case .voiceSession(let clips, _):
+            // "On a roll" — multi-clip phone voice session. First clip
+            // creates the Memory; subsequent clips append voice
+            // fragments to that same Memory so the whole roll lands
+            // as one entry. `rollGroupId` is informational; on phone
+            // the create-then-append path is already in one memory by
+            // construction, so we don't need to stamp it.
+            guard let first = clips.first else { return }
+            newId = viewModel.saveEntry(
+                content: first.transcript,
+                inputType: .voiceInApp,
+                voiceFilename: first.audioFilename
+            )
+            if let entryId = newId {
+                for clip in clips.dropFirst() {
+                    viewModel.appendToEntry(
+                        entryId: entryId,
+                        additionalContent: clip.transcript,
+                        voiceFilename: clip.audioFilename
+                    )
+                }
+            }
+            // Stamp the session's location fix onto every fragment's
+            // MediaReference + kick off reverse-geocode for the
+            // clip-row header (Memory Detail v3). All clips in a
+            // phone roll share the one session-start fix.
+            for clip in clips {
+                ClipLocationResolver.stamp(
+                    osIdentifier: clip.audioFilename,
+                    latitude: clip.latitude,
+                    longitude: clip.longitude,
+                    in: StorageService.shared.viewContext
+                )
+            }
         }
 
         // Navigate into the new memory so the captured contribution lands as
@@ -645,6 +724,8 @@ struct JournalHeaderView: View {
     let onDensityTap: () -> Void
     let onSettingsTap: () -> Void
 
+    @ObservedObject private var entitlement = EntitlementService.shared
+
     var body: some View {
         ZStack {
             // Center: segmented toggle
@@ -656,12 +737,17 @@ struct JournalHeaderView: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 180)
 
-            // Left: HI MEM
-            HStack {
+            // Left: HI MEM + tier mark
+            HStack(spacing: 6) {
                 Text("HiMem")
                     .font(.caption2.bold())
                     .tracking(2.0)
                     .foregroundStyle(Crucible.Color.ink3)
+                TierMark(
+                    tier: entitlement.tier,
+                    supporter: entitlement.isSupporter,
+                    size: 10
+                )
                 Spacer()
             }
 

@@ -66,6 +66,7 @@
 		A100000093 /* VoiceSilenceWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000093 /* VoiceSilenceWatcher.swift */; };
 		A100000094 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000094 /* LocationService.swift */; };
 		A100000095 /* PlacemarkFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000095 /* PlacemarkFormatter.swift */; };
+		A100000096 /* ClipLocationResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000096 /* ClipLocationResolver.swift */; };
 		A100000201 /* MediaTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000201 /* MediaTile.swift */; };
 		A100000203 /* AudioPlayerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000203 /* AudioPlayerSheet.swift */; };
 		A100000204 /* TextSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000204 /* TextSegment.swift */; };
@@ -88,10 +89,52 @@
 		A100000322 /* NoteEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000322 /* NoteEditorSheet.swift */; };
 		A100000323 /* Linkify.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000323 /* Linkify.swift */; };
 		A100000500 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000500 /* NotificationService.swift */; };
-		A100000510 /* WatchInboxNotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000510 /* WatchInboxNotificationCoordinator.swift */; };
 		A100000501 /* StorageService+EntryQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000501 /* StorageService+EntryQueries.swift */; };
 		A100000502 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000502 /* TranscriptionService.swift */; };
 		A100000503 /* FragmentMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000503 /* FragmentMigration.swift */; };
+		A100000510 /* WatchInboxNotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000510 /* WatchInboxNotificationCoordinator.swift */; };
+		A100000600 /* AssistBalance.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000600 /* AssistBalance.swift */; };
+		A100000601 /* EntitlementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000601 /* EntitlementService.swift */; };
+		A100000602 /* StoreKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000602 /* StoreKitService.swift */; };
+		A100000603 /* FoundersCounter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000603 /* FoundersCounter.swift */; };
+		A100000604 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = B100000604 /* Products.storekit */; };
+		A100000610 /* PricingPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000610 /* PricingPrimitives.swift */; };
+		A100000611 /* OnboardingStarterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000611 /* OnboardingStarterCard.swift */; };
+		A100000612 /* OrganizeMemoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000612 /* OrganizeMemoryCard.swift */; };
+		A100000613 /* YourAIView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000613 /* YourAIView.swift */; };
+		A100000614 /* UpgradeHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000614 /* UpgradeHubView.swift */; };
+		A100000615 /* AIPackPurchaseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000615 /* AIPackPurchaseSheet.swift */; };
+		A100000616 /* FoundersDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000616 /* FoundersDetailView.swift */; };
+		A100000617 /* ProjectCapSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000617 /* ProjectCapSheet.swift */; };
+		A100000618 /* UpgradePromptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000618 /* UpgradePromptSheet.swift */; };
+		A100000619 /* Soft75Banner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000619 /* Soft75Banner.swift */; };
+		A100000620 /* SupporterDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000620 /* SupporterDetailView.swift */; };
+		A100000621 /* TenureTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000621 /* TenureTracker.swift */; };
+		A100000622 /* DebugPricingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000622 /* DebugPricingPanel.swift */; };
+		A100000623 /* OrganizedSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000623 /* OrganizedSection.swift */; };
+		A100000624 /* OrganizeMemorySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000624 /* OrganizeMemorySection.swift */; };
+		A100000625 /* AISuggestionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000625 /* AISuggestionsCard.swift */; };
+		A100000626 /* OrganizePass.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000626 /* OrganizePass.swift */; };
+		A100000627 /* LegacyInferenceCardSlot.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000627 /* LegacyInferenceCardSlot.swift */; };
+		A100000628 /* TierMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000628 /* TierMark.swift */; };
+		A100000629 /* OrganizedChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000629 /* OrganizedChip.swift */; };
+		A100000631 /* WakeLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000631 /* WakeLock.swift */; };
+		A100000632 /* FABWithCardSuppression.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000632 /* FABWithCardSuppression.swift */; };
+		A100000633 /* SummaryRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000633 /* SummaryRenderer.swift */; };
+		A100000654 /* ProjectCapPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000654 /* ProjectCapPolicy.swift */; };
+		A100000655 /* ProjectAssistGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000655 /* ProjectAssistGate.swift */; };
+		A100000657 /* ProjectAssistUpsellSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000657 /* ProjectAssistUpsellSheet.swift */; };
+		A100000660 /* SuggestionPrefilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000660 /* SuggestionPrefilter.swift */; };
+		A100000662 /* SuggestedMemoriesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000662 /* SuggestedMemoriesSheet.swift */; };
+		A100000670 /* MinClipDebouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000670 /* MinClipDebouncer.swift */; };
+		A100000671 /* NextClipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000671 /* NextClipController.swift */; };
+		A100000672 /* MinClipDebouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000670 /* MinClipDebouncer.swift */; };
+		A100000673 /* NextClipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000671 /* NextClipController.swift */; };
+		A100000680 /* VoiceClipSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000680 /* VoiceClipSplitter.swift */; };
+		A100000690 /* ClipSessionGrouper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000690 /* ClipSessionGrouper.swift */; };
+		A100000691 /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000691 /* SessionListView.swift */; };
+		A100000693 /* SwipeToDelete.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000693 /* SwipeToDelete.swift */; };
+		A100000694 /* SwipeToDiscard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000694 /* SwipeToDiscard.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 		E2AD0E5C2FAD185F009FFEA1 /* Himem Watch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E2E510952FAE5AD3000D2670 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E2E510942FAE5AD3000D2670 /* WidgetKit.framework */; };
@@ -224,6 +267,7 @@
 		B100000093 /* VoiceSilenceWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSilenceWatcher.swift; sourceTree = "<group>"; };
 		B100000094 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		B100000095 /* PlacemarkFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacemarkFormatter.swift; sourceTree = "<group>"; };
+		B100000096 /* ClipLocationResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipLocationResolver.swift; sourceTree = "<group>"; };
 		B100000201 /* MediaTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTile.swift; sourceTree = "<group>"; };
 		B100000203 /* AudioPlayerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerSheet.swift; sourceTree = "<group>"; };
 		B100000204 /* TextSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSegment.swift; sourceTree = "<group>"; };
@@ -244,10 +288,50 @@
 		B100000322 /* NoteEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorSheet.swift; sourceTree = "<group>"; };
 		B100000323 /* Linkify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Linkify.swift; sourceTree = "<group>"; };
 		B100000500 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
-		B100000510 /* WatchInboxNotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchInboxNotificationCoordinator.swift; sourceTree = "<group>"; };
 		B100000501 /* StorageService+EntryQueries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StorageService+EntryQueries.swift"; sourceTree = "<group>"; };
 		B100000502 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		B100000503 /* FragmentMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FragmentMigration.swift; sourceTree = "<group>"; };
+		B100000510 /* WatchInboxNotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchInboxNotificationCoordinator.swift; sourceTree = "<group>"; };
+		B100000600 /* AssistBalance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistBalance.swift; sourceTree = "<group>"; };
+		B100000601 /* EntitlementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementService.swift; sourceTree = "<group>"; };
+		B100000602 /* StoreKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitService.swift; sourceTree = "<group>"; };
+		B100000603 /* FoundersCounter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundersCounter.swift; sourceTree = "<group>"; };
+		B100000604 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = file.storekit; path = Products.storekit; sourceTree = "<group>"; };
+		B100000610 /* PricingPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PricingPrimitives.swift; sourceTree = "<group>"; };
+		B100000611 /* OnboardingStarterCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStarterCard.swift; sourceTree = "<group>"; };
+		B100000612 /* OrganizeMemoryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeMemoryCard.swift; sourceTree = "<group>"; };
+		B100000613 /* YourAIView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YourAIView.swift; sourceTree = "<group>"; };
+		B100000614 /* UpgradeHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeHubView.swift; sourceTree = "<group>"; };
+		B100000615 /* AIPackPurchaseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPackPurchaseSheet.swift; sourceTree = "<group>"; };
+		B100000616 /* FoundersDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundersDetailView.swift; sourceTree = "<group>"; };
+		B100000617 /* ProjectCapSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCapSheet.swift; sourceTree = "<group>"; };
+		B100000618 /* UpgradePromptSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradePromptSheet.swift; sourceTree = "<group>"; };
+		B100000619 /* Soft75Banner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Soft75Banner.swift; sourceTree = "<group>"; };
+		B100000620 /* SupporterDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupporterDetailView.swift; sourceTree = "<group>"; };
+		B100000621 /* TenureTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TenureTracker.swift; sourceTree = "<group>"; };
+		B100000622 /* DebugPricingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugPricingPanel.swift; sourceTree = "<group>"; };
+		B100000623 /* OrganizedSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizedSection.swift; sourceTree = "<group>"; };
+		B100000624 /* OrganizeMemorySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeMemorySection.swift; sourceTree = "<group>"; };
+		B100000625 /* AISuggestionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISuggestionsCard.swift; sourceTree = "<group>"; };
+		B100000626 /* OrganizePass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizePass.swift; sourceTree = "<group>"; };
+		B100000627 /* LegacyInferenceCardSlot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyInferenceCardSlot.swift; sourceTree = "<group>"; };
+		B100000628 /* TierMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TierMark.swift; sourceTree = "<group>"; };
+		B100000629 /* OrganizedChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizedChip.swift; sourceTree = "<group>"; };
+		B100000631 /* WakeLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeLock.swift; sourceTree = "<group>"; };
+		B100000632 /* FABWithCardSuppression.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FABWithCardSuppression.swift; sourceTree = "<group>"; };
+		B100000633 /* SummaryRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryRenderer.swift; sourceTree = "<group>"; };
+		B100000654 /* ProjectCapPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCapPolicy.swift; sourceTree = "<group>"; };
+		B100000655 /* ProjectAssistGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistGate.swift; sourceTree = "<group>"; };
+		B100000657 /* ProjectAssistUpsellSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistUpsellSheet.swift; sourceTree = "<group>"; };
+		B100000660 /* SuggestionPrefilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionPrefilter.swift; sourceTree = "<group>"; };
+		B100000662 /* SuggestedMemoriesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestedMemoriesSheet.swift; sourceTree = "<group>"; };
+		B100000670 /* MinClipDebouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MinClipDebouncer.swift; path = Shared/MinClipDebouncer.swift; sourceTree = "<group>"; };
+		B100000671 /* NextClipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NextClipController.swift; path = Shared/NextClipController.swift; sourceTree = "<group>"; };
+		B100000680 /* VoiceClipSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClipSplitter.swift; sourceTree = "<group>"; };
+		B100000690 /* ClipSessionGrouper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipSessionGrouper.swift; sourceTree = "<group>"; };
+		B100000691 /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
+		B100000693 /* SwipeToDelete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDelete.swift; sourceTree = "<group>"; };
+		B100000694 /* SwipeToDiscard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDiscard.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Himem Watch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -389,6 +473,8 @@
 				B100000204 /* TextSegment.swift */,
 				B100000301 /* CaptureModality.swift */,
 				B100000048 /* Project.swift */,
+				B100000600 /* AssistBalance.swift */,
+				B100000626 /* OrganizePass.swift */,
 				B100000024 /* MemoryStream.xcdatamodeld */,
 			);
 			path = Models;
@@ -405,6 +491,7 @@
 				G100000061 /* Projects */,
 				G100000402 /* Inbox */,
 				G100000043 /* Components */,
+				G100000610 /* Pricing */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -433,8 +520,11 @@
 				G100000400 /* Watch */,
 				G100000500 /* Notifications */,
 				G100000501 /* Transcription */,
+				G100000600 /* Entitlement */,
+				G100000620 /* Projects */,
 				B100000071 /* EpigraphService.swift */,
 				B100000081 /* AuthService.swift */,
+				B100000631 /* WakeLock.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -485,6 +575,8 @@
 				B100000323 /* Linkify.swift */,
 				B100000302 /* AppendFAB.swift */,
 				B100000305 /* CaptureFlowHost.swift */,
+				B100000693 /* SwipeToDelete.swift */,
+				B100000694 /* SwipeToDiscard.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -498,6 +590,7 @@
 				B100000055 /* TopicSlugHelper.swift */,
 				B100000057 /* EntryLifecycleService.swift */,
 				B100000311 /* InboxManifest.swift */,
+				B100000690 /* ClipSessionGrouper.swift */,
 				B100000501 /* StorageService+EntryQueries.swift */,
 				B100000503 /* FragmentMigration.swift */,
 			);
@@ -513,8 +606,10 @@
 				B100000012 /* SpeechService.swift */,
 				B100000093 /* VoiceSilenceWatcher.swift */,
 				B100000030 /* AudioPlayerService.swift */,
+				B100000680 /* VoiceClipSplitter.swift */,
 				B100000034 /* CameraService.swift */,
 				B100000035 /* ThumbnailService.swift */,
+				B100000633 /* SummaryRenderer.swift */,
 			);
 			path = AI;
 			sourceTree = "<group>";
@@ -551,6 +646,7 @@
 			children = (
 				B100000094 /* LocationService.swift */,
 				B100000095 /* PlacemarkFormatter.swift */,
+				B100000096 /* ClipLocationResolver.swift */,
 			);
 			path = Location;
 			sourceTree = "<group>";
@@ -570,6 +666,7 @@
 				B100000051 /* ProjectListView.swift */,
 				B100000052 /* ProjectDetailView.swift */,
 				B100000206 /* AddMemoryToProjectSheet.swift */,
+				B100000662 /* SuggestedMemoriesSheet.swift */,
 			);
 			path = Projects;
 			sourceTree = "<group>";
@@ -586,6 +683,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000072 /* epigraphs.json */,
+				B100000604 /* Products.storekit */,
 				E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */,
 			);
 			path = Resources;
@@ -625,6 +723,8 @@
 			children = (
 				B100000310 /* ClipMetadata.swift */,
 				B100000320 /* WatchSharedState.swift */,
+				B100000670 /* MinClipDebouncer.swift */,
+				B100000671 /* NextClipController.swift */,
 			);
 			name = Shared;
 			sourceTree = "<group>";
@@ -633,6 +733,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000314 /* ClipInboxView.swift */,
+				B100000691 /* SessionListView.swift */,
 				B100000315 /* CreateMemoryFromClipsSheet.swift */,
 				B100000316 /* AddClipsToMemorySheet.swift */,
 			);
@@ -654,6 +755,54 @@
 				B100000502 /* TranscriptionService.swift */,
 			);
 			path = Transcription;
+			sourceTree = "<group>";
+		};
+		G100000600 /* Entitlement */ = {
+			isa = PBXGroup;
+			children = (
+				B100000601 /* EntitlementService.swift */,
+				B100000602 /* StoreKitService.swift */,
+				B100000603 /* FoundersCounter.swift */,
+				B100000654 /* ProjectCapPolicy.swift */,
+				B100000655 /* ProjectAssistGate.swift */,
+				B100000621 /* TenureTracker.swift */,
+			);
+			path = Entitlement;
+			sourceTree = "<group>";
+		};
+		G100000610 /* Pricing */ = {
+			isa = PBXGroup;
+			children = (
+				B100000610 /* PricingPrimitives.swift */,
+				B100000611 /* OnboardingStarterCard.swift */,
+				B100000612 /* OrganizeMemoryCard.swift */,
+				B100000623 /* OrganizedSection.swift */,
+				B100000624 /* OrganizeMemorySection.swift */,
+				B100000625 /* AISuggestionsCard.swift */,
+				B100000627 /* LegacyInferenceCardSlot.swift */,
+				B100000628 /* TierMark.swift */,
+				B100000629 /* OrganizedChip.swift */,
+				B100000632 /* FABWithCardSuppression.swift */,
+				B100000613 /* YourAIView.swift */,
+				B100000614 /* UpgradeHubView.swift */,
+				B100000615 /* AIPackPurchaseSheet.swift */,
+				B100000616 /* FoundersDetailView.swift */,
+				B100000617 /* ProjectCapSheet.swift */,
+				B100000657 /* ProjectAssistUpsellSheet.swift */,
+				B100000618 /* UpgradePromptSheet.swift */,
+				B100000619 /* Soft75Banner.swift */,
+				B100000620 /* SupporterDetailView.swift */,
+				B100000622 /* DebugPricingPanel.swift */,
+			);
+			path = Pricing;
+			sourceTree = "<group>";
+		};
+		G100000620 /* Projects */ = {
+			isa = PBXGroup;
+			children = (
+				B100000660 /* SuggestionPrefilter.swift */,
+			);
+			path = Projects;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -892,6 +1041,7 @@
 				E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */,
 				A100000030 /* Assets.xcassets in Resources */,
 				A100000072 /* epigraphs.json in Resources */,
+				A100000604 /* Products.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -911,6 +1061,8 @@
 			files = (
 				A100000313 /* ClipMetadata.swift in Sources */,
 				A100000320 /* WatchSharedState.swift in Sources */,
+				A100000672 /* MinClipDebouncer.swift in Sources */,
+				A100000673 /* NextClipController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -943,8 +1095,12 @@
 				A100000001 /* MemoryStreamApp.swift in Sources */,
 				A100000310 /* ClipMetadata.swift in Sources */,
 				A100000311 /* InboxManifest.swift in Sources */,
+				A100000690 /* ClipSessionGrouper.swift in Sources */,
 				A100000312 /* WatchSessionDelegate.swift in Sources */,
 				A100000314 /* ClipInboxView.swift in Sources */,
+				A100000691 /* SessionListView.swift in Sources */,
+				A100000693 /* SwipeToDelete.swift in Sources */,
+				A100000694 /* SwipeToDiscard.swift in Sources */,
 				A100000315 /* CreateMemoryFromClipsSheet.swift in Sources */,
 				A100000316 /* AddClipsToMemorySheet.swift in Sources */,
 				A100000002 /* JournalEntry.swift in Sources */,
@@ -958,6 +1114,39 @@
 				A100000008 /* StorageService.swift in Sources */,
 				A100000500 /* NotificationService.swift in Sources */,
 				A100000510 /* WatchInboxNotificationCoordinator.swift in Sources */,
+				A100000600 /* AssistBalance.swift in Sources */,
+				A100000601 /* EntitlementService.swift in Sources */,
+				A100000654 /* ProjectCapPolicy.swift in Sources */,
+				A100000655 /* ProjectAssistGate.swift in Sources */,
+				A100000660 /* SuggestionPrefilter.swift in Sources */,
+				A100000670 /* MinClipDebouncer.swift in Sources */,
+				A100000671 /* NextClipController.swift in Sources */,
+				A100000602 /* StoreKitService.swift in Sources */,
+				A100000603 /* FoundersCounter.swift in Sources */,
+				A100000610 /* PricingPrimitives.swift in Sources */,
+				A100000611 /* OnboardingStarterCard.swift in Sources */,
+				A100000612 /* OrganizeMemoryCard.swift in Sources */,
+				A100000623 /* OrganizedSection.swift in Sources */,
+				A100000624 /* OrganizeMemorySection.swift in Sources */,
+				A100000625 /* AISuggestionsCard.swift in Sources */,
+				A100000626 /* OrganizePass.swift in Sources */,
+				A100000627 /* LegacyInferenceCardSlot.swift in Sources */,
+				A100000628 /* TierMark.swift in Sources */,
+				A100000629 /* OrganizedChip.swift in Sources */,
+				A100000631 /* WakeLock.swift in Sources */,
+				A100000632 /* FABWithCardSuppression.swift in Sources */,
+				A100000633 /* SummaryRenderer.swift in Sources */,
+				A100000613 /* YourAIView.swift in Sources */,
+				A100000614 /* UpgradeHubView.swift in Sources */,
+				A100000615 /* AIPackPurchaseSheet.swift in Sources */,
+				A100000616 /* FoundersDetailView.swift in Sources */,
+				A100000617 /* ProjectCapSheet.swift in Sources */,
+				A100000657 /* ProjectAssistUpsellSheet.swift in Sources */,
+				A100000618 /* UpgradePromptSheet.swift in Sources */,
+				A100000619 /* Soft75Banner.swift in Sources */,
+				A100000620 /* SupporterDetailView.swift in Sources */,
+				A100000621 /* TenureTracker.swift in Sources */,
+				A100000622 /* DebugPricingPanel.swift in Sources */,
 				A100000501 /* StorageService+EntryQueries.swift in Sources */,
 				A100000502 /* TranscriptionService.swift in Sources */,
 				A100000503 /* FragmentMigration.swift in Sources */,
@@ -965,6 +1154,7 @@
 				A100000010 /* LocalEntityExtractor.swift in Sources */,
 				A100000011 /* SearchEngine.swift in Sources */,
 				A100000012 /* SpeechService.swift in Sources */,
+				A100000680 /* VoiceClipSplitter.swift in Sources */,
 				A100000013 /* ConnectivityMonitor.swift in Sources */,
 				A100000014 /* ProcessingEngine.swift in Sources */,
 				A100000015 /* DisplayModels.swift in Sources */,
@@ -998,6 +1188,7 @@
 				A100000051 /* ProjectListView.swift in Sources */,
 				A100000052 /* ProjectDetailView.swift in Sources */,
 				A100000206 /* AddMemoryToProjectSheet.swift in Sources */,
+				A100000662 /* SuggestedMemoriesSheet.swift in Sources */,
 				A100000045 /* EntryExpandedView.swift in Sources */,
 				A100000205 /* ChronologicalCaptureStream.swift in Sources */,
 				A100000028 /* TopicApprovalService.swift in Sources */,
@@ -1019,6 +1210,7 @@
 				A100000092 /* VoiceSearchView.swift in Sources */,
 				A100000093 /* VoiceSilenceWatcher.swift in Sources */,
 				A100000094 /* LocationService.swift in Sources */,
+				A100000096 /* ClipLocationResolver.swift in Sources */,
 				A100000095 /* PlacemarkFormatter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

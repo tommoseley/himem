@@ -5,6 +5,7 @@ struct LaunchScreenView: View {
     let onStorageReady: () -> Void
     let onComplete: () -> Void
 
+    @ObservedObject private var entitlement = EntitlementService.shared
     @State private var storageLoaded = false
     @State private var syncProgress: CGFloat = 0
     @State private var syncDone = false
@@ -59,17 +60,38 @@ struct LaunchScreenView: View {
                 // Wordmark — collapsed reads "HiMem"; expanded reads
                 // "HiMemories!" on sync complete. The two-Text
                 // construction preserves the brand's bold/italic + color
-                // split across the transition.
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text("Hi")
-                        .font(.custom("Georgia-Bold", size: 56))
-                        .foregroundStyle(ink)
-                    Text(wordmarkExpanded ? "Memories!" : "Mem")
-                        .font(.custom("Georgia-Italic", size: 56))
-                        .foregroundStyle(ochre)
+                // split across the transition. The TierMark sits to the
+                // right of the wordmark for paying users (Founder /
+                // Plus / Supporter) so they feel seen without ceremony.
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        Text("Hi")
+                            .font(.custom("Georgia-Bold", size: 56))
+                            .foregroundStyle(ink)
+                        Text(wordmarkExpanded ? "Memories!" : "Mem")
+                            .font(.custom("Georgia-Italic", size: 56))
+                            .foregroundStyle(ochre)
+                    }
+                    .animation(.easeInOut(duration: 0.6), value: wordmarkExpanded)
+
+                    TierMark(
+                        tier: entitlement.tier,
+                        supporter: entitlement.isSupporter,
+                        size: 18
+                    )
+                    .offset(y: -10) // align baseline with wordmark cap
                 }
                 .padding(.top, 18)
-                .animation(.easeInOut(duration: 0.6), value: wordmarkExpanded)
+
+                // Founder line — unbounded acknowledgment under the
+                // wordmark. Plus / Supporter / Free see nothing here;
+                // the TierMark above is their identity.
+                if entitlement.tier == .founders {
+                    Text("Thanks for being a founder.")
+                        .font(.custom("Georgia-Italic", size: 13))
+                        .foregroundStyle(ink.opacity(0.6))
+                        .padding(.top, 6)
+                }
 
                 // Moment (epigraph) — 220ms start
                 VStack(alignment: .leading, spacing: 10) {

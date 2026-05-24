@@ -180,6 +180,7 @@ final class EntryLifecycleService {
             request.fetchLimit = 1
             guard let ref = try storage.viewContext.fetch(request).first else { return }
             ref.text = text
+            ref.lastEditedAt = Date()
             try storage.save(context: storage.viewContext)
             regenerateContent(forEntryId: entryId)
         } catch {
@@ -197,6 +198,7 @@ final class EntryLifecycleService {
             request.fetchLimit = 1
             guard let ref = try storage.viewContext.fetch(request).first else { return }
             ref.transcript = transcript
+            ref.lastEditedAt = Date()
             try storage.save(context: storage.viewContext)
             regenerateContent(forEntryId: entryId)
         } catch {
@@ -359,8 +361,12 @@ final class EntryLifecycleService {
 
             // nil = no change to title; "" = clear (let displayTitle fall back
             // to the AI/derived/input-type ladder); non-empty = explicit set.
+            // Any user-side title write clears the `titleSourcedFromAI` flag
+            // — the ✦ AI tag next to the title drops honestly once the user
+            // has reworded the suggestion.
             if let newTitle {
                 entry.title = newTitle.isEmpty ? nil : newTitle
+                entry.titleSourcedFromAI = false
             }
 
             removeEntities(from: entry, ids: removedTagIds)
@@ -588,9 +594,36 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Auto-fires the AI processing pipeline if the user's tier allows
+    /// it. Free users never auto-run — they tap "Organize with AI" on
+    /// individual memories so each consumption is explicit. Plus and
+    /// Founders auto-run as long as their monthly allowance + pack
+    /// balance has assists left; silently skips when exhausted.
+    ///
+    /// Per v2 pricing rule, the engine itself deducts the assist only
+    /// on a successful pass — failures cost zero. We do a precheck
+    /// here (`canConsumeAssist`) so we don't even hit the API when
+    /// the user is already at the cap; the engine's post-success
+    /// `tryConsumeAssist()` is what actually decrements.
     private func processEntry(_ entry: JournalEntry) {
         guard let processingEngine else { return }
         Task.detached {
+            let shouldProcess: Bool = await MainActor.run {
+                let entitlement = EntitlementService.shared
+                switch entitlement.tier {
+                case .free:
+                    // Manual-only for Free; auto-org would burn the
+                    // 3 starter assists silently.
+                    return false
+                case .plusMonthly, .plusYearly, .founders:
+                    // Respect the user's auto-organize threshold —
+                    // they can carve out a manual-only reserve from
+                    // their monthly + pack pool. At default 0 this
+                    // is equivalent to `canConsumeAssist`.
+                    return entitlement.canAutoOrganize
+                }
+            }
+            guard shouldProcess else { return }
             await processingEngine.processEntry(entry)
         }
     }

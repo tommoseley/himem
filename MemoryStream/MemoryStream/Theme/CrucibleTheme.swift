@@ -40,6 +40,16 @@ enum Crucible {
         static let danger  = SwiftUI.Color(hex: 0xB8311E)
         static let info    = SwiftUI.Color(hex: 0x1E5C8E)
 
+        // AI attribution — Crucible reserves this blue for every
+        // AI-generated/owned surface (Project Assist, AI Summary
+        // eyebrow, "App is inferring" block, ✦ sparkle glyph,
+        // confidence chips, suggested-memory rationale). PR 5 of
+        // the Projects MVP sweeps every site over to this token.
+        // Same hex as `info`; named separately so future palette
+        // tweaks can move one without dragging the other.
+        static let aiBlue      = SwiftUI.Color(hex: 0x1E5C8E)
+        static let aiBlueTint  = SwiftUI.Color(hex: 0xE6EEF8)
+
         // Status — entry lifecycle chips (specific bg/fg pairs)
         enum Status {
             static let editedBg    = SwiftUI.Color(hex: 0xE6EEF8)
@@ -52,8 +62,12 @@ enum Crucible {
             static let draftFg     = SwiftUI.Color(hex: 0x1A1612).opacity(0.64)
             static let failedBg    = SwiftUI.Color(hex: 0xF6E1DD)
             static let failedFg    = SwiftUI.Color(hex: 0xB8311E)
-            static let inferringBg = SwiftUI.Color(hex: 0xF3E4C3)
-            static let inferringFg = SwiftUI.Color(hex: 0x8A5A0E)
+            // AI inference attribution — Crucible reserves blue for
+            // AI moments. The amber/ochre forms `0xF3E4C3` / `0x8A5A0E`
+            // were the source of the ochre AI bug; both moved to AI
+            // blue 2026-05-19 as part of the Projects MVP sweep.
+            static let inferringBg = SwiftUI.Color(hex: 0xE6EEF8)
+            static let inferringFg = SwiftUI.Color(hex: 0x1E5C8E)
             static let capturedBg  = SwiftUI.Color(hex: 0xEFE6D4)
             static let capturedFg  = SwiftUI.Color(hex: 0x7A5A10)
         }
@@ -68,14 +82,17 @@ enum Crucible {
             static let attach = captureAttach
         }
 
-        // AI — everything the model does wears this warm bronze.
-        // Sits in the ochre/amber family so the AI affordance feels native to
-        // the warm/ink system, but stays distinct from ember (user intent /
-        // action accent) and from status.info (passive blue).
+        // AI — everything the model does wears this blue. Crucible
+        // reserves the blue family for AI moments; user intent /
+        // action accent stays in the ochre family. The 2026-05 sweep
+        // moved this from the ochre/amber family (`0x8A5A0E` etc.) to
+        // blue after callout from the Projects MVP review — the old
+        // ochre AI bled into the action-accent ochre and made the
+        // provenance illegible.
         enum AI {
-            static let base   = SwiftUI.Color(hex: 0x8A5A0E)
-            static let strong = SwiftUI.Color(hex: 0x6B4509)
-            static let tint   = SwiftUI.Color(hex: 0xF3E4C3)
+            static let base   = SwiftUI.Color(hex: 0x1E5C8E)
+            static let strong = SwiftUI.Color(hex: 0x154567)
+            static let tint   = SwiftUI.Color(hex: 0xE6EEF8)
         }
 
         // Topic palette — finite pool of hues users pick from when creating a Topic.

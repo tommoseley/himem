@@ -128,6 +128,18 @@ struct AddClipsToMemorySheet: View {
         }
         try? storage.save(context: storage.viewContext)
 
+        // Stamp per-clip lat/lon from each watch clip's fix and kick
+        // off background reverse-geocode for `placeName` (Memory
+        // Detail v3 clip-row header).
+        for clip in clips {
+            ClipLocationResolver.stamp(
+                osIdentifier: clip.audioFilename,
+                latitude: clip.latitude,
+                longitude: clip.longitude,
+                in: storage.viewContext
+            )
+        }
+
         InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
         dismiss()
     }

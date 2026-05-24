@@ -12,8 +12,40 @@ struct WatchPendingClip: Codable, Identifiable, Equatable {
     let latitude: Double?
     let longitude: Double?
     let audioFilename: String
+    /// On-a-roll session id. Stamped on every clip in the same
+    /// Record→Stop session. Phone-side inbox grouper uses this as a
+    /// deterministic override over time+location.
+    let rollGroupId: UUID?
+    /// Next-tap offsets (seconds from session start) for the
+    /// continuous master audio file. Empty for single-clip sessions.
+    /// iPhone splits the master into per-clip files on receive
+    /// (see `VoiceClipSplitter`); the watch ships one file plus this
+    /// list rather than rotating recorders per tap.
+    let nextTapOffsets: [TimeInterval]
 
     var id: UUID { clipId }
+
+    init(
+        clipId: UUID,
+        capturedAt: Date,
+        duration: TimeInterval,
+        transcript: String,
+        latitude: Double?,
+        longitude: Double?,
+        audioFilename: String,
+        rollGroupId: UUID? = nil,
+        nextTapOffsets: [TimeInterval] = []
+    ) {
+        self.clipId = clipId
+        self.capturedAt = capturedAt
+        self.duration = duration
+        self.transcript = transcript
+        self.latitude = latitude
+        self.longitude = longitude
+        self.audioFilename = audioFilename
+        self.rollGroupId = rollGroupId
+        self.nextTapOffsets = nextTapOffsets
+    }
 
     var metadata: ClipMetadata {
         ClipMetadata(
@@ -23,7 +55,9 @@ struct WatchPendingClip: Codable, Identifiable, Equatable {
             transcript: transcript,
             latitude: latitude,
             longitude: longitude,
-            source: "watch"
+            source: "watch",
+            rollGroupId: rollGroupId,
+            nextTapOffsets: nextTapOffsets
         )
     }
 }
@@ -201,6 +235,7 @@ final class WatchPendingManifest: ObservableObject {
     private func load() {
         loadLastConfirmedReceipt()
         let url = Self.manifestURL
+        defer { syncSharedCountAfterLoad() }
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             let data = try Data(contentsOf: url)
@@ -214,4 +249,29 @@ final class WatchPendingManifest: ObservableObject {
             clips = []
         }
     }
+
+    /// Force-syncs the App Group's `pendingCount` to match `clips.count`
+    /// and kicks the complication's timeline. Required after `load()`
+    /// because both the audio-missing filter on load AND the
+    /// decode-failure fallback (`clips = []`) bypass `replace(with:)`,
+    /// the normal mutation funnel. Without this, the complication can
+    /// read a stale count from a prior session — symptom: watch app
+    /// says "all caught up" while the complication still shows
+    /// "1 pending." Money-tested in
+    /// `WatchPendingManifestLoadSyncTests`.
+    private func syncSharedCountAfterLoad() {
+        WatchSharedState.pendingCount = clips.count
+        Task { await WidgetTimelineRefresher.refresh() }
+    }
+
+    #if DEBUG
+    /// Test seam — re-runs the load logic so each money test can
+    /// observe `clips` and `WatchSharedState.pendingCount` against a
+    /// freshly-prepared manifest on disk. The shared singleton init
+    /// runs once per process; without this seam, tests would all see
+    /// whatever the first init landed on.
+    func forceReloadForTesting() {
+        load()
+    }
+    #endif
 }

@@ -38,6 +38,18 @@ final class SpeechService: ObservableObject {
     /// True once the SpeechTranscriber model is installed AND the
     /// analyzer is prepared. UI gates the record button on this.
     @Published var isModelReady = false
+    /// Normalised mic input level in 0...1 for the voice composer's
+    /// live waveform. Sampled in the audio tap (peak amplitude →
+    /// dB → 0...1 perceptual map), throttled to 10 Hz before
+    /// hopping to MainActor — the tap fires ~45×/s at 1024 frames /
+    /// 44.1 kHz, which is too noisy for SwiftUI to redraw on every
+    /// callback. Reset to 0 in `stopRecording()`.
+    @Published private(set) var audioLevel: CGFloat = 0
+    /// Audio-level throttle clock — `nonisolated` so the tap thread
+    /// can read/write without crossing actor boundaries on every
+    /// buffer. Guarded by `levelLock`.
+    private nonisolated(unsafe) var lastLevelPublishedAt: CFTimeInterval = 0
+    private let levelLock = NSLock()
 
     // MARK: - Persistent (across recordings)
 
@@ -251,6 +263,12 @@ final class SpeechService: ObservableObject {
             return
         }
 
+        // Capture active — disable the system idle timer per the
+        // CLAUDE.md "Wake Lock (Idle Timer)" rule. Released in
+        // `stopRecording()`. Refcounted so concurrent capture
+        // surfaces compose cleanly (none today, but cheap insurance).
+        WakeLock.shared.acquire()
+
         let filename = UUID().uuidString + ".caf"
         let fileURL = Self.audioDirectory.appendingPathComponent(filename)
         currentRecordingURL = fileURL
@@ -293,6 +311,7 @@ final class SpeechService: ObservableObject {
             }
             self?.streamBuffer(buffer)
             try? self?.audioFile?.write(from: buffer)
+            self?.publishAudioLevelIfDue(from: buffer)
         }
 
         // Analyzer.start with the new input sequence. Fire-and-forget Task
@@ -386,6 +405,10 @@ final class SpeechService: ObservableObject {
         audioFile = nil
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Release the wake lock acquired in `startRecording`. Safe
+        // to call even if startRecording bailed before acquire — the
+        // refcount guard treats release with count==0 as a no-op.
+        WakeLock.shared.release()
 
         if let url = currentRecordingURL, FileManager.default.fileExists(atPath: url.path) {
             lastRecordingPath = url.lastPathComponent
@@ -395,16 +418,78 @@ final class SpeechService: ObservableObject {
         currentRecordingURL = nil
 
         isRecording = false
+        audioLevel = 0
     }
 
     deinit {
         resultsTask?.cancel()
     }
 
+    // MARK: - Live audio level (waveform driver)
+
+    /// Computes peak amplitude over the current tap buffer and, if
+    /// at least 100ms has elapsed since the last publish, hops to
+    /// MainActor and updates `audioLevel`. The throttle clock is
+    /// guarded by `levelLock` since this is called on the audio
+    /// thread and we want to avoid every buffer racing the main
+    /// queue.
+    private nonisolated func publishAudioLevelIfDue(from buffer: AVAudioPCMBuffer) {
+        let now = CACurrentMediaTime()
+        levelLock.lock()
+        let due = (now - lastLevelPublishedAt) >= 0.1
+        if due { lastLevelPublishedAt = now }
+        levelLock.unlock()
+        guard due else { return }
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        let frameLength = Int(buffer.frameLength)
+        var peak: Float = 0
+        // Sample loop — simple peak; RMS would feel less responsive
+        // for the same reason `averagePower` did on the watch. Speech
+        // impulses dominate the buffer's max value cleanly.
+        for i in 0..<frameLength {
+            let s = abs(channelData[i])
+            if s > peak { peak = s }
+        }
+        let normalized = Self.normalisedLevel(forPeakAmplitude: peak)
+        Task { @MainActor [weak self] in
+            self?.audioLevel = normalized
+        }
+    }
+
+    /// Maps 0…1 linear peak amplitude to a 0…1 perceptual band for
+    /// the live waveform. Mirrors the watch's `normalisedLevel` —
+    /// peak DB range -50 → -10 puts ambient near zero and normal
+    /// speech around 0.7+, with headroom for loud peaks to fill the
+    /// band. Below -50 dB is the room-noise floor and zeroed so the
+    /// waveform doesn't twitch in a quiet room.
+    private nonisolated static func normalisedLevel(forPeakAmplitude peak: Float) -> CGFloat {
+        guard peak > 0 else { return 0 }
+        let db = 20 * log10f(peak)
+        let minDb: Float = -50
+        let maxDb: Float = -10
+        if db < minDb { return 0 }
+        if db > maxDb { return 1 }
+        return CGFloat((db - minDb) / (maxDb - minDb))
+    }
+
     // MARK: - Playback
 
     static func audioURL(for filename: String) -> URL {
         audioDirectory.appendingPathComponent(filename)
+    }
+}
+
+extension SpeechService: RecordingHandoff {
+    /// Phone uses the master-file-then-split approach (see
+    /// `docs/design/on-a-roll-spec.md` and `VoiceClipSplitter`): the
+    /// `AVAudioEngine` + analyzer write one continuous file across
+    /// the whole recording session, so there's nothing to swap at a
+    /// Next tap. The view records the tap offset in
+    /// `NextClipController.nextTapOffsets` and splits the master at
+    /// Save time. This conformance is therefore a no-op — but real
+    /// because `NextClipController` requires a handoff implementor.
+    func handoffToNewClip(rollGroupId: UUID, newClipIndex: Int) {
+        // Intentional no-op.
     }
 }
 

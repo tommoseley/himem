@@ -12,6 +12,12 @@ import Photos
 struct CaptureFlowHost: ViewModifier {
     @Binding var activeModality: CaptureModality?
     @ObservedObject var speechService: SpeechService
+    /// When non-nil, the voice composer renders an "Adding to · X"
+    /// header pill so the user knows which Memory the captured
+    /// clips will land in. Per `docs/Voice Composer · spec` —
+    /// the append composer is identical to direct-voice plus this
+    /// pill. Pass `nil` for capture-new flows.
+    let appendingTo: String?
     let onCaptured: (CapturedItem) -> Void
 
     @State private var isMountingCamera = false
@@ -20,11 +26,13 @@ struct CaptureFlowHost: ViewModifier {
         content
             .sheet(isPresented: voiceBinding) {
                 VoiceCaptureScreen(
-                    onFinish: { filename, transcript in
-                        onCaptured(.voice(filename: filename, transcript: transcript))
+                    onFinish: { clips, rollGroupId in
+                        guard !clips.isEmpty else { return }
+                        onCaptured(.voiceSession(clips: clips, rollGroupId: rollGroupId))
                     },
                     onCancel: {},
-                    speechService: speechService
+                    speechService: speechService,
+                    appendingTo: appendingTo
                 )
             }
             .sheet(isPresented: noteBinding) {
@@ -130,11 +138,13 @@ extension View {
     func captureFlowHost(
         activeModality: Binding<CaptureModality?>,
         speechService: SpeechService,
+        appendingTo: String? = nil,
         onCaptured: @escaping (CapturedItem) -> Void
     ) -> some View {
         modifier(CaptureFlowHost(
             activeModality: activeModality,
             speechService: speechService,
+            appendingTo: appendingTo,
             onCaptured: onCaptured
         ))
     }

@@ -22,4 +22,17 @@ enum WatchTheme {
 
     /// Failure red — only used for storage-full / failed-sync states.
     static let danger = Color(red: 0xFF/255, green: 0x8A/255, blue: 0x75/255)
+
+    /// Recording cream — the Stop & save pill on a black background.
+    /// Per the watch spec V1 canonical: "Cream `#F1ECE3` background,
+    /// ink `#000` text — the visually heaviest element on the screen."
+    /// Distinct from `accent`: ochre is reserved for Next, REC, and the
+    /// waveform; the commit button reads heavier *because* it isn't.
+    static let cream = Color(red: 0xF1/255, green: 0xEC/255, blue: 0xE3/255)
+
+    /// Warn amber — the timer color shift at 4:45 (30s left). Lifts off
+    /// the cream timer without going full danger red, which would feel
+    /// like an error state. Used briefly: just the closing window of a
+    /// 5-min clip.
+    static let warnAmber = Color(red: 0xE8/255, green: 0xA0/255, blue: 0x40/255)
 }

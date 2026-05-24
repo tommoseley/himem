@@ -21,9 +21,23 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var mediaReferences: NSSet?
     @NSManaged public var processingTasks: NSSet?
     @NSManaged public var inferenceSummary: InferenceSummary?
+    @NSManaged public var organizePasses: NSSet?
     @NSManaged public var textSegments: NSSet?
     @NSManaged public var topics: NSSet?
     @NSManaged public var projects: NSSet?
+    /// Timestamp of the most recent successful AI Organize pass.
+    /// `nil` means this memory has never been organized. Used by the
+    /// memory detail view to decide whether to show the "N new clips
+    /// since last organize" Re-organize callout.
+    @NSManaged public var lastOrganizedAt: Date?
+    /// True when the current `title` originated from an AI Organize
+    /// pass that the user accepted (via the Title row of the
+    /// AISuggestionsCard or via Accept all). Drives the small `✦ AI`
+    /// tag rendered next to the title in `titleSection`. Cleared back
+    /// to false on any subsequent manual title edit so the tag drops
+    /// honestly when the user has reworded the suggestion enough that
+    /// it's no longer the AI's wording.
+    @NSManaged public var titleSourcedFromAI: Bool
 }
 
 // MARK: - Input Type
@@ -125,6 +139,72 @@ extension JournalEntry {
         let set = processingTasks as? Set<ProcessingTask> ?? []
         return set.sorted { $0.createdAt > $1.createdAt }.first
     }
+
+    var organizePassesArray: [OrganizePass] {
+        let set = organizePasses as? Set<OrganizePass> ?? []
+        return set.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// The most recent successful AI organize pass for this entry, if
+    /// any. Used by the memory detail view to render the "Done" state
+    /// (Summary / Next steps / Related memories sections). Returns
+    /// `nil` for entries that have never been organized.
+    var latestOrganizePass: OrganizePass? {
+        organizePassesArray.first
+    }
+
+    /// Count of media clips added after the last successful organize
+    /// pass. Zero when never organized (we count from epoch in that
+    /// case to mean "nothing new since organize"). Drives the
+    /// "N new clips since last organize" Re-organize callout — surfaces
+    /// the prompt whenever even one new clip has been added.
+    var clipsAddedSinceLastOrganize: Int {
+        guard let lastOrganizedAt else { return 0 }
+        let clips = mediaReferencesArray.filter { ($0.createdAt ?? .distantPast) > lastOrganizedAt }
+        return clips.count
+    }
+
+    /// Count of pre-existing clips whose content was edited after the
+    /// last organize. Excludes clips added after the organize — those
+    /// already count under `clipsAddedSinceLastOrganize`; double-counting
+    /// would lie to the user ("1 new + 1 edited" for the same clip).
+    /// Zero when never organized.
+    var clipsEditedSinceLastOrganize: Int {
+        guard let lastOrganizedAt else { return 0 }
+        return mediaReferencesArray.filter { ref in
+            // Newly added → counted as "added", not "edited".
+            guard (ref.createdAt ?? .distantPast) <= lastOrganizedAt else { return false }
+            guard let edited = ref.lastEditedAt else { return false }
+            return edited > lastOrganizedAt
+        }.count
+    }
+
+    /// Single gate the AI Suggestions card consults to decide whether
+    /// the Refresh affordance fires. True when either an add or an edit
+    /// has happened after the last organize. Never-organized entries
+    /// always return false — they use the first-organize affordance,
+    /// not the refresh one.
+    var hasChangesSinceLastOrganize: Bool {
+        guard lastOrganizedAt != nil else { return false }
+        return clipsAddedSinceLastOrganize > 0 || clipsEditedSinceLastOrganize > 0
+    }
+
+    /// Owner-rendered summary for surfaces outside the AI Suggestions
+    /// card — memory detail header, journal feed snippet. Returns the
+    /// summary text from the latest organize pass only when the user
+    /// has accepted the summary row; nil otherwise. Storage form uses
+    /// the `<user>` token, which `SummaryRenderer.renderForOwner`
+    /// substitutes to second-person English.
+    var renderedSummary: String? {
+        guard let pass = latestOrganizePass,
+              pass.acceptedRows.contains(.summary),
+              let text = pass.summaryText,
+              !text.isEmpty else { return nil }
+        return SummaryRenderer.renderForOwner(text)
+    }
+
+    @objc(addOrganizePassesObject:)
+    @NSManaged func addToOrganizePasses(_ value: OrganizePass)
 }
 
 // MARK: - Fetch Requests
@@ -142,6 +222,13 @@ extension JournalEntry {
         let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         request.predicate = NSPredicate(format: "ANY topics == %@", topic)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \JournalEntry.createdAt, ascending: false)]
+        return request
+    }
+
+    static func fetchOne(id: UUID) -> NSFetchRequest<JournalEntry> {
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
         return request
     }
 }

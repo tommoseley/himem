@@ -25,7 +25,8 @@ struct ProjectDetailViewTextTests {
             recycledAt: nil,
             latitude: nil,
             longitude: nil,
-            locationName: locality
+            locationName: locality,
+            renderedSummary: nil
         )
     }
 

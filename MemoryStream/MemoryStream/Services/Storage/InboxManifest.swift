@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UserNotifications
 
 /// One row in the inbox manifest — represents an unorganized clip that
 /// arrived from the watch. Lives at `Documents/Inbox/manifest.json`. Audio
@@ -22,6 +23,11 @@ struct InboxClip: Codable, Identifiable, Equatable {
     /// distinguishes "still in flight" from "ran, found no speech" — UI
     /// shows different copy and styling for each.
     let transcriptionAttempted: Bool
+    /// On-a-roll grouping signal — clips with the same non-nil
+    /// `rollGroupId` always land in one Memory regardless of
+    /// time/location heuristics. Optional so older manifest rows that
+    /// predate the feature decode cleanly.
+    let rollGroupId: UUID?
 
     var id: UUID { clipId }
 
@@ -34,7 +40,8 @@ struct InboxClip: Codable, Identifiable, Equatable {
         longitude: Double?,
         source: String,
         audioFilename: String,
-        transcriptionAttempted: Bool = false
+        transcriptionAttempted: Bool = false,
+        rollGroupId: UUID? = nil
     ) {
         self.clipId = clipId
         self.capturedAt = capturedAt
@@ -45,6 +52,7 @@ struct InboxClip: Codable, Identifiable, Equatable {
         self.source = source
         self.audioFilename = audioFilename
         self.transcriptionAttempted = transcriptionAttempted
+        self.rollGroupId = rollGroupId
     }
 
     // Custom decoding so old persisted manifests (without
@@ -53,7 +61,7 @@ struct InboxClip: Codable, Identifiable, Equatable {
     // until we either replace its transcript or re-attempt recognition.
     private enum CodingKeys: String, CodingKey {
         case clipId, capturedAt, duration, transcript, latitude, longitude
-        case source, audioFilename, transcriptionAttempted
+        case source, audioFilename, transcriptionAttempted, rollGroupId
     }
 
     init(from decoder: Decoder) throws {
@@ -67,6 +75,7 @@ struct InboxClip: Codable, Identifiable, Equatable {
         source = try c.decode(String.self, forKey: .source)
         audioFilename = try c.decode(String.self, forKey: .audioFilename)
         transcriptionAttempted = try c.decodeIfPresent(Bool.self, forKey: .transcriptionAttempted) ?? false
+        rollGroupId = try c.decodeIfPresent(UUID.self, forKey: .rollGroupId)
     }
 }
 
@@ -193,6 +202,22 @@ final class InboxManifest: ObservableObject {
     private func replace(with next: [InboxClip]) {
         clips = next
         persist()
+        // Keep the iOS home-screen badge in lockstep with the inbox.
+        // Push payloads from `WatchInboxNotificationCoordinator` set
+        // the badge to whatever the count was when the push fired,
+        // but the system doesn't lower the badge when the user
+        // reviews clips in-app — we have to do that ourselves.
+        // Money-tested in `InboxManifestBadgeSyncTests`.
+        syncIconBadge(to: next.count)
+    }
+
+    /// Sets the home-screen icon badge to `count` via the modern
+    /// `UNUserNotificationCenter.setBadgeCount` API (iOS 17+, replaces
+    /// the deprecated `UIApplication.applicationIconBadgeNumber`).
+    /// Errors are swallowed — a transient permission/HAL hiccup
+    /// shouldn't cascade into a manifest-persist failure.
+    private func syncIconBadge(to count: Int) {
+        UNUserNotificationCenter.current().setBadgeCount(count) { _ in }
     }
 
     private func persist() {
@@ -213,6 +238,7 @@ final class InboxManifest: ObservableObject {
 
     private func load() {
         let url = Self.manifestURL
+        defer { syncIconBadge(to: clips.count) }
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             let data = try Data(contentsOf: url)
@@ -226,6 +252,17 @@ final class InboxManifest: ObservableObject {
             // Corrupt manifest — start fresh rather than block the user.
             clips = []
         }
+    }
+
+    /// Public hook so app launch and scene-active can force the
+    /// icon badge to match the current inbox count. Defensive against
+    /// state drift from notifications that fired while the app was
+    /// killed: the push set the badge to N when delivered, but if the
+    /// user reviewed clips in-app and then quit, the next launch
+    /// might find the manifest empty while the badge still shows N.
+    /// Calling this on scene-active resolves the gap immediately.
+    func syncBadgeNow() {
+        syncIconBadge(to: clips.count)
     }
 }
 

@@ -22,7 +22,17 @@ final class KeychainService {
             kSecAttrService as String: serviceIdentifier,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            // `AfterFirstUnlock` — readable any time after the user
+            // has unlocked the phone once since boot. The previous
+            // class (`WhenUnlocked`) made the entry inaccessible
+            // during the device-locked window, so background launches
+            // (CloudKit push, watch sync, notification fetch) that
+            // created the AuthService singleton during a locked
+            // window read nil and stuck `isAuthenticated=false`
+            // until next app cold-start. AfterFirstUnlock removes
+            // that window. Still `ThisDeviceOnly` — no iCloud
+            // Keychain sync, same security profile as before.
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)

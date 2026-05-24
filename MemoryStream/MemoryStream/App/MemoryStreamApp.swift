@@ -171,6 +171,18 @@ struct MemoryStreamApp: App {
         // wakeable in the background to receive transfers even when HiMem
         // isn't foregrounded.
         WatchSessionDelegate.shared.start()
+        // Bring up the entitlement + StoreKit layer. EntitlementService
+        // loads/creates the singleton AssistBalance record. StoreKitService
+        // loads products in the background and starts the long-running
+        // transaction observer so renewals and family-sharing updates land
+        // even while no purchase sheet is open. FoundersCounter pulls the
+        // CloudKit public DB cap state so the upgrade hub renders honestly.
+        DispatchQueue.main.async {
+            _ = EntitlementService.shared
+            StoreKitService.shared.start()
+            Task { await FoundersCounter.shared.refresh() }
+            TenureTracker.shared.start()
+        }
         // Seed UserDefaults with notification setting defaults (toggles off,
         // 8pm nudge time) before any @AppStorage in SettingsView reads them.
         NotificationService.registerDefaults()
@@ -235,7 +247,15 @@ struct MemoryStreamApp: App {
                 ConnectivityReprocessor.shared.start()
             }
             .onChange(of: scenePhase) { _, newPhase in
-                guard newPhase == .active, storageReady else { return }
+                guard newPhase == .active else { return }
+                // Refresh auth from Keychain on foreground —
+                // recovers a stale `isAuthenticated=false` if the
+                // AuthService singleton was created during a
+                // locked-device background launch (Keychain
+                // unreadable then). Runs before the storageReady
+                // guard since Keychain is independent of Core Data.
+                auth.refresh()
+                guard storageReady else { return }
                 Task { await refreshDailyNudge() }
                 Task { await retryPendingInboxTranscriptions() }
                 Task { await promptForNotificationsIfFirstTime() }
@@ -245,6 +265,17 @@ struct MemoryStreamApp: App {
                 // when the user opens the app. Watch's `pending.remove`
                 // is idempotent — already-removed clips are no-ops.
                 WatchSessionDelegate.shared.reconcileWatchAcks()
+                // Roll the monthly assist counter if the user crossed
+                // a calendar-month boundary while the app was backgrounded.
+                EntitlementService.shared.resetMonthlyIfDue()
+                // Reset the home-screen icon badge to the live inbox
+                // count. Defensive against state drift — push payloads
+                // set the badge when they fire, but if the user
+                // reviews clips and the badge isn't lowered before
+                // the app is killed, the stale count sticks to the
+                // icon until the next inbox mutation re-routes
+                // through `replace(with:)`.
+                InboxManifest.shared.syncBadgeNow()
             }
         }
     }

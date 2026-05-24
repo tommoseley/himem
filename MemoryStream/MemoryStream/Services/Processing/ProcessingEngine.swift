@@ -5,7 +5,14 @@ import CoreData
 /// driven by a stub in tests (and to keep the fallback-on-failure path
 /// exercised without real network access).
 protocol EntryAnalyzer {
-    func analyzeEntry(_ text: String, existingTopics: [String]) async throws -> ClaudeAPIService.AnalysisResult
+    /// `existingMentions` carries the case-folded-deduped entity values
+    /// already attached to this entry. Empty on first-organize. Server
+    /// is instructed (via `docs/design/mentions-server-prompt.md`) to
+    /// reuse these strings verbatim where they still apply rather than
+    /// paraphrasing — kills the "Reusable Sausage Process" /
+    /// "Sausage making process" / "Develop Reusable Sausage Process"
+    /// paraphrase accumulation observed 2026-05-18.
+    func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult
 }
 
 extension ClaudeAPIService: EntryAnalyzer {}
@@ -68,9 +75,33 @@ final class ProcessingEngine {
                 return topics.map(\.name)
             }
 
-            let result = try await analyzer.analyzeEntry(content, existingTopics: existingTopics)
+            // Existing mentions on THIS entry only — case-folded
+            // dedupe so duplicates already in the store don't
+            // pollute the payload. Re-organize passes ship this set
+            // so the model refines instead of paraphrasing.
+            let existingMentions: [String] = await context.perform {
+                guard let entry = try? context.existingObject(with: objectID) as? JournalEntry,
+                      let entities = entry.extractedEntities as? Set<ExtractedEntity> else { return [] }
+                var seen: Set<String> = []
+                var out: [String] = []
+                for e in entities {
+                    let trimmed = e.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { continue }
+                    let key = trimmed.lowercased()
+                    if seen.insert(key).inserted {
+                        out.append(trimmed)
+                    }
+                }
+                return out
+            }
 
-            await context.perform { [self] in
+            let result = try await analyzer.analyzeEntry(
+                content,
+                existingTopics: existingTopics,
+                existingMentions: existingMentions
+            )
+
+            let saveSucceeded: Bool = await context.perform { [self] in
                 do {
                     let entry = try context.existingObject(with: objectID) as! JournalEntry
                     storeEntities(from: result, for: entry, in: context)
@@ -78,11 +109,24 @@ final class ProcessingEngine {
                     queueNewTopics(newTopics, entryObjectID: objectID)
                     checkAlbumSync(for: entry, topics: result.topics, context: context)
                     storeInference(from: result, for: entry, in: context)
+                    storeOrganizePass(from: result, for: entry, in: context)
                     markCompleted(entry)
                     try context.save()
+                    return true
                 } catch {
                     self.markFailed(objectID: objectID, error: error, context: context)
+                    return false
                 }
+            }
+            // Pricing rule (v2): 1 assist per successful organize pass.
+            // Failures cost zero. We deduct ONLY when the Core Data
+            // save committed cleanly — a Core Data error, parser blow-
+            // up, or anything else in the inner closure that fell into
+            // `markFailed` leaves the counter untouched. (The cloud-
+            // network failure path doesn't even reach here — it's
+            // handled by the outer catch that falls back to local.)
+            if saveSucceeded {
+                await MainActor.run { try? EntitlementService.shared.tryConsumeAssist() }
             }
         } catch {
             // Cloud unreachable or timed out (weak connection, server error,
@@ -142,6 +186,16 @@ final class ProcessingEngine {
     /// transitions so memories captured offline get upgraded once the user
     /// is back online.
     func reprocessLocallyHandledEntries() async {
+        // Free tier never had AI run on entries, so nothing to reprocess.
+        // Plus/Founders may have local-fallback entries from offline
+        // creation that should be re-processed when connectivity returns.
+        // Each one consumes one assist; bail when the user runs out
+        // rather than silently exceed the monthly allowance.
+        let entitled: Bool = await MainActor.run {
+            EntitlementService.shared.tier != .free
+        }
+        guard entitled else { return }
+
         let viewContext = storage.viewContext
         let entryIDs: [NSManagedObjectID] = await viewContext.perform {
             let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
@@ -154,6 +208,15 @@ final class ProcessingEngine {
         guard !entryIDs.isEmpty else { return }
 
         for entryID in entryIDs {
+            // Precheck — this is auto-org (no user tap), so respect
+            // the user's auto-organize threshold. Bail at the first
+            // entry where the threshold gate fires rather than firing
+            // doomed API calls or eating the user's manual reserve.
+            let mayConsume: Bool = await MainActor.run {
+                EntitlementService.shared.canAutoOrganize
+            }
+            guard mayConsume else { break }
+
             let entry: JournalEntry? = await viewContext.perform {
                 guard let entry = try? viewContext.existingObject(with: entryID) as? JournalEntry else { return nil }
                 let entities = entry.extractedEntities as? Set<ExtractedEntity> ?? []
@@ -220,11 +283,15 @@ final class ProcessingEngine {
         }
     }
 
-    /// Normalized key for entity-dedup: type plus case-folded, trimmed value.
-    /// "Sarah" / "sarah" / " Sarah " all collapse to the same key.
+    /// Normalized key for entity-dedup: case-folded, trimmed value
+    /// only. Type is intentionally excluded — the same string with
+    /// different types ("Bob" classified as `person` in pass A and
+    /// `project` in pass B) is the same entity, just classified
+    /// inconsistently. Type accepts the `type` param to preserve the
+    /// call-site shape; it does not affect the key.
     static func entityKey(type: String, value: String) -> String {
-        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return "\(type)::\(normalized)"
+        _ = type
+        return value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     /// Returns names of topics that need user approval (don't exist yet).
@@ -288,9 +355,56 @@ final class ProcessingEngine {
         summary.summaryText = result.summary
         summary.createdAt = Date()
         summary.entry = entry
-        if let title = result.title {
-            entry.title = title
+        // Per v5 pricing UX: AI-suggested titles no longer auto-write
+        // into `entry.title`. They land on `OrganizePass.suggestedTitle`
+        // (see `storeOrganizePass` below) and flow into the entry only
+        // when the user accepts via the Title row of the
+        // AISuggestionsCard. This prevents silent overwrites of
+        // user-authored titles by background auto-org passes.
+    }
+
+    /// Writes the per-pass `OrganizePass` record alongside the legacy
+    /// `InferenceSummary`. The two coexist for now — the new memory
+    /// detail Done state reads from `OrganizePass`, but old entries
+    /// without one fall back to the legacy `InferenceCard` which reads
+    /// `InferenceSummary`. When the prompt is updated to return Next
+    /// steps and Related memories, those fields populate here.
+    private func storeOrganizePass(
+        from result: ClaudeAPIService.AnalysisResult,
+        for entry: JournalEntry,
+        in context: NSManagedObjectContext
+    ) {
+        let pass = OrganizePass(context: context)
+        pass.id = UUID()
+        pass.entryId = entry.id
+        pass.createdAt = Date()
+        pass.summaryText = result.summary
+        pass.suggestedTitle = result.title
+        pass.setSuggestedTopics(result.topics)
+        // Next steps — formatted as markdown bullets so the existing
+        // `OrganizePass.nextStepsItems` parser handles them and the
+        // AISuggestionsCard renders them in its Next steps row.
+        // Skips writes when the server returned an empty / nil array
+        // so the column stays nil (Next steps row hides cleanly).
+        if let steps = result.nextSteps, !steps.isEmpty {
+            pass.nextStepsMarkdown = steps
+                .map { "- " + $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .joined(separator: "\n")
+        } else {
+            pass.nextStepsMarkdown = nil
         }
+        // Related memories isn't yet returned by the server prompt
+        // and was deliberately cut from the v5 Review card (the
+        // Review card is the contract for "this memory"; other-memory
+        // discovery happens elsewhere — search, tag drilldown).
+        // Field reserved for future use; not populated.
+        pass.relatedEntryIDsJSON = nil
+        pass.dismissedAt = nil
+        pass.entry = entry
+        // The lastOrganizedAt timestamp drives the "N new clips since
+        // last organize" Re-organize callout. Set on every successful
+        // pass — Free manual taps and Plus auto-runs both qualify.
+        entry.lastOrganizedAt = pass.createdAt
     }
 
     private func markCompleted(_ entry: JournalEntry) {

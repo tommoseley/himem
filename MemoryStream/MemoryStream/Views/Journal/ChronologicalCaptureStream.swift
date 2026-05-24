@@ -155,7 +155,7 @@ struct VoiceClipPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            CaptureTimestampLabel(date: item.createdAt)
+            CaptureTimestampLabel(date: item.createdAt, placeName: item.placeName)
             Text(displayText.attributedWithLinks())
                 .font(.callout)
                 .foregroundStyle(item.transcript == nil || item.transcript?.isEmpty == true
@@ -185,7 +185,7 @@ private struct NotePanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            CaptureTimestampLabel(date: item.createdAt)
+            CaptureTimestampLabel(date: item.createdAt, placeName: item.placeName)
             Text(bodyText.attributedWithLinks())
                 .font(.callout)
                 .foregroundStyle(Crucible.Color.ink)
@@ -201,20 +201,60 @@ private struct NotePanel: View {
 
 // MARK: - Capture timestamp label
 
-/// Small h:mm a label rendered above each chronological capture panel.
-/// Keeps a consistent style across voice / note panels and matches the
-/// timestamp overlay rendered by MediaTile on photo/video tiles.
-private struct CaptureTimestampLabel: View {
+/// Clip-row header per Memory Detail v3:
+///   "Sun May 17 · 6:12 PM · Bishop St, Bluffton"
+/// Year appears only when the capture isn't in the current calendar
+/// year (e.g. "Sun May 17, 2025 · …"). The trailing place segment is
+/// omitted when `placeName` is nil — legacy clips without location,
+/// or clips whose reverse-geocode is still in flight.
+struct CaptureTimestampLabel: View {
     let date: Date
+    var placeName: String? = nil
 
     var body: some View {
-        Text(Self.formatter.string(from: date))
+        Text(formatted)
             .font(.caption2.weight(.semibold).monospacedDigit())
             .foregroundStyle(Crucible.Color.ink3)
-            .accessibilityLabel("Captured at \(Self.formatter.string(from: date))")
+            .accessibilityLabel(accessibilityLabel)
     }
 
-    private static let formatter: DateFormatter = {
+    private var formatted: String {
+        let dateStr = Self.dateFormatter(for: date).string(from: date)
+        let timeStr = Self.timeFormatter.string(from: date)
+        if let placeName, !placeName.isEmpty {
+            return "\(dateStr) · \(timeStr) · \(placeName)"
+        }
+        return "\(dateStr) · \(timeStr)"
+    }
+
+    private var accessibilityLabel: String {
+        "Captured \(formatted)"
+    }
+
+    /// Suppresses the year for the current calendar year so the
+    /// header doesn't get noisy with current-year stamps. Older
+    /// captures gain a year segment (`Sun May 17, 2025`) so the
+    /// user isn't ambiguous about whether a memory is recent.
+    private static func dateFormatter(for date: Date) -> DateFormatter {
+        let cal = Calendar.current
+        let captureYear = cal.component(.year, from: date)
+        let currentYear = cal.component(.year, from: Date())
+        return captureYear == currentYear ? currentYearDateFormatter : olderYearDateFormatter
+    }
+
+    private static let currentYearDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE MMM d"
+        return f
+    }()
+
+    private static let olderYearDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE MMM d, yyyy"
+        return f
+    }()
+
+    private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "h:mm a"
         return f

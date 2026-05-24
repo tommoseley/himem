@@ -70,7 +70,6 @@ struct EntryExpandedView: View {
     @State private var removedMediaIds: Set<UUID> = []
     @State private var addedTopics: Set<String> = []
     @State private var removedTopics: Set<String> = []
-    @State private var mentionsExpanded = false
     @State private var selectedMedia: MediaDisplayItem? = nil
     @State private var audioPlayerForFile: AudioPlayerTarget? = nil
     @State private var noteEditorTarget: NoteEditorTarget? = nil
@@ -79,6 +78,9 @@ struct EntryExpandedView: View {
     @State private var showShareSheet = false
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
+    @State private var showAIPackPurchase = false
+    @State private var aiCardUnfolded = false
+    @ObservedObject private var entitlement = EntitlementService.shared
 
     /// Direct lifecycle reference for per-panel edit/delete operations on the
     /// chronological capture stream and for the Append spec's per-modality
@@ -121,17 +123,45 @@ struct EntryExpandedView: View {
         // over a custom swipe modifier traps vertical drags before the
         // parent `ScrollView` can claim them.
         List {
-            sectionRow { topicChipsRow }
-            sectionRow { titleSection }
-            sectionRow {
+            // Per Memory Detail v3 spec: title is the hero (serif),
+            // topic chip sits *below* it and above the meta line, not
+            // above. The four header rows (title, chip, date, summary)
+            // use `headerRow` for a tight rhythm; the rest of the
+            // page keeps `sectionRow`'s normal 8pt gap.
+            headerRow { titleSection }
+            headerRow(top: -3) { topicChipsRow }
+            headerRow {
                 Text(fullTimestamp)
                     .font(.caption)
                     .foregroundStyle(Crucible.Color.ink3)
             }
-            sectionRow { locationChip }
+            // Memory Detail v3: the memory-level location pill is
+            // retired. Per-clip headers in the chronological capture
+            // stream carry their own date + time + place name now,
+            // making the page-level pill redundant. `locationChip`
+            // remains defined below for the share/export composer
+            // until that path migrates to per-clip place names.
+            headerRow { summarySection }
             bodyContent
-            sectionRow { inferenceCardSection }
+            // Mentions promoted out of the previous bottom expander
+            // (was after OrganizeMemorySection / inferenceCardSection)
+            // and rendered as an always-visible row between the
+            // chronological capture stream and the Organized · review
+            // card. Spec: `docs/Memory Detail/screens-memory-detail.jsx`.
             sectionRow { mentionsSection }
+            sectionRow {
+                // Replaces v2's inline OrganizeDoneSections. Section
+                // routes through Idle / Review / Organized / Exhausted
+                // states; the AISuggestionsCard renders inline here in
+                // Review and as the accordion unfold in Organized.
+                OrganizeMemorySection(
+                    entryID: entry.id,
+                    unfolded: $aiCardUnfolded,
+                    onOrganize: { triggerManualAIOrganize() },
+                    onOpenPackSheet: { showAIPackPurchase = true }
+                )
+            }
+            sectionRow { inferenceCardSection }
             // Bottom inset so the floating Contribute FAB doesn't cover the
             // last row.
             Color.clear
@@ -172,7 +202,11 @@ struct EntryExpandedView: View {
                     }
                 }
             )
-            .presentationDetents([.medium, .large])
+            // Match the note editor's `.large` detent so the voice
+            // editor and note editor open at the same height — Tom's
+            // edit surfaces should feel the same regardless of clip
+            // type.
+            .presentationDetents([.large])
         }
         .sheet(item: $noteEditorTarget) { target in
             NoteEditorSheet(
@@ -209,6 +243,10 @@ struct EntryExpandedView: View {
         } message: {
             Text("All content has been removed. This will permanently delete the memory — it won't go to Recently Deleted.")
         }
+        .sheet(isPresented: $showAIPackPurchase) {
+            AIPackPurchaseSheet()
+                .presentationDetents([.large])
+        }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .newTopic:
@@ -223,19 +261,29 @@ struct EntryExpandedView: View {
             }
         }
 
-            // Append-spec FAB — pick a modality, capture, append to this memory.
+            // Append-spec FAB — pick a modality, capture, append to
+            // this memory. Hidden while the AI Suggestions card is
+            // open (Review state OR chip unfolded) so the FAB and
+            // "Accept all" don't fight for the same bottom-right
+            // slot. The wrapper observes the live entry to decide.
             if mode == .reading {
-                AppendFAB(
-                    onSelect: { modality in
-                        activeCaptureModality = modality
-                    },
-                    accessibilityLabel: "Add to memory"
-                )
+                FABWithCardSuppression(
+                    entryID: entry.id,
+                    cardUnfolded: aiCardUnfolded
+                ) {
+                    AppendFAB(
+                        onSelect: { modality in
+                            activeCaptureModality = modality
+                        },
+                        accessibilityLabel: "Add to memory"
+                    )
+                }
             }
         }
         .captureFlowHost(
             activeModality: $activeCaptureModality,
             speechService: speechService,
+            appendingTo: entry.displayTitle,
             onCaptured: { item in
                 handleCapturedItemForAppend(item)
             }
@@ -245,16 +293,29 @@ struct EntryExpandedView: View {
     // MARK: - Body sections (decomposed from var body)
 
     /// Topic chips + (edit-mode) Add menu + (read-mode) status badge.
+    /// Per Memory Detail v3 spec (`MDTopicChip`): full-width chip,
+    /// neutral subtle dark background, `ink2` label, 11.5pt — the
+    /// dot picks up the topic's pip color while the chip body stays
+    /// muted. Spec's `inline-flex` child of a flex-column parent
+    /// stretches to the column width via CSS's default
+    /// `align-items: stretch`; SwiftUI parallel is
+    /// `.frame(maxWidth: .infinity, alignment: .leading)` per chip.
+    /// Vertical padding is 2pt — the v2 4pt was reading ~50% too
+    /// tall against the spec.
+    ///
+    /// Multi-topic memories stack chips vertically; each chip still
+    /// spans the full width. Status badge moves to its own row
+    /// (rendered below) so it doesn't compete with the chip's
+    /// full-width band.
     private var topicChipsRow: some View {
-        HStack(spacing: 8) {
+        VStack(spacing: 6) {
             ForEach(currentTopics, id: \.self) { topic in
                 let hue = Crucible.Color.topicHue(for: topic)
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Circle().fill(hue.fg).frame(width: 7, height: 7)
                     Text(topic)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(hue.fg)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Crucible.Color.ink2)
                     if mode == .editing {
                         Button {
                             if addedTopics.contains(topic) {
@@ -266,25 +327,31 @@ struct EntryExpandedView: View {
                             Text("×")
                                 .font(.caption)
                                 .fontWeight(.bold)
-                                .foregroundStyle(hue.fg.opacity(0.5))
+                                .foregroundStyle(Crucible.Color.ink3)
                         }
                         .buttonStyle(.plain)
                     }
+                    Spacer()
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(hue.bg)
-                .clipShape(Capsule())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Crucible.Color.ink.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 11))
             }
 
             if mode == .editing {
-                addTopicMenu
+                HStack {
+                    addTopicMenu
+                    Spacer()
+                }
             }
 
-            Spacer()
-
             if let status = entry.displayStatus, entry.inferenceSummary == nil {
-                StatusBadge(text: status.text, style: status.style)
+                HStack {
+                    StatusBadge(text: status.text, style: status.style)
+                    Spacer()
+                }
             }
         }
     }
@@ -343,11 +410,43 @@ struct EntryExpandedView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
         } else {
+            // Provenance lives in the Organized chip below — once a
+            // suggestion is accepted, the field is the memory's, not
+            // the AI's. No `✦ AI` tag here.
             Text(entry.displayTitle)
                 .font(.title2)
                 .fontWeight(.bold)
                 .foregroundStyle(Crucible.Color.ink)
+                .contentShape(Rectangle())
                 .onTapGesture { enterEditing() }
+        }
+    }
+
+    /// Accepted AI summary, rendered as a labelled block above the
+    /// chronological capture stream. Honest Label principle: the
+    /// `✦ AI` glyph + caption make the origin visible at a glance.
+    /// Empty when the summary isn't accepted (or doesn't exist) —
+    /// view collapses without taking layout space.
+    @ViewBuilder
+    private var summarySection: some View {
+        if let summary = entry.renderedSummary {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("SUMMARY")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .tracking(0.5)
+                }
+                .foregroundStyle(Crucible.Color.aiBlue)
+                Text(summary)
+                    .font(.body)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 4)
         }
     }
 
@@ -402,6 +501,28 @@ struct EntryExpandedView: View {
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+    }
+
+    /// Tight variant of `sectionRow` for the v3 header block — title,
+    /// topic chip, date line, and summary card. 1pt top/bottom by
+    /// default so those four rows read as one continuous heading
+    /// block while the rest of the page (clip stream, mentions,
+    /// organize card, inference card) keeps the normal 8pt rhythm.
+    ///
+    /// `top` / `bottom` overridable so individual header rows can
+    /// tighten further (e.g. the topic chip sits right under the
+    /// title with a -3pt top to compensate for `Text`'s own descender
+    /// padding).
+    @ViewBuilder
+    private func headerRow<Content: View>(
+        top: CGFloat = 1,
+        bottom: CGFloat = 1,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: top, leading: 16, bottom: bottom, trailing: 16))
     }
 
     /// Body — every entry renders through ChronologicalCaptureStream
@@ -479,71 +600,66 @@ struct EntryExpandedView: View {
         lifecycle.migrateOrphanedContentIfNeeded(entryId: entry.id)
     }
 
-    /// AI inference card — visible while the user hasn't yet acted on
-    /// the suggestion (no feedback state set).
-    @ViewBuilder
-    private var inferenceCardSection: some View {
-        if let inference = entry.inferenceSummary, entry.feedbackState == nil {
-            InferenceCard(
-                summary: inference,
-                feedbackState: entry.feedbackState,
-                onFeedback: { state in onFeedback?(entry.id, state) },
-                onAdjust: { correction in onAdjust?(entry.id, correction) }
-            )
+    /// Fires AI processing for THIS entry on user tap. Assist
+    /// consumption has already happened inside `OrganizeAIPanel` via
+    /// `EntitlementService.tryConsumeAssist()` — this method only
+    /// dispatches the actual processing pipeline. We look up the entry
+    /// fresh from the view context so the background task gets a stable
+    /// managed object reference.
+    private func triggerManualAIOrganize() {
+        let entryId = entry.id
+        Task.detached {
+            let ctx = await StorageService.shared.viewContext
+            let request = JournalEntry.fetchOne(id: entryId)
+            guard let journalEntry = try? await ctx.perform({ try ctx.fetch(request).first }) else {
+                return
+            }
+            await ProcessingEngine.shared.processEntry(journalEntry)
         }
     }
 
-    /// Mentions section — collapsible row of extracted entity tags.
+    /// AI inference card — legacy display surface for entries that
+    /// were processed before the `OrganizePass` schema existed.
+    ///
+    /// New passes write into `OrganizePass`, which the
+    /// `OrganizeDoneSections(entryID:)` view above renders. To avoid
+    /// duplicating output for entries that have both records, this
+    /// card is wrapped in a `@FetchRequest` view that suppresses
+    /// itself when a modern pass exists for the entry. Kept around
+    /// only for entries created before the v2 pricing-design rebuild.
+    @ViewBuilder
+    private var inferenceCardSection: some View {
+        if let inference = entry.inferenceSummary, entry.feedbackState == nil {
+            LegacyInferenceCardSlot(entryID: entry.id) {
+                InferenceCard(
+                    summary: inference,
+                    feedbackState: entry.feedbackState,
+                    onFeedback: { state in onFeedback?(entry.id, state) },
+                    onAdjust: { correction in onAdjust?(entry.id, correction) }
+                )
+            }
+        }
+    }
+
+    /// Mentions section — always-visible row of extracted entity
+    /// tags per Memory Detail v3. Previously a bottom-of-page
+    /// collapsed `MENTIONS ⌄` expander; the chevron + count are
+    /// retired and all chips render in a single FlowLayout. The
+    /// section sits between the chronological capture stream and the
+    /// Organized · review card. Person-typed mentions and others
+    /// flow together — no internal split.
     @ViewBuilder
     private var mentionsSection: some View {
         if !entry.tags.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Button {
-                    withAnimation { mentionsExpanded.toggle() }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("MENTIONS")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .tracking(0.5)
-                            .foregroundStyle(Crucible.Color.ink3)
-                        Image(systemName: mentionsExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption2)
-                            .foregroundStyle(Crucible.Color.ink3)
-                        Spacer()
-                        Text("\(visibleTags.count)")
-                            .font(.caption)
-                            .foregroundStyle(Crucible.Color.ink3)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(mentionsExpanded ? "Collapse" : "Expand") mentions, \(visibleTags.count) item\(visibleTags.count == 1 ? "" : "s")")
+            VStack(alignment: .leading, spacing: 10) {
+                Text("MENTIONS")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .tracking(0.5)
+                    .foregroundStyle(Crucible.Color.ink3)
 
-                if mentionsExpanded {
-                    FlowLayout(spacing: 6) {
-                        ForEach(visibleTags) { tag in
-                            HStack(spacing: 4) {
-                                Text(tag.value)
-                                if mode == .editing {
-                                    Button {
-                                        removedTagIds.insert(tag.id)
-                                    } label: {
-                                        Text("×")
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(Crucible.Color.ink3)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundStyle(Crucible.Color.ink2)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Crucible.Color.sunk)
-                            .clipShape(Capsule())
-                        }
-                    }
+                FlowLayout(spacing: 6) {
+                    ForEach(visibleTags) { mentionChip($0) }
                 }
             }
             .padding(.top, 8)
@@ -551,6 +667,43 @@ struct EntryExpandedView: View {
                 Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
             }
         }
+    }
+
+    /// One standalone-mentions chip. Persons get a `person.fill`
+    /// glyph; other types get a colored dot. Tint comes from
+    /// `AISuggestionsCard.mentionTint(for:)` so the two surfaces
+    /// share one palette.
+    @ViewBuilder
+    private func mentionChip(_ tag: TagDisplayModel) -> some View {
+        HStack(spacing: 4) {
+            if tag.entityType == .person {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(AISuggestionsCard.mentionTint(for: tag.entityType))
+            } else {
+                Circle()
+                    .fill(AISuggestionsCard.mentionTint(for: tag.entityType))
+                    .frame(width: 5, height: 5)
+            }
+            Text(tag.value)
+            if mode == .editing {
+                Button {
+                    removedTagIds.insert(tag.id)
+                } label: {
+                    Text("×")
+                        .fontWeight(.bold)
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .font(.caption)
+        .fontWeight(.medium)
+        .foregroundStyle(Crucible.Color.ink2)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Crucible.Color.sunk)
+        .clipShape(Capsule())
     }
 
     // MARK: - Toolbar items (decomposed from var body)
@@ -677,6 +830,28 @@ struct EntryExpandedView: View {
             let captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
                 ids.map { ($0, .image) }
             lifecycle.append(entryId: entry.id, additionalContent: "", mediaCaptures: captures)
+
+        case .voiceSession(let clips, _):
+            // "On a roll" — append every clip in the session as its
+            // own voice fragment on this Memory.
+            for clip in clips {
+                lifecycle.append(
+                    entryId: entry.id,
+                    additionalContent: clip.transcript,
+                    voiceFilename: clip.audioFilename
+                )
+            }
+            // Stamp the session's location fix onto every appended
+            // fragment + kick off reverse-geocode for the clip-row
+            // header (Memory Detail v3).
+            for clip in clips {
+                ClipLocationResolver.stamp(
+                    osIdentifier: clip.audioFilename,
+                    latitude: clip.latitude,
+                    longitude: clip.longitude,
+                    in: StorageService.shared.viewContext
+                )
+            }
         }
     }
 

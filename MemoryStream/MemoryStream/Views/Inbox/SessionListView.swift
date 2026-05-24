@@ -1,0 +1,685 @@
+import SwiftUI
+import AVFoundation
+
+/// Session-first Captured Clips · v2. One surface. Cards expand in
+/// place. Per-clip triage lives **inside** the expanded card — never
+/// on a new screen. Per `docs/Himem · Captured Clips (session-first)-2.html`
+/// and the 2026-05-19 critique that drove the rebuild.
+///
+/// Visual register: operational throughout (SF Pro, denser layout,
+/// no editorial type). The voice softens to reflective only at the
+/// confirm sheet. No selection rings, no "Bundle as memory" verb,
+/// no bottom action bar, no amber badges. "Make a Memory" is the
+/// primary verb and lives inside every card.
+struct SessionListView: View {
+    @ObservedObject var inbox: InboxManifest = .shared
+    @ObservedObject var viewModel: JournalViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var sessions: [ClipGroup] = []
+    @State private var expandedSessionId: UUID? = nil
+    @State private var bundleSession: BundleRequest? = nil
+    @State private var pendingDeleteClipId: UUID? = nil
+    @State private var openedSwipeRowId: AnyHashable? = nil
+    @State private var playingClipId: UUID? = nil
+    @State private var player: AVAudioPlayer? = nil
+    /// Session whose inline "Discard session" link is in the
+    /// red "Discard N clips?" confirm state. Per v2.1 spec: tap once
+    /// swaps the label, second tap commits. No confirmation dialog.
+    @State private var linkDiscardConfirmingSessionId: UUID? = nil
+    @State private var linkDiscardTimeoutTask: Task<Void, Never>? = nil
+    /// Per-session, per-clip selection state for the expanded card.
+    /// Keyed by clip id. Defaults to "non-accidental clips selected"
+    /// when the user expands a session for the first time; once they
+    /// toggle a ring, manual selection takes over.
+    @State private var sessionSelections: [UUID: Set<UUID>] = [:]
+
+    /// Wraps the bundle action with the chosen clip subset so the
+    /// confirm sheet bundles exactly what's checked, not a re-derived
+    /// "all usable" set.
+    struct BundleRequest: Identifiable {
+        let id = UUID()
+        let session: ClipGroup
+        let clipsToBundle: [InboxClip]
+    }
+
+    var body: some View {
+        // No inner NavigationStack — this view is pushed onto the
+        // parent's stack (per v2 spec: "Captured Clips isn't a modal
+        // — back only"). Routing comes from JournalView /
+        // SettingsView via `.navigationDestination(isPresented:)`.
+        ZStack {
+            Crucible.Color.paper.ignoresSafeArea()
+            if inbox.isEmpty {
+                emptyState
+            } else {
+                list
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Done") { dismiss() }
+                    .foregroundStyle(Crucible.Color.accent)
+            }
+        }
+        .sheet(item: $bundleSession) { request in
+            CreateMemoryFromClipsSheet(
+                clips: request.clipsToBundle,
+                session: request.session,
+                viewModel: viewModel
+            )
+        }
+        .confirmationDialog(
+            "Delete this clip?",
+            isPresented: deleteClipDialogBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let id = pendingDeleteClipId {
+                    inbox.remove(clipId: id)
+                    openedSwipeRowId = nil
+                }
+                pendingDeleteClipId = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDeleteClipId = nil
+            }
+        } message: {
+            Text("This audio can't be recovered.")
+        }
+        .onAppear {
+            sessions = ClipSessionGrouper.group(inbox.clips)
+        }
+        .onChange(of: inbox.clips) { _, newClips in
+            sessions = ClipSessionGrouper.group(newClips)
+            // If a session expanded its last clip away, collapse.
+            if let id = expandedSessionId,
+               !sessions.contains(where: { $0.id == id }) {
+                expandedSessionId = nil
+            }
+        }
+        .onDisappear { stopPlayback() }
+    }
+
+    // MARK: - Empty state
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Nothing new from your Watch")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink)
+            Text("Audio you record on your Apple Watch lands here.")
+                .font(.footnote)
+                .foregroundStyle(Crucible.Color.ink2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 20)
+        .padding(.top, 24)
+    }
+
+    // MARK: - List
+
+    private var list: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                header
+                LazyVStack(spacing: 12) {
+                    ForEach(sessions) { session in
+                        sessionCard(session)
+                    }
+                }
+                .padding(.horizontal, 14)
+                Color.clear.frame(height: 20)
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(headerTitle)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink)
+            Text(headerSubtitle)
+                .font(.footnote)
+                .foregroundStyle(Crucible.Color.ink3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+    }
+
+    private var headerTitle: String {
+        let n = inbox.count
+        return n == 1 ? "1 from your Watch" : "\(n) from your Watch"
+    }
+
+    private var headerSubtitle: String {
+        guard let first = inbox.clips.map(\.capturedAt).min(),
+              let last = inbox.clips.map(\.capturedAt).max() else { return "" }
+        let cal = Calendar.current
+        let dayLabel: String
+        if cal.isDateInToday(first) {
+            dayLabel = "today"
+        } else if cal.isDateInYesterday(first) {
+            dayLabel = "yesterday"
+        } else {
+            let f = DateFormatter(); f.dateFormat = "MMM d"
+            dayLabel = f.string(from: first)
+        }
+        let timeFmt = DateFormatter(); timeFmt.dateFormat = "h:mm a"
+        let firstStr = timeFmt.string(from: first)
+        let lastStr = timeFmt.string(from: last)
+        let range = firstStr == lastStr ? firstStr : "\(firstStr)–\(lastStr)"
+        let n = sessions.count
+        let sessionPart = n == 1 ? "1 session" : "\(n) sessions"
+        return "\(sessionPart) · \(dayLabel), \(range)"
+    }
+
+    // MARK: - Session card (collapsed + expanded variants)
+
+    /// One session card. Collapsed shows time + clip count + transcript
+    /// snippets + Make a Memory + play. Tapping the card body expands
+    /// in place to reveal full per-clip transcripts and per-clip
+    /// swipe-to-delete. No navigation push. No bottom action bar.
+    @ViewBuilder
+    private func sessionCard(_ session: ClipGroup) -> some View {
+        let isExpanded = expandedSessionId == session.id
+        VStack(alignment: .leading, spacing: 0) {
+            sessionMetaRow(session)
+            if isExpanded {
+                expandedBody(session)
+            } else {
+                collapsedBody(session)
+            }
+            Rectangle()
+                .fill(Crucible.Color.hairline)
+                .frame(height: 0.5)
+                .padding(.vertical, 12)
+            sessionActionRow(session, isExpanded: isExpanded)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Crucible.Color.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Crucible.Color.hairline, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                toggleExpand(session)
+            }
+        }
+        // Native left-swipe with two-tap inline confirm per v2.1
+        // spec. Confirm-state lives inside the swipe affordance;
+        // no separate dialog. `clipCount` drives the "Discard N
+        // clips?" label.
+        .swipeToDiscard(
+            id: session.id,
+            openedRowId: $openedSwipeRowId,
+            clipCount: session.clips.count
+        ) {
+            deleteSession(session)
+        }
+        .contextMenu {
+            Button {
+                let selected = selectionFor(session)
+                let clips = session.clips.filter { selected.contains($0.clipId) }
+                guard !clips.isEmpty else { return }
+                bundleSession = BundleRequest(session: session, clipsToBundle: clips)
+            } label: {
+                Label("Make a Memory", systemImage: "sparkles")
+            }
+            // Long-press is a power-user shortcut per v2.1 spec —
+            // the contextMenu itself supplies "Cancel"; tapping
+            // "Discard session" commits directly with no dialog.
+            Button(role: .destructive) {
+                deleteSession(session)
+            } label: {
+                Label("Discard session", systemImage: "trash")
+            }
+        }
+    }
+
+    // Meta row: time (bold) · clip count · duration. No amber badge —
+    // accidentals (when present) get a quieter inline line below.
+    private func sessionMetaRow(_ session: ClipGroup) -> some View {
+        let timeStr: String = {
+            let f = DateFormatter(); f.dateFormat = "h:mm a"
+            return f.string(from: session.capturedAt)
+        }()
+        let clipPart = session.clipCount == 1 ? "1 clip" : "\(session.clipCount) clips"
+        let durStr = formatDuration(session.totalDuration)
+        return HStack(spacing: 6) {
+            Text(timeStr)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink)
+                .monospacedDigit()
+            Text("·").foregroundStyle(Crucible.Color.ink3)
+            Text(clipPart)
+            Text("·").foregroundStyle(Crucible.Color.ink3)
+            Text(durStr).monospacedDigit()
+            Spacer()
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(Crucible.Color.ink2)
+    }
+
+    // MARK: - Collapsed body
+
+    /// Single block of quoted speech joined with " … " between clips,
+    /// capped at 3 lines. Per spec Bug #8: "Reads like the thought it
+    /// was," not a stack of separate quoted lines like a status log.
+    @ViewBuilder
+    private func collapsedBody(_ session: ClipGroup) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let preview = joinedPreview(session) {
+                Text("\u{201C}\(preview)\u{201D}")
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .lineSpacing(2)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Transcribing…")
+                    .font(.system(size: 13))
+                    .italic()
+                    .foregroundStyle(Crucible.Color.ink3)
+            }
+            accidentalNote(session)
+        }
+        .padding(.top, 8)
+    }
+
+    /// Joins all usable clips' transcripts into one quoted block,
+    /// separated by " … " between fragments. Returns nil when no
+    /// transcripts are ready yet (caller shows the "Transcribing…"
+    /// placeholder).
+    private func joinedPreview(_ session: ClipGroup) -> String? {
+        let usable = session.usableClips
+        let candidates = usable.isEmpty ? session.clips : usable
+        let fragments = candidates.compactMap { clip -> String? in
+            let t = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? nil : t
+        }
+        guard !fragments.isEmpty else { return nil }
+        return fragments.joined(separator: " \u{2026} ")
+    }
+
+    // MARK: - Expanded body (per-clip rows: ring + meta + transcript + chevron)
+
+    /// Each clip is a row: selection ring on the left, offset/duration
+    /// meta, transcript (or italic accidental note), trailing chevron.
+    /// Accidentals appear at their chronological position with an empty
+    /// ring (auto-excluded by default; user can opt them in by tapping).
+    /// Usable clips default-selected with a filled ochre ring + check.
+    @ViewBuilder
+    private func expandedBody(_ session: ClipGroup) -> some View {
+        let selected = selectionFor(session)
+        let ordered = orderedClipsByOffset(session)
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(ordered.enumerated()), id: \.element.id) { idx, clip in
+                clipRow(
+                    clip,
+                    indexInSession: idx,
+                    session: session,
+                    isSelected: selected.contains(clip.clipId),
+                    isLast: idx == ordered.count - 1
+                )
+                .swipeToDelete(
+                    id: clip.clipId,
+                    openedRowId: $openedSwipeRowId
+                ) {
+                    pendingDeleteClipId = clip.clipId
+                }
+            }
+        }
+        .padding(.top, 10)
+    }
+
+    /// Clips ordered earliest-first within the session (matches the
+    /// spec's chronological row order).
+    private func orderedClipsByOffset(_ session: ClipGroup) -> [InboxClip] {
+        session.clips.sorted { $0.capturedAt < $1.capturedAt }
+    }
+
+    @ViewBuilder
+    private func clipRow(_ clip: InboxClip, indexInSession: Int, session: ClipGroup, isSelected: Bool, isLast: Bool) -> some View {
+        let accidental = clip.transcript.isEmpty && clip.transcriptionAttempted
+        let isPlaying = playingClipId == clip.clipId
+        // Manually-excluded clips (user toggled off) dim to 0.55.
+        // Auto-excluded clips keep full opacity (so the italic
+        // "No speech detected" line stays readable). Per JSX:
+        // `opacity: !included && !autoExcluded ? 0.55 : 1`.
+        let manuallyExcluded = !isSelected && !accidental
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                clipSelectionRing(isSelected: isSelected) {
+                    toggleClipSelection(clipId: clip.clipId, in: session)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    clipMetaRow(clip, indexInSession: indexInSession, session: session)
+                    clipBody(clip, accidental: accidental, included: isSelected)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    toggleClipSelection(clipId: clip.clipId, in: session)
+                }
+                clipPlayButton(clip: clip, isPlaying: isPlaying)
+            }
+            .padding(.vertical, 12)
+            .opacity(manuallyExcluded ? 0.55 : 1.0)
+            if !isLast {
+                Rectangle()
+                    .fill(Crucible.Color.hairline)
+                    .frame(height: 0.5)
+            }
+        }
+    }
+
+    /// Per-clip play glyph — the only play affordance in the v2 spec.
+    /// Per spec Bug #7: "Play button heavier than the primary action"
+    /// was wrong. Stroke-only triangle in ink3 inside a 26pt frame,
+    /// no background circle, no accent tint. Quiet by design.
+    private func clipPlayButton(clip: InboxClip, isPlaying: Bool) -> some View {
+        Button {
+            if isPlaying {
+                stopPlayback()
+            } else {
+                playClip(clip)
+            }
+        } label: {
+            Image(systemName: isPlaying ? "stop" : "play")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(Crucible.Color.ink3)
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isPlaying ? "Stop clip" : "Play clip")
+    }
+
+    /// Selection toggle per Crucible: ring, never check.
+    /// Empty → excluded. Filled (ochre) with a small paper-color
+    /// inner dot → included. Spec Bug #2: "Filled ochre checkmark
+    /// circles for selected clips" is wrong; the filled state has
+    /// no glyph, just a tinier filled dot inside the ring.
+    private func clipSelectionRing(isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+        Button(action: onTap) {
+            ZStack {
+                Circle()
+                    .strokeBorder(
+                        isSelected ? Crucible.Color.accent : Crucible.Color.ink4,
+                        lineWidth: 1.5
+                    )
+                    .background(Circle().fill(isSelected ? Crucible.Color.accent : Color.clear))
+                    .frame(width: 20, height: 20)
+                if isSelected {
+                    // Paper-color inner dot — selection indicator
+                    // without resorting to a check glyph. Matches
+                    // `IncludeRing` in the JSX exactly.
+                    Circle()
+                        .fill(Color(hex: 0xFFFCF6))
+                        .frame(width: 8, height: 8)
+                }
+            }
+            .contentShape(Rectangle())
+            .padding(.top, 1)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isSelected ? "Exclude this clip" : "Include this clip")
+    }
+
+    private func clipMetaRow(_ clip: InboxClip, indexInSession: Int, session: ClipGroup) -> some View {
+        // "0:00   0:05" for the first clip (offset 0, duration); "+10s   0:05" for later.
+        let offset = clip.capturedAt.timeIntervalSince(session.capturedAt)
+        let offsetStr: String
+        if indexInSession == 0 || offset < 1 {
+            offsetStr = "0:00"
+        } else {
+            offsetStr = "+\(Int(offset))s"
+        }
+        return HStack(spacing: 12) {
+            Text(offsetStr)
+                .monospacedDigit()
+                .frame(width: 36, alignment: .leading)
+            Text(formatDuration(clip.duration))
+                .monospacedDigit()
+        }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(Crucible.Color.ink3)
+    }
+
+    @ViewBuilder
+    private func clipBody(_ clip: InboxClip, accidental: Bool, included: Bool) -> some View {
+        // Per JSX: `color: muted ? ink3 : ink2` and italic only when
+        // auto-excluded. Manually-excluded clips are handled by the
+        // row's 0.55 opacity above — text itself stays roman.
+        let muted = !included || accidental
+        if !clip.transcript.isEmpty {
+            Text("\u{201C}\(clip.transcript)\u{201D}")
+                .font(.system(size: 13))
+                .foregroundStyle(muted ? Crucible.Color.ink3 : Crucible.Color.ink2)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if accidental {
+            Text("No speech detected · likely accidental")
+                .font(.system(size: 13))
+                .italic()
+                .foregroundStyle(Crucible.Color.ink3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text("Transcribing…")
+                .font(.system(size: 13))
+                .italic()
+                .foregroundStyle(Crucible.Color.ink3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func accidentalNote(_ session: ClipGroup) -> some View {
+        let n = session.accidentalClips.count
+        if n > 0 {
+            Text(n == 1
+                 ? "1 clip auto-excluded · no speech"
+                 : "\(n) clips auto-excluded · no speech")
+                .font(.footnote)
+                .foregroundStyle(Crucible.Color.ink3)
+        }
+    }
+
+    // MARK: - Action row (Make a Memory + optional Discard link)
+
+    /// Action row layout per v2.1 spec:
+    /// - Collapsed, normal:        [   Make a Memory pill (full)   ]
+    /// - Collapsed, all-excluded:  [ Discard session ] [ pill (dim) ]
+    /// - Expanded:                 [ Discard session ] [ pill        ]
+    ///
+    /// The `Discard session` link is the visible-exit path (the
+    /// other two are swipe and long-press). Two-tap inline confirm
+    /// shares state across both link and swipe via
+    /// `linkDiscardConfirmingSessionId`.
+    @ViewBuilder
+    private func sessionActionRow(_ session: ClipGroup, isExpanded: Bool) -> some View {
+        let selected = selectionFor(session)
+        let selectedClips = session.clips.filter { selected.contains($0.clipId) }
+        let isDisabled = selectedClips.isEmpty
+        let showDiscardLink = isExpanded || session.isAllAccidental
+        HStack(spacing: 12) {
+            if showDiscardLink {
+                discardSessionLink(session)
+            }
+            makeAMemoryPill(session, selectedClips: selectedClips, isDisabled: isDisabled)
+        }
+    }
+
+    /// Make a Memory pill — full capsule (height 40, radius 20),
+    /// 14pt semibold paper-color text, trailing chevron arrow.
+    /// Matches `MakeAMemoryPill` in the JSX exactly. Disabled state
+    /// drops the ochre to 35% alpha so it reads as inert rather than
+    /// dimmed (per JSX: `rgba(198,74,28,0.35)`).
+    @ViewBuilder
+    private func makeAMemoryPill(_ session: ClipGroup, selectedClips: [InboxClip], isDisabled: Bool) -> some View {
+        Button {
+            bundleSession = BundleRequest(session: session, clipsToBundle: selectedClips)
+        } label: {
+            HStack(spacing: 8) {
+                Text("Make a Memory")
+                    .font(.system(size: 14, weight: .semibold))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(Color(hex: 0xFFFCF6))
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(isDisabled
+                        ? Crucible.Color.accent.opacity(0.35)
+                        : Crucible.Color.accent)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        // Prevent the pill tap from being swallowed by the card's
+        // tap-to-expand gesture.
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded {})
+    }
+
+    /// Inline "Discard session" text link. SF Pro 13, ink2 in the
+    /// default state; swaps to red "Discard N clips?" on the first
+    /// tap; commits on the second. Same two-tap pattern as the
+    /// swipe-revealed button — both share confirm state via
+    /// `linkDiscardConfirmingSessionId` so the user can't end up
+    /// with two hot confirms on screen.
+    @ViewBuilder
+    private func discardSessionLink(_ session: ClipGroup) -> some View {
+        let confirming = linkDiscardConfirmingSessionId == session.id
+        let n = session.clips.count
+        Button {
+            if confirming {
+                deleteSession(session)
+                linkDiscardConfirmingSessionId = nil
+                linkDiscardTimeoutTask?.cancel()
+                linkDiscardTimeoutTask = nil
+            } else {
+                linkDiscardConfirmingSessionId = session.id
+                scheduleLinkDiscardTimeout()
+            }
+        } label: {
+            Text(confirming
+                 ? "Discard \(n) clip\(n == 1 ? "" : "s")?"
+                 : "Discard session")
+                .font(.system(size: 13, weight: confirming ? .semibold : .regular))
+                .foregroundStyle(confirming
+                                 ? Color(red: 0.78, green: 0.20, blue: 0.16)
+                                 : Crucible.Color.ink2)
+                .frame(height: 40)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // Don't let the link tap bubble to the card's tap-to-expand.
+        .simultaneousGesture(TapGesture().onEnded {})
+        .accessibilityLabel(confirming ? "Confirm discard \(n) clips" : "Discard session")
+    }
+
+    /// Auto-clears the link's confirm state after 5s — same hot-
+    /// button safety as the swipe-revealed button's timeout.
+    private func scheduleLinkDiscardTimeout() {
+        linkDiscardTimeoutTask?.cancel()
+        linkDiscardTimeoutTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            if !Task.isCancelled {
+                linkDiscardConfirmingSessionId = nil
+            }
+        }
+    }
+
+    // MARK: - Selection state
+
+    /// Returns the current selection for a session — explicit if the
+    /// user has toggled anything, otherwise the default (non-accidental
+    /// clips selected).
+    private func selectionFor(_ session: ClipGroup) -> Set<UUID> {
+        if let explicit = sessionSelections[session.id] {
+            return explicit.intersection(Set(session.clips.map(\.clipId)))
+        }
+        return Set(session.usableClips.map(\.clipId))
+    }
+
+    private func toggleClipSelection(clipId: UUID, in session: ClipGroup) {
+        var current = selectionFor(session)
+        if current.contains(clipId) {
+            current.remove(clipId)
+        } else {
+            current.insert(clipId)
+        }
+        sessionSelections[session.id] = current
+    }
+
+    // MARK: - Behavior
+
+    private func toggleExpand(_ session: ClipGroup) {
+        if expandedSessionId == session.id {
+            expandedSessionId = nil
+        } else {
+            expandedSessionId = session.id
+            openedSwipeRowId = nil
+        }
+    }
+
+    private func deleteSession(_ session: ClipGroup) {
+        let ids = session.clips.map(\.clipId)
+        for id in ids {
+            inbox.remove(clipId: id)
+        }
+        if expandedSessionId == session.id { expandedSessionId = nil }
+    }
+
+    private var deleteClipDialogBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeleteClipId != nil },
+            set: { if !$0 { pendingDeleteClipId = nil } }
+        )
+    }
+
+    // MARK: - Helpers
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds)
+        let m = total / 60
+        let s = total % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
+    private func playClip(_ clip: InboxClip) {
+        stopPlayback()
+        let url = InboxManifest.audioURL(for: clip.audioFilename)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
+            try AVAudioSession.sharedInstance().setActive(true)
+            let p = try AVAudioPlayer(contentsOf: url)
+            p.prepareToPlay()
+            p.play()
+            player = p
+            playingClipId = clip.clipId
+        } catch {
+            // Silent — playback isn't critical to the flow.
+        }
+    }
+
+    private func stopPlayback() {
+        player?.stop()
+        player = nil
+        playingClipId = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+}

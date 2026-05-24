@@ -84,14 +84,31 @@ struct EntryCardView: View {
                 .fill(Crucible.Color.hairline)
                 .frame(height: 0.5)
 
-            // Content
-            Text(entry.content)
-                .font(density == .compact ? .subheadline : .body)
-                .foregroundStyle(Crucible.Color.ink)
-                .lineSpacing(density == .compact ? 2 : 3)
-                .lineLimit(isContentExpanded && density != .compact ? nil : density.contentLineLimit)
+            // Content — prefer the accepted AI summary when present;
+            // otherwise show the raw joined content. Summary is more
+            // useful as a snippet (already curated, fits in fewer
+            // lines) and honors the Honest Label principle via the
+            // small `✦ AI` glyph tag.
+            let snippetText = entry.renderedSummary ?? entry.content
+            VStack(alignment: .leading, spacing: 4) {
+                if entry.renderedSummary != nil {
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 8, weight: .semibold))
+                        Text("AI SUMMARY")
+                            .font(.system(size: 9, weight: .bold))
+                            .tracking(0.5)
+                    }
+                    .foregroundStyle(Crucible.Color.aiBlue)
+                }
+                Text(snippetText)
+                    .font(density == .compact ? .subheadline : .body)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .lineSpacing(density == .compact ? 2 : 3)
+                    .lineLimit(isContentExpanded && density != .compact ? nil : density.contentLineLimit)
+            }
 
-            if density.contentLineLimit != nil && entry.content.count > 120 {
+            if density.contentLineLimit != nil && snippetText.count > 120 {
                 Button(isContentExpanded ? "Show less" : "Show more") {
                     withAnimation(.easeInOut(duration: 0.2)) { isContentExpanded.toggle() }
                 }

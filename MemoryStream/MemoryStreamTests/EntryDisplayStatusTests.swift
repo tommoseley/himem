@@ -32,7 +32,8 @@ struct EntryDisplayStatusTests {
             recycledAt: nil,
             latitude: nil,
             longitude: nil,
-            locationName: nil
+            locationName: nil,
+            renderedSummary: nil
         )
     }
 

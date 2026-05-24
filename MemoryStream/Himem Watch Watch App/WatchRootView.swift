@@ -7,6 +7,12 @@ import SwiftUI
 /// state change.
 struct WatchRootView: View {
     @EnvironmentObject var coordinator: WatchAppCoordinator
+    /// Siri "Record in HiMem" sets this via `StartVoiceRecordingIntent`.
+    /// We observe it here so an intent firing during cold launch
+    /// (bus flag already set before this view appears) and an intent
+    /// firing while the app is foreground (flag flips after appear)
+    /// both route into the recording screen.
+    @ObservedObject private var captureRequests = WatchCaptureRequestBus.shared
 
     var body: some View {
         ZStack {
@@ -16,23 +22,36 @@ struct WatchRootView: View {
         .onOpenURL { url in
             handleURL(url)
         }
+        .onAppear { handlePendingVoiceRecordRequest() }
+        .onChange(of: captureRequests.pendingVoiceRecord) { _, pending in
+            if pending { handlePendingVoiceRecordRequest() }
+        }
+    }
+
+    /// Drains a Siri voice-record request by routing into the
+    /// recording screen. `WatchRecordingView.onAppear` calls
+    /// `recording.start()` itself, so flipping the route is enough
+    /// to land in mic-hot state. Distinct from the complication path
+    /// (`himem://record` → `.home`), which leaves recording to the
+    /// user's explicit mic tap.
+    private func handlePendingVoiceRecordRequest() {
+        guard captureRequests.pendingVoiceRecord else { return }
+        captureRequests.pendingVoiceRecord = false
+        coordinator.route = .recording
     }
 
     /// Deep-link handler. Complication taps fire `himem://record` URLs
-    /// (see HimemComplicationsBundle's `widgetURL`). The user's tap
-    /// behavior setting decides whether we land on the recording screen
-    /// ready to tap mic, or fire recording immediately.
+    /// (see HimemComplicationsBundle's `widgetURL`). The complication
+    /// lands the user on the home page (Capture/Tap-to-Record) — it
+    /// never auto-starts the recorder. Recording only begins after the
+    /// user explicitly taps the mic on the capture page; that lets a
+    /// stray wrist-bump open the app without committing a clip to
+    /// pending.
     private func handleURL(_ url: URL) {
         guard url.scheme == "himem" else { return }
         switch url.host {
         case "record":
-            switch WatchSharedState.tapBehavior {
-            case .openReadyToRecord:
-                coordinator.route = .recording
-            case .pressAndHoldToRecord:
-                coordinator.route = .recording
-                Task { await coordinator.recording.start() }
-            }
+            coordinator.route = .home
         case "pending":
             coordinator.route = .pendingList
         default:

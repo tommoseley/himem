@@ -13,7 +13,7 @@ struct ProcessingEngineFallbackTests {
     /// timeout, transient 5xx, or any other cloud failure.
     private struct ThrowingAnalyzer: EntryAnalyzer {
         struct StubError: Error {}
-        func analyzeEntry(_ text: String, existingTopics: [String]) async throws -> ClaudeAPIService.AnalysisResult {
+        func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult {
             throw StubError()
         }
     }
@@ -23,12 +23,13 @@ struct ProcessingEngineFallbackTests {
         let title: String
         let entityValue: String
         let topic: String
-        func analyzeEntry(_ text: String, existingTopics: [String]) async throws -> ClaudeAPIService.AnalysisResult {
+        func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult {
             ClaudeAPIService.AnalysisResult(
                 entities: [.init(type: "person", value: entityValue, confidence: 0.95)],
                 topics: [topic],
                 summary: "cloud summary",
-                title: title
+                title: title,
+                nextSteps: nil
             )
         }
     }
@@ -110,11 +111,26 @@ struct ProcessingEngineFallbackTests {
         let summary = try storage.viewContext.fetch(summaryRequest).first
         #expect(summary?.summaryText == "cloud summary")
 
-        // Title from the analyzer flows back to the entry.
+        // v5 pricing-UX change: AI-suggested titles no longer auto-write
+        // into `entry.title`. They land on `OrganizePass.suggestedTitle`
+        // and flow into the entry only when the user accepts via the
+        // Title row of the AISuggestionsCard.
         let entryRequest = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         entryRequest.predicate = NSPredicate(format: "id == %@", entry.id as CVarArg)
         let refreshed = try storage.viewContext.fetch(entryRequest).first
-        #expect(refreshed?.title == "Garden meeting")
+        #expect(refreshed?.title == nil)
+        #expect(refreshed?.titleSourcedFromAI == false)
+
+        let passRequest = NSFetchRequest<OrganizePass>(entityName: "OrganizePass")
+        passRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let pass = try storage.viewContext.fetch(passRequest).first
+        #expect(pass?.suggestedTitle == "Garden meeting")
+        #expect(pass?.summaryText == "cloud summary")
+        #expect(pass?.suggestedTopics == ["Garden"])
+        #expect(pass?.dismissedAt == nil)
+        // lastOrganizedAt is set so the "N new clips since last
+        // organize" Re-organize callout can fire.
+        #expect(refreshed?.lastOrganizedAt != nil)
     }
 
     /// processPendingTasks fetches pending ProcessingTasks and runs them.
@@ -194,6 +210,23 @@ struct ProcessingEngineFallbackTests {
     }
 
     @Test func reprocess_upgradesLocalEntriesToCloud() async throws {
+        // `reprocessLocallyHandledEntries` gates on the user's tier
+        // and assist balance — Free skips it (auto-org never ran in
+        // the first place), Plus/Founders runs it consuming one
+        // assist per entry. Grant Plus + a generous pack balance so
+        // the gate passes for the test entry.
+        let priorTier = EntitlementService.shared.tier
+        let priorPack = EntitlementService.shared.packBalance
+        let priorThreshold = EntitlementService.shared.autoOrganizeThreshold
+        EntitlementService.shared.setTier(.plusMonthly)
+        EntitlementService.shared.debugSetPackBalance(100)
+        EntitlementService.shared.debugSetAutoOrganizeThreshold(0)
+        defer {
+            EntitlementService.shared.setTier(priorTier)
+            EntitlementService.shared.debugSetPackBalance(priorPack)
+            EntitlementService.shared.debugSetAutoOrganizeThreshold(priorThreshold)
+        }
+
         let storage = StorageService(inMemory: true)
         let offlineEngine = ProcessingEngine(storage: storage, analyzer: ThrowingAnalyzer())
 

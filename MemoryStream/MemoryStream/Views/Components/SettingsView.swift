@@ -25,7 +25,15 @@ struct SettingsView: View {
 
     @State private var displayName: String = AuthService.shared.userName
     @ObservedObject private var inbox = InboxManifest.shared
+    @ObservedObject private var entitlement = EntitlementService.shared
+    @ObservedObject private var tenure = TenureTracker.shared
     @State private var showInbox = false
+    @State private var showYourAI = false
+    @State private var showUpgradeHub = false
+    @State private var showSupporter = false
+    #if DEBUG
+    @State private var showDebugPricing = false
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -132,6 +140,49 @@ struct SettingsView: View {
                     }
                 }
 
+                // MARK: - HiMem Plus (Pricing)
+                Section {
+                    Button {
+                        showYourAI = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "sparkles")
+                                .foregroundStyle(Crucible.Color.accent)
+                            Text("Your AI")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                            Text(aiSummary)
+                                .font(.subheadline)
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(Crucible.Color.ink4)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        showUpgradeHub = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(Crucible.Color.accent)
+                            Text("HiMem Plus")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                            Text(planSummary)
+                                .font(.subheadline)
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(Crucible.Color.ink4)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } footer: {
+                    Text("HiMem AI is the helper, not the product. Free works forever; Plus adds AI organization and unlimited projects.")
+                }
+
                 // MARK: - Captured Clips (Inbox)
                 Section {
                     Button {
@@ -154,6 +205,31 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                 } footer: {
                     Text("Voice clips from Apple Watch land here. Review them, then create a new memory or add them to an existing one.")
+                }
+
+                // MARK: - Supporter (post-trust only)
+                if tenure.isTenured {
+                    Section {
+                        Button {
+                            showSupporter = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "heart.fill")
+                                    .foregroundStyle(Crucible.Color.accent)
+                                Text("Support HiMem")
+                                    .foregroundStyle(Crucible.Color.ink)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(Crucible.Color.ink4)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } header: {
+                        Text("Behind HiMem")
+                    } footer: {
+                        Text("Voluntary. No feature unlocks. We surface this only after you've stuck around.")
+                    }
                 }
 
                 // MARK: - Voice
@@ -206,6 +282,34 @@ struct SettingsView: View {
                 } footer: {
                     Text("Anchors the Add button to the bottom-left of the screen instead of the bottom-right. The action stack flips with it.")
                 }
+
+                #if DEBUG
+                // MARK: - Debug (stripped from Release builds)
+                Section {
+                    Button {
+                        showDebugPricing = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "ladybug.fill")
+                                .foregroundStyle(.purple)
+                            Text("Pricing & entitlements")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                            Text(devTierLabel)
+                                .font(.caption)
+                                .foregroundStyle(Crucible.Color.ink3)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(Crucible.Color.ink4)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } header: {
+                    Text("Debug")
+                } footer: {
+                    Text("Developer-only. Compiled out of Release builds — App Store users never see this section.")
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -214,13 +318,28 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .sheet(isPresented: $showInbox) {
+            .navigationDestination(isPresented: $showInbox) {
                 if let viewModel {
-                    ClipInboxView(viewModel: viewModel)
+                    SessionListView(viewModel: viewModel)
                 }
             }
+            .navigationDestination(isPresented: $showYourAI) {
+                YourAIView()
+            }
+            .navigationDestination(isPresented: $showUpgradeHub) {
+                UpgradeHubView()
+            }
+            .navigationDestination(isPresented: $showSupporter) {
+                SupporterDetailView()
+            }
+            #if DEBUG
+            .navigationDestination(isPresented: $showDebugPricing) {
+                DebugPricingPanel()
+            }
+            #endif
             .onAppear {
                 loadTopics()
+                tenure.refresh()
                 Task {
                     notificationAuthStatus = await NotificationService.shared.authorizationStatus()
                 }
@@ -411,6 +530,37 @@ struct SettingsView: View {
         _ = await NotificationService.shared.requestPermissionIfNeeded()
         notificationAuthStatus = await NotificationService.shared.authorizationStatus()
     }
+
+    // MARK: - Pricing summaries
+
+    private var aiSummary: String {
+        if entitlement.isPlus {
+            return "\(entitlement.monthlyRemaining)/\(entitlement.monthlyAllowance) this month"
+        }
+        return "\(entitlement.totalAssistsRemaining) assists"
+    }
+
+    private var planSummary: String {
+        switch entitlement.tier {
+        case .free: return "Upgrade"
+        case .plusMonthly: return "Plus · Monthly"
+        case .plusYearly: return "Plus · Yearly"
+        case .founders: return "Founders"
+        }
+    }
+
+    #if DEBUG
+    /// Compact tier label for the debug-section row, with an "(override)"
+    /// suffix when the developer override is in play so it's obvious at
+    /// a glance which path is driving the tier.
+    private var devTierLabel: String {
+        let base = planSummary
+        if entitlement.developerOverrideTier != nil {
+            return "\(base) · override"
+        }
+        return base
+    }
+    #endif
 }
 
 #Preview {

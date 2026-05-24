@@ -44,13 +44,24 @@ enum EntryMapper {
                     isAccessible: ref.isAccessible,
                     transcript: ref.transcript,
                     text: ref.text,
-                    createdAt: ref.createdAt ?? .distantPast
+                    createdAt: ref.createdAt ?? .distantPast,
+                    // Per-clip placeName wins when present; otherwise
+                    // fall back to the memory's own locationName so
+                    // every existing memory with a captured location
+                    // lights up on the clip row without waiting for
+                    // the per-clip backfill. The two will diverge
+                    // only when a memory's clips actually span
+                    // places (multi-session memories spanning a
+                    // walk/drive) — at which point the per-clip
+                    // value renders.
+                    placeName: ref.placeName ?? entry.locationName
                 )
             },
             recycledAt: entry.recycledAt,
             latitude: entry.latitude?.doubleValue,
             longitude: entry.longitude?.doubleValue,
-            locationName: entry.locationName
+            locationName: entry.locationName,
+            renderedSummary: entry.renderedSummary
         )
     }
 }

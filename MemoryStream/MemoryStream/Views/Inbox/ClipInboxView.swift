@@ -23,12 +23,20 @@ struct ClipInboxView: View {
     @State private var playingClipId: UUID?
     @State private var player: AVAudioPlayer?
     @State private var pendingDeleteIds: Set<UUID> = []
+    /// Per-clip expand toggle for long transcripts. When a clipId is in
+    /// this set, its transcript renders without a line-limit; otherwise
+    /// it caps at `collapsedLineLimit` and shows a "Show more" affordance.
+    @State private var expandedClipIds: Set<UUID> = []
 
     /// Cached output of `groupClips(_:)` — recomputed only when
     /// `inbox.clips` actually changes. The previous implementation
     /// re-sorted + re-grouped on every render (audit 2026-05-09: HIGH
     /// cost on dense inboxes).
     @State private var groupedClips: [ClipGroup] = []
+    /// Heuristic: transcripts shorter than this don't bother offering the
+    /// expand toggle — they fit in the collapsed view anyway.
+    private let collapsedLineLimit = 4
+    private let expandThresholdChars = 180
 
     @Environment(\.dismiss) private var dismiss
 
@@ -88,6 +96,10 @@ struct ClipInboxView: View {
         .onDisappear { stopPlayback() }
         .onAppear {
             groupedClips = Self.groupClips(inbox.clips)
+            // Just-in-time transcription: kick off any clip that
+            // hasn't been attempted. Cheap if everything's already
+            // transcribed (predicate filters them out).
+            triggerLazyTranscription()
         }
         .onChange(of: inbox.clips) { _, newClips in
             groupedClips = Self.groupClips(newClips)
@@ -204,58 +216,119 @@ struct ClipInboxView: View {
 
     // MARK: - Clip card
 
-    /// Per the Watch → Memory flow spec (2026-05-14, step 9): no
-    /// transcript preview in MVP — each row shows audio + capture time
-    /// + duration only. The user reviews by playback, not by reading.
-    /// The transcript stored on `InboxClip` remains available for v2
-    /// (AI title / topic suggestion) but isn't surfaced here.
+    /// Three-way render based on whether iPhone-side transcription has
+    /// run and what it produced. The "no speech" branch dims the row
+    /// and labels the clip as accidental so the user can delete with
+    /// confidence; "pending" is the in-flight state while
+    /// `TranscriptionService` is still working on the clip (triggered
+    /// when the inbox view first appears — see `triggerLazyTranscription`).
+    private enum ClipDisplayState {
+        case hasTranscript
+        case pending      // transcription hasn't completed yet
+        case noSpeech     // transcription ran, returned nothing
+    }
+
+    private func displayState(for clip: InboxClip) -> ClipDisplayState {
+        if !clip.transcript.isEmpty { return .hasTranscript }
+        return clip.transcriptionAttempted ? .noSpeech : .pending
+    }
+
     private func clipCard(_ clip: InboxClip) -> some View {
         let isSelected = selected.contains(clip.clipId)
         let isPlaying = playingClipId == clip.clipId
+        let state = displayState(for: clip)
+        let isExpanded = expandedClipIds.contains(clip.clipId)
+        let canExpand = state == .hasTranscript && clip.transcript.count > expandThresholdChars
 
-        return HStack(spacing: 12) {
-            Button {
-                toggle(clip.clipId)
-            } label: {
-                ZStack {
-                    Circle()
-                        .strokeBorder(
-                            isSelected ? Crucible.Color.accent : Crucible.Color.ink4,
-                            lineWidth: 1.5
-                        )
-                        .background(Circle().fill(isSelected ? Crucible.Color.accent : .clear))
-                        .frame(width: 22, height: 22)
-                    if isSelected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
+        return HStack(alignment: .top, spacing: 10) {
+            VStack(spacing: 8) {
+                Button {
+                    toggle(clip.clipId)
+                } label: {
+                    ZStack {
+                        Circle()
+                            .strokeBorder(
+                                isSelected ? Crucible.Color.accent : Crucible.Color.ink4,
+                                lineWidth: 1.5
+                            )
+                            .background(Circle().fill(isSelected ? Crucible.Color.accent : .clear))
+                            .frame(width: 22, height: 22)
+                        if isSelected {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isSelected ? "Deselect clip" : "Select clip")
+                .buttonStyle(.plain)
+                .accessibilityLabel(isSelected ? "Deselect clip" : "Select clip")
 
-            Button {
-                isPlaying ? stopPlayback() : playClip(clip)
-            } label: {
-                Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Crucible.Color.accent)
-                    .frame(width: 36, height: 36)
-                    .background(Crucible.Color.accentTint)
-                    .clipShape(Circle())
+                Button {
+                    isPlaying ? stopPlayback() : playClip(clip)
+                } label: {
+                    Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Crucible.Color.accent)
+                        .frame(width: 28, height: 28)
+                        .background(Crucible.Color.accentTint)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isPlaying ? "Stop playback" : "Play clip")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isPlaying ? "Stop playback" : "Play clip")
+            .padding(.top, 2)
 
-            clipMeta(clip)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture { toggle(clip.clipId) }
+            VStack(alignment: .leading, spacing: 6) {
+                clipMeta(clip)
+
+                switch state {
+                case .hasTranscript:
+                    Text("\u{201C}\(clip.transcript)\u{201D}")
+                        .font(.system(.subheadline, design: .serif))
+                        .foregroundStyle(Crucible.Color.ink)
+                        .lineLimit(isExpanded ? nil : collapsedLineLimit)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .pending:
+                    Text("Transcribing…")
+                        .font(.footnote)
+                        .italic()
+                        .foregroundStyle(Crucible.Color.ink3)
+                case .noSpeech:
+                    Text("No speech detected · likely accidental")
+                        .font(.footnote)
+                        .italic()
+                        .foregroundStyle(Crucible.Color.ink3)
+                    Button {
+                        retryTranscription(clip)
+                    } label: {
+                        Text("Retry transcription")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Crucible.Color.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if canExpand {
+                    Button {
+                        if isExpanded { expandedClipIds.remove(clip.clipId) }
+                        else { expandedClipIds.insert(clip.clipId) }
+                    } label: {
+                        Text(isExpanded ? "Show less" : "Show more")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Crucible.Color.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { toggle(clip.clipId) }
         }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .padding(.leading, 10)
+        .padding(.trailing, 12)
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(isSelected ? Color(hex: 0xFFF8F1) : Crucible.Color.card)
@@ -267,20 +340,55 @@ struct ClipInboxView: View {
                     lineWidth: isSelected ? 1.5 : 1
                 )
         )
+        .opacity(state == .noSpeech ? 0.55 : 1.0)
     }
 
     private func clipMeta(_ clip: InboxClip) -> some View {
         let timeFmt = DateFormatter(); timeFmt.dateFormat = "h:mm a"
-        return HStack(spacing: 8) {
+        return HStack(spacing: 6) {
             Text(timeFmt.string(from: clip.capturedAt))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Crucible.Color.ink)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Crucible.Color.ink2)
                 .monospacedDigit()
             Circle().fill(Crucible.Color.ink4).frame(width: 3, height: 3)
+            HStack(spacing: 3) {
+                Image(systemName: "applewatch")
+                    .font(.caption2)
+                Text("Watch")
+                    .font(.caption2)
+            }
+            .foregroundStyle(Crucible.Color.ink3)
+            Circle().fill(Crucible.Color.ink4).frame(width: 3, height: 3)
             Text(durationLabel(clip.duration))
-                .font(.subheadline)
+                .font(.caption2)
                 .monospacedDigit()
                 .foregroundStyle(Crucible.Color.ink3)
+        }
+    }
+
+    // MARK: - Transcription
+
+    /// Re-runs `TranscriptionService` against the clip's audio file. Used
+    /// by the "Retry transcription" affordance on no-speech rows; also
+    /// reachable when a row's first-pass transcription failed and the
+    /// user wants another shot.
+    private func retryTranscription(_ clip: InboxClip) {
+        let url = InboxManifest.audioURL(for: clip.audioFilename)
+        Task {
+            let result = await TranscriptionService.shared.transcribe(audioURL: url)
+            inbox.recordTranscriptionAttempt(clipId: clip.clipId, transcript: result.text)
+        }
+    }
+
+    /// On first appearance of the inbox view, kick off transcription for
+    /// any clip that hasn't been attempted yet. Per the design decision
+    /// (2026-05-15): transcription is just-in-time — no CPU is burned at
+    /// clip arrival; the iPhone transcribes when the user opens Captured
+    /// Clips. Tasks fan out in parallel; each row flips from "Transcribing…"
+    /// to the final state as its task completes.
+    private func triggerLazyTranscription() {
+        for clip in inbox.clips where !clip.transcriptionAttempted && clip.transcript.isEmpty {
+            retryTranscription(clip)
         }
     }
 
@@ -465,56 +573,19 @@ struct ClipInboxView: View {
 
     // MARK: - Grouping
 
-    /// Session grouping per the Watch → Memory flow spec (step 5):
-    /// ~10 min AND ~50 m proximity → same session. Clips without
-    /// location coordinates fall back to time-only proximity (both
-    /// clips' lat/lon must be present for the distance check to apply).
-    /// Computed at the call site each time the inbox changes; cached in
-    /// `groupedClips` so the render path doesn't re-sort.
-    private static let sessionTimeWindowSeconds: TimeInterval = 10 * 60
-    private static let sessionProximityMeters: Double = 50
-
+    /// Grouping moved to `ClipSessionGrouper` (shared with the new
+    /// session-first list). Thin static forwarder kept so existing
+    /// `groupedClips` cache call sites compile unchanged; remove
+    /// once the new `SessionListView` fully replaces this view.
     private static func groupClips(_ clips: [InboxClip]) -> [ClipGroup] {
-        let sorted = clips.sorted { $0.capturedAt > $1.capturedAt }
-        var groups: [[InboxClip]] = []
-        for clip in sorted {
-            if let lastGroup = groups.last, let lastClip = lastGroup.last,
-               sameSession(lastClip, clip) {
-                groups[groups.count - 1].append(clip)
-            } else {
-                groups.append([clip])
-            }
-        }
-        return groups.map { ClipGroup(clips: $0) }
+        ClipSessionGrouper.group(clips)
     }
 
-    private static func sameSession(_ a: InboxClip, _ b: InboxClip) -> Bool {
-        guard abs(a.capturedAt.timeIntervalSince(b.capturedAt)) <= sessionTimeWindowSeconds else {
-            return false
-        }
-        // If either clip lacks coordinates, fall back to time-only.
-        guard let aLat = a.latitude, let aLon = a.longitude,
-              let bLat = b.latitude, let bLon = b.longitude
-        else {
-            return true
-        }
-        return haversineMeters(lat1: aLat, lon1: aLon, lat2: bLat, lon2: bLon)
-            <= sessionProximityMeters
-    }
-
-    /// Great-circle distance via the haversine formula. Sufficient
-    /// precision for the ~50 m session threshold; no CoreLocation
-    /// dependency, so callable from the static grouping path.
-    private static func haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Double {
-        let earthR = 6_371_000.0
-        let toRad = Double.pi / 180
-        let dLat = (lat2 - lat1) * toRad
-        let dLon = (lon2 - lon1) * toRad
-        let a = sin(dLat / 2) * sin(dLat / 2)
-            + cos(lat1 * toRad) * cos(lat2 * toRad)
-            * sin(dLon / 2) * sin(dLon / 2)
-        let c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return earthR * c
+    /// Test-facing forwarder. Older tests reference
+    /// `ClipInboxView.sameSession`; the implementation now lives on
+    /// `ClipSessionGrouper`.
+    static func sameSession(_ a: InboxClip, _ b: InboxClip) -> Bool {
+        ClipSessionGrouper.sameSession(a, b)
     }
 
     // MARK: - Helpers
@@ -522,8 +593,4 @@ struct ClipInboxView: View {
     private func durationLabel(_ d: TimeInterval) -> String {
         String(format: "%d:%02d", Int(d) / 60, Int(d) % 60)
     }
-}
-
-private struct ClipGroup {
-    let clips: [InboxClip]
 }

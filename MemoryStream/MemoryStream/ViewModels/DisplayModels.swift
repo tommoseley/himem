@@ -58,6 +58,10 @@ struct EntryDisplayModel: Identifiable {
     let latitude: Double?
     let longitude: Double?
     let locationName: String?
+    /// Owner-rendered AI summary from the latest organize pass, if the
+    /// summary row has been accepted. Used by the feed card to replace
+    /// the raw-content snippet when present. Nil otherwise.
+    let renderedSummary: String?
 
     var timeString: String {
         let interval = Date().timeIntervalSince(createdAt)
@@ -145,6 +149,7 @@ extension EntryDisplayModel: Equatable {
             && lhs.latitude == rhs.latitude
             && lhs.longitude == rhs.longitude
             && lhs.locationName == rhs.locationName
+            && lhs.renderedSummary == rhs.renderedSummary
     }
 }
 
@@ -170,7 +175,8 @@ extension EntryDisplayModel {
             recycledAt: recycledAt,
             latitude: latitude,
             longitude: longitude,
-            locationName: locationName
+            locationName: locationName,
+            renderedSummary: renderedSummary
         )
     }
 }
@@ -198,6 +204,11 @@ struct MediaDisplayItem: Identifiable, Equatable {
     /// Wall-clock timestamp the capture was taken — used to interleave
     /// fragments in the chronological capture stream.
     var createdAt: Date = .distantPast
+    /// Cached reverse-geocoded place name — feeds the clip-row header
+    /// per the Memory Detail v3 spec: "Sun May 17 · 6:12 PM ·
+    /// Bishop St, Bluffton". Nil while resolve is in flight, for
+    /// legacy clips, and for `.note` fragments.
+    var placeName: String? = nil
 }
 
 // MARK: - Tag Display Model
