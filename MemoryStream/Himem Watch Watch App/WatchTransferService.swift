@@ -116,4 +116,24 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
             NSLog("[Himem][WC] watch — transferFile delivered to iPhone")
         }
     }
+
+    /// Auto-recovery for phone-side reinstalls. When the iPhone is
+    /// reinstalled, the watch's already-queued `transferFile` entries
+    /// are addressed to the previous install's WC identity — iOS can't
+    /// deliver them. The watch's `retryPendingTransfers` only runs on
+    /// cold-launch of the watch app, so a reinstalled phone leaves
+    /// pending clips silently stuck until the user force-quits the
+    /// watch app.
+    ///
+    /// Hook the reachability transition (false → true) and re-queue
+    /// everything in the manifest. `transferFile` de-dupes in-flight
+    /// transfers, so this is safe to fire on any reachability change.
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        let reachable = session.isReachable
+        NSLog("[Himem][WC] watch — sessionReachabilityDidChange reachable=\(reachable)")
+        guard reachable else { return }
+        Task { @MainActor in
+            self.flushPendingManifest()
+        }
+    }
 }

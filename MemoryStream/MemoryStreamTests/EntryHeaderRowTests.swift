@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import MemoryStream
+@testable import HiMem
 
 /// Tests for EntryHeaderRow.fitting — the truncation ladder applied to the
 /// inline location string on max-density cards. Behavior is doc-commented:

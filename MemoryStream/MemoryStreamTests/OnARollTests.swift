@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import MemoryStream
+@testable import HiMem
 
 /// PR 1 of the "On a roll" implementation (`docs/design/on-a-roll-spec.md`).
 /// Tests the pure decision layer (MinClipDebouncer) and the
@@ -227,7 +227,7 @@ struct OnARollTests {
         let b = clip(captured: Date(timeIntervalSinceReferenceDate: 7200),
                      latitude: 33.05, longitude: -117.05, rollGroupId: rollId)
 
-        #expect(ClipInboxView.sameSession(a, b) == true)
+        #expect(ClipSessionGrouper.sameSession(a, b) == true)
     }
 
     @Test func sameSession_differentRollGroupIds_doNotGroup() {
@@ -237,7 +237,7 @@ struct OnARollTests {
         let b = clip(captured: Date(timeIntervalSinceReferenceDate: 1),
                      latitude: 33.0, longitude: -117.0, rollGroupId: UUID())
 
-        #expect(ClipInboxView.sameSession(a, b) == false)
+        #expect(ClipSessionGrouper.sameSession(a, b) == false)
     }
 
     @Test func sameSession_bothNilRollGroupIds_fallsBackToTimeLocation() {
@@ -247,7 +247,7 @@ struct OnARollTests {
         let a = clip(captured: near, latitude: 33.0, longitude: -117.0)
         let b = clip(captured: later, latitude: 33.0, longitude: -117.0)
 
-        #expect(ClipInboxView.sameSession(a, b) == true)
+        #expect(ClipSessionGrouper.sameSession(a, b) == true)
     }
 
     @Test func sameSession_bothNilRollGroupIds_outsideTimeWindow_doNotGroup() {
@@ -256,7 +256,7 @@ struct OnARollTests {
         let a = clip(captured: near, latitude: 33.0, longitude: -117.0)
         let b = clip(captured: muchLater, latitude: 33.0, longitude: -117.0)
 
-        #expect(ClipInboxView.sameSession(a, b) == false)
+        #expect(ClipSessionGrouper.sameSession(a, b) == false)
     }
 
     @Test func sameSession_mixedNilAndNonNilRollGroupIds_fallBackToHeuristic() {
@@ -269,7 +269,7 @@ struct OnARollTests {
         let a = clip(captured: near, latitude: 33.0, longitude: -117.0, rollGroupId: UUID())
         let b = clip(captured: later, latitude: 33.0, longitude: -117.0, rollGroupId: nil)
 
-        #expect(ClipInboxView.sameSession(a, b) == true)
+        #expect(ClipSessionGrouper.sameSession(a, b) == true)
     }
 
     // MARK: - VoiceClipSplitter offset math (PR 4)

@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import MemoryStream
+@testable import HiMem
 
 /// Tests for `EntryDisplayModel.displayStatus` — the small pill that shows
 /// "Parsing now", "Processed", "Confirmed", etc. on each card. Specifically

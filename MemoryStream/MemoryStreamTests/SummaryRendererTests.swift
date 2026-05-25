@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import MemoryStream
+@testable import HiMem
 
 /// Money tests for the `<user>` token substitution layer specified
 /// in `docs/design/ai-organize-spec.md` §3. Two render paths to cover:

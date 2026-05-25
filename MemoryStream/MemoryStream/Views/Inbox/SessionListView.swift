@@ -56,6 +56,7 @@ struct SessionListView: View {
                 list
             }
         }
+        .navigationTitle("Captured Clips")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -132,6 +133,16 @@ struct SessionListView: View {
                 .padding(.horizontal, 14)
                 Color.clear.frame(height: 20)
             }
+        }
+        .refreshable {
+            // Manual nudge — asks the watch to retry any pending
+            // transferFile in its queue, then re-broadcasts acks for
+            // every inbox clip so the watch can drop stale pending
+            // rows whose original ack got lost. Idempotent on both
+            // sides. Wired here so a stuck "Hasn't reached your phone"
+            // banner on the watch has an obvious user remedy.
+            WatchSessionDelegate.shared.requestWatchPendingFlush()
+            WatchSessionDelegate.shared.reconcileWatchAcks()
         }
     }
 
@@ -233,7 +244,7 @@ struct SessionListView: View {
                 guard !clips.isEmpty else { return }
                 bundleSession = BundleRequest(session: session, clipsToBundle: clips)
             } label: {
-                Label("Make a Memory", systemImage: "sparkles")
+                Label("Make or Add To a memory", systemImage: "sparkles")
             }
             // Long-press is a power-user shortcut per v2.1 spec —
             // the contextMenu itself supplies "Cancel"; tapping
@@ -425,7 +436,7 @@ struct SessionListView: View {
                     // without resorting to a check glyph. Matches
                     // `IncludeRing` in the JSX exactly.
                     Circle()
-                        .fill(Color(hex: 0xFFFCF6))
+                        .fill(Crucible.Color.accentInk)
                         .frame(width: 8, height: 8)
                 }
             }
@@ -532,12 +543,12 @@ struct SessionListView: View {
             bundleSession = BundleRequest(session: session, clipsToBundle: selectedClips)
         } label: {
             HStack(spacing: 8) {
-                Text("Make a Memory")
+                Text("Make or Add To a memory")
                     .font(.system(size: 14, weight: .semibold))
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .bold))
             }
-            .foregroundStyle(Color(hex: 0xFFFCF6))
+            .foregroundStyle(Crucible.Color.accentInk)
             .frame(maxWidth: .infinity)
             .frame(height: 40)
             .background(isDisabled
@@ -579,7 +590,7 @@ struct SessionListView: View {
                  : "Discard session")
                 .font(.system(size: 13, weight: confirming ? .semibold : .regular))
                 .foregroundStyle(confirming
-                                 ? Color(red: 0.78, green: 0.20, blue: 0.16)
+                                 ? Crucible.Color.danger
                                  : Crucible.Color.ink2)
                 .frame(height: 40)
                 .contentShape(Rectangle())

@@ -265,4 +265,39 @@ Session summaries are **immutable logs**. Never edit after writing.
 
 ---
 
+## Product Architecture (synced from `docs/design/CLAUDE.md`)
+
+The design-system CLAUDE.md is the source of truth for product architecture; this section mirrors its locked decisions so the two stay coherent. If a decision changes there, sync here in the same PR.
+
+### Two capture paradigms
+
+HiMem has two distinct capture modes. These are properties of **intent**, not platform — a surface can host either, though each surface has a current default.
+
+- **Structured capture** — User intentionally creates a Memory. Reflective space. Clips and media flow into a container that already exists or is created on the spot. Memory-oriented from the first tap. *Today: phone direct-voice composer, phone append composer, iPad (when it ships).*
+- **Ad-hoc capture** — User catches fragments. Brainstorms. Doesn't organize yet. Session-oriented; structure comes later via consolidation. *Today: watch.* *Future possibilities (don't design for these now): Studio quick-capture, phone widget, Siri shortcut into the session inbox.*
+
+The boundary isn't watch-vs-phone. It's "I'm capturing inside a container I'm building" vs "I'm catching something to sort out later." Don't bake "watch = ad-hoc" into anything fundamental.
+
+**Captured Clips is the consolidation seam for ad-hoc captures**, regardless of which surface produced them. Sessions are proto-memories; that's why they're the right primary unit there.
+
+### The consolidation ladder
+
+Three layers, same dance at each scale:
+
+1. **Clips → Session → Memory.** Done on Captured Clips. Bundling a session is consolidation at the smallest scale.
+2. **Memories → Project membership.** Manual tagging. Mid-scale grouping.
+3. **Project + Memories → Project summary.** Project Assist. High-scale synthesis.
+
+At each layer: messy input → recognition → structure. Brainstorming is messy; reflection creates structure; memory formation is editorial. The product models that explicitly.
+
+**The normal vs edge inversion on Captured Clips.** Most users, most of the time, see a session and bundle it. That's the normal flow. Clip-level tools (delete one, retry transcription, exclude accidental) are *exception handling*, accessed by expanding a session card. Don't put everyone in granular-management mode by default.
+
+### Crucible token contract
+
+The single source of truth for design tokens (colors, topic palette) is `docs/design/crucible.css`. iOS asset-catalog entries under `Assets.xcassets/Crucible/*.colorset` mirror it byte-for-byte. When the spec changes, both sides change in the same PR.
+
+**Topic-slug strings are a cross-platform contract.** The 16-swatch palette names (`ember`, `terracotta`, `clay`, … `slate`) defined in `docs/design/Crucible · topic palette spec.md` must match the asset-catalog entries (`topic-ember.colorset` etc.) AND the `Topic.paletteKey` Core Data values AND the Swift `topicSlug(for:)` hash output. Drift in any of these silently mis-renders chips. If a slug needs renaming, that's a data migration on every device.
+
+---
+
 _Governance derived from TheCombine (~/dev/TheCombine/) -- 2026-04-14_

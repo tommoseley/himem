@@ -88,12 +88,24 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             NSLog("[Himem][WC] audio already at \(dest.path), skipping copy")
         }
 
+        // Confirm receipt to the watch IMMEDIATELY, before any of the
+        // async manifest/compress/transcribe work runs. The file at
+        // `dest` is durably on disk — that's the only precondition for
+        // a valid ack. Gating the ack behind the MainActor Task below
+        // means a slow downstream step (AAC compression can take
+        // ~1-2s on long clips) or an iOS background-suspend hit can
+        // leave the watch showing "Hasn't reached your phone in a day"
+        // even though the clip arrived. Money: 2026-05-25 — Tom saw
+        // this exact symptom right after AAC compression landed. Don't
+        // re-introduce the gate.
+        self.sendConfirmation(clipId: clipId)
+        NSLog("[Himem][WC] confirmation sent for clipId=\(clipId)")
+
         Task { @MainActor in
             NSLog("[Himem][WC] entering MainActor task for clipId=\(clipId)")
 
             if InboxManifest.shared.clips.contains(where: { $0.clipId == clipId }) {
-                NSLog("[Himem][WC] clipId already in manifest, sending dup confirmation")
-                self.sendConfirmation(clipId: clipId)
+                NSLog("[Himem][WC] clipId already in manifest, skipping accept")
                 return
             }
 
@@ -106,8 +118,54 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 clipId: clipId,
                 capturedAt: clipMetadata.capturedAt
             )
-            self.sendConfirmation(clipId: clipId)
-            NSLog("[Himem][WC] confirmation sent for clipId=\(clipId)")
+
+            // Kick off transcription for the just-arrived row(s).
+            // Without this, clips that land while the user is on the
+            // session-first inbox (SessionListView) stay stuck on
+            // "Transcribing…" until the next scenePhase=.active
+            // transition. Money: 2026-05-25 bug.
+            await Self.transcribePendingInboxClips()
+
+            // Re-broadcast acks for ALL inbox clips, not just the one
+            // that just arrived. WatchConnectivity acks can be lost
+            // (sendMessage when watch unreachable, transferUserInfo
+            // queue dropped on app reinstall, etc.) — and the watch
+            // currently has no way to know it missed one. Every new
+            // arrival is a chance to clean up the watch's stale
+            // pending rows. Money: 2026-05-25 — Tom saw watch
+            // continuing to show clips that had clearly landed on
+            // iPhone, because their acks were lost in transit.
+            self.reconcileWatchAcks()
+        }
+    }
+
+    /// Runs `TranscriptionService.transcribe` against every inbox clip
+    /// that hasn't had a transcription attempt yet, then records the
+    /// result on the manifest row. Idempotent — already-attempted
+    /// clips are skipped, so calling this from multiple seams (the
+    /// arrival path in `session(_:didReceive:)` AND the scene-active
+    /// backstop in `MemoryStreamApp`) is safe.
+    ///
+    /// Single source of truth for "make the inbox catch up on
+    /// transcription." Lives here rather than on `InboxManifest` so
+    /// the manifest doesn't take a hard dependency on
+    /// `TranscriptionService`.
+    @MainActor
+    static func transcribePendingInboxClips() async {
+        let pending = InboxManifest.shared.clips.filter {
+            $0.transcript.isEmpty && !$0.transcriptionAttempted
+        }
+        guard !pending.isEmpty else { return }
+        NSLog("[Himem][Inbox] transcribing \(pending.count) pending clip(s)")
+        if #available(iOS 26.0, *) {
+            for clip in pending {
+                let url = InboxManifest.audioURL(for: clip.audioFilename)
+                let result = await TranscriptionService.shared.transcribe(audioURL: url)
+                InboxManifest.shared.recordTranscriptionAttempt(
+                    clipId: clip.clipId,
+                    transcript: result.text
+                )
+            }
         }
     }
 
@@ -117,12 +175,21 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// via `VoiceClipSplitter` into N per-clip files + N `InboxClip`
     /// rows, all sharing the master's `rollGroupId`. The master file
     /// is removed after a successful split so disk doesn't carry both.
+    ///
+    /// Each finalized audio file is run through `AudioCompressor` before
+    /// being referenced by the manifest. Watch clips arrive as raw
+    /// Float32 PCM (~192 KB/sec) because watchOS lacks `AVAssetWriter`;
+    /// the phone compresses to AAC (~4 KB/sec, ~48× smaller) so the
+    /// on-device storage and CloudKit footprint stay bounded.
     @MainActor
     static func acceptArrivedClip(metadata: ClipMetadata, masterFilename: String) async {
         NSLog("[Himem][WC] phone — acceptArrivedClip clipId=\(metadata.clipId) rollGroupId=\(metadata.rollGroupId?.uuidString ?? "nil") offsets=\(metadata.nextTapOffsets.count)")
         let masterURL = InboxManifest.audioURL(for: masterFilename)
         let offsets = metadata.nextTapOffsets
         if offsets.isEmpty {
+            // Single-clip session — master file IS the clip. Compress
+            // before referencing so the row points at the small AAC file.
+            await compressIfPossible(at: masterURL, label: "single-clip master")
             let clip = InboxClip(
                 clipId: metadata.clipId,
                 capturedAt: metadata.capturedAt,
@@ -151,6 +218,15 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 outputDir: outputDir,
                 rollGroupId: rollGroupId
             )
+            // Compress each fragment in place. The splitter writes PCM
+            // outputs (uses the master's `processingFormat`); compressing
+            // here turns each into AAC before manifest entry. If a
+            // compress fails for one fragment, log and continue — better
+            // to ship a big clip than to lose it.
+            for fragment in fragments {
+                let url = InboxManifest.audioURL(for: fragment.audioFilename)
+                await compressIfPossible(at: url, label: "fragment \(fragment.audioFilename)")
+            }
             let sessionStart = metadata.capturedAt
             // Per-clip start times: clip 1 = sessionStart;
             // clip i (i>1) = sessionStart + offsets[i-2].
@@ -175,8 +251,10 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         } catch {
             // Split failed — fall back to one inbox row pointing at
             // the master, so we don't lose audio. User sees the
-            // unsplit recording; rollGroupId still attached.
+            // unsplit recording; rollGroupId still attached. Still
+            // compress so the fallback file isn't bloated either.
             NSLog("[Himem][WC] split failed (\(error.localizedDescription)), surfacing master as one clip")
+            await compressIfPossible(at: masterURL, label: "fallback master")
             let clip = InboxClip(
                 clipId: metadata.clipId,
                 capturedAt: metadata.capturedAt,
@@ -189,6 +267,21 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 rollGroupId: metadata.rollGroupId
             )
             InboxManifest.shared.acceptClip(clip)
+        }
+    }
+
+    /// Compress `url` in place to AAC. Failure is logged and swallowed
+    /// — losing the size win is better than losing the clip.
+    private static func compressIfPossible(at url: URL, label: String) async {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let before = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+        do {
+            try await AudioCompressor.compressInPlace(at: url)
+            let after = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+            let ratio = before > 0 && after > 0 ? Double(before) / Double(after) : 0
+            NSLog("[Himem][WC] compressed \(label): \(before)→\(after) bytes (\(String(format: "%.1fx", ratio)))")
+        } catch {
+            NSLog("[Himem][WC] compress failed for \(label): \(error.localizedDescription) — keeping raw PCM")
         }
     }
 

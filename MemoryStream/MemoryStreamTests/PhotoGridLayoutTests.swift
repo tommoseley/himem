@@ -1,5 +1,5 @@
 import Testing
-@testable import MemoryStream
+@testable import HiMem
 
 @Suite struct PhotoGridLayoutTests {
 

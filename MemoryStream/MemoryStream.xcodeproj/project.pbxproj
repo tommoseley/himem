@@ -81,9 +81,8 @@
 		A100000311 /* InboxManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000311 /* InboxManifest.swift */; };
 		A100000312 /* WatchSessionDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000312 /* WatchSessionDelegate.swift */; };
 		A100000313 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
-		A100000314 /* ClipInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000314 /* ClipInboxView.swift */; };
 		A100000315 /* CreateMemoryFromClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000315 /* CreateMemoryFromClipsSheet.swift */; };
-		A100000316 /* AddClipsToMemorySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000316 /* AddClipsToMemorySheet.swift */; };
+		A100000316 /* ExistingMemoryPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000316 /* ExistingMemoryPickerView.swift */; };
 		A100000320 /* WatchSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000320 /* WatchSharedState.swift */; };
 		A100000321 /* WatchSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000320 /* WatchSharedState.swift */; };
 		A100000322 /* NoteEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000322 /* NoteEditorSheet.swift */; };
@@ -135,6 +134,7 @@
 		A100000691 /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000691 /* SessionListView.swift */; };
 		A100000693 /* SwipeToDelete.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000693 /* SwipeToDelete.swift */; };
 		A100000694 /* SwipeToDiscard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000694 /* SwipeToDiscard.swift */; };
+		A100000700 /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000700 /* AudioCompressor.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 		E2AD0E5C2FAD185F009FFEA1 /* Himem Watch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E2E510952FAE5AD3000D2670 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E2E510942FAE5AD3000D2670 /* WidgetKit.framework */; };
@@ -281,9 +281,8 @@
 		B100000310 /* ClipMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipMetadata.swift; path = Shared/ClipMetadata.swift; sourceTree = "<group>"; };
 		B100000311 /* InboxManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxManifest.swift; sourceTree = "<group>"; };
 		B100000312 /* WatchSessionDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionDelegate.swift; sourceTree = "<group>"; };
-		B100000314 /* ClipInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipInboxView.swift; sourceTree = "<group>"; };
 		B100000315 /* CreateMemoryFromClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateMemoryFromClipsSheet.swift; sourceTree = "<group>"; };
-		B100000316 /* AddClipsToMemorySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddClipsToMemorySheet.swift; sourceTree = "<group>"; };
+		B100000316 /* ExistingMemoryPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingMemoryPickerView.swift; sourceTree = "<group>"; };
 		B100000320 /* WatchSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchSharedState.swift; path = Shared/WatchSharedState.swift; sourceTree = "<group>"; };
 		B100000322 /* NoteEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorSheet.swift; sourceTree = "<group>"; };
 		B100000323 /* Linkify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Linkify.swift; sourceTree = "<group>"; };
@@ -332,6 +331,7 @@
 		B100000691 /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
 		B100000693 /* SwipeToDelete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDelete.swift; sourceTree = "<group>"; };
 		B100000694 /* SwipeToDiscard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDiscard.swift; sourceTree = "<group>"; };
+		B100000700 /* AudioCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AudioCompressor.swift; path = Shared/AudioCompressor.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Himem Watch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -341,7 +341,7 @@
 		E2E510942FAE5AD3000D2670 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		E2E510962FAE5AD3000D2670 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		E2E510AB2FAE5B91000D2670 /* Himem Watch WidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Himem Watch WidgetsExtension.entitlements"; sourceTree = "<group>"; };
-		P100000001 /* MemoryStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		P100000001 /* HiMem.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HiMem.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -700,7 +700,7 @@
 		G100000099 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				P100000001 /* MemoryStream.app */,
+				P100000001 /* HiMem.app */,
 				E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */,
 				E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */,
 				E2AD0E482FAD185F009FFEA1 /* Himem Watch Watch AppTests.xctest */,
@@ -725,6 +725,7 @@
 				B100000320 /* WatchSharedState.swift */,
 				B100000670 /* MinClipDebouncer.swift */,
 				B100000671 /* NextClipController.swift */,
+				B100000700 /* AudioCompressor.swift */,
 			);
 			name = Shared;
 			sourceTree = "<group>";
@@ -732,10 +733,9 @@
 		G100000402 /* Inbox */ = {
 			isa = PBXGroup;
 			children = (
-				B100000314 /* ClipInboxView.swift */,
 				B100000691 /* SessionListView.swift */,
 				B100000315 /* CreateMemoryFromClipsSheet.swift */,
-				B100000316 /* AddClipsToMemorySheet.swift */,
+				B100000316 /* ExistingMemoryPickerView.swift */,
 			);
 			path = Inbox;
 			sourceTree = "<group>";
@@ -939,7 +939,7 @@
 			);
 			name = MemoryStream;
 			productName = MemoryStream;
-			productReference = P100000001 /* MemoryStream.app */;
+			productReference = P100000001 /* HiMem.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -1094,15 +1094,15 @@
 			files = (
 				A100000001 /* MemoryStreamApp.swift in Sources */,
 				A100000310 /* ClipMetadata.swift in Sources */,
+				A100000700 /* AudioCompressor.swift in Sources */,
 				A100000311 /* InboxManifest.swift in Sources */,
 				A100000690 /* ClipSessionGrouper.swift in Sources */,
 				A100000312 /* WatchSessionDelegate.swift in Sources */,
-				A100000314 /* ClipInboxView.swift in Sources */,
 				A100000691 /* SessionListView.swift in Sources */,
 				A100000693 /* SwipeToDelete.swift in Sources */,
 				A100000694 /* SwipeToDiscard.swift in Sources */,
 				A100000315 /* CreateMemoryFromClipsSheet.swift in Sources */,
-				A100000316 /* AddClipsToMemorySheet.swift in Sources */,
+				A100000316 /* ExistingMemoryPickerView.swift in Sources */,
 				A100000002 /* JournalEntry.swift in Sources */,
 				A100000003 /* ExtractedEntity.swift in Sources */,
 				A100000004 /* ProcessingTask.swift in Sources */,
@@ -1303,7 +1303,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MemoryStream/MemoryStream.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
@@ -1328,7 +1328,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.himem.app;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = HiMem;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1344,7 +1344,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MemoryStream/MemoryStream.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
@@ -1369,7 +1369,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.himem.app;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = HiMem;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1433,7 +1433,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MemoryStream.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MemoryStream";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HiMem.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HiMem";
 			};
 			name = Debug;
 		};
@@ -1491,7 +1491,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MemoryStream.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MemoryStream";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HiMem.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HiMem";
 			};
 			name = Release;
 		};
@@ -1527,7 +1527,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch Watch App/Himem Watch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1600,7 +1600,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch Watch App/Himem Watch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;

@@ -19,10 +19,12 @@ struct LaunchScreenView: View {
     @State private var showFooter = false
     @State private var wordmarkExpanded = false
 
-    // Design tokens
-    private let ochre = Color(red: 0xC6/255, green: 0x4A/255, blue: 0x1C/255)
-    private let ink = Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255)
-    private let bg = Color(red: 0xEF/255, green: 0xEC/255, blue: 0xE5/255)
+    // Design tokens — aliased from the Crucible catalog so launch
+    // animations adapt to dark mode automatically when Phase 4
+    // exposes it.
+    private let ochre = Crucible.Color.accent
+    private let ink = Crucible.Color.ink
+    private let bg = Crucible.Color.paper
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())

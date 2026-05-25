@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CoreData
-@testable import MemoryStream
+@testable import HiMem
 
 /// Money test for 2026-05-18 Problem 1 (server-prompt half): on a
 /// re-organize pass, the existing mentions attached to the entry get

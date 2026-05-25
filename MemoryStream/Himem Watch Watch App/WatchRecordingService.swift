@@ -66,9 +66,50 @@ final class WatchRecordingService: NSObject, ObservableObject {
     // SFSpeechRecognizer once the file lands and updates the inbox row.
     private let locationProvider = WatchLocationProvider()
 
-    /// Begins a recording. Requests permissions if needed.
+    /// Throwaway audio-session warmup. Run once at app launch from
+    /// `WatchAppCoordinator.init`. Per Apple DTS guidance the HAL +
+    /// route-negotiation state caches at the process level after a
+    /// setActive cycle, so paying the ~10s `.allowBluetooth` HFP
+    /// route-scan cost here (off the record critical path, while the
+    /// user is still landing on the home screen) leaves the first
+    /// real record hitting a warm HAL.
+    ///
+    /// `.mixWithOthers` keeps the user's music from being interrupted
+    /// during the warmup. `.duckOthers` is omitted for the same
+    /// reason — we don't need ducking to spin up the route. The
+    /// actual record path sets the full options on its own
+    /// setCategory call.
+    nonisolated static func warmAudioSession() async {
+        let warmStart = Date()
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(
+                .playAndRecord,
+                mode: .measurement,
+                options: [.allowBluetooth, .mixWithOthers]
+            )
+            try session.setActive(true, options: [])
+            try session.setActive(false, options: [])
+            NSLog("[Himem][REC] warmAudioSession completed in \(Int(Date().timeIntervalSince(warmStart) * 1000))ms")
+        } catch {
+            NSLog("[Himem][REC] warmAudioSession failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Begins a recording. Requests permissions if needed. All AV
+    /// bring-up (audio session, engine, tap install, prepare, start)
+    /// runs synchronously on the critical path. First-record cold
+    /// start adds latency here (HAL warmup + I/O ring buffer
+    /// allocation); subsequent records reuse the warm HAL and are
+    /// near-instant. The dominant cold cost — `.allowBluetooth` HFP
+    /// route scan — is paid at app launch via `warmAudioSession()`,
+    /// so this setActive should hit a warm HAL.
+    ///
+    /// NSLog timings stay in place so we can see the cold-start cost
+    /// in the device log on the next first-record.
     func start() async {
         guard !isRecording else { return }
+        let startBegin = Date()
 
         let granted = await ensurePermissions()
         guard granted else { return }
@@ -88,31 +129,37 @@ final class WatchRecordingService: NSObject, ObservableObject {
         currentAudioURL = url
 
         do {
+            let sessionStart = Date()
             let session = AVAudioSession.sharedInstance()
+            // `.allowBluetooth` enables AirPods-as-mic. It also triggers
+            // HFP route negotiation on `setActive(true)` — that's the
+            // 10s cold-start cost Apple DTS confirms. We pay it once
+            // per app launch via `warmAudioSession()` called from
+            // `WatchAppCoordinator.init`, then this setActive hits a
+            // warm HAL.
             try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetooth])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
+            NSLog("[Himem][REC] start: AVAudioSession active in \(Int(Date().timeIntervalSince(sessionStart) * 1000))ms")
 
-            // AVAudioEngine + tap. The input node's native format
-            // drives both the file we write and the buffers we peek
-            // at for the live waveform. Using the input format
-            // directly (vs forcing a settings dictionary) avoids the
-            // hidden conversion that drove the metering smoothing on
-            // the AVAudioRecorder path.
+            // AVAudioEngine + tap. The input node's native format drives
+            // both the file we write and the buffers we peek at for the
+            // live waveform. Using the input format directly (vs forcing
+            // a settings dictionary) avoids the hidden conversion that
+            // drove the metering smoothing on the AVAudioRecorder path.
             //
-            // The tap closure captures `file` directly (rather than
-            // going through `self?.audioFile?`) — the audio thread
-            // can fire callbacks the moment `engine.start()` returns,
-            // and reaching back into `self.audioFile` would either
-            // race the main-actor assignment that follows or, when
-            // following a prior recording's cleanup that left
-            // `self.audioFile = nil`, drop writes silently. Direct
-            // capture keeps the reference alive in the closure for
-            // the lifetime of the tap.
+            // The tap closure captures `file` directly (rather than going
+            // through `self?.audioFile?`) — the audio thread can fire
+            // callbacks the moment `engine.start()` returns, and reaching
+            // back into `self.audioFile` would either race the main-actor
+            // assignment that follows or, when following a prior
+            // recording's cleanup that left `self.audioFile = nil`, drop
+            // writes silently. Direct capture keeps the reference alive
+            // in the closure for the lifetime of the tap.
+            let engineStart = Date()
             let engine = AVAudioEngine()
             let inputNode = engine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
             let file = try AVAudioFile(forWriting: url, settings: recordingFormat.settings)
-
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self, file] buffer, _ in
                 try? file.write(from: buffer)
                 self?.publishAudioLevelIfDue(from: buffer)
@@ -126,6 +173,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
 
             engine.prepare()
             try engine.start()
+            NSLog("[Himem][REC] start: engine prepared+started in \(Int(Date().timeIntervalSince(engineStart) * 1000))ms")
 
             startedAt = Date()
             elapsed = 0
@@ -144,6 +192,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
             WKInterfaceDevice.current().play(.click)
 
             startTimer()
+            NSLog("[Himem][REC] start: total \(Int(Date().timeIntervalSince(startBegin) * 1000))ms")
         } catch {
             cleanupAfterError()
         }
@@ -317,10 +366,13 @@ final class WatchRecordingService: NSObject, ObservableObject {
     }
 
     /// Maps 0…1 linear peak amplitude to a 0…1 perceptual band for
-    /// the live waveform. Peak DB range -50 → -10 puts ambient near
-    /// zero, normal speech around 0.7+, with headroom for loud
-    /// peaks to fill the band. Below -50 dB is the room-noise floor
-    /// and zeroed so the waveform doesn't twitch in a quiet room.
+    /// the live waveform. Peak dB range -50 → -10 puts ambient near
+    /// zero with headroom for loud peaks to fill the band. Watch mic
+    /// at wrist position captures most normal speech in the -50 to
+    /// -40 dB peak range, so bars often look short — a tighter floor
+    /// was tried (-45) and made things worse (zeroed real speech).
+    /// Below -50 dB is the room-noise floor and zeroed so the
+    /// waveform doesn't twitch in a quiet room.
     /// `nonisolated` so the audio-thread path can call it without an
     /// actor hop.
     private nonisolated static func normalisedLevel(forPeakAmplitude peak: Float) -> CGFloat {

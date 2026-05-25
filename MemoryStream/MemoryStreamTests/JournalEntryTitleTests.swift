@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CoreData
-@testable import MemoryStream
+@testable import HiMem
 
 /// Tests for `JournalEntry.derivedTitle(from:)` — the content-derived fallback
 /// that fires when the AI didn't return a title and we want something better

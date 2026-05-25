@@ -453,6 +453,48 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Bulk-appends N inbox-sourced voice clips to an existing entry as
+    /// `.voice` MediaReferences in chronological order. Audio files are
+    /// assumed to already live in the standard voice store; the caller
+    /// (Captured Clips bundle sheet) moves them out of the inbox before
+    /// invoking this.
+    ///
+    /// Crucially: this **does not** trigger re-organization. Per AI
+    /// Organize §8 (`docs/design/AI Organize · spec.md`): "Refresh costs
+    /// an assist. The previous summary remains visible until the refresh
+    /// commits." The append marks the memory stale by adding fragments
+    /// whose `createdAt > entry.lastOrganizedAt`, which the memory-view
+    /// stale detector reads to render the amber footer `"N new clips ·
+    /// Refresh · 1 assist"`. The user spends the assist by tapping
+    /// Refresh — never automatically.
+    ///
+    /// Returns the count of clips successfully appended.
+    @discardableResult
+    func appendClips(
+        entryId: UUID,
+        clips: [(audioFilename: String, transcript: String, capturedAt: Date)]
+    ) -> Int {
+        guard !clips.isEmpty else { return 0 }
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return 0 }
+            let ordered = clips.sorted { $0.capturedAt < $1.capturedAt }
+            for clip in ordered {
+                _ = try storage.createVoiceFragment(
+                    for: entry,
+                    audioFilename: clip.audioFilename,
+                    transcript: clip.transcript,
+                    createdAt: clip.capturedAt
+                )
+            }
+            entry.content = Self.joinedContent(from: entry)
+            try storage.save(context: storage.viewContext)
+            return ordered.count
+        } catch {
+            ErrorState.shared.report(.editFailed(error.localizedDescription))
+            return 0
+        }
+    }
+
     // MARK: - Delete / Recycle
 
     /// Returns true when an entry has no media fragments left — i.e. every

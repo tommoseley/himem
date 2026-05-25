@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import UserNotifications
-@testable import MemoryStream
+@testable import HiMem
 
 /// Money tests for the 2026-05-18 regression: phone icon badge stuck
 /// at "4" while the inbox was empty and no notifications had fired

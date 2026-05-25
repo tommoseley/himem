@@ -2,19 +2,26 @@ import SwiftUI
 import AVFoundation
 import CoreLocation
 
-/// Phone voice composer — **v1 canonical** (`docs/Voice Composer/Himem · Voice Composer.html`).
+/// Phone voice composer — **tight cluster + live transcript** spec
+/// (May 25 2026, `docs/design/Himem · Voice Composer.html` →
+/// "Proposal · tight cluster + live transcript").
 ///
-/// Mirrors the watch's capture surface: big tabular timer + live
-/// waveform are the visual hero; persistent "Clip N · on a roll"
-/// state line under the timer; Stop & save (84pt ochre circle) +
-/// Next satellite (56pt ochre-tinted) at the bottom; ✕ corner
-/// glyph for cancel; optional "Adding to · [Memory]" header pill
-/// when the screen is presented from inside an existing Memory.
+/// Mirrors the watch's capture surface, with the upper third packed
+/// tight: REC dot → big tabular timer → live waveform breathe as one
+/// cluster. The persistent "Clip N · on a roll" state line anchors
+/// DIRECTLY BELOW the waveform (it labels the active moment rather
+/// than separating timer from waveform). A live-transcript Source
+/// Serif italic strip sits below — Crucible's audio-as-hero
+/// principle made literal. Stop & save (84pt ochre circle) + Next
+/// satellite (56pt ochre-tinted) at the bottom; ✕ corner glyph for
+/// cancel; optional "Adding to · [Memory]" header pill when the
+/// screen is presented from inside an existing Memory.
 ///
-/// **No transcript card.** The composer is a capture surface, not
-/// an editor. The transcript renders on the resulting Memory once
-/// the user commits with Done. Same model as the watch — uniform
-/// across surfaces so users don't relearn the gesture.
+/// **Live transcript band**: italic Source Serif 17pt in `ink3`,
+/// center-aligned, with a fainter `Listening…` (15pt ink4) empty
+/// state. The cap surface stays a capture surface — no edit
+/// affordances here. Final editing happens on the resulting Memory
+/// after Done.
 ///
 /// "On a roll" support (`docs/watch/On a roll · spec.md`): the Next
 /// button records an offset from session start at each tap. On
@@ -176,28 +183,78 @@ struct VoiceCaptureScreen: View {
 
     // MARK: - Body layout
 
-    /// Vertical stack: REC indicator → big timer → state line →
-    /// waveform → bottom action row. The bottom row is pinned via
-    /// `Spacer`s so the timer/waveform breathe in the middle.
+    /// Vertical stack per the May-25 2026 "tight cluster + live
+    /// transcript" spec: REC → timer → waveform packed into one tight
+    /// upper cluster; "Clip N · on a roll" anchored DIRECTLY BELOW the
+    /// waveform; live transcript serif strip below that. The bottom
+    /// row floats to the safe area via a flexible `Spacer`.
     private var composerBody: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 24)
+            Spacer(minLength: 16)
             recIndicator
-                .padding(.top, 16)
+                .padding(.top, 14)
             timerLabel
+                .padding(.top, 12)
+            waveform
                 .padding(.top, 18)
             stateLine
-                .padding(.top, 10)
+                .padding(.top, 6)
                 // Reserve the slot even when hidden so layout doesn't
                 // bounce when the user crosses into clip 2.
-                .frame(height: 20)
-            Spacer(minLength: 24)
-            waveform
-            Spacer(minLength: 32)
+                .frame(height: 16)
+            liveTranscript
+                .padding(.top, 22)
+            Spacer()
             bottomActionRow
                 .padding(.bottom, 28)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Live transcript band
+
+    /// Source Serif italic strip beneath the on-a-roll line that
+    /// surfaces what the engine has heard so far. Centered, dimmed
+    /// (`ink3`) so it reads as a quiet supportive feedback channel
+    /// rather than a competing hero — the waveform stays the live
+    /// edge. Empty state surfaces a fainter `Listening…` (ink4) so
+    /// the user knows the engine is alive even before any word lands.
+    ///
+    /// The full transcript accumulates in
+    /// `speechService.transcribedText` and rides to the resulting
+    /// Memory at Done. The on-screen view caps the visible string
+    /// from the tail so long sessions don't expand the slot
+    /// arbitrarily — newer words stay readable, older words drift
+    /// off the top (which the parent layout clips at its bounds).
+    @ViewBuilder
+    private var liveTranscript: some View {
+        let full = speechService.transcribedText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if full.isEmpty {
+            Text("Listening…")
+                .font(.system(size: 15, design: .serif).italic())
+                .foregroundStyle(Crucible.Color.ink4)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 32)
+                .accessibilityLabel("Listening")
+        } else {
+            // Cap the visible string to the tail so the slot stays
+            // bounded as the user records. 180 chars ≈ 2–3 lines at
+            // the spec's font/width — matches the artboards.
+            let tail = full.count > 180 ? "…" + String(full.suffix(180)) : full
+            Text(tail)
+                .font(.system(size: 17, design: .serif).italic())
+                .foregroundStyle(Crucible.Color.ink3)
+                .kerning(-0.1)
+                .lineSpacing(6) // ≈ lineHeight 1.55 at 17pt
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 32)
+                .animation(.easeOut(duration: 0.18), value: tail)
+                .accessibilityLabel("Live transcript")
+                .accessibilityValue(tail)
+        }
     }
 
     // MARK: - Countdown content (phase = .countdown / .listening)
@@ -335,12 +392,14 @@ struct VoiceCaptureScreen: View {
 
     /// ● REC — ochre dot + small-caps "REC" label. Pulses 1.4s
     /// ease-in-out so the user has a tactile-feeling "audio is alive"
-    /// cue independent of the waveform.
+    /// cue independent of the waveform. Dot is 6pt per the May-25 2026
+    /// tight-cluster spec (was 7pt) so it reads as a tighter cap on
+    /// the upper rhythm.
     private var recIndicator: some View {
         HStack(spacing: 6) {
             Circle()
                 .fill(Crucible.Color.accent)
-                .frame(width: 7, height: 7)
+                .frame(width: 6, height: 6)
                 .opacity(recPulse ? 0.4 : 1.0)
             Text("REC")
                 .font(.system(size: 10, weight: .bold))
@@ -364,13 +423,15 @@ struct VoiceCaptureScreen: View {
 
     /// Persistent "Clip N · on a roll" line. Visible from the first
     /// Next tap until the user commits or cancels; hidden during the
-    /// initial clip (`currentClipIndex == 1`). Same rule as watch
-    /// (`currentClipIndex > 1`).
+    /// initial clip (`currentClipIndex == 1`). Sits directly under
+    /// the waveform per the May-25 2026 spec — anchored to the
+    /// cluster as a label on the active moment, not as a separator
+    /// between timer and waveform.
     @ViewBuilder
     private var stateLine: some View {
         if nextController.currentClipIndex > 1 {
             Text("Clip \(nextController.currentClipIndex) · on a roll")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .tracking(-0.1)
                 .foregroundStyle(Crucible.Color.accent)
         }
@@ -473,7 +534,7 @@ struct VoiceCaptureScreen: View {
                         .shadow(color: Crucible.Color.accent.opacity(0.40),
                                 radius: 22, x: 0, y: 6)
                     RoundedRectangle(cornerRadius: 5)
-                        .fill(Color(hex: 0xFFFCF6))
+                        .fill(Crucible.Color.accentInk)
                         .frame(width: 26, height: 26)
                 }
             }
@@ -759,6 +820,10 @@ struct VoiceCaptureScreen: View {
         let lat = sessionLocation?.coordinate.latitude
         let lon = sessionLocation?.coordinate.longitude
         if offsets.isEmpty {
+            // Single-clip session — master IS the clip. Compress before
+            // returning so the journal entry attaches a small AAC file
+            // instead of the multi-megabyte PCM master.
+            await Self.compressIfPossible(at: masterURL, label: "phone single-clip master")
             let duration = audioDuration(at: masterURL)
             return [VoiceClipFragment(
                 audioFilename: masterURL.lastPathComponent,
@@ -780,6 +845,9 @@ struct VoiceCaptureScreen: View {
             if #available(iOS 26.0, *) {
                 for split in splits {
                     let url = SpeechService.audioURL(for: split.audioFilename)
+                    // Compress each split before transcribing — saves
+                    // disk, and SpeechAnalyzer reads AAC fine.
+                    await Self.compressIfPossible(at: url, label: "phone split \(split.audioFilename)")
                     let result = await TranscriptionService.shared.transcribe(audioURL: url)
                     fragments.append(VoiceClipFragment(
                         audioFilename: split.audioFilename,
@@ -803,6 +871,9 @@ struct VoiceCaptureScreen: View {
             return fragments
         } catch {
             ErrorState.shared.report(.mediaError("Voice clip split failed: \(error.localizedDescription)"))
+            // Split failed — surface the unsplit master as one fragment.
+            // Compress it so the fallback isn't penalized by size either.
+            await Self.compressIfPossible(at: masterURL, label: "phone split-fallback master")
             let duration = audioDuration(at: masterURL)
             return [VoiceClipFragment(
                 audioFilename: masterURL.lastPathComponent,
@@ -818,6 +889,22 @@ struct VoiceCaptureScreen: View {
         guard let file = try? AVAudioFile(forReading: url) else { return 0 }
         let sampleRate = file.processingFormat.sampleRate
         return TimeInterval(file.length) / sampleRate
+    }
+
+    /// Compress a finalized audio file in place to AAC. Failure is
+    /// logged and swallowed — losing the size win is better than losing
+    /// the clip. Mirrors `WatchSessionDelegate.compressIfPossible`.
+    static func compressIfPossible(at url: URL, label: String) async {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let before = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+        do {
+            try await AudioCompressor.compressInPlace(at: url)
+            let after = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+            let ratio = before > 0 && after > 0 ? Double(before) / Double(after) : 0
+            NSLog("[Himem][Compress] \(label): \(before)→\(after) bytes (\(String(format: "%.1fx", ratio)))")
+        } catch {
+            NSLog("[Himem][Compress] failed for \(label): \(error.localizedDescription) — keeping raw PCM")
+        }
     }
 }
 
@@ -840,15 +927,12 @@ struct CountdownRing: View {
     /// Countdown-specific ochre palette — intentionally brighter
     /// than the brand `Crucible.Color.accent` (`#C64A1C`) per spec
     /// `Watch · spec-2.md`: "a brightened ochre, more saturated
-    /// than the brand --accent for countdown readability." Both
-    /// values inlined here rather than in `CrucibleTheme` because
-    /// they only exist for the countdown surface.
-    private var brightOchre: Color {
-        Color(red: 0xE5/255, green: 0x5A/255, blue: 0x22/255)
-    }
-    private var dimOchre: Color {
-        Color(red: 0x9A/255, green: 0x38/255, blue: 0x15/255)
-    }
+    /// than the brand --accent for countdown readability." Sourced
+    /// from the catalog (`accent-bright` / `accent-dim`) so the
+    /// values automatically flip in dark mode without per-call
+    /// branching.
+    private var brightOchre: Color { Crucible.Color.accentBright }
+    private var dimOchre: Color    { Crucible.Color.accentDim }
 
     private var isCountdown: Bool {
         if case .countdown = phase { return true } else { return false }

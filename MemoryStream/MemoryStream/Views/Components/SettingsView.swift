@@ -16,6 +16,10 @@ struct SettingsView: View {
     @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
     @AppStorage("tagMemoriesWithLocation") private var tagMemoriesWithLocation = true
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
+    @AppStorage("appearance") private var appearanceRaw: String = Appearance.system.rawValue
+    private var appearance: Appearance {
+        Appearance(rawValue: appearanceRaw) ?? .system
+    }
     @AppStorage(NotificationService.Keys.notifyDailyNudge) private var notifyDailyNudge = false
     @AppStorage(NotificationService.Keys.nudgeTimeMinutes) private var nudgeTimeMinutes = 1200
     @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
@@ -55,6 +59,31 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Profile")
+                }
+
+                // MARK: - Appearance
+                // Per docs/design/pricing-screens-settings.jsx
+                // ScrSettingsAppearance — row shows current mode as
+                // the value; tap navigates to the sub-screen.
+                Section {
+                    NavigationLink {
+                        AppearanceSettingsView()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: appearance.systemImage)
+                                .frame(width: 22)
+                                .foregroundStyle(Crucible.Color.accent)
+                                .accessibilityHidden(true)
+                            Text("Appearance")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                            Text(appearance.label)
+                                .font(.body)
+                                .foregroundStyle(Crucible.Color.ink2)
+                        }
+                    }
+                } header: {
+                    Text("Display")
                 }
 
                 // MARK: - Topics
@@ -565,4 +594,71 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
+}
+
+// MARK: - Appearance sub-screen
+
+/// Settings → Appearance per `docs/design/pricing-screens-settings.jsx
+/// ScrSettingsAppearance`. Three radio rows — System (default),
+/// Light, Dark — backed by `@AppStorage("appearance")`. Tapping a
+/// row mutates the storage; the root `MemoryStreamApp` re-applies
+/// `.preferredColorScheme(...)` and the whole app re-renders in the
+/// chosen mode immediately.
+///
+/// Footer reminder: the watch is dark-native and ignores this
+/// setting (watch's recording surface needs pure-black OLED at all
+/// times, regardless of the user's phone preference).
+struct AppearanceSettingsView: View {
+    @AppStorage("appearance") private var appearanceRaw: String = Appearance.system.rawValue
+
+    private var current: Appearance {
+        Appearance(rawValue: appearanceRaw) ?? .system
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(Appearance.allCases) { option in
+                    Button {
+                        appearanceRaw = option.rawValue
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: option.systemImage)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Crucible.Color.ink2)
+                                .frame(width: 28, height: 28)
+                                .background(Crucible.Color.wash2)
+                                .clipShape(RoundedRectangle(cornerRadius: 7))
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(option.label)
+                                    .foregroundStyle(Crucible.Color.ink)
+                                Text(option.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(Crucible.Color.ink3)
+                            }
+                            Spacer()
+                            if current == option {
+                                Image(systemName: "checkmark")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(Crucible.Color.accent)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(option.label). \(option.detail)")
+                    .accessibilityAddTraits(current == option ? [.isSelected] : [])
+                }
+            } header: {
+                Text("Theme")
+            } footer: {
+                Text("The watch is always dark — capture happens in any light.")
+            }
+        }
+        .navigationTitle("Appearance")
+        .navigationBarTitleDisplayMode(.inline)
+    }
 }

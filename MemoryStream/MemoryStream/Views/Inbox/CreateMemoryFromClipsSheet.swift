@@ -12,6 +12,12 @@ import CoreData
 /// names the scope at the top; AI-suggested title renders in AI blue
 /// with an AI tag.
 struct CreateMemoryFromClipsSheet: View {
+    /// Destination of the bundle. Drives the sheet's header, commit
+    /// action label, and body content. Per `docs/design/Captured
+    /// Clips · session-first · spec.md` § Bundle confirm sheet
+    /// (May 25 2026 addition).
+    enum Destination: Hashable { case newMemory, existingMemory }
+
     let clips: [InboxClip]
     /// Source session — used to render the ochre summary chip
     /// ("3 clips · 3:36 PM · 0:12"). Optional so existing single-clip
@@ -19,13 +25,24 @@ struct CreateMemoryFromClipsSheet: View {
     var session: ClipGroup? = nil
     @ObservedObject var viewModel: JournalViewModel
 
+    @State private var destination: Destination = .newMemory
     @State private var title: String = ""
     /// Tracks whether the user has overwritten the AI-suggested title.
     /// Drives the `AI` tag visibility — once they type, the tag drops.
     @State private var userEditedTitle: Bool = false
     @State private var selectedTopic: String? = nil
+    @State private var selectedProjectId: UUID? = nil
+    @State private var selectedExistingEntryId: UUID? = nil
     @State private var aiSuggestedTitle: String? = nil
+    /// Drives the "+ New project" inline alert.
+    @State private var showingNewProjectAlert: Bool = false
+    @State private var newProjectName: String = ""
     @Environment(\.dismiss) private var dismiss
+
+    /// Fresh per-sheet view-model. Read-only here — we list projects and
+    /// (optionally) create one via the "+ New project" chip. Sheet
+    /// lifetime is short; a one-shot fetch is fine.
+    @StateObject private var projectVM = ProjectViewModel()
 
     private let storage = StorageService.shared
     private let lifecycle = EntryLifecycleService()
@@ -36,15 +53,38 @@ struct CreateMemoryFromClipsSheet: View {
                 if let session {
                     summaryChip(for: session)
                 }
-                titleField
-                topicChips
+                destinationToggle
+                if destination == .newMemory {
+                    titleField
+                    topicChips
+                    projectChips
+                } else {
+                    ExistingMemoryPickerView(
+                        selectedEntryId: $selectedExistingEntryId,
+                        onSearchTapped: {
+                            // TODO: route to global search prefiltered to
+                            // memories per spec. For first cut, dismissing
+                            // the sheet returns the user to Captured Clips
+                            // where they can navigate to Search themselves.
+                            dismiss()
+                        }
+                    )
+                }
                 Spacer(minLength: 0)
+            }
+            .alert("New project", isPresented: $showingNewProjectAlert) {
+                TextField("Project name", text: $newProjectName)
+                Button("Cancel", role: .cancel) { newProjectName = "" }
+                Button("Create") { createNewProjectFromAlert() }
+                    .disabled(newProjectName.trimmingCharacters(in: .whitespaces).isEmpty)
+            } message: {
+                Text("Give the project a short name. You can edit it later.")
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
             .padding(.bottom, 16)
             .background(Crucible.Color.paper)
-            .navigationTitle("New memory")
+            .navigationTitle(headerTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -52,11 +92,12 @@ struct CreateMemoryFromClipsSheet: View {
                         .foregroundStyle(Crucible.Color.ink2)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Create") {
-                        createMemory()
+                    Button(commitLabel) {
+                        commit()
                     }
                     .font(.body.weight(.semibold))
                     .foregroundStyle(Crucible.Color.accent)
+                    .disabled(!canCommit)
                 }
             }
             .onAppear {
@@ -74,6 +115,43 @@ struct CreateMemoryFromClipsSheet: View {
         // more room (e.g. long title).
         .presentationDetents([.fraction(0.68), .large])
         .presentationDragIndicator(.visible)
+    }
+
+    // MARK: - Header / commit (mode-aware)
+
+    private var headerTitle: String {
+        destination == .newMemory ? "New memory" : "Add to memory"
+    }
+
+    private var commitLabel: String {
+        destination == .newMemory ? "Create" : "Add"
+    }
+
+    private var canCommit: Bool {
+        switch destination {
+        case .newMemory: return true
+        case .existingMemory: return selectedExistingEntryId != nil
+        }
+    }
+
+    private func commit() {
+        switch destination {
+        case .newMemory: createMemory()
+        case .existingMemory: appendToExistingMemory()
+        }
+    }
+
+    // MARK: - Destination toggle (segmented control)
+
+    /// Two-option segmented control. Per spec: `Make a new memory`
+    /// (default) and `Add to existing memory`. Picking either swaps the
+    /// body without changing the sheet's presentation.
+    private var destinationToggle: some View {
+        Picker("Destination", selection: $destination) {
+            Text("Make a new memory").tag(Destination.newMemory)
+            Text("Add to existing memory").tag(Destination.existingMemory)
+        }
+        .pickerStyle(.segmented)
     }
 
     // MARK: - Summary chip (ochre, names the session scope)
@@ -212,32 +290,127 @@ struct CreateMemoryFromClipsSheet: View {
         return Button {
             selectedTopic = topic
         } label: {
+            // Active-topic chip uses Crucible accent-tint family —
+            // catalog-backed so the wash auto-flips for dark mode.
+            // bg = accent-tint, border = accent-tint-2; dot uses ink2
+            // (warm grey light / cream dark) so it stays legible
+            // against either chip surface; text uses accent-pressed
+            // (deeper ochre light / lighter ochre dark).
             HStack(spacing: 6) {
                 if isSelected, topic != nil {
                     Circle()
-                        .fill(Color(hex: 0x7A6B4F))
+                        .fill(Crucible.Color.ink2)
                         .frame(width: 6, height: 6)
                 }
                 Text(label)
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color(hex: 0x7A3A14) : Crucible.Color.ink2)
+                    .foregroundStyle(isSelected ? Crucible.Color.accentPressed : Crucible.Color.ink2)
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
-            .background(isSelected
-                        ? Color(red: 198/255, green: 74/255, blue: 28/255, opacity: 0.16)
-                        : Crucible.Color.card)
+            .background(isSelected ? Crucible.Color.accentTint : Crucible.Color.card)
             .clipShape(Capsule())
             .overlay(
                 Capsule().stroke(
-                    isSelected
-                    ? Color(red: 198/255, green: 74/255, blue: 28/255, opacity: 0.28)
-                    : Crucible.Color.hairline,
+                    isSelected ? Crucible.Color.accentTint2 : Crucible.Color.hairline,
                     lineWidth: 1
                 )
             )
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Project chips (existing projects + "+ New project")
+
+    /// Optional project assignment per the Captured Clips spec — the
+    /// memory can land in 0–N projects (Memory × Project is many-to-many).
+    /// For the bundle flow we surface single-select to keep the sheet
+    /// tight; the user can multi-assign later from Memory Detail.
+    @ViewBuilder
+    private var projectChips: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Project")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Crucible.Color.ink3)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    projectChip(label: "None", projectId: nil)
+                    ForEach(projectVM.projects) { project in
+                        projectChip(label: project.name, projectId: project.id)
+                    }
+                    newProjectChip
+                }
+            }
+        }
+    }
+
+    /// Project chip — same visual treatment as the topic chips so the
+    /// sheet reads as one consistent row of optional metadata.
+    private func projectChip(label: String, projectId: UUID?) -> some View {
+        let isSelected = selectedProjectId == projectId
+        return Button {
+            selectedProjectId = projectId
+        } label: {
+            HStack(spacing: 6) {
+                if isSelected, projectId != nil {
+                    Circle()
+                        .fill(Crucible.Color.ink2)
+                        .frame(width: 6, height: 6)
+                }
+                Text(label)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(isSelected ? Crucible.Color.accentPressed : Crucible.Color.ink2)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .background(isSelected ? Crucible.Color.accentTint : Crucible.Color.card)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().stroke(
+                    isSelected ? Crucible.Color.accentTint2 : Crucible.Color.hairline,
+                    lineWidth: 1
+                )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// "+ New project" chip — opens an alert with a text field. On
+    /// Create the new project is selected automatically.
+    private var newProjectChip: some View {
+        Button {
+            newProjectName = ""
+            showingNewProjectAlert = true
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "plus")
+                    .font(.system(size: 9, weight: .bold))
+                Text("New project")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(Crucible.Color.ink3)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Crucible.Color.card)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Crucible.Color.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Confirmed via the "+ New project" alert. Creates the project,
+    /// re-fetches the list, and selects the newly-created one so the
+    /// user doesn't have to scroll back and tap it.
+    private func createNewProjectFromAlert() {
+        let trimmed = newProjectName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        projectVM.createProject(name: trimmed, purpose: nil)
+        // ProjectViewModel.createProject re-loads `projects` synchronously
+        // before returning, so the new row is already in the list.
+        if let created = projectVM.projects.first(where: { $0.name == trimmed }) {
+            selectedProjectId = created.id
+        }
+        newProjectName = ""
     }
 
     /// Forward-looking "+ New" chip per spec. Tapping today is a
@@ -349,9 +522,67 @@ struct CreateMemoryFromClipsSheet: View {
                     in: storage.viewContext
                 )
             }
+
+            // Optional project assignment from the bundle sheet's
+            // chip-row. ProjectViewModel.addMemory handles the
+            // many-to-many wiring and saves.
+            if let projectId = selectedProjectId {
+                projectVM.addMemory(entryId: newId, toProjectId: projectId)
+            }
         }
 
         // Drop manifest rows — audio files were already moved out.
+        InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
+        dismiss()
+    }
+
+    /// Captured Clips · session-first spec § Bundle confirm sheet ·
+    /// Add-to-existing-memory mode. Moves each selected clip's audio
+    /// from the inbox to the standard voice store, then appends N
+    /// `.voice` MediaReferences to the chosen entry in chronological
+    /// order via `EntryLifecycleService.appendClips`. **No automatic
+    /// re-organize** — per AI Organize § 8, refresh is user-tap-only.
+    /// The destination memory's view picks up the new fragments as
+    /// "stale" (createdAt past `lastOrganizedAt`) and renders the
+    /// amber `N new clips · Refresh · 1 assist` footer.
+    private func appendToExistingMemory() {
+        guard let entryId = selectedExistingEntryId else { return }
+
+        var payload: [(audioFilename: String, transcript: String, capturedAt: Date)] = []
+        var locationStamps: [(audioFilename: String, latitude: Double?, longitude: Double?)] = []
+        for clip in clips {
+            let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
+            let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
+            do {
+                if FileManager.default.fileExists(atPath: voiceURL.path) {
+                    try FileManager.default.removeItem(at: voiceURL)
+                }
+                try FileManager.default.moveItem(at: inboxURL, to: voiceURL)
+                payload.append((clip.audioFilename, clip.transcript, clip.capturedAt))
+                locationStamps.append((clip.audioFilename, clip.latitude, clip.longitude))
+            } catch {
+                // Skip clips whose audio failed to move — their inbox
+                // rows stay so the user can retry. Matches the
+                // create-new-memory path's tolerance.
+                continue
+            }
+        }
+
+        let written = lifecycle.appendClips(entryId: entryId, clips: payload)
+        guard written > 0 else { return }
+
+        // Stamp per-clip lat/lon onto the freshly-created MediaReferences
+        // so the clip-row header in Memory Detail shows the same
+        // "Bishop St, Bluffton" line we'd get on the new-memory path.
+        for stamp in locationStamps {
+            ClipLocationResolver.stamp(
+                osIdentifier: stamp.audioFilename,
+                latitude: stamp.latitude,
+                longitude: stamp.longitude,
+                in: storage.viewContext
+            )
+        }
+
         InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
         dismiss()
     }

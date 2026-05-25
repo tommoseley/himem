@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import MemoryStream
+@testable import HiMem
 
 /// Money tests for the iOS-26 SpeechAnalyzer + SpeechTranscriber path.
 ///

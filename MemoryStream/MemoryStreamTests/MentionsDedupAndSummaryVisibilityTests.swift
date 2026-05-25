@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CoreData
-@testable import MemoryStream
+@testable import HiMem
 
 /// Money tests for the two bugs Tom hit 2026-05-18:
 ///

@@ -85,7 +85,7 @@ struct SwipeToDiscard<Content: View>: View {
                 .foregroundStyle(.white)
                 .frame(width: revealWidth)
                 .frame(maxHeight: .infinity)
-                .background(Color(red: 0.78, green: 0.20, blue: 0.16))
+                .background(Crucible.Color.danger)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(confirming ? "Confirm discard \(clipCount) clips" : "Discard session")

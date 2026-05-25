@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CoreData
-@testable import MemoryStream
+@testable import HiMem
 
 /// Money tests for the 2026-05-15 gap: Tom edited two existing clips in
 /// an already-organized memory and the AI Suggestions card never offered

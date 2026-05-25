@@ -48,6 +48,15 @@ final class WatchAppCoordinator: ObservableObject {
         // user sees recent progress.
         transfer.start()
         Task { await retryPendingTransfers() }
+
+        // Pay the AVAudioSession HAL + `.allowBluetooth` HFP route-
+        // negotiation cost off the record critical path. Runs in the
+        // background so app launch isn't blocked; if the user records
+        // before this completes they hit the cold cost, but typical
+        // launch-to-tap gives the warmup plenty of head start.
+        Task.detached(priority: .background) {
+            await WatchRecordingService.warmAudioSession()
+        }
     }
 
     /// Retries `transferFile` for every clip currently in the pending

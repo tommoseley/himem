@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import MemoryStream
+@testable import HiMem
 
 /// Tests for SearchViewModel.bucket — the pure date-classification used by
 /// groupedHits to slot search results into Today/Yesterday/This week/etc.

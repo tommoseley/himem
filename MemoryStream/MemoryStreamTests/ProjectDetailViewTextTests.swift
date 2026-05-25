@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import MemoryStream
+@testable import HiMem
 
 /// Tests for ProjectDetailView.composeProjectText — the share-sheet output
 /// the user sees when sharing a project. Pure formatter; no Core Data or

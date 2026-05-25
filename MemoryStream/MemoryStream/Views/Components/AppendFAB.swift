@@ -72,7 +72,7 @@ struct AppendFAB: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(isOpen ? Color(hex: 0x8C2F0E) : Crucible.Color.accent)
+                    .fill(isOpen ? Crucible.Color.accentPressed : Crucible.Color.accent)
                     .frame(width: 60, height: 60)
                     .shadow(color: Crucible.Color.accent.opacity(0.32), radius: 16, x: 0, y: 4)
                     .shadow(color: .black.opacity(0.12), radius: 4, x: 0, y: 2)

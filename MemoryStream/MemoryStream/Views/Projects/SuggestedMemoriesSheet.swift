@@ -38,8 +38,8 @@ struct SuggestedMemoriesSheet: View {
 
             var dotColor: Color {
                 switch self {
-                case .likely: return Color(red: 0x3F/255, green: 0xA8/255, blue: 0x77/255)
-                case .maybe:  return Crucible.Color.warning
+                case .likely: return Crucible.Color.confirmed
+                case .maybe:  return Crucible.Color.warn
                 }
             }
         }

@@ -1,16 +1,26 @@
 import Foundation
 
 /// Pure decision: is the "Find the thread" button (Project Assist)
-/// enabled for a project? Activates at ≥3 memories per the Projects
-/// MVP spec — below the threshold the button is still visible but
-/// disabled with helper copy ("Add a few more memories first") so
-/// the user discovers the affordance early.
+/// enabled for a project?
 ///
-/// Threshold is intentionally low — three memories is the minimum
-/// scale where a synthesis paragraph + suggested-memories pass
-/// produces signal worth the assist cost.
+/// Spec intent (Projects MVP spec § Trigger, cost) is to activate
+/// at ≥1 memory: "with one memory the 'summary' is closer to a
+/// paraphrase than a synthesis — fine; the user gets back what
+/// they asked for." Until we've validated the 1-memory output
+/// feels honest in TestFlight, this ships with the threshold gated
+/// off — production stays on the conservative ≥3 behavior.
+///
+/// Flip `allowSingleMemoryThreshold` to `true` when ready; the
+/// spec-intended behavior takes over with no other code changes.
 enum ProjectAssistGate {
-    static let minimumMemories: Int = 3
+    /// Set to `true` to use the spec-intended ≥1 memory threshold.
+    /// `false` keeps the previous conservative ≥3 behavior for the
+    /// "until we're sure it's working well" window.
+    static let allowSingleMemoryThreshold: Bool = false
+
+    static var minimumMemories: Int {
+        allowSingleMemoryThreshold ? 1 : 3
+    }
 
     static func isEnabled(memoryCount: Int) -> Bool {
         memoryCount >= minimumMemories

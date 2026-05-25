@@ -457,16 +457,20 @@ final class SpeechService: ObservableObject {
     }
 
     /// Maps 0…1 linear peak amplitude to a 0…1 perceptual band for
-    /// the live waveform. Mirrors the watch's `normalisedLevel` —
-    /// peak DB range -50 → -10 puts ambient near zero and normal
-    /// speech around 0.7+, with headroom for loud peaks to fill the
-    /// band. Below -50 dB is the room-noise floor and zeroed so the
-    /// waveform doesn't twitch in a quiet room.
+    /// the live waveform. The phone mic is typically 15-30 cm from
+    /// the speaker's mouth, so normal speech peaks land near -28 dB
+    /// and even loud speech rarely crosses -15 dB. Saturating at
+    /// -10 dB left the visible band underused — normal volume
+    /// painted bars at ~50% height. Saturating at -18 dB instead
+    /// puts conversational speech around 0.65 (visually obvious
+    /// "you're being heard") and keeps headroom for genuine loud
+    /// peaks to hit 1.0. Floor at -50 dB keeps a quiet room from
+    /// twitching the waveform.
     private nonisolated static func normalisedLevel(forPeakAmplitude peak: Float) -> CGFloat {
         guard peak > 0 else { return 0 }
         let db = 20 * log10f(peak)
         let minDb: Float = -50
-        let maxDb: Float = -10
+        let maxDb: Float = -18
         if db < minDb { return 0 }
         if db > maxDb { return 1 }
         return CGFloat((db - minDb) / (maxDb - minDb))

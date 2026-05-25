@@ -24,6 +24,18 @@ struct ProjectDetailView: View {
     @State private var showProjectAssistUpsell = false
     @ObservedObject private var entitlement = EntitlementService.shared
 
+    /// Coordinates the trailing-edge swipe across memory rows so only
+    /// one row's Remove affordance is open at a time.
+    @State private var openedSwipeRowId: AnyHashable? = nil
+
+    /// Most-recently-removed entry id, held until the undo window
+    /// expires (5s per spec). When non-nil, the bottom toast renders.
+    @State private var pendingUndoEntryId: UUID? = nil
+    /// Task that auto-dismisses the undo toast after 5s. Cancelled
+    /// when the user taps Undo (so the toast clears immediately) or
+    /// when another removal supersedes this one.
+    @State private var undoDismissTask: Task<Void, Never>? = nil
+
     private let storage = StorageService.shared
 
     var body: some View {
@@ -158,11 +170,21 @@ struct ProjectDetailView: View {
                         .onTapGesture { selectedEntryId = entry.id }
                         .contextMenu {
                             Button(role: .destructive) {
-                                projectVM.removeMemory(entryId: entry.id, fromProjectId: projectId)
-                                loadProjectEntries()
+                                removeMemoryWithUndo(entryId: entry.id)
                             } label: {
                                 Label("Remove from Project", systemImage: "minus.circle")
                             }
+                        }
+                        // Trailing-edge swipe per Projects MVP spec
+                        // (Model § Removing a memory): single-tap
+                        // commits, undo toast is the safety net.
+                        .swipeToDelete(
+                            id: entry.id,
+                            openedRowId: $openedSwipeRowId,
+                            label: "Remove",
+                            systemImage: "minus.circle"
+                        ) {
+                            removeMemoryWithUndo(entryId: entry.id)
                         }
                     }
                 }
@@ -170,6 +192,15 @@ struct ProjectDetailView: View {
             .padding(16)
         }
         .background(Crucible.Color.paper)
+        .overlay(alignment: .bottom) {
+            if pendingUndoEntryId != nil {
+                undoToast
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: pendingUndoEntryId)
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -273,18 +304,22 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// "Find the thread" card — Project Assist entry point. Per
-    /// `ScrProjectPreCoalesce` in `screens-projects-views.jsx`:
-    /// card with a 36-square AI-tint icon on the left, title +
+    /// "Find the thread" card — Project Assist entry point.
+    /// Card with a 36-square AI-tint icon on the left, title +
     /// sub-line stacked in the middle, "Run" pill on the right.
-    /// Disabled below 3 memories with a quiet sub-line reason
-    /// (Projects MVP spec, States table).
+    /// Disabled below `ProjectAssistGate.minimumMemories`; sub-line
+    /// adapts to whichever threshold is currently active. Spec
+    /// (Projects MVP § States) wants `Add a memory first.` for the
+    /// ≥1 path and `Add a few more memories first.` for the gated-
+    /// off conservative path.
     @ViewBuilder
     private var findTheThreadButton: some View {
         let enabled = ProjectAssistGate.isEnabled(memoryCount: entries.count)
         let subline = enabled
             ? "A short summary across these memories. 1 assist."
-            : "Add a few more memories first."
+            : (ProjectAssistGate.allowSingleMemoryThreshold
+               ? "Add a memory first."
+               : "Add a few more memories first.")
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
@@ -375,6 +410,75 @@ struct ProjectDetailView: View {
         project = try? storage.viewContext.fetch(request).first
         editedName = project?.name ?? ""
         editedPurpose = project?.purpose ?? ""
+    }
+
+    // MARK: - Remove + undo
+
+    /// Removes a memory from the project and arms the 5-second undo
+    /// toast. Per Projects MVP spec § Removing a memory: no
+    /// confirmation modal — the undo toast IS the safety net.
+    /// Subsequent removals supersede any pending undo (only the most
+    /// recent removal is undoable, matching standard toast semantics).
+    private func removeMemoryWithUndo(entryId: UUID) {
+        projectVM.removeMemory(entryId: entryId, fromProjectId: projectId)
+        loadProjectEntries()
+        openedSwipeRowId = nil
+        undoDismissTask?.cancel()
+        pendingUndoEntryId = entryId
+        undoDismissTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            if !Task.isCancelled {
+                pendingUndoEntryId = nil
+            }
+        }
+    }
+
+    private func undoLastRemoval() {
+        guard let entryId = pendingUndoEntryId else { return }
+        projectVM.addMemory(entryId: entryId, toProjectId: projectId)
+        loadProjectEntries()
+        undoDismissTask?.cancel()
+        undoDismissTask = nil
+        pendingUndoEntryId = nil
+    }
+
+    /// Bottom toast — "Removed from [project] · Undo". Per spec the
+    /// only safety net for the swipe-remove path. Project name is
+    /// quoted so the user sees exactly which project they removed
+    /// the memory from (especially relevant on the second tap of an
+    /// undo-then-remove-again sequence).
+    private var undoToast: some View {
+        HStack(spacing: 12) {
+            Text(toastMessage)
+                .font(.system(size: 14))
+                .foregroundStyle(Crucible.Color.paper)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Button {
+                undoLastRemoval()
+            } label: {
+                Text("Undo")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Crucible.Color.ink)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 2)
+    }
+
+    private var toastMessage: String {
+        let name = project?.name.trimmingCharacters(in: .whitespaces)
+        if let name, !name.isEmpty {
+            return "Removed from \(name)"
+        }
+        return "Removed from project"
     }
 
     private func loadProjectEntries() {

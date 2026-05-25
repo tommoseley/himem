@@ -10,9 +10,11 @@ struct OnboardingView: View {
     @State private var currentPage = 0
     @State private var selectedTopics: Set<String> = []
 
-    private let ink = Color(red: 0x1A/255, green: 0x16/255, blue: 0x12/255)
-    private let ochre = Color(red: 0xC6/255, green: 0x4A/255, blue: 0x1C/255)
-    private let bg = Color(red: 0xEF/255, green: 0xEC/255, blue: 0xE5/255)
+    // Design tokens — aliased from the Crucible catalog so
+    // onboarding adapts to dark mode automatically.
+    private let ink = Crucible.Color.ink
+    private let ochre = Crucible.Color.accent
+    private let bg = Crucible.Color.paper
 
     var body: some View {
         ZStack {

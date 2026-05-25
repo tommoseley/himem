@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CoreData
-@testable import MemoryStream
+@testable import HiMem
 
 /// PR 1 of the Projects MVP rebuild. Covers:
 ///
@@ -156,22 +156,28 @@ struct ProjectsMVPTests {
 
     // MARK: - Project Assist gate (PR 2)
 
-    @Test func assistGate_zeroMemories_disabled() {
+    @Test func assistGate_zeroMemories_alwaysDisabled() {
         #expect(ProjectAssistGate.isEnabled(memoryCount: 0) == false)
     }
 
-    @Test func assistGate_belowThreshold_disabled() {
-        #expect(ProjectAssistGate.isEnabled(memoryCount: 1) == false)
-        #expect(ProjectAssistGate.isEnabled(memoryCount: 2) == false)
-    }
-
-    @Test func assistGate_atThreshold_enabled() {
-        #expect(ProjectAssistGate.isEnabled(memoryCount: 3) == true)
-    }
-
-    @Test func assistGate_aboveThreshold_enabled() {
+    @Test func assistGate_aboveAllPossibleThresholds_enabled() {
+        // 7+ memories satisfies both gated-on (≥1) and gated-off
+        // (≥3) thresholds, so this assertion is stable regardless of
+        // the flag's compile-time value.
         #expect(ProjectAssistGate.isEnabled(memoryCount: 7) == true)
         #expect(ProjectAssistGate.isEnabled(memoryCount: 50) == true)
+    }
+
+    /// The flag itself is the contract: when `allowSingleMemoryThreshold`
+    /// is false (production-safe default), the conservative ≥3 threshold
+    /// applies. When true (post-validation), ≥1 applies. The two
+    /// behaviors are tied to the flag — verify the linkage so flipping
+    /// the flag is a one-line change with predictable test coverage.
+    @Test func assistGate_thresholdTracksFlag() {
+        let expectedThreshold = ProjectAssistGate.allowSingleMemoryThreshold ? 1 : 3
+        #expect(ProjectAssistGate.minimumMemories == expectedThreshold)
+        #expect(ProjectAssistGate.isEnabled(memoryCount: expectedThreshold) == true)
+        #expect(ProjectAssistGate.isEnabled(memoryCount: expectedThreshold - 1) == false)
     }
 
     // MARK: - Project Assist entitlement bucket (PR 3)

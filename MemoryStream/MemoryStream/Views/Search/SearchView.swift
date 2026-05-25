@@ -1,6 +1,6 @@
 import SwiftUI
 
-private let highlightColor = Color(red: 1.0, green: 213/255, blue: 110/255).opacity(0.55)
+private let highlightColor = Crucible.Color.highlight
 
 struct SearchView: View {
     @StateObject private var viewModel = SearchViewModel()

@@ -34,18 +34,26 @@ struct TopicTab: View {
 
     var body: some View {
         Button(action: action) {
-            Text(label)
-                .font(.subheadline)
-                .fontWeight(isSelected ? .semibold : .regular)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(chipBackground)
-                .foregroundStyle(chipForeground)
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(isSelected ? Color.clear : Crucible.Color.divider, lineWidth: 0.5)
-                )
+            HStack(spacing: 6) {
+                if let hue {
+                    Circle()
+                        .fill(hue.fg)
+                        .frame(width: 7, height: 7)
+                        .accessibilityHidden(true)
+                }
+                Text(label)
+                    .font(.subheadline)
+                    .fontWeight(isSelected ? .semibold : .regular)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(chipBackground)
+            .foregroundStyle(chipForeground)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(isSelected ? Color.clear : Crucible.Color.divider, lineWidth: 0.5)
+            )
         }
         .buttonStyle(.plain)
     }

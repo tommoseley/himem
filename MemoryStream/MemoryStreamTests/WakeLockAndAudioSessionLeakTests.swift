@@ -2,7 +2,7 @@ import Testing
 import Foundation
 import AVFoundation
 import UIKit
-@testable import MemoryStream
+@testable import HiMem
 
 // Money tests for two bugs found 2026-05-17:
 //

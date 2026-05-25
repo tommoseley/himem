@@ -17,6 +17,13 @@ import SwiftUI
 struct SwipeToDelete<Content: View>: View {
     let id: AnyHashable
     @Binding var openedRowId: AnyHashable?
+    /// Text shown under the icon on the revealed affordance.
+    /// Defaults to `"Delete"` for the original clip-deletion use; the
+    /// project memory-list path passes `"Remove"` since the memory
+    /// itself isn't destroyed, just unlinked from the project.
+    var label: String = "Delete"
+    /// SF Symbol for the affordance icon. Defaults to `"trash"`.
+    var systemImage: String = "trash"
     let onDelete: () -> Void
     let content: () -> Content
 
@@ -62,18 +69,18 @@ struct SwipeToDelete<Content: View>: View {
             openedRowId = nil
         }) {
             VStack(spacing: 4) {
-                Image(systemName: "trash")
+                Image(systemName: systemImage)
                     .font(.system(size: 16, weight: .semibold))
-                Text("Delete")
+                Text(label)
                     .font(.system(size: 11, weight: .semibold))
             }
             .foregroundStyle(.white)
             .frame(width: revealWidth)
             .frame(maxHeight: .infinity)
-            .background(Color(red: 0.78, green: 0.20, blue: 0.16))
+            .background(Crucible.Color.danger)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Delete")
+        .accessibilityLabel(label)
         .opacity(visibleOffset < -4 ? 1.0 : 0)
     }
 
@@ -122,11 +129,15 @@ extension View {
     func swipeToDelete(
         id: some Hashable,
         openedRowId: Binding<AnyHashable?>,
+        label: String = "Delete",
+        systemImage: String = "trash",
         onDelete: @escaping () -> Void
     ) -> some View {
         SwipeToDelete(
             id: AnyHashable(id),
             openedRowId: openedRowId,
+            label: label,
+            systemImage: systemImage,
             onDelete: onDelete,
             content: { self }
         )

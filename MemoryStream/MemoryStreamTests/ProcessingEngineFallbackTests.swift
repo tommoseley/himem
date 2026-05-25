@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CoreData
-@testable import MemoryStream
+@testable import HiMem
 
 // Serialized because LocalEntityExtractor.shared.tagger (NLTagger) isn't
 // thread-safe. Concurrent tests crash inside the local-fallback path.

@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CoreData
-@testable import MemoryStream
+@testable import HiMem
 
 // Serialized because EntitlementService.shared is a singleton —
 // mutating tier / pack balance / threshold across @Test methods

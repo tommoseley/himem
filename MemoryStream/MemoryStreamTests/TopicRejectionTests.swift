@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CoreData
-@testable import MemoryStream
+@testable import HiMem
 
 /// Money tests for the per-topic reject UI added 2026-05-18 — Tom
 /// wanted the line-through-to-reject pattern from the Mentions row
