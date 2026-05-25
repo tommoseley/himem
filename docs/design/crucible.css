@@ -1,0 +1,199 @@
+/* ─────────────────────────────────────────────────────────────
+   Crucible · tokens
+   Single source of truth for Himem design-system colors.
+
+   Authoring rules:
+   - Every color used in Himem JSX/HTML must be declared here as a CSS
+     custom property. Inline literals in components are a bug.
+   - Token names match the PX keys in crucible-primitives.jsx so existing
+     code keeps working — PX.ink → var(--ink), PX.ink2 → var(--ink2).
+   - Each token uses light-dark(<light>, <dark>) so mode switching is
+     declarative. light-dark() requires Safari 17.5+ / Chrome 123+ — within
+     iOS shipping target.
+
+   Theming:
+   - Default follows system via prefers-color-scheme.
+   - <html data-theme="light"> or data-theme="dark"> forces a mode.
+   - Reflective vs operational distinction is NOT enforced at the token
+     layer (per design call: dark mode applies to all surfaces, with
+     reflective dark values designed deliberately to read as
+     "lamp-lit book at night" not "Netflix title card").
+
+   See "Crucible · topic palette spec.md" for the topic-color contract —
+   slug strings here MUST match that spec byte-for-byte.
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light dark;
+
+  /* ─────────── Surfaces ─────────── */
+  --paper:    light-dark(#EFECE5, #000000);   /* canvas — pure black on dark for OLED + clean bezel edge */
+  --card:     light-dark(#FFFCF6, #1C1A17);   /* raised surface — gray lift above black paper */
+  --sunk:     light-dark(#E8E4DB, #000000);   /* inset / keyboard tint — same as paper on dark */
+
+  /* ─────────── Type & lines ─────────── */
+  --ink:      light-dark(#1A1612, #F0E9DC);
+  --ink2:     light-dark(rgba(26,22,18,0.66), rgba(240,233,220,0.68));
+  --ink3:     light-dark(rgba(26,22,18,0.45), rgba(240,233,220,0.46));
+  --ink4:     light-dark(rgba(26,22,18,0.22), rgba(240,233,220,0.24));
+  --hairline: light-dark(rgba(26,22,18,0.10), rgba(240,233,220,0.10));
+  --divider:  light-dark(rgba(26,22,18,0.14), rgba(240,233,220,0.16));
+
+  /* ─────────── Accent — ochre, the brand action color ─────────── */
+  --accent:        light-dark(#C64A1C, #EC7442);
+  --accent-press:  light-dark(#A53A13, #CC5A2E);
+  --accent-bright: light-dark(#E55A22, #FF8855); /* brighter accent for ring readability */
+  --accent-dim:    light-dark(#9A3815, #C04A2A); /* darker accent for unfilled tracks */
+  --accent-ink:    light-dark(#FFFCF6, #1A1210); /* fg on solid accent OR solid ink bg */
+  --accent-tint:   light-dark(rgba(198,74,28,0.10), rgba(236,116,66,0.16));
+  --accent-tint-2: light-dark(rgba(198,74,28,0.18), rgba(236,116,66,0.26));
+
+  /* ─────────── AI — blue, reserved for inference moments ─────────── */
+  --ai:        light-dark(#1E5C8E, #5BA4D6);
+  --ai-tint:   light-dark(rgba(30,92,142,0.10), rgba(91,164,214,0.16));
+  --ai-edge:   light-dark(rgba(30,92,142,0.12), rgba(91,164,214,0.22));
+
+  /* ─────────── Semantic ─────────── */
+  --confirmed:      light-dark(#3FA877, #5FC994);
+  --confirmed-tint: light-dark(#DDEBE1, rgba(95,201,148,0.16));
+  --confirmed-ink:  light-dark(#1F5A35, #C2EFD3); /* fg on confirmed-tint */
+  --warn:           light-dark(#B87322, #D89858);
+  --warn-tint:      light-dark(#F4E6D0, rgba(216,152,88,0.18));
+  --warn-ink:       light-dark(#7A4A0E, #F4D2A0); /* fg on warn-tint */
+  --danger:         light-dark(#B8311E, #E55A4A);
+
+  /* ─────────── Focus ring ─────────── */
+  --focus: light-dark(rgba(198,74,28,0.45), rgba(236,116,66,0.55));
+
+  /* ─────────── Scrim (behind sheets / modals) ─────────── */
+  --scrim: light-dark(rgba(20,14,8,0.55), rgba(0,0,0,0.68));
+
+  /* ─────────── Ink washes — faint surface tints over paper ───────────
+     Used for chip backgrounds, segmented-control pills, etc. Two levels.
+     Always lighter than --hairline; if you need stronger, use --hairline. */
+  --wash-1: light-dark(rgba(26,22,18,0.04), rgba(240,233,220,0.05));
+  --wash-2: light-dark(rgba(26,22,18,0.06), rgba(240,233,220,0.07));
+
+  /* ─────────── Text highlight (search hits, etc.) ───────────
+     Yellow wash over text. Tuned to read on both paper modes. */
+  --highlight: light-dark(rgba(255, 213, 110, 0.55), rgba(255, 213, 110, 0.32));
+
+  /* ─────────── Shadows ─────────── */
+  /* On dark, shadows mostly disappear — we lean on hairlines + brightness
+     contrast instead, so dark shadow values are deliberately near-zero. */
+  --shadow-card:        light-dark(0 1px 2px rgba(40,25,15,0.06), 0 0 0 1px rgba(255,245,235,0.04));
+  --shadow-elevated:    light-dark(0 2px 6px rgba(40,25,15,0.08), 0 0 0 1px rgba(255,245,235,0.06));
+  --shadow-floating:    light-dark(0 6px 16px rgba(40,25,15,0.10), 0 6px 18px rgba(0,0,0,0.45));
+  --shadow-modal:       light-dark(0 20px 60px rgba(40,25,15,0.22), 0 20px 60px rgba(0,0,0,0.65));
+  --shadow-fab-accent:  light-dark(
+                          0 8px 20px rgba(166,60,21,0.32), 0 2px 6px rgba(0,0,0,0.10),
+                          0 8px 20px rgba(0,0,0,0.50), 0 0 0 1px rgba(236,116,66,0.30)
+                        );
+  --shadow-sheet:       light-dark(0 -8px 24px rgba(0,0,0,0.18), 0 -8px 24px rgba(0,0,0,0.60));
+
+  /* ─────────── Typography ─────────── */
+  --serif: "Source Serif 4", Georgia, serif;
+  --sans:  -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --mono:  ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ─────────── Topic palette ───────────
+     16-swatch palette inherited from Himem Design System.html. The slug
+     strings here are the cross-platform contract — must match the Swift
+     Color asset names and the topicSlugFor() / topicSlug(for:) hash.
+     See "Crucible · topic palette spec.md".
+
+     Light values are the existing `fg` column from the design-system
+     bundle (designed to read on cream paper as dot/text). Dark values
+     are tuned for distinguishability on near-black — saturated enough
+     to read at a 6×6px dot AND spread across hue/lightness so the
+     16 swatches read as 16 distinct colors in a picker grid.
+
+     Tip when tweaking: the bug to avoid is what shipping iOS has — when
+     you take a chip-background pastel (designed for cream paper) and
+     render it on near-black, lightness dominates hue and all 16 swatches
+     collapse to "vaguely tinted near-white." Dark values must be
+     saturated dots, not pastels. */
+  --topic-ember:      light-dark(#A53A13, #E5754A);  /* red-orange */
+  --topic-terracotta: light-dark(#8A4724, #C68A6D);  /* brown-peach */
+  --topic-clay:       light-dark(#7A3A1C, #C8654A);  /* darker red-orange */
+  --topic-amber:      light-dark(#8A5A0E, #D9A050);  /* gold */
+  --topic-wheat:      light-dark(#7A5A10, #DBC078);  /* yellow-cream */
+  --topic-sage:       light-dark(#4A6A3A, #A8C088);  /* yellow-green */
+  --topic-moss:       light-dark(#3E6A2A, #80C575);  /* green */
+  --topic-pine:       light-dark(#284A1F, #5FA868);  /* deep green */
+  --topic-sea:        light-dark(#1F5C56, #6DB5A8);  /* teal */
+  --topic-tide:       light-dark(#255A7A, #6FB3D6);  /* sky blue */
+  --topic-indigo:     light-dark(#2E3E7C, #8A95DC);  /* blue-purple */
+  --topic-violet:     light-dark(#4A3577, #B488D8);  /* purple */
+  --topic-plum:       light-dark(#6B3567, #D08FC4);  /* pink-purple */
+  --topic-rose:       light-dark(#8A3A3A, #E68A8A);  /* rose-red */
+  --topic-sand:       light-dark(#5A4A30, #BFAE8A);  /* warm neutral */
+  --topic-slate:      light-dark(#3B4452, #9DAABA);  /* cool neutral */
+
+  /* ─────────── Legacy topic-name aliases ───────────
+     Older HTML files reference topics by working-name (e.g. var(--topic-garden))
+     rather than spec slug. These aliases point each working-name to the
+     slug the auto-hash (topicSlugFor) produces for that name — so a
+     legacy mock and a freshly user-created topic with the same name
+     render identically. If the picker order or hash function ever
+     changes, recompute these. */
+  --topic-garden: var(--topic-moss);    /* topicSlugFor("garden") */
+  --topic-food:   var(--topic-rose);    /* topicSlugFor("food") */
+  --topic-ideas:  var(--topic-violet);  /* topicSlugFor("ideas") */
+  --topic-work:   var(--topic-sea);     /* topicSlugFor("work") */
+
+  /* ─────────── Legacy chip-color aliases ───────────
+     Older HTML files use *-bg / *-text instead of *-tint / *-ink. */
+  --confirmed-bg:   var(--confirmed-tint);
+  --confirmed-text: var(--confirmed-ink);
+  --warn-bg:        var(--warn-tint);
+  --warn-text:      var(--warn-ink);
+
+  /* ─────────── Legacy hyphen-variant ink scale ───────────
+     App Store frames + a few older files use --ink-2 (hyphenated). */
+  --ink-2: var(--ink2);
+  --ink-3: var(--ink3);
+  --ink-4: var(--ink4);
+}
+
+/* ─────────── Explicit theme overrides ───────────
+   data-theme attribute on <html> wins over system preference. Used by the
+   design-system Tweaks toggle and (eventually) the user's Settings choice. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }
+
+/* ─────────── Topic chip — derived backgrounds ───────────
+   Use by setting --topic-color on the chip's element (or a parent):
+     <span class="cru-topic-chip" style="--topic-color: var(--topic-moss)">
+       <span class="cru-topic-dot"></span> Garden
+     </span>
+
+   Background and border are derived per-instance via color-mix(), so a single
+   token per swatch carries the whole chip styling. color-mix() requires
+   Safari 16.4+ / Chrome 111+. */
+.cru-topic-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 13px;
+  font-size: 12.5px;
+  letter-spacing: -0.1px;
+  color: var(--ink);
+  background: color-mix(in oklab, var(--topic-color) 14%, var(--paper));
+  border: 1px solid color-mix(in oklab, var(--topic-color) 26%, var(--paper));
+}
+.cru-topic-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--topic-color);
+  flex-shrink: 0;
+}
+
+/* ─────────── Default body styling ─────────── */
+html, body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+}

@@ -1,0 +1,1215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Himem — Search</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..900;1,8..60,300..900&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --paper: #EFECE5;
+    --card: #FFFCF6;
+    --sunk: #E8E4DB;
+    --ink: #1A1612;
+    --ink2: rgba(26,22,18,0.66);
+    --ink3: rgba(26,22,18,0.45);
+    --ink4: rgba(26,22,18,0.22);
+    --hairline: rgba(26,22,18,0.10);
+    --divider: rgba(26,22,18,0.14);
+    --accent: #C64A1C;
+    --accent-tint: rgba(198,74,28,0.10);
+    --highlight: rgba(255, 213, 110, 0.55);
+    --serif: "Source Serif 4", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh;
+    background: var(--paper);
+    font-family: var(--sans);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+
+  .stage {
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    padding: 48px 56px 80px;
+    gap: 56px;
+  }
+  .header { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
+  .eyebrow {
+    font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--ink3);
+  }
+  .title {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 38px; line-height: 1.15; letter-spacing: -0.4px;
+    margin: 0; color: var(--ink);
+  }
+  .desc {
+    font-size: 15px; line-height: 1.55; color: var(--ink2);
+    max-width: 640px; margin: 0;
+  }
+
+  .section { display: flex; flex-direction: column; gap: 24px; }
+  .section-label {
+    display: flex; align-items: baseline; gap: 14px;
+    font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--ink3);
+  }
+  .section-label::after {
+    content: ''; flex: 1; height: 1px; background: var(--hairline);
+  }
+  .section-sub {
+    font-size: 14px; line-height: 1.55; color: var(--ink2); max-width: 640px; margin: -8px 0 8px;
+  }
+
+  .phones {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 56px 40px;
+    align-items: start;
+  }
+  .specimen { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .specimen-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--ink3); align-self: flex-start;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .specimen-num {
+    width: 22px; height: 22px; border-radius: 999px;
+    background: var(--accent-tint); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+  }
+  .specimen-caption {
+    font-size: 13px; line-height: 1.6; color: var(--ink2);
+    max-width: 360px; align-self: flex-start;
+  }
+  .specimen-caption strong { color: var(--ink); font-weight: 600; }
+
+  .phone-wrap { position: relative; }
+  .phone {
+    width: 360px; height: 780px; border-radius: 52px;
+    background: var(--card);
+    box-shadow:
+      0 0 0 11px #1A1612,
+      0 0 0 12px #2c2520,
+      0 32px 80px rgba(40,25,15,0.18),
+      0 6px 20px rgba(40,25,15,0.10);
+    position: relative; overflow: hidden;
+  }
+  .statusbar {
+    position: absolute; top: 0; left: 0; right: 0; height: 54px;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 0 30px 8px;
+    font-size: 15px; font-weight: 600; color: var(--ink);
+    z-index: 5;
+  }
+  .statusbar .right { display: inline-flex; align-items: center; gap: 6px; }
+  .notch {
+    position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+    width: 124px; height: 36px; background: #0a0807; border-radius: 22px;
+    z-index: 6;
+  }
+  .home-ind {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 134px; height: 5px; border-radius: 3px; background: rgba(26,22,18,0.30);
+  }
+
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 54px 0 0;
+  }
+
+  /* Search bar — top */
+  .search-header {
+    padding: 12px 16px 8px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .search-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .search-back {
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--accent);
+    margin-left: -8px;
+  }
+  .search-field {
+    flex: 1; min-width: 0;
+    height: 38px; border-radius: 12px;
+    background: var(--sunk);
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 12px;
+    color: var(--ink2);
+    font-size: 16px;
+  }
+  .search-field svg { flex: 0 0 16px; color: var(--ink3); }
+  .search-field input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 16px; color: var(--ink); font-family: inherit;
+  }
+  .search-field input::placeholder { color: var(--ink3); }
+  .search-field .mic {
+    width: 28px; height: 28px; border-radius: 999px; flex: 0 0 28px;
+    background: var(--accent-tint); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-right: -4px;
+  }
+  /* When the field has text, the clear (×) takes over — voice and text are mutually exclusive entry modes */
+  .search-field:has(.clear) .mic { display: none; }
+  .search-field .clear {
+    width: 18px; height: 18px; border-radius: 999px; flex: 0 0 18px;
+    background: var(--ink3); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+  }
+  .search-cancel {
+    flex: 0 0 auto;
+    font-size: 16px; color: var(--accent); font-weight: 500;
+    margin-right: 4px;
+  }
+
+  /* Scope chips */
+  .scope-row {
+    display: flex; gap: 6px; overflow-x: auto;
+    margin: 0 -16px; padding: 0 16px 4px;
+  }
+  .scope-row::-webkit-scrollbar { display: none; }
+  .scope {
+    flex: 0 0 auto;
+    height: 30px; padding: 0 12px; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 500; color: var(--ink2);
+    background: var(--sunk);
+    border: 1px solid transparent;
+  }
+  .scope.active {
+    background: var(--ink); color: #FFFCF6;
+  }
+  .scope .swatch {
+    width: 8px; height: 8px; border-radius: 999px; background: var(--swatch, var(--accent));
+  }
+  .scope .count {
+    font-size: 11px; color: var(--ink3); font-variant-numeric: tabular-nums;
+    margin-left: 2px;
+  }
+  .scope.active .count { color: rgba(255,255,255,0.55); }
+
+  /* Result list */
+  .results {
+    flex: 1; overflow: hidden;
+    padding: 8px 16px 80px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .result-section-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--ink3);
+    padding: 16px 4px 8px;
+  }
+
+  .result {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 14px 4px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .result:last-child { border-bottom: none; }
+  .result-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--ink3);
+  }
+  .result-meta .topic-pip {
+    width: 8px; height: 8px; border-radius: 999px; background: var(--swatch, var(--accent));
+  }
+  .result-meta .topic-name { color: var(--ink2); font-weight: 500; }
+  .result-meta .dot { color: var(--ink4); }
+  .result-meta .media svg { color: var(--ink3); display: block; }
+  .result-title {
+    font-size: 15px; font-weight: 600; color: var(--ink);
+    line-height: 1.35;
+  }
+  .result-snippet {
+    font-size: 14px; line-height: 1.5; color: var(--ink2);
+  }
+  .result-snippet mark {
+    background: var(--highlight); color: var(--ink);
+    padding: 0 2px; border-radius: 2px; font-weight: 500;
+  }
+
+  /* Zero state */
+  .zero {
+    flex: 1; padding: 24px 16px 80px;
+    display: flex; flex-direction: column; gap: 28px;
+    overflow-y: auto;
+  }
+  .zero-block { display: flex; flex-direction: column; gap: 10px; }
+  .zero-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--ink3);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .zero-label .clear-all {
+    text-transform: none; letter-spacing: 0;
+    font-size: 13px; font-weight: 500; color: var(--accent);
+  }
+
+  .recent-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .recent-row:last-child { border-bottom: none; }
+  .recent-row svg { color: var(--ink3); flex: 0 0 16px; }
+  .recent-text { flex: 1; font-size: 15px; color: var(--ink); }
+  .recent-text .scope-prefix {
+    color: var(--accent); font-weight: 500;
+    font-family: var(--sans);
+  }
+  .recent-row .x {
+    color: var(--ink3); font-size: 18px; padding: 4px;
+  }
+
+  .browse-grid {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .browse-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 14px; border-radius: 999px;
+    background: var(--sunk);
+    font-size: 14px; font-weight: 500; color: var(--ink);
+  }
+  .browse-chip .swatch {
+    width: 8px; height: 8px; border-radius: 999px; background: var(--swatch, var(--accent));
+  }
+  .browse-chip .count {
+    font-size: 12px; color: var(--ink3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .forgotten {
+    background: var(--sunk);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .forgotten-eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--ink3);
+  }
+  .forgotten-quote {
+    font-family: var(--serif); font-style: italic;
+    font-size: 15px; line-height: 1.4; color: var(--ink);
+  }
+  .forgotten-meta {
+    font-size: 12px; color: var(--ink2);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .forgotten-meta .topic-pip {
+    width: 7px; height: 7px; border-radius: 999px; background: var(--swatch, var(--accent));
+  }
+
+  /* Suggestion typed scope */
+  .typed-suggestions {
+    flex: 1; padding: 8px 0;
+    display: flex; flex-direction: column;
+  }
+  .typed-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+  }
+  .typed-row:hover { background: var(--sunk); }
+  .typed-row .lead {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: var(--accent-tint); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+  }
+  .typed-row .text { flex: 1; font-size: 15px; color: var(--ink); }
+  .typed-row .text mark {
+    background: var(--highlight); color: var(--ink);
+    padding: 0 2px; border-radius: 2px;
+  }
+  .typed-row .hint {
+    font-size: 12px; color: var(--ink3);
+  }
+
+  /* No results */
+  .no-results {
+    flex: 1;
+    padding: 56px 28px 0;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+  }
+  .no-results h3 {
+    font-family: var(--serif); font-weight: 400; font-style: italic;
+    font-size: 24px; line-height: 1.3; margin: 0; color: var(--ink);
+  }
+  .no-results p {
+    font-size: 14px; line-height: 1.55; color: var(--ink2);
+    margin: 12px 0 24px; max-width: 280px;
+  }
+  .no-results .actions {
+    display: flex; flex-direction: column; gap: 8px; width: 100%;
+  }
+  /* Primary action — the transformation moment */
+  .no-results .action.primary {
+    padding: 18px 18px;
+    border-radius: 16px;
+    background: var(--accent);
+    color: #FFF8EE;
+    display: flex; align-items: center; gap: 14px;
+    text-align: left;
+    box-shadow: 0 6px 18px -8px rgba(198,74,28,0.55), 0 1px 0 rgba(255,255,255,0.08) inset;
+    margin-bottom: 6px;
+    position: relative;
+  }
+  .no-results .action.primary .action-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: rgba(255,248,238,0.18);
+    color: #FFF8EE;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: 0 0 40px;
+  }
+  .no-results .action.primary .action-text {
+    flex: 1; color: #FFF8EE;
+    font-size: 15px; font-weight: 600; line-height: 1.3;
+  }
+  .no-results .action.primary .action-text small {
+    display: block; font-weight: 400;
+    color: rgba(255,248,238,0.78);
+    font-size: 12px; margin-top: 2px;
+  }
+  .no-results .action.primary svg.chev { color: rgba(255,248,238,0.7); }
+  /* Bridge line above the secondary group */
+  .no-results .or-bridge {
+    align-self: stretch;
+    text-align: left;
+    font-family: var(--sans);
+    font-size: 11px; font-weight: 600; letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--ink3);
+    padding: 10px 4px 4px;
+  }
+  /* Secondary actions — lighter, quieter */
+  .no-results .action {
+    padding: 12px 14px; border-radius: 12px;
+    background: transparent;
+    border: 1px solid var(--hairline);
+    display: flex; align-items: center; gap: 12px;
+    text-align: left;
+  }
+  .no-results .action-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--sunk); color: var(--ink2);
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: 0 0 28px;
+  }
+  .no-results .action-text {
+    font-size: 14px; line-height: 1.4; color: var(--ink); flex: 1;
+  }
+  .no-results .action-text small { color: var(--ink2); display: block; font-size: 12px; }
+  .no-results .action svg.chev { color: var(--ink3); }
+
+  /* Ask your Memory Box card — pre-search voice entry */
+  .ask-card {
+    margin-top: 8px;
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid var(--hairline);
+    display: flex; align-items: center; gap: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .ask-card::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(120% 140% at 100% 0%, rgba(198,74,28,0.06), transparent 60%);
+    pointer-events: none;
+  }
+  .ask-card .ask-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: var(--accent-tint); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: 0 0 40px;
+  }
+  .ask-card .ask-text { flex: 1; }
+  .ask-card .ask-title {
+    font-family: var(--serif); font-style: italic; font-weight: 400;
+    font-size: 18px; line-height: 1.2; color: var(--ink);
+  }
+  .ask-card .ask-sub {
+    font-size: 12px; color: var(--ink2); margin-top: 4px; line-height: 1.4;
+  }
+
+  /* Voice listening — full-screen takeover */
+  .voice-overlay {
+    position: absolute; inset: 0;
+    background: var(--paper);
+    display: flex; flex-direction: column;
+    z-index: 5;
+  }
+  .voice-overlay .voice-top {
+    display: flex; justify-content: flex-start; padding: 14px 14px;
+  }
+  .voice-overlay .voice-back {
+    width: 36px; height: 36px; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ink2);
+  }
+  .voice-overlay .voice-cancel {
+    font-size: 15px; color: var(--accent); font-weight: 500;
+  }
+  .voice-overlay .voice-done {
+    margin-top: 4px;
+    padding: 14px 28px;
+    border-radius: 999px;
+    background: var(--accent); color: #FFF8EE;
+    font-size: 15px; font-weight: 600;
+    box-shadow: 0 6px 18px -8px rgba(198,74,28,0.55);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .voice-overlay .voice-stage {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 0 32px; text-align: center; gap: 28px;
+  }
+  .voice-overlay .voice-status {
+    font-family: var(--sans);
+    font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
+    text-transform: uppercase; color: var(--accent);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .voice-overlay .voice-status .dot {
+    width: 7px; height: 7px; border-radius: 999px;
+    background: var(--accent); animation: pulse 1100ms ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1); }
+  }
+  .voice-overlay .waveform {
+    display: flex; align-items: center; gap: 5px; height: 56px;
+  }
+  .voice-overlay .waveform span {
+    display: block; width: 4px; border-radius: 2px;
+    background: var(--accent);
+    animation: wv 900ms ease-in-out infinite;
+  }
+  .voice-overlay .waveform span:nth-child(1) { height: 18px; animation-delay: 0ms; }
+  .voice-overlay .waveform span:nth-child(2) { height: 32px; animation-delay: 80ms; }
+  .voice-overlay .waveform span:nth-child(3) { height: 48px; animation-delay: 160ms; }
+  .voice-overlay .waveform span:nth-child(4) { height: 28px; animation-delay: 240ms; }
+  .voice-overlay .waveform span:nth-child(5) { height: 44px; animation-delay: 80ms; }
+  .voice-overlay .waveform span:nth-child(6) { height: 22px; animation-delay: 200ms; }
+  .voice-overlay .waveform span:nth-child(7) { height: 36px; animation-delay: 100ms; }
+  .voice-overlay .waveform span:nth-child(8) { height: 16px; animation-delay: 280ms; }
+  .voice-overlay .waveform span:nth-child(9) { height: 30px; animation-delay: 60ms; }
+  @keyframes wv {
+    0%, 100% { transform: scaleY(0.55); }
+    50% { transform: scaleY(1); }
+  }
+  .voice-overlay .voice-transcript {
+    font-family: var(--serif); font-weight: 400; font-style: italic;
+    font-size: 22px; line-height: 1.35; color: var(--ink);
+    max-width: 320px;
+    text-wrap: pretty;
+  }
+  .voice-overlay .voice-transcript .live {
+    color: var(--ink3); font-style: italic;
+  }
+  .voice-overlay .voice-transcript .caret {
+    display: inline-block; width: 2px; height: 0.9em; vertical-align: -2px;
+    background: var(--accent); margin-left: 2px;
+    animation: blink 900ms steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .voice-overlay .voice-hint {
+    font-size: 12px; color: var(--ink3); max-width: 240px; line-height: 1.5;
+  }
+
+  /* Voice interpreted — confirmation state */
+  .voice-interpreted {
+    flex: 1;
+    padding: 24px 24px 0;
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .voice-interpreted .heard-eyebrow {
+    font-family: var(--sans);
+    font-size: 10px; font-weight: 700; letter-spacing: 1.6px;
+    text-transform: uppercase; color: var(--ink3);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .voice-interpreted .heard-eyebrow svg { color: var(--accent); }
+  .voice-interpreted .heard-quote {
+    font-family: var(--serif); font-style: italic; font-weight: 400;
+    font-size: 20px; line-height: 1.35; color: var(--ink);
+  }
+  .voice-interpreted .interpreted-block {
+    background: var(--card);
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .voice-interpreted .interp-label {
+    font-family: var(--sans);
+    font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--ink3);
+  }
+  .voice-interpreted .scope-chips {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .voice-interpreted .scope-chip {
+    background: var(--sunk);
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px; color: var(--ink);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .voice-interpreted .scope-chip .scope-key {
+    font-family: var(--serif); font-style: italic; color: var(--accent);
+  }
+  .voice-interpreted .voice-actions {
+    margin-top: auto; padding: 16px 0 24px;
+    display: flex; gap: 10px;
+  }
+  .voice-interpreted .voice-actions .btn {
+    flex: 1; padding: 14px; border-radius: 12px;
+    font-size: 15px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .voice-interpreted .voice-actions .btn.secondary {
+    background: var(--sunk); color: var(--ink);
+    border: 1px solid var(--hairline);
+  }
+  .voice-interpreted .voice-actions .btn.primary {
+    background: var(--accent); color: #FFF8EE;
+    box-shadow: 0 6px 18px -8px rgba(198,74,28,0.55);
+  }
+
+  /* Result count */
+  .result-count {
+    font-size: 12px; color: var(--ink3);
+    padding: 12px 4px 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Notes */
+  .notes {
+    background: var(--card);
+    border: 1px solid var(--hairline);
+    border-radius: 18px;
+    padding: 24px 28px;
+    display: flex; flex-direction: column; gap: 16px;
+    max-width: 380px;
+  }
+  .notes h3 {
+    margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
+    text-transform: uppercase; color: var(--ink3);
+  }
+  .notes p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink2); }
+  .notes p strong { color: var(--ink); font-weight: 600; }
+  .notes ul {
+    margin: 0; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .notes li {
+    font-size: 13px; line-height: 1.5; color: var(--ink2);
+    padding-left: 16px; position: relative;
+  }
+  .notes li::before {
+    content: '·'; position: absolute; left: 4px; color: var(--accent); font-weight: 700;
+  }
+  .notes li strong { color: var(--ink); font-weight: 600; }
+  .notes code {
+    font-family: ui-monospace, SF Mono, Menlo, monospace;
+    font-size: 12px; padding: 1px 5px; border-radius: 4px;
+    background: var(--sunk); color: var(--ink);
+  }
+
+  .principles {
+    border-top: 1px solid var(--hairline);
+    padding-top: 36px; margin-top: 8px;
+  }
+  .principles-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 28px 36px;
+  }
+  .principle h4 {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
+    text-transform: uppercase; margin: 0 0 8px; color: var(--ink3);
+  }
+  .principle p {
+    margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink2);
+  }
+  .principle p strong { color: var(--ink); font-weight: 600; }
+
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <header class="header">
+    <div class="eyebrow">Himem · Search · 4 core states + 2 voice overlays</div>
+    <h1 class="title">Search is how you return to the Memory Box.</h1>
+    <p class="desc">A single field with typed scopes (<code style="font-family:var(--serif);font-style:italic">topic:</code>, <code style="font-family:var(--serif);font-style:italic">type:</code>, <code style="font-family:var(--serif);font-style:italic">date:</code>) — fast, precise, and warm. Scope chips are the visible affordance; typed scopes are the power user's reward.</p>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-label">Four core states + two voice overlays</div>
+
+    <div class="phones">
+
+      <!-- State 1 — Zero / pre-search -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">1</span> Pre-search</div>
+        <div class="phone-wrap">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="statusbar">
+              <span>9:41</span>
+              <span class="right">
+                <svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor"><path d="M1 5.5h2v5H1zM5 4h2v6.5H5zM9 2.5h2v8H9zM13 1h2v9.5h-2z"/></svg>
+                <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 2.4c1.9 0 3.7.7 5 2 .2.2.5.2.7 0l.7-.7c.2-.2.2-.5 0-.7C12.7.5 10.4-.4 8-.4S3.3.5 1.6 3c-.2.2-.2.5 0 .7l.7.7c.2.2.5.2.7 0 1.3-1.3 3.1-2 5-2z"/></svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="22" height="11" rx="3"/><rect x="2" y="2" width="17" height="8" rx="1.5" fill="currentColor"/><path d="M24 4v4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+
+            <div class="screen">
+              <div class="search-header">
+                <div class="search-row">
+                  <span class="search-back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </span>
+                  <div class="search-field">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+                    <input placeholder="Search your Memory Box"/>
+                    <button class="mic" aria-label="Ask your Memory Box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="zero">
+                <div class="zero-block">
+                  <div class="zero-label">
+                    Recently searched
+                    <span class="clear-all">Forget all</span>
+                  </div>
+                  <div class="recent-row">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="recent-text">tomato seedlings</span>
+                    <span class="x">×</span>
+                  </div>
+                  <div class="recent-row">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="recent-text"><span class="scope-prefix">topic:</span>cooking pasta</span>
+                    <span class="x">×</span>
+                  </div>
+                  <div class="recent-row">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="recent-text">reddit hook</span>
+                    <span class="x">×</span>
+                  </div>
+                </div>
+
+                <div class="zero-block">
+                  <div class="ask-card">
+                    <span class="ask-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+                    </span>
+                    <span class="ask-text">
+                      <span class="ask-title">Ask your Memory Box</span>
+                      <span class="ask-sub">Tap the mic and say what you're trying to remember.</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="zero-block">
+                  <div class="zero-label">Browse by topic</div>
+                  <div class="browse-grid">
+                    <span class="browse-chip" style="--swatch:#C64A1C;"><span class="swatch"></span>Content<span class="count">42</span></span>
+                    <span class="browse-chip" style="--swatch:#5C8D4E;"><span class="swatch"></span>Garden<span class="count">28</span></span>
+                    <span class="browse-chip" style="--swatch:#7B6F4F;"><span class="swatch"></span>Cooking<span class="count">19</span></span>
+                    <span class="browse-chip" style="--swatch:#2C6F7C;"><span class="swatch"></span>Travel<span class="count">7</span></span>
+                    <span class="browse-chip" style="--swatch:#4E7C9C;"><span class="swatch"></span>Work<span class="count">15</span></span>
+                  </div>
+                </div>
+
+                <div class="zero-block">
+                  <div class="zero-label">Forgotten</div>
+                  <div class="forgotten" style="--swatch:#5C8D4E;">
+                    <span class="forgotten-eyebrow">From your Memory Box · 14 months ago</span>
+                    <span class="forgotten-quote">"Need to try the trellis pattern from that Dutch greenhouse paper. Vertical, not horizontal — saves 60% floor space."</span>
+                    <span class="forgotten-meta"><span class="topic-pip"></span>Garden · Voice note</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="home-ind"></div>
+          </div>
+        </div>
+        <div class="specimen-caption"><strong>Three sections, in priority order.</strong> Recent at top (with typed-scope syntax preserved), then topic browse, then a single "Forgotten" card pulled from the deep bin — the surprise that earns return visits.</div>
+      </div>
+
+      <!-- State 2 — Typing with suggestions -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">2</span> Typing</div>
+        <div class="phone-wrap">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="statusbar">
+              <span>9:41</span>
+              <span class="right">
+                <svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor"><path d="M1 5.5h2v5H1zM5 4h2v6.5H5zM9 2.5h2v8H9zM13 1h2v9.5h-2z"/></svg>
+                <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 2.4c1.9 0 3.7.7 5 2 .2.2.5.2.7 0l.7-.7c.2-.2.2-.5 0-.7C12.7.5 10.4-.4 8-.4S3.3.5 1.6 3c-.2.2-.2.5 0 .7l.7.7c.2.2.5.2.7 0 1.3-1.3 3.1-2 5-2z"/></svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="22" height="11" rx="3"/><rect x="2" y="2" width="17" height="8" rx="1.5" fill="currentColor"/><path d="M24 4v4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+
+            <div class="screen">
+              <div class="search-header">
+                <div class="search-row">
+                  <span class="search-back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </span>
+                  <div class="search-field">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+                    <input value="tom"/>
+                    <span class="clear">×</span>
+                    <button class="mic" aria-label="Ask your Memory Box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>
+                  </div>
+                  <span class="search-cancel">Cancel</span>
+                </div>
+              </div>
+
+              <div class="typed-suggestions">
+                <div class="typed-row">
+                  <span class="lead">→</span>
+                  <span class="text"><mark>tom</mark>ato seedlings</span>
+                  <span class="hint">in entries</span>
+                </div>
+                <div class="typed-row">
+                  <span class="lead">→</span>
+                  <span class="text"><mark>tom</mark> from book club</span>
+                  <span class="hint">person mentioned</span>
+                </div>
+                <div class="typed-row">
+                  <span class="lead">→</span>
+                  <span class="text"><mark>tom</mark>orrow</span>
+                  <span class="hint">date</span>
+                </div>
+
+                <div style="height:1px;background:var(--hairline);margin:8px 16px;"></div>
+
+                <div style="font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink3);padding:8px 16px;">Filter by</div>
+                <div class="typed-row">
+                  <span class="lead" style="background:rgba(92,141,78,0.12);color:#3F6E5C;">G</span>
+                  <span class="text"><span style="color:var(--accent);font-weight:500;">topic:</span> Garden <span style="color:var(--ink3);font-size:12px;">(28 entries)</span></span>
+                </div>
+                <div class="typed-row">
+                  <span class="lead" style="background:rgba(123,111,79,0.12);color:#7B6F4F;">C</span>
+                  <span class="text"><span style="color:var(--accent);font-weight:500;">topic:</span> Cooking <span style="color:var(--ink3);font-size:12px;">(19 entries)</span></span>
+                </div>
+                <div class="typed-row">
+                  <span class="lead">🎤</span>
+                  <span class="text"><span style="color:var(--accent);font-weight:500;">type:</span> voice notes</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="home-ind"></div>
+          </div>
+        </div>
+        <div class="specimen-caption"><strong>Two columns of intent.</strong> Top: literal text matches in your Memory Box. Bottom: typed-scope filters HiMem can apply. The user can keep typing or tap a suggestion to commit it as a scope chip.</div>
+      </div>
+
+      <!-- State 3 — Results -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">3</span> Results</div>
+        <div class="phone-wrap">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="statusbar">
+              <span>9:41</span>
+              <span class="right">
+                <svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor"><path d="M1 5.5h2v5H1zM5 4h2v6.5H5zM9 2.5h2v8H9zM13 1h2v9.5h-2z"/></svg>
+                <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 2.4c1.9 0 3.7.7 5 2 .2.2.5.2.7 0l.7-.7c.2-.2.2-.5 0-.7C12.7.5 10.4-.4 8-.4S3.3.5 1.6 3c-.2.2-.2.5 0 .7l.7.7c.2.2.5.2.7 0 1.3-1.3 3.1-2 5-2z"/></svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="22" height="11" rx="3"/><rect x="2" y="2" width="17" height="8" rx="1.5" fill="currentColor"/><path d="M24 4v4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+
+            <div class="screen">
+              <div class="search-header">
+                <div class="search-row">
+                  <span class="search-back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </span>
+                  <div class="search-field">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+                    <input value="tomato"/>
+                    <span class="clear">×</span>
+                    <button class="mic" aria-label="Ask your Memory Box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>
+                  </div>
+                </div>
+
+                <div class="scope-row">
+                  <span class="scope active">All<span class="count">7</span></span>
+                  <span class="scope" style="--swatch:#5C8D4E;"><span class="swatch"></span>Garden<span class="count">5</span></span>
+                  <span class="scope" style="--swatch:#7B6F4F;"><span class="swatch"></span>Cooking<span class="count">2</span></span>
+                  <span class="scope">🎤 Voice<span class="count">3</span></span>
+                  <span class="scope">📝 Notes<span class="count">4</span></span>
+                </div>
+              </div>
+
+              <div class="results">
+                <div class="result-count">7 entries · last 14 months</div>
+
+                <div class="result-section-label">This week</div>
+
+                <div class="result">
+                  <div class="result-meta">
+                    <span class="topic-pip" style="--swatch:#5C8D4E;"></span>
+                    <span class="topic-name">Garden</span>
+                    <span class="dot">·</span>
+                    <span>Mon, 4:12 PM</span>
+                    <span class="dot">·</span>
+                    <span class="media">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/></svg>
+                    </span>
+                  </div>
+                  <div class="result-title">Trellis options for the cherry <mark>tomato</mark>es</div>
+                  <div class="result-snippet">"…thinking about the Florida weave again — three stakes, twine on a figure-eight pattern. Way better than cages for the cherry <mark>tomato</mark>es last year. The Brandywines need cages though, branches are too heavy…"</div>
+                </div>
+
+                <div class="result">
+                  <div class="result-meta">
+                    <span class="topic-pip" style="--swatch:#5C8D4E;"></span>
+                    <span class="topic-name">Garden</span>
+                    <span class="dot">·</span>
+                    <span>Sun, 9:42 AM</span>
+                    <span class="dot">·</span>
+                    <span class="media">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </span>
+                  </div>
+                  <div class="result-title">Started <mark>tomato</mark> seedlings indoors</div>
+                  <div class="result-snippet">First batch of San Marzanos are up. About 40 cells. Heat mat on, lights 14 hours. Hardening off probably mid-April if frost holds…</div>
+                </div>
+
+                <div class="result-section-label">Last month</div>
+
+                <div class="result">
+                  <div class="result-meta">
+                    <span class="topic-pip" style="--swatch:#7B6F4F;"></span>
+                    <span class="topic-name">Cooking</span>
+                    <span class="dot">·</span>
+                    <span>Mar 12</span>
+                  </div>
+                  <div class="result-title">Quick <mark>tomato</mark> sauce — Marcella method</div>
+                  <div class="result-snippet">"…can <mark>tomato</mark>es, half stick of butter, peeled onion. 45 minutes simmer, mash up the onion at the end…"</div>
+                </div>
+
+                <div class="result">
+                  <div class="result-meta">
+                    <span class="topic-pip" style="--swatch:#5C8D4E;"></span>
+                    <span class="topic-name">Garden</span>
+                    <span class="dot">·</span>
+                    <span>Mar 4</span>
+                  </div>
+                  <div class="result-title">Variety list for this year</div>
+                  <div class="result-snippet">San Marzano · Brandywine · Sungold · Black Krim. Keep the <mark>tomato</mark>es out of the rotation block where the peppers were…</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="home-ind"></div>
+          </div>
+        </div>
+        <div class="specimen-caption"><strong>Grouped by relative recency, not exact date.</strong> Each card shows topic + time + media type, then matched snippet with the term highlighted. Scope chips below the field act as a faceted filter; counts update live.</div>
+      </div>
+
+      <!-- State 4 — No results -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">4</span> No results</div>
+        <div class="phone-wrap">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="statusbar">
+              <span>9:41</span>
+              <span class="right">
+                <svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor"><path d="M1 5.5h2v5H1zM5 4h2v6.5H5zM9 2.5h2v8H9zM13 1h2v9.5h-2z"/></svg>
+                <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 2.4c1.9 0 3.7.7 5 2 .2.2.5.2.7 0l.7-.7c.2-.2.2-.5 0-.7C12.7.5 10.4-.4 8-.4S3.3.5 1.6 3c-.2.2-.2.5 0 .7l.7.7c.2.2.5.2.7 0 1.3-1.3 3.1-2 5-2z"/></svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="22" height="11" rx="3"/><rect x="2" y="2" width="17" height="8" rx="1.5" fill="currentColor"/><path d="M24 4v4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+
+            <div class="screen">
+              <div class="search-header">
+                <div class="search-row">
+                  <span class="search-back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </span>
+                  <div class="search-field">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+                    <input value="kombucha brewing"/>
+                    <span class="clear">×</span>
+                    <button class="mic" aria-label="Ask your Memory Box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="no-results">
+                <h3>Nothing in your Memory Box matches "kombucha brewing".</h3>
+                <p>Maybe it's not a memory yet — just a thought looking for a place to land.</p>
+
+                <div class="actions">
+                  <button class="action primary">
+                    <span class="action-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+                    </span>
+                    <span class="action-text">
+                      Capture “kombucha brewing” now
+                      <small>Turn the missing memory into one. Tap to record.</small>
+                    </span>
+                    <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+
+                  <div class="or-bridge">Or look elsewhere</div>
+
+                  <button class="action">
+                    <span class="action-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+                    </span>
+                    <span class="action-text">
+                      Search just "kombucha"
+                      <small>3 entries match the shorter term</small>
+                    </span>
+                    <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+
+                  <button class="action">
+                    <span class="action-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </span>
+                    <span class="action-text">
+                      Browse Cooking
+                      <small>19 entries · the topic this might belong to</small>
+                    </span>
+                    <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="home-ind"></div>
+          </div>
+        </div>
+        <div class="specimen-caption"><strong>No results is a productive state, not an apology.</strong> The italic-serif headline keeps it warm. <strong>Capture is the hero</strong> — a full ochre card framed as transformation (“the missing memory just became one”). The fallback paths sit below a small bridge label, quiet and tertiary, so the user feels the primary invitation first.</div>
+      </div>
+
+      <!-- State 5 — Voice listening -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">5</span> Voice listening</div>
+        <div class="phone-wrap">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="statusbar">
+              <span>9:41</span>
+              <span class="right">
+                <svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor"><path d="M1 5.5h2v5H1zM5 4h2v6.5H5zM9 2.5h2v8H9zM13 1h2v9.5h-2z"/></svg>
+                <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 2.4c1.9 0 3.7.7 5 2 .2.2.5.2.7 0l.7-.7c.2-.2.2-.5 0-.7C12.7.5 10.4-.4 8-.4S3.3.5 1.6 3c-.2.2-.2.5 0 .7l.7.7c.2.2.5.2.7 0 1.3-1.3 3.1-2 5-2z"/></svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="22" height="11" rx="3"/><rect x="2" y="2" width="17" height="8" rx="1.5" fill="currentColor"/><path d="M24 4v4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+
+            <div class="screen">
+              <div class="voice-overlay">
+                <div class="voice-top">
+                  <span class="voice-back" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </span>
+                </div>
+                <div class="voice-stage">
+                  <span class="voice-status"><span class="dot"></span>Listening</span>
+                  <div class="waveform">
+                    <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                  </div>
+                  <div class="voice-transcript">
+                    "Find the memory about the tomato trellis<span class="live"> I saw last spring</span><span class="caret"></span>"
+                  </div>
+                  <div class="voice-hint">Speak naturally. Tap Done when finished.</div>
+                  <button class="voice-done">Done</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="home-ind"></div>
+          </div>
+        </div>
+        <div class="specimen-caption"><strong>A soft full-screen takeover.</strong> The waveform breathes, the transcript builds in italic serif as you speak. A back chevron exits without committing; the ochre <em>Done</em> pill confirms when you've said your piece — silence detection still works, but the affordance is explicit.</div>
+      </div>
+
+      <!-- State 6 — Voice interpreted -->
+      <div class="specimen">
+        <div class="specimen-label"><span class="specimen-num">6</span> Voice interpreted</div>
+        <div class="phone-wrap">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="statusbar">
+              <span>9:41</span>
+              <span class="right">
+                <svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor"><path d="M1 5.5h2v5H1zM5 4h2v6.5H5zM9 2.5h2v8H9zM13 1h2v9.5h-2z"/></svg>
+                <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 2.4c1.9 0 3.7.7 5 2 .2.2.5.2.7 0l.7-.7c.2-.2.2-.5 0-.7C12.7.5 10.4-.4 8-.4S3.3.5 1.6 3c-.2.2-.2.5 0 .7l.7.7c.2.2.5.2.7 0 1.3-1.3 3.1-2 5-2z"/></svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="22" height="11" rx="3"/><rect x="2" y="2" width="17" height="8" rx="1.5" fill="currentColor"/><path d="M24 4v4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+
+            <div class="screen">
+              <div class="voice-interpreted">
+                <div>
+                  <span class="heard-eyebrow">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+                    Heard
+                  </span>
+                  <div class="heard-quote" style="margin-top:6px">"Find the memory about the tomato trellis I saw last spring."</div>
+                </div>
+
+                <div class="interpreted-block">
+                  <span class="interp-label">Looking for</span>
+                  <div class="scope-chips">
+                    <span class="scope-chip">tomato trellis</span>
+                    <span class="scope-chip"><span class="scope-key">topic:</span>garden</span>
+                    <span class="scope-chip"><span class="scope-key">date:</span>spring</span>
+                  </div>
+                </div>
+
+                <div class="interpreted-block">
+                  <span class="interp-label">What HiMem thinks you mean · 4</span>
+                  <div style="font-size:13px; color:var(--ink2); line-height:1.5;">
+                    Garden notes from Mar–May, plus a voice memo about a Dutch greenhouse paper. Confirm to see them all.
+                  </div>
+                </div>
+
+                <div class="voice-actions">
+                  <button class="btn secondary">Edit</button>
+                  <button class="btn primary">Search</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="home-ind"></div>
+          </div>
+        </div>
+        <div class="specimen-caption"><strong>HiMem shows what it heard before running.</strong> The spoken phrase, the parsed query, the scope chips it inferred. The user gets to <em>Edit</em> or <em>Search</em> — never auto-fired in v1. Later, a setting can let confident queries skip this confirmation; for now, transparency wins.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-label">Notes</div>
+    <p class="section-sub">Mechanics behind the visible behavior.</p>
+
+    <div class="phones">
+      <div class="notes">
+        <h3>Typed scopes</h3>
+        <p>Three scopes ship in v1: <code>topic:</code>, <code>type:</code>, <code>date:</code>. Typed scopes are <strong>discoverable</strong> through the Filter-by suggestion list — the user doesn't need to know the syntax to use it.</p>
+        <ul>
+          <li><strong>topic:</strong> garden, cooking, work, <em>etc.</em></li>
+          <li><strong>type:</strong> voice, text, photo, video</li>
+          <li><strong>date:</strong> today, this-week, last-month, 2024, before:apr-1</li>
+        </ul>
+        <p>Scopes compose: <code>topic:garden type:voice tomato</code> works.</p>
+      </div>
+
+      <div class="notes">
+        <h3>Chips vs typed</h3>
+        <p>Below the search field, scope chips appear <strong>only after results render</strong> — they're a faceted filter on the current result set, not a pre-filter on what to search.</p>
+        <p>They reflect the actual distribution of results (counts shown). Tapping <em>Garden</em> narrows; tapping <em>All</em> widens.</p>
+        <p>Power users skip the chips entirely and type scopes inline. Both paths produce the same query.</p>
+      </div>
+
+      <div class="notes">
+        <h3>Highlighting</h3>
+        <p>Matched terms get a <strong>warm-yellow highlight</strong> (<code>rgba(255,213,110,.55)</code>) — not the accent ochre. Two reasons:</p>
+        <ul>
+          <li>Ochre is reserved for primary actions and brand. If we use it for highlights, it loses meaning.</li>
+          <li>Yellow reads as "marker" universally. Lower cognitive cost.</li>
+        </ul>
+      </div>
+
+      <div class="notes">
+        <h3>The "Forgotten" card</h3>
+        <p>Pre-search shows <strong>one</strong> randomly surfaced entry from the deep Memory Box (older than 6 months, not opened in &gt;3 months). Italic serif quote, topic pip, age.</p>
+        <p>This is the only place HiMem surfaces randomness. It's <strong>not gamification</strong> — it's the Memory Box doing what a Memory Box does: surprising you with something you forgot you had.</p>
+      </div>
+
+      <div class="notes">
+        <h3>Date sectioning</h3>
+        <p>Results are grouped by relative buckets, in this order:</p>
+        <ul>
+          <li><strong>Today / Yesterday</strong> (if any match)</li>
+          <li><strong>This week</strong></li>
+          <li><strong>Last month</strong> (Mar / Feb / Jan…)</li>
+          <li><strong>Earlier in YYYY</strong></li>
+          <li><strong>Older</strong></li>
+        </ul>
+        <p>Ordering within a bucket: relevance first, then recency.</p>
+      </div>
+
+      <div class="notes">
+        <h3>Why no separate filter sheet</h3>
+        <p>A filter funnel icon → modal sheet was the alternative. We rejected it because:</p>
+        <ul>
+          <li>It hides scope behind a tap. Users forget it exists.</li>
+          <li>Scope chips + typed scopes <strong>cover 95% of intent</strong> with zero modal weight.</li>
+          <li>If we ever need date-range pickers or "edited only" toggles, we add a small <em>More filters</em> chip — not a sheet.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section class="principles">
+    <div class="principles-grid">
+      <div class="principle">
+        <h4>One field, three powers</h4>
+        <p><strong>Free text. Typed scopes. Scope chips.</strong> Same field, three escalating levels of precision. The user doesn't have to choose which one they're using.</p>
+      </div>
+      <div class="principle">
+        <h4>Always a way forward</h4>
+        <p>No-results is a screen of intent, never a dead end. <strong>Capture is the hero action</strong> — visually primary, full ochre, framed as transformation. The query you couldn't find becomes the memory you're about to make. Broaden and browse stay below as quieter fallbacks.</p>
+      </div>
+      <div class="principle">
+        <h4>Search is memory-adjacent</h4>
+        <p>What you searched for can be more revealing than what you saved. So: <strong>local-first, never synced by default, no analytics on raw terms.</strong> Per-item dismissal, "Forget all" for the whole list, and a future <em>Private search</em> mode that doesn't write history at all. <strong>Voice queries follow the same rule</strong> — on-device transcription via Apple's Speech framework where possible, never raw analytics, treated as the same sacred history.</p>
+      </div>
+      <div class="principle">
+        <h4>One intent, four entry points</h4>
+        <p>HiMem exposes a single <code style="font-family:var(--serif);font-style:italic">Search Memory Box</code> App Intent. <strong>Siri, Shortcuts, and Spotlight</strong> all route through it. "Hey Siri, search HiMem for tomato trellis" lands on the same results as the in-app voice flow. One pipe, many openings — the experience stays HiMem's, the plumbing is Apple's.</p>
+      </div>
+      <div class="principle">
+        <h4>Confirm before you run</h4>
+        <p>Voice search shows what HiMem heard and what it inferred <em>before</em> firing results. v1 default: always confirm. Later, a setting (<em>Search immediately after voice input</em>) can let confident queries skip the interpreted step. The product should learn — but on the user's terms, not by default.</p>
+      </div>
+      <div class="principle">
+        <h4>Performance budget</h4>
+        <p>Every keystroke debounces at <strong>120ms</strong>. Results render under 200ms for &lt;1k entries (local index). For larger Memory Boxes, we show a skeleton row at 250ms and stream results in.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+</body>
+</html>

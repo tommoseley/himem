@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Himem — Pricing surfaces</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<template id="__bundler_thumbnail" data-bg-color="#EFECE5">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#EFECE5"/>
+    <g fill="none" stroke="#C64A1C" stroke-width="6" stroke-linecap="round">
+      <rect x="380" y="180" width="200" height="120" rx="14"/>
+      <rect x="620" y="180" width="200" height="120" rx="14" fill="#C64A1C"/>
+      <text x="480" y="248" text-anchor="middle" font-family="Georgia, serif" font-size="36" fill="#1A1612">$0</text>
+      <text x="720" y="248" text-anchor="middle" font-family="Georgia, serif" font-size="36" fill="#FFFCF6">$4.99</text>
+      <line x1="600" y1="340" x2="600" y2="420"/>
+      <polyline points="585,405 600,425 615,405"/>
+      <rect x="430" y="440" width="340" height="100" rx="14" fill="#FFFCF6"/>
+      <text x="600" y="478" text-anchor="middle" font-family="Georgia, serif" font-size="22" fill="#1A1612" font-style="italic">Add 20 assists · $4.99</text>
+      <text x="600" y="510" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="14" fill="#1A1612">or subscribe to Plus</text>
+    </g>
+    <text x="600" y="610" text-anchor="middle" font-family="Georgia, serif" font-size="32" fill="#1A1612" font-style="italic">Pricing surfaces</text>
+  </svg>
+</template>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..900;1,8..60,300..900&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="crucible.css"/>
+<script src="crucible-theme.js"></script>
+<style>
+  /* DesignCanvas manages its own bg; #f0eee9 matches DC.bg exactly. */
+  html, body { margin: 0; padding: 0; background: #f0eee9; }
+  body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  /* Hide scrollbars inside artboards — DesignCanvas already does this for descendants;
+     also kill on any direct stray scrollers. */
+  .dc-card * { scrollbar-width: none; }
+  .dc-card *::-webkit-scrollbar { display: none; }
+  /* Pricing canvas frame — rounded screen content (no bezel; the artboard is the bezel) */
+  [data-dc-slot] .dc-card { background: #1A1612 !important; }
+  [data-dc-slot] .dc-card > * { border-radius: 0; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="crucible-primitives.jsx"></script>
+<script type="text/babel" src="pricing-screens-settings.jsx"></script>
+<script type="text/babel" src="pricing-screens-modals.jsx"></script>
+<script type="text/babel" src="pricing-screens-tier-states.jsx"></script>
+<script type="text/babel" src="pricing-screens-memory-detail.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "tier": "plus_monthly",
+  "monthlyUsed": 10,
+  "packBalance": 100,
+  "starterUsed": 0,
+  "projectCount": 1,
+  "foundersRemaining": 203,
+  "promptState": "shown",
+  "tenured": false
+}/*EDITMODE-END*/;
+
+// Artboard frame: each phone screen sits in a 360×755 artboard with rounded
+// inner corners and a thin dark bezel drawn by the artboard background.
+// We keep PhoneScreen at 340×735 and inset it 10/10 inside the artboard.
+function Frame({ children, dark }) {
+  return (
+    <div style={{
+      width: 360, height: 755, background: '#1A1612',
+      padding: '10px', borderRadius: 0,
+    }}>
+      <div style={{
+        width: '100%', height: '100%', borderRadius: 32, overflow: 'hidden',
+        background: '#EFECE5', position: 'relative',
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const AB = 360, ABH = 755;
+
+  return (
+    <React.Fragment>
+      <DesignCanvas>
+
+        <DCSection id="header" title="Pricing · phone surfaces"
+                   subtitle="Locked 2026-05-15 — Free is a real product, AI is a helper, no free trial of Plus. Tweak state in lower right →">
+        </DCSection>
+
+        <DCSection id="onboarding" title="1 · Onboarding · starter assists"
+                   subtitle="One-time card the first time a user encounters Organize with AI. Plants the '3 starter' grant before they spend it.">
+          <DCArtboard id="starter" label="The starter moment" width={AB} height={ABH}>
+            <Frame><ScrOnboardingStarter/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="counter-action" title="2 · Memory Detail · AI states"
+                   subtitle="Resolves the production state collision (cream Organize card next to yellow App-Is-Inferring card). One assist = one whole-memory pass. Ambient inference is free and quiet; the paid pass promotes it into editable fields. Decision tree below specifies every condition set.">
+          <DCArtboard id="mem-idle" label="A · Idle (ambient hint + Organize)" width={AB} height={ABH}>
+            <Frame><ScrMemoryIdle/></Frame>
+          </DCArtboard>
+          <DCArtboard id="mem-review" label="B · Post-pass · Review (unified card)" width={AB} height={ABH}>
+            <Frame><ScrMemoryReview/></Frame>
+          </DCArtboard>
+          <DCArtboard id="mem-applied" label="C · Post-pass · Applied (title up top)" width={AB} height={ABH}>
+            <Frame><ScrMemoryApplied/></Frame>
+          </DCArtboard>
+          <DCArtboard id="mem-stale" label="D · Stale (refresh callout)" width={AB} height={ABH}>
+            <Frame><ScrMemoryStale/></Frame>
+          </DCArtboard>
+          <DCArtboard id="mem-exhausted" label="E · Out-of-assists (muted)" width={AB} height={ABH}>
+            <Frame><ScrMemoryExhausted/></Frame>
+          </DCArtboard>
+          <DCArtboard id="mem-decision" label="Decision tree · every condition set" width={920} height={760}>
+            <ScrDecisionTree/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="memory-summary" title="2b · Memory view · Summary at top"
+                   subtitle="Once accepted, the summary lives between title and clips on the memory page. Plain 'Summary' eyebrow, serif body — no AI tag (provenance lives in the Organized chip). Length matches substance: thin clips → thin summary, multi-clip → paragraph. Photo-only memories disclose the v1 vision boundary.">
+          <DCArtboard id="mem-summary-multi" label="Multi-clip · paragraph summary" width={AB} height={ABH}>
+            <Frame><ScrMemoryWithSummary/></Frame>
+          </DCArtboard>
+          <DCArtboard id="mem-summary-thin" label='Single clip · "Tom appreciated pears."' width={AB} height={ABH}>
+            <Frame><ScrMemoryThinSummary/></Frame>
+          </DCArtboard>
+          <DCArtboard id="mem-photo-only" label="Photo-only · v1 boundary disclosed" width={AB} height={ABH}>
+            <Frame><ScrMemoryPhotoOnly/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="journal" title="2c · Journal view · summary as scan line"
+                   subtitle="The list view — Today's landing. Organized memories show title + 2-line summary excerpt. Unorganized memories with text show italic first-clip excerpt under a 'from first clip' caption. Media-only memories show metadata. The visual contrast IS the value proposition for the assist — not nagged, shown.">
+          <DCArtboard id="journal-mixed" label="Mixed · organized + unorganized" width={AB} height={ABH}>
+            <Frame><ScrJournalView/></Frame>
+          </DCArtboard>
+          <DCArtboard id="journal-unorganized" label="All unorganized · less scannable" width={AB} height={ABH}>
+            <Frame><ScrJournalUnorganized/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="summary-spec" title="2d · Summary spec · the Honest Label"
+                   subtitle="The rule the prompt cites and the QA grader applies. Same source clips, good vs. bad output, side-by-side. Full text spec in 'AI Organize · spec.md' at project root.">
+          <DCArtboard id="summary-spec-sheet" label="Good / bad / voice / length" width={920} height={760}>
+            <ScrSummarySpec/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="settings-ai" title="3 · Settings · Your AI"
+                   subtitle="The day-to-day counter home. Shows tier, monthly remaining (Plus), pack balance, reset date. Free users see a different hero.">
+          <DCArtboard id="ai-plus" label="Plus · 12 of 50 remaining" width={AB} height={ABH}>
+            <Frame><ScrSettingsYourAI t={{ tier: 'plus_monthly', monthlyUsed: 38, packBalance: 0, starterUsed: 3 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="ai-plus-with-pack" label="Plus + pack balance" width={AB} height={ABH}>
+            <Frame><ScrSettingsYourAI t={{ tier: 'plus_yearly', monthlyUsed: 12, packBalance: 100, starterUsed: 3 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="ai-free" label="Free · starter + packs" width={AB} height={ABH}>
+            <Frame><ScrSettingsYourAI t={{ tier: 'free', starterUsed: 1, packBalance: 0 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="ai-founders" label="Founders · bonus packs" width={AB} height={ABH}>
+            <Frame><ScrSettingsYourAI t={{ tier: 'founders', monthlyUsed: 8, packBalance: 100, starterUsed: 3 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="ai-live" label="Live · reflects tweaks" width={AB} height={ABH}>
+            <Frame><ScrSettingsYourAI t={t}/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="settings-appearance" title="3b · Settings · Appearance"
+                   subtitle="Light / System / Dark. Sub-screen visible from Settings root. System is the default and follows iOS. Watch is always dark (capture happens in any light) — surfaced as a footer caption, not a toggle.">
+          <DCArtboard id="appearance-root" label="Settings root · Appearance row" width={AB} height={ABH}>
+            <Frame><ScrSettingsRoot mode="system"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="appearance-system" label="Sub-screen · System (default)" width={AB} height={ABH}>
+            <Frame><ScrSettingsAppearance mode="system"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="appearance-light" label="Sub-screen · Light" width={AB} height={ABH}>
+            <Frame><ScrSettingsAppearance mode="light"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="appearance-dark" label="Sub-screen · Dark" width={AB} height={ABH}>
+            <Frame><ScrSettingsAppearance mode="dark"/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="topic-picker" title="3c · Topic color picker · Light vs Dark"
+                   subtitle="Side-by-side: the same picker UI in each mode. Swatch fills are the saturated DOT color (which adapts per mode), NOT the chip-bg pastel. Fixes the shipping bug where the dark picker collapsed to 16 near-white blobs.">
+          <DCArtboard id="picker-light" label="Light mode" width={AB} height={ABH}>
+            <Frame><ScrTopicColorPicker forceMode="light" selected="ember"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="picker-dark" label="Dark mode · the fix" width={AB} height={ABH}>
+            <Frame><ScrTopicColorPicker forceMode="dark" selected="ember"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="picker-dark-pine" label="Dark · pine selected (Garden)" width={AB} height={ABH}>
+            <Frame><ScrTopicColorPicker forceMode="dark" selected="pine" topicName="Garden"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="picker-dark-violet" label="Dark · violet selected (Ideas)" width={AB} height={ABH}>
+            <Frame><ScrTopicColorPicker forceMode="dark" selected="violet" topicName="Ideas"/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="upgrade-hub" title="4 · Settings · HiMem Plus (upgrade hub)"
+                   subtitle="One committed direction. Plus monthly + yearly as primary peers. Founders as 'Or, one-time' secondary tile with live cap counter — tile disappears at 0. Packs at the bottom.">
+          <DCArtboard id="hub-default" label="Default · 203 of 250 left" width={AB} height={ABH}>
+            <Frame><ScrUpgradeHub t={{ foundersRemaining: 203 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="hub-lowstock" label="Founders · 12 left" width={AB} height={ABH}>
+            <Frame><ScrUpgradeHub t={{ foundersRemaining: 12 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="hub-closed" label="Founders cap closed" width={AB} height={ABH}>
+            <Frame><ScrUpgradeHub t={{ foundersRemaining: 0 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="hub-live" label="Live · reflects tweaks" width={AB} height={ABH}>
+            <Frame><ScrUpgradeHub t={t}/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="pack-purchase" title="5 · AI Pack purchase sheet"
+                   subtitle="Reachable from Settings → Add AI assists and from the hard-100% modal. Explicit per-assist math + a quiet 'A note on rates' nudge toward Plus.">
+          <DCArtboard id="pack-sheet" label="Add AI assists" width={AB} height={ABH}>
+            <Frame><ScrPackPurchase/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="founders" title="6 · Founders Lifetime · detail"
+                   subtitle="Drilldown from upgrade hub. Expanded perks: Plus for life · 100 bonus assists · TestFlight · name credit · early feature flags. Live cap counter creates honest scarcity without sales language.">
+          <DCArtboard id="founders-open" label="203 of 250 remaining" width={AB} height={ABH}>
+            <Frame><ScrFoundersDetail t={{ foundersRemaining: 203 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="founders-low" label="12 of 250 — low stock" width={AB} height={ABH}>
+            <Frame><ScrFoundersDetail t={{ foundersRemaining: 12 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="founders-closed" label="Cap reached · 0 left" width={AB} height={ABH}>
+            <Frame><ScrFoundersDetail t={{ foundersRemaining: 0 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="founders-live" label="Live · reflects tweaks" width={AB} height={ABH}>
+            <Frame><ScrFoundersDetail t={t}/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="upgrade-prompt" title="7 · Upgrade prompt (3-starter + 5-memory trigger)"
+                   subtitle="PRIMARY direction: A. No per-assist math here — it belongs in Settings and pack purchase, not at an emotional moment. Fires once per install. Two paid paths: 20-pack or Plus. No free trial.">
+          <DCArtboard id="prompt-a" label="A · Honest two-path · PRIMARY" width={AB} height={ABH}>
+            <Frame><ScrUpgradePromptA/></Frame>
+          </DCArtboard>
+          <DCArtboard id="prompt-b" label="B · What continues / what pauses" width={AB} height={ABH}>
+            <Frame><ScrUpgradePromptB/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="soft" title="8 · Soft 75% warning"
+                   subtitle="Once per period. Dismissible inline toast at the top of Today. Doesn't block anything — just a heads-up.">
+          <DCArtboard id="soft-toast" label="Toast on Today" width={AB} height={ABH}>
+            <Frame><ScrSoft75/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="hard" title="9 · Hard 100% fair-use hit"
+                   subtitle="PRIMARY direction: B (inline · quiet). The Organize card shifts to its exhausted state right where the user tried to act — no scrim, no modal. Modal A kept as a fallback for surfaces without an organize card.">
+          <DCArtboard id="hard-b" label="B · Inline exhausted · PRIMARY" width={AB} height={ABH}>
+            <Frame><ScrHard100B/></Frame>
+          </DCArtboard>
+          <DCArtboard id="hard-a" label="A · Modal · fallback" width={AB} height={ABH}>
+            <Frame><ScrHard100A/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="project-cap" title="10 · Project cap"
+                   subtitle="Free user tries to create a 2nd project. Quiet modal — doesn't gate the rest of HiMem, just this one action.">
+          <DCArtboard id="proj-cap" label="Free → 2nd project" width={AB} height={ABH}>
+            <Frame><ScrProjectCap/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="supporter" title="11 · Supporter · post-trust (future v1.1+)"
+                   subtitle="$2.99/mo or $29.99/yr. Surfaces only after ≥1 month of use + ≥10 memories. Settings-only — never in onboarding or upgrade. Voluntary; no feature unlocks. Toggle Tenured in tweaks to see the entry appear/disappear.">
+          <DCArtboard id="supporter-pre" label="Settings · pre-tenure (hidden)" width={AB} height={ABH}>
+            <Frame><ScrSupporterSettings t={{ tenured: false }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="supporter-settings" label="Settings · tenured (visible)" width={AB} height={ABH}>
+            <Frame><ScrSupporterSettings t={{ tenured: true }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="supporter-detail" label="Support HiMem · detail" width={AB} height={ABH}>
+            <Frame><ScrSupporterDetail/></Frame>
+          </DCArtboard>
+          <DCArtboard id="supporter-live" label="Settings · live (tweak Tenured)" width={AB} height={ABH}>
+            <Frame><ScrSupporterSettings t={t}/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="plan-hub" title="12 · Subscriptions page · tier-aware"
+                   subtitle="Settings → HiMem Plus changes voice based on tier. Free sees the upgrade hub. Plus sees 'Your plan' + Manage. Founder sees the permanent dark identity card (4 perks, no name credit).">
+          <DCArtboard id="hub-free" label="Free · standard upgrade hub" width={AB} height={ABH}>
+            <Frame><ScrPlanHub t={{ tier: 'free', foundersRemaining: 203 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="hub-plus" label="Plus · 'Your plan' + Manage" width={AB} height={ABH}>
+            <Frame><ScrPlanHub t={{ tier: 'plus_monthly', foundersRemaining: 203 }}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="hub-founders-tier" label="Founder · permanent identity" width={AB} height={ABH}>
+            <Frame><ScrPlanHub t={{ tier: 'founders', foundersRemaining: 247 }}/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="tier-marks" title="13 · Tier mark · next to the wordmark"
+                   subtitle="A single small ochre glyph by tier. Founder = filled diamond. Plus = ring with dot. Supporter = outlined heart. Free = nothing. No names, no UGC, no storage. Founder also gets one quiet 'Thanks for being a founder' line on launch for 30 days.">
+          <DCArtboard id="marks-specimen" label="The marks, side by side" width={AB} height={ABH}>
+            <Frame><ScrMarksSpecimen/></Frame>
+          </DCArtboard>
+          <DCArtboard id="launch-founder" label="Launch · Founder (within 30d)" width={AB} height={ABH}>
+            <Frame><ScrLaunchTier tier="founders"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="launch-plus" label="Launch · Plus (mark only)" width={AB} height={ABH}>
+            <Frame><ScrLaunchTier tier="plus_monthly"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="launch-supporter" label="Launch · Supporter (mark only)" width={AB} height={ABH}>
+            <Frame><ScrLaunchTier tier="supporter"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="launch-free" label="Launch · Free (clean)" width={AB} height={ABH}>
+            <Frame><ScrLaunchTier tier="free"/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+      </DesignCanvas>
+
+      <TweaksPanel title="Pricing state">
+        <TweakSection label="Tier"/>
+        <TweakSelect label="User tier" value={t.tier}
+                     options={[
+                       {value:'free', label:'Free'},
+                       {value:'plus_monthly', label:'Plus · Monthly'},
+                       {value:'plus_yearly', label:'Plus · Yearly'},
+                       {value:'founders', label:'Founders Lifetime'},
+                     ]}
+                     onChange={(v) => setTweak('tier', v)}/>
+        <TweakSelect label="Supporter (overlay)" value={t.supporter || 'none'}
+                     options={[
+                       {value:'none', label:'Not a supporter'},
+                       {value:'monthly', label:'Supporter · Monthly'},
+                       {value:'yearly', label:'Supporter · Yearly'},
+                     ]}
+                     onChange={(v) => setTweak('supporter', v === 'none' ? null : v)}/>
+
+        <TweakSection label="AI Usage"/>
+        <TweakSlider label="Monthly used" value={t.monthlyUsed} min={0} max={50} unit="/50"
+                     onChange={(v) => setTweak('monthlyUsed', v)}/>
+        <TweakSelect label="Pack balance" value={String(t.packBalance)}
+                     options={['0','20','100','120']}
+                     onChange={(v) => setTweak('packBalance', Number(v))}/>
+        <TweakSlider label="Starter used (free)" value={t.starterUsed} min={0} max={3} unit="/3"
+                     onChange={(v) => setTweak('starterUsed', v)}/>
+
+        <TweakSection label="Limits"/>
+        <TweakSlider label="Projects owned" value={t.projectCount} min={0} max={5} unit=""
+                     onChange={(v) => setTweak('projectCount', v)}/>
+        <TweakSelect label="Founders remaining" value={String(t.foundersRemaining)}
+                     options={['250','203','100','25','12','0']}
+                     onChange={(v) => setTweak('foundersRemaining', Number(v))}/>
+
+        <TweakSection label="Lifecycle"/>
+        <TweakSelect label="Upgrade prompt state" value={t.promptState}
+                     options={[
+                       {value:'not-triggered', label:'Not yet triggered'},
+                       {value:'triggered', label:'Triggered, not shown'},
+                       {value:'shown', label:'Shown (any outcome)'},
+                       {value:'converted-pack', label:'Converted → pack'},
+                       {value:'converted-plus', label:'Converted → Plus'},
+                     ]}
+                     onChange={(v) => setTweak('promptState', v)}/>
+        <TweakToggle label="Tenured (≥1mo + ≥10 mem)" value={t.tenured}
+                     onChange={(v) => setTweak('tenured', v)}/>
+
+      </TweaksPanel>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

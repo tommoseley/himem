@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Himem Studio — iPad wireframes</title>
+<template id="__bundler_thumbnail" data-bg-color="#F7F5F0">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#F7F5F0"/>
+    <g transform="translate(360, 220)">
+      <rect x="0" y="0" width="480" height="360" rx="18" fill="#FFFFFF" stroke="rgba(25,20,15,0.12)" stroke-width="2"/>
+      <rect x="20" y="20" width="100" height="320" rx="6" fill="rgba(25,20,15,0.08)"/>
+      <rect x="140" y="20" width="220" height="320" rx="6" fill="rgba(25,20,15,0.04)"/>
+      <rect x="380" y="20" width="80" height="320" rx="6" fill="rgba(25,20,15,0.08)"/>
+    </g>
+    <text x="600" y="640" text-anchor="middle" font-family="Georgia, serif" font-size="36" font-style="italic" fill="#1A1612">Studio · iPad</text>
+    <text x="600" y="676" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" letter-spacing="2" fill="rgba(26,22,18,0.42)">FIVE LAYOUT WIREFRAMES</text>
+  </svg>
+</template>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..900;1,8..60,300..900&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="crucible.css"/>
+<script src="crucible-theme.js"></script>
+<style>
+  /* DesignCanvas manages its own bg; #f0eee9 matches DC.bg exactly. */
+  html, body { margin:0; padding:0; background:#f0eee9; overscroll-behavior:none; }
+  body { font-family: var(--sans); }
+  * { box-sizing: border-box; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<!-- Crucible tokens — copy of the relevant subset from the main system -->
+<script>
+window.Crucible = {
+  color: {
+    paper: '#F7F5F0', card: '#FFFFFF', sunk: '#EFECE5',
+    hairline: 'rgba(25,20,15,0.08)', divider: 'rgba(25,20,15,0.12)',
+    ink: '#1A1612',
+    accent: '#C64A1C', accentPressed: '#A53A13', accentTint: '#FBEAE0',
+    success: '#2F7D4F', warning: '#B87322', danger: '#B8311E', info: '#1E5C8E',
+    media: { audio: '#E8893A', text: '#3FA877', photo: '#2E7BD6', video: '#A935B8' },
+    ai: { base: '#1E5C8E', strong: '#144674', tint: '#E6EEF8', ink: '#FFFFFF' },
+    topicPalette: [
+      { key:'ember', bg:'#FBEAE0', fg:'#A53A13' }, { key:'terracotta', bg:'#F4DED0', fg:'#8A4724' },
+      { key:'clay', bg:'#EFDDD0', fg:'#7A3A1C' }, { key:'amber', bg:'#F3E4C3', fg:'#8A5A0E' },
+      { key:'wheat', bg:'#EFE6CF', fg:'#7A5A10' }, { key:'sage', bg:'#DFE7D9', fg:'#4A6A3A' },
+      { key:'moss', bg:'#E0EADB', fg:'#3E6A2A' }, { key:'pine', bg:'#D6E0D3', fg:'#284A1F' },
+      { key:'sea', bg:'#D6E5E3', fg:'#1F5C56' }, { key:'tide', bg:'#DCE7EE', fg:'#255A7A' },
+      { key:'indigo', bg:'#DCDFEE', fg:'#2E3E7C' }, { key:'violet', bg:'#E0DAEC', fg:'#4A3577' },
+      { key:'plum', bg:'#EADDE8', fg:'#6B3567' }, { key:'rose', bg:'#F1DDDD', fg:'#8A3A3A' },
+      { key:'sand', bg:'#E6E0D6', fg:'#5A4A30' }, { key:'slate', bg:'#DFE1E6', fg:'#3B4452' },
+    ],
+  },
+};
+window.C = window.Crucible;
+</script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="studio/wireframes.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "aiPresence": "palette",
+  "focus": "all"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const ai = tweaks.aiPresence;
+
+  const W = 1366, H = 1024;
+
+  const all = [
+    { id: 'three',     label: '1 · Three-pane classic',           el: <StudioThreePane aiPresence={ai}/>,
+      note: 'Bin · Document · Inspector. The producer\u2019s IDE. Best for keyboard-heavy work, high information density, and orchestrating many sources at once.' },
+    { id: 'two',       label: '2 · Two-pane with drawers',         el: <StudioTwoPane aiPresence={ai}/>,
+      note: 'Document is the hero. Bin and Tools collapse to edge handles you tap to slide out. Good when one project gets long focus sessions.' },
+    { id: 'tabs',      label: '3 · Tab-bar workspace',             el: <StudioTabBar aiPresence={ai}/>,
+      note: 'One activity at a time \u2014 Bin / Outline / Write / Assets / Export. Lower cognitive load, mirrors how producers move through phases.' },
+    { id: 'canvas',    label: '4 · Canvas \u00b7 corkboard',       el: <StudioCanvas aiPresence={ai}/>,
+      note: 'Free-arrange cards. The script is one card; LinkedIn and Reel siblings sit beside it. Connections show provenance from memories.' },
+    { id: 'docfirst',  label: '5 · Doc-first with rail',           el: <StudioDocFirst aiPresence={ai}/>,
+      note: 'Manuscript dominates the screen. Thin tool rail, drawers on demand. Closest to a writer\u2019s app; least studio-y but highest text comfort.' },
+  ];
+
+  const filtered = tweaks.focus === 'all' ? all : all.filter(x => x.id === tweaks.focus);
+
+  return (
+    <>
+      <DesignCanvas>
+        <DCSection id="intro" title="Himem Studio · iPad" subtitle={'Lo-fi wireframes — five layouts for one project ("The Future of Work" → Reddit / LinkedIn / Reel).'}>
+          <DCArtboard id="readme" label="Read me" width={520} height={H}>
+            <div style={{ padding: 36, fontFamily: '-apple-system, system-ui, sans-serif', height: '100%', background: '#fff', display:'flex', flexDirection:'column', gap: 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'rgba(26,22,18,0.5)' }}>BRIEF</div>
+              <div style={{ fontFamily:'Source Serif 4, Georgia, serif', fontSize: 28, lineHeight: 1.15, fontWeight: 600, color: '#1A1612', letterSpacing: -0.3 }}>
+                The iPad is the Studio.<br/>Where memories become work.
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.5, color: 'rgba(26,22,18,0.7)' }}>
+                {'Phone & Watch are for capture: fast, in-the-moment, AI infers silently. The iPad shifts gears — a producer’s workspace where a creator pulls raw memories into structured outputs: scripts, articles, episodes.'}
+              </div>
+              <div style={{ height: 1, background: 'rgba(25,20,15,0.10)' }}/>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: 'rgba(26,22,18,0.5)' }}>WORKING EXAMPLE</div>
+              <div style={{ fontSize: 13, color: '#1A1612', lineHeight: 1.5 }}>
+                <b>The Future of Work</b> — an essay assembled from 12 source memories (voice rants, photos, quotes, clips). Three outputs from one source set:
+                <ul style={{ paddingLeft: 18, margin: '8px 0' }}>
+                  <li>Reddit (long, ~2,500w)</li>
+                  <li>LinkedIn (short, ~600w)</li>
+                  <li>YouTube Reel (90s script + shot list)</li>
+                </ul>
+              </div>
+              <div style={{ height: 1, background: 'rgba(25,20,15,0.10)' }}/>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: 'rgba(26,22,18,0.5)' }}>SHARED ACROSS LAYOUTS</div>
+              <div style={{ fontSize: 12, color: 'rgba(26,22,18,0.7)', lineHeight: 1.55 }}>
+                · <b>Memories | Projects</b> top toggle (peer destinations)<br/>
+                · Output tabs (Reddit · LinkedIn · Reel) as siblings of the document<br/>
+                · Pulled-memory blocks render as ember-tinted blockquotes with a media dot<br/>
+                · ⌘K command palette in the chrome — always available<br/>
+                · AI gets its own blue. Ember = user intent. They never blend.
+              </div>
+              <div style={{ height: 1, background: 'rgba(25,20,15,0.10)' }}/>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: 'rgba(26,22,18,0.5)' }}>USE TWEAKS</div>
+              <div style={{ fontSize: 12, color: 'rgba(26,22,18,0.7)', lineHeight: 1.55 }}>
+                {'Toggle '}<b>AI presence</b>{' (silent / copilot margins / chat panel / command palette) and '}<b>focus</b>{' a single layout. Drag artboards to reorder; double-tap to focus.'}
+              </div>
+              <div style={{ flex:1 }}/>
+              <div style={{ fontSize: 11, color: 'rgba(26,22,18,0.42)' }}>Watch is next.</div>
+            </div>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="layouts" title="Five layouts" subtitle="Same project, same data, five answers to: where does the work live?">
+          {filtered.map(({ id, label, el }) => (
+            <DCArtboard key={id} id={id} label={label} width={W} height={H}>{el}</DCArtboard>
+          ))}
+        </DCSection>
+
+        <DCSection id="notes" title="Quick reads" subtitle="When each layout earns its keep.">
+          {filtered.map(({ id, label, note }) => (
+            <DCArtboard key={id+'-n'} id={id+'-n'} label={label} width={420} height={260}>
+              <div style={{ padding: 24, height:'100%', display:'flex', flexDirection:'column', gap:10, background:'#fff' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.4, color:'rgba(26,22,18,0.5)' }}>WHEN TO PICK IT</div>
+                <div style={{ fontFamily:'Source Serif 4, Georgia, serif', fontSize: 17, fontWeight: 600, color:'#1A1612', letterSpacing:-0.2 }}>{label}</div>
+                <div style={{ fontSize: 13, color: 'rgba(26,22,18,0.72)', lineHeight: 1.5 }}>{note}</div>
+              </div>
+            </DCArtboard>
+          ))}
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="AI presence">
+          <TweakRadio
+            value={tweaks.aiPresence}
+            onChange={(v) => setTweak('aiPresence', v)}
+            options={[
+              { value: 'silent',  label: 'Silent' },
+              { value: 'copilot', label: 'Copilot' },
+              { value: 'chat',    label: 'Chat' },
+              { value: 'palette', label: '⌘K' },
+            ]}
+          />
+        </TweakSection>
+        <TweakSection title="Focus">
+          <TweakSelect
+            value={tweaks.focus}
+            onChange={(v) => setTweak('focus', v)}
+            options={[
+              { value: 'all', label: 'Show all 5' },
+              { value: 'three', label: '1 · Three-pane' },
+              { value: 'two', label: '2 · Two-pane' },
+              { value: 'tabs', label: '3 · Tab-bar' },
+              { value: 'canvas', label: '4 · Canvas' },
+              { value: 'docfirst', label: '5 · Doc-first' },
+            ]}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</head>
+<body>
+<div id="root"></div>
+</body>
+</html>

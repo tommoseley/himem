@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Himem · Projects</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #ECE7DC; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; color: #1A1612; }
+  #root { width: 100vw; height: 100vh; overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="crucible-primitives.jsx"></script>
+<script type="text/babel" src="screens-projects.jsx"></script>
+<script type="text/babel" src="screens-projects-cards.jsx"></script>
+<script type="text/babel" src="screens-projects-views.jsx"></script>
+<script type="text/babel" src="screens-projects-spec.jsx"></script>
+
+<script type="text/babel">
+function App() {
+  return (
+    <DesignCanvas
+      title="Himem · Projects — MVP"
+      subtitle="The smallest project system that feels intentional. Four screens: the tab, the detail before and after Project Assist, and the Plus upsell."
+    >
+      <DCSection id="mvp" title="MVP project system" subtitle="iPhone · Crucible · May 2026">
+        <DCArtboard id="list" label="1. Projects tab" width={340} height={735}>
+          <ScrProjectsList />
+        </DCArtboard>
+        <DCArtboard id="pre" label="2. Detail · before" width={340} height={735}>
+          <ScrProjectPreCoalesce />
+        </DCArtboard>
+        <DCArtboard id="post" label="3. Detail · summarized" width={340} height={735}>
+          <ScrProjectPostCoalesce />
+        </DCArtboard>
+        <DCArtboard id="upsell" label="4. Project Assist · Free upsell" width={340} height={735}>
+          <ScrCoalesceUpsell />
+        </DCArtboard>
+        <DCArtboard id="suggestions" label="5. Suggested memories · review" width={340} height={735}>
+          <ScrSuggestionsReview />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="suggestions-spec" title="Suggested memories · row spec" subtitle="UI-execution details for the dev. Tokens, not decisions.">
+        <DCArtboard id="row-spec" label="Suggestion row · annotated" width={720} height={520}>
+          <SuggestionRowSpec />
+        </DCArtboard>
+        <DCArtboard id="row-states" label="Row states" width={720} height={520}>
+          <SuggestionRowStates />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="notes" title="What changed" subtitle="Decisions locked. See Projects · MVP spec.md for the full writeup.">
+        <DCArtboard id="rules" label="MVP rules" width={680} height={735}>
+          <RulesPanel />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+function RulesPanel() {
+  const cell = { padding: '18px 22px', borderBottom: '1px solid rgba(26,22,18,0.10)' };
+  const eyebrow = { fontSize: 10.5, fontWeight: 700, color: 'rgba(26,22,18,0.45)', letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 8 };
+  const body = { fontSize: 14, lineHeight: 1.55, color: '#1A1612', letterSpacing: -0.1 };
+  return (
+    <div style={{ width: 680, height: 735, background: '#FFFCF6', overflow: 'hidden', fontFamily: '-apple-system, "SF Pro Text", system-ui, sans-serif' }}>
+      <div style={{ padding: '26px 22px 8px' }}>
+        <div style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: 28, fontWeight: 400, color: '#1A1612', letterSpacing: -0.4, lineHeight: 1.1 }}>
+          Project system, locked for MVP.
+        </div>
+        <div style={{ fontSize: 13, color: 'rgba(26,22,18,0.55)', marginTop: 6, lineHeight: 1.5 }}>
+          Just enough to feel intentional. Studio extends this post-MVP.
+        </div>
+      </div>
+
+      <div style={cell}>
+        <div style={eyebrow}>Model</div>
+        <div style={body}>
+          Topic ⟷ Project is <strong>many-to-many</strong>. A memory carries one topic and belongs to 0–1 projects.
+          A project's topic chips are <em>derived</em> from its member memories — there's no project-level
+          topic field. Project shape: <code style={{ fontFamily: '"SF Mono", monospace', fontSize: 12.5 }}>name + goal + memories</code>.
+          No cover art, no date range, no archive state in MVP.
+        </div>
+      </div>
+
+      <div style={cell}>
+        <div style={eyebrow}>Project Assist · “Find the thread”</div>
+        <div style={body}>
+          Owner-initiated. One AI assist per pass produces <strong>two outputs</strong>:
+          (1) a single Honest-Label paragraph in second-person voice — the project summary;
+          (2) a short list of <strong>suggested memories</strong> from elsewhere in the library that may belong here.
+          Activates at ≥ 3 memories. Suggestions are proposals — nothing auto-adds.
+        </div>
+      </div>
+
+      <div style={cell}>
+        <div style={eyebrow}>What it does <em>not</em> do</div>
+        <div style={body}>
+          No “currents,” no “open loops,” no “important memories,” no “what's becoming.” Those
+          violate the Honest Label principle — they require interpretation the AI shouldn't be making.
+          A paragraph captures the thread; we don't fragment it into LinkedIn sections. Studio
+          (post-MVP) can structure further.
+        </div>
+      </div>
+
+      <div style={cell}>
+        <div style={eyebrow}>Suggestion mechanics</div>
+        <div style={body}>
+          Local prefilter first — overlapping topics, mentions/entities, similar phrases, nearby dates.
+          Top 20–30 candidates go to the AI, which re-ranks and explains in one sentence each
+          (<em>“why it may belong”</em>). User sees a sheet with 3–5 proposals, each labeled
+          <strong> Likely</strong> or <strong>Maybe</strong>. Selection is a ring; completion is
+          the tap on <em>Add N</em>.
+        </div>
+      </div>
+
+      <div style={cell}>
+        <div style={eyebrow}>Tier</div>
+        <div style={body}>
+          <strong>Free</strong> gets 1 active project <em>and</em> 1 free Project Assist run on it — separate
+          from the 3 starter memory assists, so projects don't feel like they're stealing from capture. The
+          starter run is silent: the first tap of <em>Find the thread</em> just works. The upsell only fires
+          on the second attempt. <strong>Plus / Founders</strong> get unlimited projects and assists from
+          the 50/month allowance. Studio (post-MVP) reads raw fragments + cross-project + structured output.
+        </div>
+      </div>
+
+      <div style={cell}>
+        <div style={eyebrow}>Bugs the screenshots surfaced</div>
+        <div style={body}>
+          AI Summary and "App is inferring" were drawn in <strong>ochre/amber</strong> — Crucible reserves blue
+          for AI moments. Both move to AI blue <code style={{ fontFamily: '"SF Mono", monospace', fontSize: 12.5 }}>#1E5C8E</code>.
+          Header chrome glyphs were iOS system blue — they move to warm ink. The duplicate FAB
+          on the Projects tab is removed in favor of the inline <em>+ New project</em> row.
+        </div>
+      </div>
+
+      <div style={{ padding: '18px 22px' }}>
+        <div style={eyebrow}>What this design doesn't cover</div>
+        <div style={body}>
+          Empty state (zero projects), edit / delete sheet, running state, cancel-Plus regression
+          (oldest project preserved, newer go read-only), share/export. All deferred — none block
+          MVP shipping.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
