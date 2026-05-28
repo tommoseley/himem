@@ -22,6 +22,7 @@ class JournalViewModel: ObservableObject {
 
     private let storage: StorageService
     private let lifecycle: EntryLifecycleService
+    private let queries: EntryQueryService
     private var contextObserver: AnyCancellable?
     private var remoteChangeObserver: AnyCancellable?
     private var foregroundObserver: AnyCancellable?
@@ -30,6 +31,7 @@ class JournalViewModel: ObservableObject {
     init(storage: StorageService = .shared, processingEngine: ProcessingEngine? = .shared) {
         self.storage = storage
         self.lifecycle = EntryLifecycleService(storage: storage, processingEngine: processingEngine)
+        self.queries = EntryQueryService(storage: storage)
         observeStorageChanges()
         observeRemoteChanges()
         observeForeground()
@@ -156,11 +158,11 @@ class JournalViewModel: ObservableObject {
     }
 
     func loadRecycledEntries() -> [EntryDisplayModel] {
-        return lifecycle.loadRecycledEntries()
+        return queries.loadRecycledEntries()
     }
 
     func recycledCountForTopic(_ topicName: String) -> Int {
-        return lifecycle.recycledCountForTopic(topicName)
+        return queries.recycledCountForTopic(topicName)
     }
 
     func emptyRecycleBin() {
@@ -228,9 +230,9 @@ class JournalViewModel: ObservableObject {
 
     private func recomputeRecycledCount(topic: String?) {
         if let topic {
-            recycledCount = lifecycle.recycledCountForTopic(topic)
+            recycledCount = queries.recycledCountForTopic(topic)
         } else {
-            recycledCount = lifecycle.recycledCount()
+            recycledCount = queries.recycledCount()
         }
     }
 

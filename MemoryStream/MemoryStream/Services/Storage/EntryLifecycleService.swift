@@ -583,34 +583,6 @@ final class EntryLifecycleService {
         }
     }
 
-    // MARK: - Queries
-
-    func loadRecycledEntries() -> [EntryDisplayModel] {
-        do {
-            let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
-            request.predicate = NSPredicate(format: "isRecycled == YES")
-            request.sortDescriptors = [NSSortDescriptor(keyPath: \JournalEntry.recycledAt, ascending: false)]
-            return try storage.viewContext.fetch(request).map { EntryMapper.mapToDisplayModel($0) }
-        } catch {
-            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
-            return []
-        }
-    }
-
-    func recycledCountForTopic(_ topicName: String) -> Int {
-        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
-        request.predicate = NSPredicate(format: "isRecycled == YES AND ANY topics.name == %@", topicName)
-        return (try? storage.viewContext.count(for: request)) ?? 0
-    }
-
-    /// Counts every recycled entry without materializing the rows. Cheap;
-    /// use this in derived state instead of `loadRecycledEntries().count`.
-    func recycledCount() -> Int {
-        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
-        request.predicate = NSPredicate(format: "isRecycled == YES")
-        return (try? storage.viewContext.count(for: request)) ?? 0
-    }
-
     // MARK: - Private Helpers
 
     private func fetchEntry(id: UUID) throws -> JournalEntry? {

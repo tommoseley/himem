@@ -196,6 +196,8 @@ struct EntryLifecycleServiceTests {
 
     @Test func recycledCountForTopic_countsOnlyRecycledOnesWithThatTopic() throws {
         let (storage, service) = makeService()
+        // Queries live on EntryQueryService since CRAP Batch 3 (2026-05-28).
+        let queries = EntryQueryService(storage: storage)
         // Active entry tagged Garden — should NOT count.
         _ = try seedEntry(in: storage, content: "active garden", topicNames: ["Garden"])
         // Recycled entry tagged Garden — should count.
@@ -205,13 +207,14 @@ struct EntryLifecycleServiceTests {
         let trashedCooking = try seedEntry(in: storage, content: "trashed cooking", topicNames: ["Cooking"])
         service.recycle(entryId: trashedCooking.id)
 
-        #expect(service.recycledCountForTopic("Garden") == 1)
-        #expect(service.recycledCountForTopic("Cooking") == 1)
-        #expect(service.recycledCountForTopic("Nonexistent") == 0)
+        #expect(queries.recycledCountForTopic("Garden") == 1)
+        #expect(queries.recycledCountForTopic("Cooking") == 1)
+        #expect(queries.recycledCountForTopic("Nonexistent") == 0)
     }
 
     @Test func loadRecycledEntries_returnsRecycledOnlySortedNewestFirst() throws {
         let (storage, service) = makeService()
+        let queries = EntryQueryService(storage: storage)
         let activeEntry = try seedEntry(in: storage, content: "active")
         let firstTrashed = try seedEntry(in: storage, content: "first trashed")
         service.recycle(entryId: firstTrashed.id)
@@ -220,7 +223,7 @@ struct EntryLifecycleServiceTests {
         let secondTrashed = try seedEntry(in: storage, content: "second trashed")
         service.recycle(entryId: secondTrashed.id)
 
-        let recycled = service.loadRecycledEntries()
+        let recycled = queries.loadRecycledEntries()
 
         #expect(recycled.count == 2)
         #expect(recycled.first?.id == secondTrashed.id) // newest first
