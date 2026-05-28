@@ -70,7 +70,7 @@ struct JournalView: View {
             // default, but when the inbox is non-empty surface a single
             // banner-only nag.
             if !inbox.isEmpty && viewMode == .memories {
-                inboxBanner
+                JournalInboxBanner(count: inbox.count, onTap: { showInbox = true })
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
             }
@@ -108,9 +108,13 @@ struct JournalView: View {
             )
         }
 
-        errorBannerOverlay
+        JournalErrorBanner()
 
-        undoToastOverlay
+        JournalUndoToast(
+            isShown: $showUndo,
+            undoEntry: undoEntry,
+            viewModel: viewModel
+        )
 
         } // ZStack
         .navigationDestination(isPresented: $showSearch) {
@@ -291,11 +295,18 @@ struct JournalView: View {
 
 
     private func dateLabel(for date: Date) -> String {
-        let calendar = Calendar.current
+        Self.dateLabel(for: date, calendar: .current)
+    }
+
+    /// Pure label-formatter — hoisted as a static so the day-group
+    /// header strings can be unit-tested without instantiating the
+    /// view. CRAP audit Batch 1 (2026-05-28).
+    static func dateLabel(for date: Date, calendar: Calendar) -> String {
         if calendar.isDateInToday(date) { return "Today" }
         if calendar.isDateInYesterday(date) { return "Yesterday" }
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d"
+        formatter.calendar = calendar
         return formatter.string(from: date)
     }
 
@@ -482,118 +493,11 @@ struct JournalView: View {
         }
     }
 
-    // MARK: - Error banner overlay
-
-    @ViewBuilder
-    private var errorBannerOverlay: some View {
-        if let error = errorState.current {
-            VStack {
-                HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Crucible.Color.danger)
-                        .accessibilityHidden(true)
-                    Text(error.errorDescription ?? "Something went wrong")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Spacer()
-                    Button {
-                        errorState.dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Dismiss error")
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Crucible.Color.ink)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .padding(.horizontal, 16)
-                Spacer()
-            }
-            .padding(.top, 8)
-            .transition(.move(edge: .top).combined(with: .opacity))
-            .animation(.spring(response: 0.3), value: errorState.current?.id)
-        }
-    }
-
-    // MARK: - Undo toast overlay
-
-    @ViewBuilder
-    private var undoToastOverlay: some View {
-        if showUndo, let entry = undoEntry {
-            VStack {
-                Spacer()
-                HStack(spacing: 12) {
-                    Text("Moved to Recently Deleted")
-                        .font(.subheadline)
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Button {
-                        viewModel.restoreEntry(entryId: entry.id)
-                        withAnimation { showUndo = false }
-                    } label: {
-                        Text("Undo")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundStyle(Crucible.Color.accent)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Crucible.Color.ink)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 16)
-                .padding(.bottom, 100)
-            }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    // MARK: - Inbox banner
-
-    /// Pinned banner above the topic filter chips. Per the Watch →
-    /// Memory flow spec: single line, count-leading, dot-separated, no
-    /// emoji, no app subtitle. Hidden when the inbox is empty — the
-    /// banner is the only nag (no auto-open, no per-clip push for v1).
-    private var inboxBanner: some View {
-        Button {
-            showInbox = true
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "applewatch")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(Crucible.Color.accent)
-                Text("\(inbox.count) new from Apple Watch")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Crucible.Color.ink)
-                Text("·")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Crucible.Color.ink4)
-                Text("Tap to review")
-                    .font(.subheadline)
-                    .foregroundStyle(Crucible.Color.ink3)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Crucible.Color.ink3)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Crucible.Color.card)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14).stroke(Crucible.Color.accent.opacity(0.3), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(inbox.count) new clip\(inbox.count == 1 ? "" : "s") from Apple Watch")
-        .accessibilityHint("Opens the inbox to review and process pending watch recordings.")
-    }
+    // errorBannerOverlay / undoToastOverlay / inboxBanner moved to
+    // their own files in the CRAP audit 2026-05-28 (Batch 1):
+    //   - Views/Journal/JournalErrorBanner.swift
+    //   - Views/Journal/JournalUndoToast.swift
+    //   - Views/Journal/JournalInboxBanner.swift
 
     // MARK: - Undo toast
 
