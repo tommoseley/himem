@@ -88,7 +88,13 @@ struct EntryExpandedView: View {
     /// capture flows (which call lifecycle.append directly when the user
     /// finishes a pill capture).
     private let lifecycle = EntryLifecycleService()
-    @State private var activeCaptureModality: CaptureModality? = nil
+    /// Owns activeCaptureModality + the per-modality dispatch that
+    /// routes captured items to `lifecycle.append`. Extracted from
+    /// this view in the CRAP audit 2026-05-28 (Batch 2) so the
+    /// append-spec dispatch is unit-testable. The view still drives
+    /// the modality binding (passed to AppendFAB) but the dispatch
+    /// logic lives on the coordinator.
+    @StateObject private var appendCoordinator = EntryAppendCoordinator()
     @State private var activeSheet: ExpandedSheet?
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
@@ -287,7 +293,7 @@ struct EntryExpandedView: View {
                 ) {
                     AppendFAB(
                         onSelect: { modality in
-                            activeCaptureModality = modality
+                            appendCoordinator.activeCaptureModality = modality
                         },
                         accessibilityLabel: "Add to memory"
                     )
@@ -295,11 +301,16 @@ struct EntryExpandedView: View {
             }
         }
         .captureFlowHost(
-            activeModality: $activeCaptureModality,
+            activeModality: $appendCoordinator.activeCaptureModality,
             speechService: speechService,
             appendingTo: entry.displayTitle,
             onCaptured: { item in
-                handleCapturedItemForAppend(item)
+                appendCoordinator.apply(
+                    item,
+                    to: entry.id,
+                    using: lifecycle,
+                    context: StorageService.shared.viewContext
+                )
             }
         )
     }
@@ -804,70 +815,9 @@ struct EntryExpandedView: View {
         }
     }
 
-    // MARK: - Append spec — single-modality capture results
-
-    /// Append the captured artifact to this memory. One pill press = one
-    /// append call. Attach with multiple selections bundles them into a
-    /// single append batch so they show as a contiguous group in the
-    /// chronological capture stream.
-    private func handleCapturedItemForAppend(_ item: CapturedItem) {
-        switch item {
-        case .voice(let filename, let transcript):
-            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard filename != nil || !trimmed.isEmpty else { return }
-            lifecycle.append(
-                entryId: entry.id,
-                additionalContent: trimmed,
-                voiceFilename: filename
-            )
-
-        case .photo(let id):
-            lifecycle.append(
-                entryId: entry.id,
-                additionalContent: "",
-                mediaCaptures: [(id, .image)]
-            )
-
-        case .video(let id):
-            lifecycle.append(
-                entryId: entry.id,
-                additionalContent: "",
-                mediaCaptures: [(id, .video)]
-            )
-
-        case .note(let text):
-            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            lifecycle.append(entryId: entry.id, additionalContent: text)
-
-        case .attach(let ids):
-            guard !ids.isEmpty else { return }
-            let captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
-                ids.map { ($0, .image) }
-            lifecycle.append(entryId: entry.id, additionalContent: "", mediaCaptures: captures)
-
-        case .voiceSession(let clips, _):
-            // "On a roll" — append every clip in the session as its
-            // own voice fragment on this Memory.
-            for clip in clips {
-                lifecycle.append(
-                    entryId: entry.id,
-                    additionalContent: clip.transcript,
-                    voiceFilename: clip.audioFilename
-                )
-            }
-            // Stamp the session's location fix onto every appended
-            // fragment + kick off reverse-geocode for the clip-row
-            // header (Memory Detail v3).
-            for clip in clips {
-                ClipLocationResolver.stamp(
-                    osIdentifier: clip.audioFilename,
-                    latitude: clip.latitude,
-                    longitude: clip.longitude,
-                    in: StorageService.shared.viewContext
-                )
-            }
-        }
-    }
+    // Append-spec dispatch moved to `EntryAppendCoordinator.apply`
+    // in the CRAP audit 2026-05-28 (Batch 2). See
+    // `Views/Journal/EntryAppendCoordinator.swift`.
 
     // MARK: - Attachment styling
 
