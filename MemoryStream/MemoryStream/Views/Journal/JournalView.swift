@@ -519,101 +519,29 @@ struct JournalView: View {
     /// On success, navigates to the new memory's detail view so the user
     /// sees their contribution as the top item.
     private func handleCapturedItemForNewEntry(_ item: CapturedItem) {
-        let newId: UUID?
-        switch item {
-        case .voice(let filename, let transcript):
-            // Drop empty voice if both fields are empty (user hit Done before
-            // saying anything).
-            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard filename != nil || !trimmed.isEmpty else { return }
-            newId = viewModel.saveEntry(
-                content: trimmed,
-                inputType: .voiceInApp,
-                voiceFilename: filename
-            )
-
-        case .photo(let id):
-            newId = viewModel.saveEntry(
-                content: "",
-                inputType: .camera,
-                mediaCaptures: [(id, .image)]
-            )
-
-        case .video(let id):
-            newId = viewModel.saveEntry(
-                content: "",
-                inputType: .camera,
-                mediaCaptures: [(id, .video)]
-            )
-
-        case .note(let text):
-            // If we seeded a search-query value, prepend it.
-            let body: String
-            if let pending = pendingNoteForNewEntry, !pending.isEmpty {
-                pendingNoteForNewEntry = nil
-                body = pending + (text.isEmpty ? "" : "\n\n" + text)
-            } else {
-                body = text
-            }
-            guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            newId = viewModel.saveEntry(content: body, inputType: .typed)
-            // Also create a `.note` MediaReference so the text shows up
-            // in the chronological capture stream alongside any later
-            // appends. Without this, the detail view would only show
-            // photos/videos and the typed text would be invisible until
-            // the user enters edit mode.
-            if let id = newId {
-                viewModel.createNoteFragment(forEntryId: id, text: body)
-            }
-
-        case .attach(let ids):
-            guard !ids.isEmpty else { return }
-            // PHPicker doesn't separate photos from videos in its return
-            // shape; classify as image by default. The asset's actual type
-            // will be picked up by ThumbnailService at render time.
-            let captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
-                ids.map { ($0, .image) }
-            newId = viewModel.saveEntry(content: "", inputType: .camera, mediaCaptures: captures)
-
-        case .voiceSession(let clips, _):
-            // "On a roll" — multi-clip phone voice session. First clip
-            // creates the Memory; subsequent clips append voice
-            // fragments to that same Memory so the whole roll lands
-            // as one entry. `rollGroupId` is informational; on phone
-            // the create-then-append path is already in one memory by
-            // construction, so we don't need to stamp it.
-            guard let first = clips.first else { return }
-            newId = viewModel.saveEntry(
-                content: first.transcript,
-                inputType: .voiceInApp,
-                voiceFilename: first.audioFilename
-            )
-            if let entryId = newId {
-                for clip in clips.dropFirst() {
-                    viewModel.appendToEntry(
-                        entryId: entryId,
-                        additionalContent: clip.transcript,
-                        voiceFilename: clip.audioFilename
-                    )
-                }
-            }
-            // Stamp the session's location fix onto every fragment's
-            // MediaReference + kick off reverse-geocode for the
-            // clip-row header (Memory Detail v3). All clips in a
-            // phone roll share the one session-start fix.
-            for clip in clips {
-                ClipLocationResolver.stamp(
-                    osIdentifier: clip.audioFilename,
-                    latitude: clip.latitude,
-                    longitude: clip.longitude,
-                    in: StorageService.shared.viewContext
-                )
-            }
+        // Per-modality dispatch lives on `JournalCaptureCoordinator`
+        // since the CRAP audit 2026-05-28 (Batch 5). The view holds
+        // pendingNoteForNewEntry + selectedEntryId; the coordinator
+        // composes the body and creates the memory.
+        let coordinator = JournalCaptureCoordinator()
+        let seed = pendingNoteForNewEntry
+        let newId = coordinator.createNewMemory(
+            from: item,
+            viewModel: viewModel,
+            seedNote: seed
+        )
+        // Clear the pending seed AFTER the successful create — only
+        // when the dispatch case was `.note` would the coordinator
+        // have consumed it; the bookkeeping is fine either way since
+        // a non-note capture leaves the seed intact for the next
+        // note attempt, and the success of `.note` resets it.
+        if case .note = item, newId != nil {
+            pendingNoteForNewEntry = nil
         }
-
-        // Navigate into the new memory so the captured contribution lands as
-        // the top item rather than dropping the user back on Today. The slight
-        // dispatch lets the capture sheet finish its dismiss animation first.
+        // Navigate into the new memory so the captured contribution
+        // lands as the top item rather than dropping the user back
+        // on Today. The slight dispatch lets the capture sheet
+        // finish its dismiss animation first.
         if let newId {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                 selectedEntryId = newId
