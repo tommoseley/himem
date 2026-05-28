@@ -44,18 +44,16 @@ struct VoiceCaptureScreen: View {
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var nextController: NextClipController
-    @State private var startedAt: Date? = nil
-    @State private var elapsed: TimeInterval = 0
-    @State private var timer: Timer? = nil
+    /// Owns elapsed timer + rolling waveform buffer. Extracted from
+    /// this view in the CRAP audit 2026-05-28 (Batch 6) so the
+    /// recording-phase state cluster is unit-testable.
+    @StateObject private var recording = VoiceRecordingController()
     @State private var didAutoStart = false
     @State private var isFinalizing = false
     @State private var finalizingClipCount = 0
     /// REC dot pulse phase (~1.4s ease-in-out per watch spec; mirrored
     /// here for visual continuity between capture surfaces).
     @State private var recPulse: Bool = false
-    /// Rolling history of audio levels for the live waveform.
-    /// Newest at the end; capped at `Self.waveBarCount`.
-    @State private var waveSamples: [CGFloat] = []
     /// One-shot location fix captured at recording start; stamped
     /// onto every `VoiceClipFragment` in this session at Done so the
     /// resulting `MediaReference`s carry their own place name. Nil
@@ -88,12 +86,6 @@ struct VoiceCaptureScreen: View {
     // Caption rotation is the shared `BreathCaption` source so the
     // phone and watch composers stay in lockstep. See
     // `Shared/BreathCaption.swift`.
-
-    /// Phone composer has more horizontal room than the watch, so the
-    /// band carries more bars. 56 keeps each bar at ~3pt + 1pt gap
-    /// across the typical iPhone composer width with 16pt side
-    /// padding.
-    private static let waveBarCount: Int = 56
 
     init(
         onFinish: @escaping (_ clips: [VoiceClipFragment], _ rollGroupId: UUID) -> Void,
@@ -179,7 +171,7 @@ struct VoiceCaptureScreen: View {
             }
         }
         .onDisappear {
-            stopTimer()
+            recording.stop()
             // Belt-and-braces: if the host dismisses us without going
             // through Cancel/Done (rare), don't leave the recorder running.
             if speechService.isRecording {
@@ -444,7 +436,7 @@ struct VoiceCaptureScreen: View {
     /// merges adjacent frames visually into ~1 Hz motion).
     private var waveform: some View {
         GeometryReader { geo in
-            let barCount = Self.waveBarCount
+            let barCount = VoiceRecordingController.waveBarCount
             let gap: CGFloat = 1
             let barWidth = max(
                 2,
@@ -470,9 +462,8 @@ struct VoiceCaptureScreen: View {
     /// before the buffer's filled length read 0 (a 3pt stub) so the
     /// band has a stable width while warming up.
     private func sampleAt(displayIndex idx: Int) -> CGFloat {
-        let offsetFromRight = (Self.waveBarCount - 1) - idx
-        let bufIdx = waveSamples.count - 1 - offsetFromRight
-        return bufIdx >= 0 ? waveSamples[bufIdx] : 0
+        let offsetFromRight = (VoiceRecordingController.waveBarCount - 1) - idx
+        return recording.sample(atOffsetFromRight: offsetFromRight)
     }
 
     /// Maps 0…1 level to a bar height. Floor of 3pt so a quiet room
@@ -489,10 +480,7 @@ struct VoiceCaptureScreen: View {
     /// at the service's 10 Hz throttle.
     private func ingest(sample: CGFloat) {
         guard speechService.isRecording else { return }
-        waveSamples.append(sample)
-        if waveSamples.count > Self.waveBarCount {
-            waveSamples.removeFirst(waveSamples.count - Self.waveBarCount)
-        }
+        recording.ingest(sample: sample)
     }
 
     // MARK: - Bottom action row (Stop & save + Next satellite)
@@ -672,20 +660,16 @@ struct VoiceCaptureScreen: View {
     // MARK: - Timer + recording lifecycle
 
     private var timerString: String {
-        let total = Int(elapsed)
+        let total = Int(recording.elapsed)
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
     private func startRecording() {
         speechService.startRecording()
-        startedAt = Date()
-        elapsed = 0
-        stopTimer()
-        // 100ms cadence so the timer is fluid — counter and waveform
-        // share visual rhythm.
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            if let s = startedAt { elapsed = Date().timeIntervalSince(s) }
-        }
+        // VoiceRecordingController owns the elapsed counter +
+        // waveform buffer + their reset/lifecycle. See
+        // `Views/Input/VoiceRecordingController.swift`.
+        recording.start()
         nextController.sessionDidStart()
         // Snapshot a one-shot location fix in parallel with the
         // recording. The result lands in `sessionLocation` whenever
@@ -701,11 +685,6 @@ struct VoiceCaptureScreen: View {
             guard granted else { return }
             sessionLocation = await LocationService.shared.currentLocation()
         }
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
     }
 
     /// Routes a Next tap. `NextClipController` handles the 2s
@@ -755,7 +734,7 @@ struct VoiceCaptureScreen: View {
         if speechService.isRecording {
             speechService.stopRecording()
         }
-        stopTimer()
+        recording.stop()
 
         guard saveResult else {
             if let path = speechService.lastRecordingPath {
