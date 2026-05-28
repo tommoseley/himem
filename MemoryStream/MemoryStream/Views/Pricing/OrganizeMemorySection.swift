@@ -53,6 +53,14 @@ struct OrganizeMemorySection: View {
 
     private var entry: JournalEntry? { entries.first }
     private var pass: OrganizePass? { entry?.latestOrganizePass }
+
+    private var idleOrExhaustedState: OrganizeCardState {
+        OrganizeCardState.idleOrExhausted(
+            hasAssists: hasAssists,
+            isPlus: entitlement.isPlus,
+            monthlyResetDate: entitlement.monthlyResetDate
+        )
+    }
     private var hasAssists: Bool { entitlement.totalAssistsRemaining > 0 }
     private var isPlus: Bool { entitlement.isPlus }
     private var isStale: Bool { entry?.hasChangesSinceLastOrganize ?? false }
@@ -88,11 +96,13 @@ struct OrganizeMemorySection: View {
             } else if entry != nil {
                 // Idle / Exhausted — never organized.
                 OrganizeMemoryCard(
-                    state: hasAssists ? .idle : .exhausted,
+                    state: idleOrExhaustedState,
                     resetDate: entitlement.monthlyResetDate,
                     onOrganize: handleOrganizeTap,
                     onSeeOptions: onOpenPackSheet,
-                    isProcessing: isProcessing
+                    isProcessing: isProcessing,
+                    assistsLeft: entitlement.showsOneLeftFreeCue ? 1 : nil,
+                    fromPack: entitlement.showsFromYourPackCaption
                 )
             } else {
                 EmptyView()

@@ -174,7 +174,33 @@ function AmbientHint({ children }) {
   );
 }
 
-function OrganizeCard({ exhausted, resetDate = 'Jun 1' }) {
+// OrganizeCard
+// Props:
+//   exhausted   — boolean, muted state with reset / upgrade copy
+//   variant     — 'plus' (default) or 'free'. Drives exhausted copy + CTA.
+//   assistsLeft — small ambient counter rendered next to "1 ASSIST" pill.
+//                 Use 1 (or 2) for the urgency cue. Hidden when undefined.
+//   fromPack    — show "from your pack" micro-caption under the pill (Plus + pack).
+//   resetDate   — string for exhausted state.
+function OrganizeCard({ exhausted, variant = 'plus', assistsLeft, fromPack = false, resetDate = 'Jun 1' }) {
+  // Free exhausted: the user's 3 starter assists are gone forever (no reset).
+  //   Body explicitly names the depleted allotment; CTA opens the Upgrade Hub
+  //   (which offers both pack and Plus paths — they're not subscribed yet).
+  // Plus exhausted: this month's 50 are used. Resets next cycle.
+  //   CTA goes directly to the pack modal (additive top-up, no resub).
+  const exhaustedBody = variant === 'free'
+    ? <>Your <strong style={{ color: PX.ink2, fontWeight: 600 }}>3 free starter assists</strong> are spent. Add a pack or get 50&thinsp;/&thinsp;month with Plus. <span style={{ color: PX.accent }}>See options →</span></>
+    : <>This month&rsquo;s 50 assists are used. Resets <strong style={{ color: PX.ink2, fontWeight: 600 }}>{resetDate}</strong>. <span style={{ color: PX.accent }}>Get more →</span></>;
+  // Status pill in the slot the "1 ASSIST" pill normally occupies — makes
+  // the type of exhaustion (starter vs monthly) visually explicit.
+  const statusPill = exhausted ? (
+    <span style={{
+      fontSize: 9.5, fontWeight: 700, color: PX.warnInk, background: PX.warnTint,
+      padding: '4px 7px', borderRadius: 7, letterSpacing: 0.4, textTransform: 'uppercase',
+      whiteSpace: 'nowrap',
+    }}>{variant === 'free' ? 'Starter used' : 'Monthly used'}</span>
+  ) : null;
+  const urgent = assistsLeft === 1;
   return (
     <div style={{
       background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 14,
@@ -195,15 +221,31 @@ function OrganizeCard({ exhausted, resetDate = 'Jun 1' }) {
         </div>
         <div style={{ fontSize: 12, color: PX.ink3, marginTop: 2, lineHeight: 1.45, letterSpacing: -0.05 }}>
           {exhausted
-            ? <>This month's AI is used. Resets <strong style={{ color: PX.ink2, fontWeight: 600 }}>{resetDate}</strong>. <span style={{ color: PX.accent }}>See options</span></>
+            ? exhaustedBody
             : <>Suggests a title, summary, topics, next steps, and related memories.</>}
         </div>
       </div>
-      {!exhausted && (
-        <span style={{
-          flexShrink: 0, fontSize: 10, fontWeight: 700, color: PX.accent, background: PX.accentTint,
-          padding: '4px 7px', borderRadius: 7, letterSpacing: 0.4, textTransform: 'uppercase',
-        }}>1 Assist</span>
+      {exhausted ? (
+        <div style={{ flexShrink: 0, alignSelf: 'flex-start' }}>{statusPill}</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, color: PX.accent, background: PX.accentTint,
+            padding: '4px 7px', borderRadius: 7, letterSpacing: 0.4, textTransform: 'uppercase',
+          }}>1 Assist</span>
+          {urgent && (
+            <span style={{
+              fontSize: 9.5, fontWeight: 600, color: PX.warn,
+              letterSpacing: 0.3, textTransform: 'uppercase', fontFamily: PX.mono,
+            }}>1 left · free</span>
+          )}
+          {fromPack && !urgent && (
+            <span style={{
+              fontSize: 9.5, fontWeight: 500, color: PX.ink3,
+              letterSpacing: 0.2, fontFamily: PX.mono,
+            }}>from your pack</span>
+          )}
+        </div>
       )}
     </div>
   );
@@ -378,7 +420,10 @@ const SAMPLE_CLIPS = (
 );
 
 // A · Idle · ambient hint + Organize card
-function ScrMemoryIdle() {
+// Extended props (free-tier journey):
+//   assistsLeft — pass 1 to show the urgency cue on the Organize card.
+//   fromPack    — pass true to show the "from your pack" micro-caption.
+function ScrMemoryIdle({ assistsLeft, fromPack = false }) {
   return (
     <PhoneScreen>
       <MemoryNav/>
@@ -387,7 +432,7 @@ function ScrMemoryIdle() {
         <AmbientHint>
           About this: a product concept for content creators that captures thoughts and media across watch, phone, and iPad.
         </AmbientHint>
-        <OrganizeCard/>
+        <OrganizeCard assistsLeft={assistsLeft} fromPack={fromPack}/>
         <div style={{ flex: 1 }}/>
         <MemoryMentions/>
       </div>
@@ -450,8 +495,11 @@ function ScrMemoryStale({ exhausted = false }) {
   );
 }
 
-// E · Exhausted · Organize card muted with "See options"
-function ScrMemoryExhausted() {
+// E · Exhausted · Organize card muted with reset / upgrade copy
+// variant = 'plus' (default) → "Resets Jun 1 · Get more →"
+// variant = 'free'           → "Your 3 free starter assists are spent · See options →"
+// Prices live on the next surface (pack modal / upgrade hub), not here.
+function ScrMemoryExhausted({ variant = 'plus' }) {
   return (
     <PhoneScreen>
       <MemoryNav/>
@@ -460,7 +508,7 @@ function ScrMemoryExhausted() {
         <AmbientHint>
           About this: a product concept for content creators that captures thoughts and media across watch, phone, and iPad.
         </AmbientHint>
-        <OrganizeCard exhausted/>
+        <OrganizeCard exhausted variant={variant}/>
         <div style={{ flex: 1 }}/>
         <MemoryMentions/>
       </div>

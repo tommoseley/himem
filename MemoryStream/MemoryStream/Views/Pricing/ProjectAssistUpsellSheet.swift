@@ -9,6 +9,7 @@ import SwiftUI
 struct ProjectAssistUpsellSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showUpgradeHub = false
+    @State private var showPackPurchase = false
 
     var body: some View {
         ZStack {
@@ -50,6 +51,28 @@ struct ProjectAssistUpsellSheet: View {
                 .buttonStyle(.plain)
                 .padding(.bottom, 8)
 
+                // Per pricing-flow handoff doc § Gap 2: the second-tap
+                // paywall offers Plus AND a one-time pack as the
+                // secondary path. Some users want to keep going on
+                // this project without committing to a subscription.
+                Button {
+                    showPackPurchase = true
+                } label: {
+                    Text("Buy an assist pack")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.ink)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(Crucible.Color.card)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Crucible.Color.hairline, lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 8)
+
                 Button {
                     dismiss()
                 } label: {
@@ -68,6 +91,10 @@ struct ProjectAssistUpsellSheet: View {
         }
         .sheet(isPresented: $showUpgradeHub) {
             UpgradeHubView()
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showPackPurchase) {
+            AIPackPurchaseSheet()
                 .presentationDetents([.large])
         }
     }

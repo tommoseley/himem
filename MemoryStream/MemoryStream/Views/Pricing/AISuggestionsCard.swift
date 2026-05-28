@@ -192,6 +192,21 @@ struct AISuggestionsCard: View {
         return true
     }
 
+    /// True when NONE of the rendered rows has been committed yet.
+    /// Drives the bulk button label — "Accept all" reads honestly on
+    /// a fresh pass, "Accept remaining" reads honestly after at
+    /// least one row was individually accepted. Per Tom's 2026-05-27
+    /// nit: "Accept remaining" was rendering on fresh passes too,
+    /// which is misleading.
+    private var noRenderedRowsCommitted: Bool {
+        if let t = pass.suggestedTitle, !t.isEmpty, titleCommitted { return false }
+        if let s = pass.summaryText, !s.isEmpty, summaryCommitted { return false }
+        if !pass.suggestedTopics.isEmpty, topicsCommitted { return false }
+        if !mentionEntities.isEmpty, mentionsCommitted { return false }
+        if !pass.nextStepsItems.isEmpty, nextStepsCommitted { return false }
+        return true
+    }
+
     /// Reads `pass.acceptedRows` into the @State commit flags so the
     /// card opens with prior acceptances visible. Runs once per
     /// view instance via `hydrated` guard.
@@ -262,7 +277,7 @@ struct AISuggestionsCard: View {
 
     private var headerTintBackground: Color {
         switch headerVariant {
-        case .refreshStale, .staleNoAssists: return Color(red: 0.96, green: 0.91, blue: 0.82)
+        case .refreshStale, .staleNoAssists: return Crucible.Color.warnTint
         case .nextStepsCount, .default:      return Crucible.Color.aiBlueTint
         }
     }
@@ -559,47 +574,76 @@ struct AISuggestionsCard: View {
     // MARK: - Footer
 
     /// True when the footer would render any visible button — the
-    /// refresh action (stale memories) or the Accept all / Accept
-    /// remaining bulk button (any row still pending). When false,
-    /// suppressing the footer entirely avoids leaving an empty
-    /// paper-colored strip below the rows.
+    /// refresh action (stale memories OR out-of-assists upsell),
+    /// or the Accept all / Accept remaining bulk button (any row
+    /// still pending). When false, suppressing the footer entirely
+    /// avoids leaving an empty paper-colored strip below the rows.
     private var footerHasContent: Bool {
-        if canRefresh { return true }
+        if isStale { return true }
+        if canRefresh && !allRenderedRowsCommitted { return true }
         return !allRenderedRowsCommitted
+    }
+
+    /// True when the stale-state should render the full
+    /// `OrganizeMemoryCard.stale(...)` affordance instead of the
+    /// compact in-card buttons. Per Tom's 2026-05-27 ask: the big
+    /// "Reorganize with AI" card matches the idle-state visual
+    /// users already know, vs. the previous tiny pill that read as
+    /// disabled when greyed for the no-assists variant.
+    private var usesBigStaleCard: Bool { isStale }
+
+    private var staleVariant: OrganizeCardState.StaleVariant {
+        let entitlement = EntitlementService.shared
+        return OrganizeCardState.staleVariant(
+            canRefresh: canRefresh,
+            isPlus: entitlement.isPlus,
+            monthlyResetDate: entitlement.monthlyResetDate
+        )
     }
 
     @ViewBuilder
     private var footer: some View {
-        // The refresh/re-run button is visible whenever the user has
-        // an assist available, even when the memory isn't stale. The
-        // non-stale tap routes through a confirmation dialog (set
-        // below) since nothing has changed and the assist isn't free.
-        // Hide Accept all / Accept remaining when every rendered row
-        // is already committed.
-        HStack(spacing: 8) {
-            if canRefresh {
-                refreshButton
-                Spacer()
-                if !allRenderedRowsCommitted {
-                    applyAllButton(filled: false)
+        if usesBigStaleCard {
+            // Full-width "Reorganize with AI" card per pricing spec
+            // § 16. The variant carries tier-specific pill (1
+            // ASSIST / STARTER USED / MONTHLY USED), body copy, and
+            // CTA route. `onOpenPackSheet` here serves both the
+            // free-→-Upgrade-Hub and Plus-→-pack-modal destinations
+            // — the parent (`OrganizeMemorySection`) routes by tier.
+            OrganizeMemoryCard(
+                state: .stale(staleVariant),
+                resetDate: nil,
+                onOrganize: onRefresh,
+                onSeeOptions: onOpenPackSheet,
+                isProcessing: isProcessing
+            )
+        } else {
+            HStack(spacing: 8) {
+                if canRefresh {
+                    refreshButton
+                    Spacer()
+                    if !allRenderedRowsCommitted {
+                        applyAllButton(filled: false)
+                    }
+                } else if !allRenderedRowsCommitted {
+                    applyAllButton(filled: true)
+                    Spacer()
                 }
-            } else if !allRenderedRowsCommitted {
-                applyAllButton(filled: true)
-                Spacer()
-            } else if !isStale {
-                // No assists + no pending rows: footer is empty but
-                // footerHasContent returns false so we don't render
-                // this branch. Keeping the else-if for clarity.
-                EmptyView()
             }
         }
     }
 
     private func applyAllButton(filled: Bool) -> some View {
-        Button(action: applyAll) {
-            Text(filled ? "Accept all" : "Accept remaining")
+        // Label is independent of fill: "Accept all" reads honestly
+        // when nothing's been individually accepted yet, "Accept
+        // remaining" reads honestly once at least one row has.
+        // Pre-2026-05-27 the label was derived from `filled` which
+        // conflated visual treatment with semantic state.
+        let label = noRenderedRowsCommitted ? "Accept all" : "Accept remaining"
+        return Button(action: applyAll) {
+            Text(label)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(filled ? Color(red: 1.0, green: 0.99, blue: 0.96) : Crucible.Color.ink)
+                .foregroundStyle(filled ? Crucible.Color.accentInk : Crucible.Color.ink)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(filled ? Crucible.Color.ink : Crucible.Color.card)
@@ -620,7 +664,9 @@ struct AISuggestionsCard: View {
                         .controlSize(.small)
                         .tint(.white)
                 } else {
-                    Image(systemName: "arrow.clockwise")
+                    // No clockwise arrow when it's the "See plans"
+                    // route — the upgrade hub isn't a refresh.
+                    Image(systemName: canRefresh ? "arrow.clockwise" : "arrow.up.forward")
                         .font(.system(size: 11, weight: .bold))
                 }
                 Text(isProcessing ? "Working…" : refreshButtonLabel)
@@ -629,7 +675,12 @@ struct AISuggestionsCard: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(canRefresh ? Crucible.Color.accent : Crucible.Color.ink4)
+            // Ochre in both branches. The "Out of assists · See plans"
+            // variant is still an active CTA (routes to the pack
+            // sheet); greying it suggested "disabled" when the button
+            // actually drives forward. Per pricing spec § 2.E the
+            // "See options" link is accent-colored.
+            .background(Crucible.Color.accent)
             .opacity(isProcessing ? 0.85 : 1.0)
             .clipShape(RoundedRectangle(cornerRadius: 9))
         }

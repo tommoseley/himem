@@ -315,8 +315,15 @@ struct ProjectDetailView: View {
     @ViewBuilder
     private var findTheThreadButton: some View {
         let enabled = ProjectAssistGate.isEnabled(memoryCount: entries.count)
+        // Cost label per pricing spec § Open work locked decision 1
+        // (2026-05-27): free users on first use see "Starter · free"
+        // so they know they're tasting their one freebie. Subsequent
+        // taps fall to "1 assist" — same as Plus — and the tap fires
+        // the upsell because `canConsumeProjectAssist` is now false.
+        let isStarterRun = !entitlement.isPlus && !entitlement.starterProjectAssistUsed
+        let costLabel = isStarterRun ? "Starter · free" : "1 assist"
         let subline = enabled
-            ? "A short summary across these memories. 1 assist."
+            ? "A short summary across these memories. \(costLabel)."
             : (ProjectAssistGate.allowSingleMemoryThreshold
                ? "Add a memory first."
                : "Add a few more memories first.")

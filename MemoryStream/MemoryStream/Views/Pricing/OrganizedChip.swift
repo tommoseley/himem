@@ -80,7 +80,7 @@ struct OrganizedChip: View {
 
     private var tintBackground: Color {
         switch variant {
-        case .refreshStale, .staleNoAssists: return Color(red: 0.96, green: 0.91, blue: 0.82)
+        case .refreshStale, .staleNoAssists: return Crucible.Color.warnTint
         case .nextStepsCount, .default:      return Crucible.Color.aiBlueTint
         }
     }

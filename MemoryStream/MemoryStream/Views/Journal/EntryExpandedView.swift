@@ -79,6 +79,7 @@ struct EntryExpandedView: View {
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
     @State private var showAIPackPurchase = false
+    @State private var showUpgradeHub = false
     @State private var aiCardUnfolded = false
     @ObservedObject private var entitlement = EntitlementService.shared
 
@@ -158,7 +159,17 @@ struct EntryExpandedView: View {
                     entryID: entry.id,
                     unfolded: $aiCardUnfolded,
                     onOrganize: { triggerManualAIOrganize() },
-                    onOpenPackSheet: { showAIPackPurchase = true }
+                    onOpenPackSheet: {
+                        // Pricing spec § 16: free users out of starter
+                        // assists → Upgrade Hub (subscription paths);
+                        // Plus users out of monthly allowance → pack
+                        // purchase modal (additive, no resub).
+                        if EntitlementService.shared.isPlus {
+                            showAIPackPurchase = true
+                        } else {
+                            showUpgradeHub = true
+                        }
+                    }
                 )
             }
             sectionRow { inferenceCardSection }
@@ -246,6 +257,9 @@ struct EntryExpandedView: View {
         .sheet(isPresented: $showAIPackPurchase) {
             AIPackPurchaseSheet()
                 .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showUpgradeHub) {
+            UpgradeHubView()
         }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {

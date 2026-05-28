@@ -122,6 +122,7 @@
 		A100000633 /* SummaryRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000633 /* SummaryRenderer.swift */; };
 		A100000654 /* ProjectCapPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000654 /* ProjectCapPolicy.swift */; };
 		A100000655 /* ProjectAssistGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000655 /* ProjectAssistGate.swift */; };
+		A100000656 /* OrganizeCardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000656 /* OrganizeCardState.swift */; };
 		A100000657 /* ProjectAssistUpsellSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000657 /* ProjectAssistUpsellSheet.swift */; };
 		A100000660 /* SuggestionPrefilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000660 /* SuggestionPrefilter.swift */; };
 		A100000662 /* SuggestedMemoriesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000662 /* SuggestedMemoriesSheet.swift */; };
@@ -135,6 +136,8 @@
 		A100000693 /* SwipeToDelete.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000693 /* SwipeToDelete.swift */; };
 		A100000694 /* SwipeToDiscard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000694 /* SwipeToDiscard.swift */; };
 		A100000700 /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000700 /* AudioCompressor.swift */; };
+		A100000730 /* BreathCaption.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000730 /* BreathCaption.swift */; };
+		A100000731 /* BreathCaption.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000730 /* BreathCaption.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 		E2AD0E5C2FAD185F009FFEA1 /* Himem Watch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E2E510952FAE5AD3000D2670 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E2E510942FAE5AD3000D2670 /* WidgetKit.framework */; };
@@ -321,6 +324,7 @@
 		B100000633 /* SummaryRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryRenderer.swift; sourceTree = "<group>"; };
 		B100000654 /* ProjectCapPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCapPolicy.swift; sourceTree = "<group>"; };
 		B100000655 /* ProjectAssistGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistGate.swift; sourceTree = "<group>"; };
+		B100000656 /* OrganizeCardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeCardState.swift; sourceTree = "<group>"; };
 		B100000657 /* ProjectAssistUpsellSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistUpsellSheet.swift; sourceTree = "<group>"; };
 		B100000660 /* SuggestionPrefilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionPrefilter.swift; sourceTree = "<group>"; };
 		B100000662 /* SuggestedMemoriesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestedMemoriesSheet.swift; sourceTree = "<group>"; };
@@ -332,6 +336,7 @@
 		B100000693 /* SwipeToDelete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDelete.swift; sourceTree = "<group>"; };
 		B100000694 /* SwipeToDiscard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDiscard.swift; sourceTree = "<group>"; };
 		B100000700 /* AudioCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AudioCompressor.swift; path = Shared/AudioCompressor.swift; sourceTree = "<group>"; };
+		B100000730 /* BreathCaption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BreathCaption.swift; path = Shared/BreathCaption.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Himem Watch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -726,6 +731,7 @@
 				B100000670 /* MinClipDebouncer.swift */,
 				B100000671 /* NextClipController.swift */,
 				B100000700 /* AudioCompressor.swift */,
+				B100000730 /* BreathCaption.swift */,
 			);
 			name = Shared;
 			sourceTree = "<group>";
@@ -765,6 +771,7 @@
 				B100000603 /* FoundersCounter.swift */,
 				B100000654 /* ProjectCapPolicy.swift */,
 				B100000655 /* ProjectAssistGate.swift */,
+				B100000656 /* OrganizeCardState.swift */,
 				B100000621 /* TenureTracker.swift */,
 			);
 			path = Entitlement;
@@ -1063,6 +1070,7 @@
 				A100000320 /* WatchSharedState.swift in Sources */,
 				A100000672 /* MinClipDebouncer.swift in Sources */,
 				A100000673 /* NextClipController.swift in Sources */,
+				A100000731 /* BreathCaption.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1095,6 +1103,7 @@
 				A100000001 /* MemoryStreamApp.swift in Sources */,
 				A100000310 /* ClipMetadata.swift in Sources */,
 				A100000700 /* AudioCompressor.swift in Sources */,
+				A100000730 /* BreathCaption.swift in Sources */,
 				A100000311 /* InboxManifest.swift in Sources */,
 				A100000690 /* ClipSessionGrouper.swift in Sources */,
 				A100000312 /* WatchSessionDelegate.swift in Sources */,
@@ -1118,6 +1127,7 @@
 				A100000601 /* EntitlementService.swift in Sources */,
 				A100000654 /* ProjectCapPolicy.swift in Sources */,
 				A100000655 /* ProjectAssistGate.swift in Sources */,
+				A100000656 /* OrganizeCardState.swift in Sources */,
 				A100000660 /* SuggestionPrefilter.swift in Sources */,
 				A100000670 /* MinClipDebouncer.swift in Sources */,
 				A100000671 /* NextClipController.swift in Sources */,

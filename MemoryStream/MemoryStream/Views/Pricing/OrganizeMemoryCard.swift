@@ -20,12 +20,6 @@ import SwiftUI
 /// design, all of that loud "buy more" framing is collapsed into the
 /// muted exhausted state — pricing math stays in Settings · Your AI,
 /// the upgrade hub, and the pack-purchase sheet.
-enum OrganizeCardState {
-    case idle
-    case reorganize(newClipCount: Int)
-    case exhausted
-}
-
 struct OrganizeMemoryCard: View {
     let state: OrganizeCardState
     var resetDate: Date?
@@ -36,6 +30,18 @@ struct OrganizeMemoryCard: View {
     /// mid-flight. Drives the "we're inquiring" signal Tom called out
     /// 2026-05-18.
     var isProcessing: Bool = false
+    /// When set on the `.idle` state, adds a warn-color "1 LEFT ·
+    /// FREE" caption under the `1 ASSIST` pill. Per pricing spec
+    /// § 14 (Paywall 1): free users about to consume their last
+    /// starter assist see the meter without a modal. Pass nil to
+    /// suppress the cue (Plus users, free users with > 1 left).
+    var assistsLeft: Int? = nil
+    /// `.idle` only. True when Plus user has drained their monthly
+    /// allowance and is now drawing from a purchased pack — adds a
+    /// quiet `from your pack` micro-caption under the `1 ASSIST`
+    /// pill so the user knows where the next assist comes from.
+    /// Per pricing spec C5.
+    var fromPack: Bool = false
 
     var body: some View {
         switch state {
@@ -43,8 +49,10 @@ struct OrganizeMemoryCard: View {
             idleCard
         case .reorganize(let count):
             reorganizeCallout(newClipCount: count)
-        case .exhausted:
-            exhaustedCard
+        case .exhausted(let variant):
+            exhaustedCard(variant: variant)
+        case .stale(let variant):
+            staleCard(variant: variant)
         }
     }
 
@@ -66,20 +74,38 @@ struct OrganizeMemoryCard: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
                         Text(isProcessing ? "Working…" : "Organize with AI")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Crucible.Color.ink)
                         Spacer()
                         if !isProcessing {
-                            Text("1 ASSIST")
-                                .font(.system(size: 10.5, weight: .bold))
-                                .tracking(0.4)
-                                .foregroundStyle(Crucible.Color.accent)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(Crucible.Color.accentTint)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            VStack(alignment: .trailing, spacing: 3) {
+                                Text("1 ASSIST")
+                                    .font(.system(size: 10.5, weight: .bold))
+                                    .tracking(0.4)
+                                    .foregroundStyle(Crucible.Color.accent)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Crucible.Color.accentTint)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                if assistsLeft == 1 {
+                                    // Pricing spec § 14 Paywall 1:
+                                    // ambient urgency cue, no modal.
+                                    Text("1 LEFT · FREE")
+                                        .font(.system(size: 9.5, weight: .semibold))
+                                        .tracking(0.3)
+                                        .foregroundStyle(Crucible.Color.warning)
+                                } else if fromPack {
+                                    // Pricing spec C5: Plus user is
+                                    // drawing from their pack now
+                                    // that the monthly bucket is dry.
+                                    Text("from your pack")
+                                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                        .tracking(0.2)
+                                        .foregroundStyle(Crucible.Color.ink3)
+                                }
+                            }
                         }
                     }
                     Text(isProcessing
@@ -146,29 +172,50 @@ struct OrganizeMemoryCard: View {
         return "\(count) new clips since last organize"
     }
 
-    // MARK: - Exhausted (Plus/Founders out, Free out)
+    // MARK: - Stale (organized + new clips since pass)
 
-    private var exhaustedCard: some View {
-        Button(action: onSeeOptions) {
-            HStack(spacing: 12) {
+    /// "Reorganize with AI" — mirrors the `.idle` shape but the title
+    /// reflects that a pass already ran. Per pricing spec § 16, the
+    /// variant carries the tier-specific status pill, body copy, and
+    /// tap target:
+    ///   • `.available`     → ochre `1 ASSIST` pill, refresh fires.
+    ///   • `.freeExhausted` → amber `STARTER USED` badge, names the
+    ///     spent 3 starters; tap routes to Upgrade Hub.
+    ///   • `.plusExhausted` → amber `MONTHLY USED` badge, names the
+    ///     reset date; tap routes to the pack purchase modal.
+    private func staleCard(variant: OrganizeCardState.StaleVariant) -> some View {
+        let isExhausted = variant != .available
+        return Button(action: variant == .available ? onOrganize : onSeeOptions) {
+            HStack(alignment: .top, spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 9)
-                        .fill(Color(red: 0.96, green: 0.91, blue: 0.82))
+                        .fill(isExhausted
+                              ? Crucible.Color.sunk
+                              : Crucible.Color.AI.base)
                         .frame(width: 36, height: 36)
-                    AISparkleGlyph(size: 18, color: Color(red: 0.48, green: 0.29, blue: 0.06))
+                    if isProcessing {
+                        ProgressView()
+                            .controlSize(.regular)
+                            .tint(.white)
+                    } else {
+                        AISparkleGlyph(
+                            size: 18,
+                            color: isExhausted ? Crucible.Color.ink3 : .white
+                        )
+                    }
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Organize with AI")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.ink)
-                    Text(exhaustedSubtitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Crucible.Color.ink3)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(isProcessing ? "Working…" : "Reorganize with AI")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(isExhausted ? Crucible.Color.ink2 : Crucible.Color.ink)
+                        Spacer()
+                        if !isProcessing {
+                            stalePill(for: variant)
+                        }
+                    }
+                    staleBody(for: variant)
                 }
-                Spacer()
-                Text("See options →")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(Crucible.Color.accent)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -178,13 +225,134 @@ struct OrganizeMemoryCard: View {
                     .stroke(Crucible.Color.hairline, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .opacity(isExhausted ? 0.92 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isProcessing)
+    }
+
+    @ViewBuilder
+    private func stalePill(for variant: OrganizeCardState.StaleVariant) -> some View {
+        switch variant {
+        case .available:
+            Text("1 ASSIST")
+                .font(.system(size: 10.5, weight: .bold))
+                .tracking(0.4)
+                .foregroundStyle(Crucible.Color.accent)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Crucible.Color.accentTint)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        case .freeExhausted:
+            exhaustedPill(label: "STARTER USED")
+        case .plusExhausted:
+            exhaustedPill(label: "MONTHLY USED")
+        }
+    }
+
+    private func exhaustedPill(label: String) -> some View {
+        Text(label)
+            .font(.system(size: 9.5, weight: .bold))
+            .tracking(0.4)
+            .foregroundStyle(Crucible.Color.warnInk)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Crucible.Color.warnTint)
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private func staleBody(for variant: OrganizeCardState.StaleVariant) -> some View {
+        staleBodyText(for: variant)
+            .font(.system(size: 12.5))
+            .foregroundStyle(Crucible.Color.ink3)
+            .lineSpacing(2)
+            .multilineTextAlignment(.leading)
+    }
+
+    private func staleBodyText(for variant: OrganizeCardState.StaleVariant) -> Text {
+        switch variant {
+        case .available:
+            let base = isProcessing
+                ? "Inquiring with the AI — title, summary, topics, mentions, and next steps."
+                : "Spends 1 assist to fold the new clips in and refresh title, summary, topics, and mentions."
+            return Text(base)
+        case .freeExhausted:
+            return Text("Your ")
+                + Text("3 free starter assists").fontWeight(.semibold)
+                + Text(" are spent. Add a pack or get 50/month with Plus. ")
+                + Text("See options →").foregroundColor(Crucible.Color.accent)
+        case .plusExhausted(let resetDate):
+            let dateStr = Self.resetDateFormatter.string(from: resetDate ?? Date())
+            return Text("This month's 50 assists are used. Resets ")
+                + Text(dateStr).fontWeight(.semibold)
+                + Text(". ")
+                + Text("Get more →").foregroundColor(Crucible.Color.accent)
+        }
+    }
+
+    // MARK: - Exhausted (never-organized memory, user out of assists)
+
+    /// Mirrors the `.stale` card's tier-aware treatment per pricing
+    /// spec A3 (free) + C3 (plus). Same icon, same body, same pill
+    /// swap as the Reorganize card so the user sees a consistent
+    /// exhaustion treatment on both first-pass and reorganize
+    /// surfaces.
+    private func exhaustedCard(variant: OrganizeCardState.ExhaustedVariant) -> some View {
+        Button(action: onSeeOptions) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Crucible.Color.sunk)
+                        .frame(width: 36, height: 36)
+                    AISparkleGlyph(size: 18, color: Crucible.Color.ink3)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text("Organize with AI")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.ink2)
+                        Spacer()
+                        switch variant {
+                        case .freeExhausted:
+                            exhaustedPill(label: "STARTER USED")
+                        case .plusExhausted:
+                            exhaustedPill(label: "MONTHLY USED")
+                        }
+                    }
+                    exhaustedBody(variant: variant)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Crucible.Color.ink3)
+                        .lineSpacing(2)
+                        .multilineTextAlignment(.leading)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Crucible.Color.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Crucible.Color.hairline, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .opacity(0.92)
         }
         .buttonStyle(.plain)
     }
 
-    private var exhaustedSubtitle: String {
-        guard let resetDate else { return "No assists available" }
-        return "Used this month's AI · resets \(OrganizeMemoryCard.resetDateFormatter.string(from: resetDate))"
+    private func exhaustedBody(variant: OrganizeCardState.ExhaustedVariant) -> Text {
+        switch variant {
+        case .freeExhausted:
+            return Text("Your ")
+                + Text("3 free starter assists").fontWeight(.semibold)
+                + Text(" are spent. Add a pack or get 50/month with Plus. ")
+                + Text("See options →").foregroundColor(Crucible.Color.accent)
+        case .plusExhausted(let resetDate):
+            let dateStr = Self.resetDateFormatter.string(from: resetDate ?? Date())
+            return Text("This month's 50 assists are used. Resets ")
+                + Text(dateStr).fontWeight(.semibold)
+                + Text(". ")
+                + Text("Get more →").foregroundColor(Crucible.Color.accent)
+        }
     }
 
     private static let resetDateFormatter: DateFormatter = {

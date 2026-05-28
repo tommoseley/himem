@@ -96,6 +96,32 @@ final class EntitlementService: ObservableObject {
 
     var isFounders: Bool { tier == .founders }
 
+    // MARK: - UI state cues (pure properties — driven by entitlement
+    // values only, so tests can verify them without rendering. Each
+    // corresponds to a beat in `docs/Pricing · QA test script.md`.)
+
+    /// True when Free + exactly 1 spendable assist remaining. Drives
+    /// the warn-color `1 LEFT · FREE` caption under the `1 ASSIST`
+    /// pill on the idle Organize card (QA script A2).
+    var showsOneLeftFreeCue: Bool {
+        !isPlus && totalAssistsRemaining == 1
+    }
+
+    /// True when Plus has drained the monthly bucket and is now
+    /// drawing from a purchased pack. Drives the `from your pack`
+    /// micro-caption (QA script C5). False when monthly still has
+    /// capacity even if pack > 0 (monthly drains first).
+    var showsFromYourPackCaption: Bool {
+        isPlus && monthlyRemaining == 0 && packBalance > 0
+    }
+
+    /// True for a free user at zero spendable assists. Drives the
+    /// bundle sheet timestamp fallback + "Get AI title · 1 assist →"
+    /// affordance (QA script A4).
+    var isFreeNoAssists: Bool {
+        !isPlus && totalAssistsRemaining == 0
+    }
+
     static let starterTotal: Int = 3
 
     // MARK: - State
@@ -130,17 +156,21 @@ final class EntitlementService: ObservableObject {
         return !starterProjectAssistUsed
     }
 
-    /// Auto-organize precheck: would an auto-run consume be allowed
-    /// AND respect the user's reserved-for-manual threshold? Plus /
-    /// Founders auto-runs gate on this so users can carve out a
-    /// "manual-only" reserve from their monthly + pack balance.
+    /// Auto-organize precheck. Tier-gated **and** budget-gated:
     ///
-    /// At default threshold `0`, equivalent to `canConsumeAssist`
-    /// (auto-org uses everything until the well is dry). When the user
-    /// pulls the slider up, auto-org pauses earlier and earlier;
-    /// at `threshold >= totalAssistsRemaining` it never fires.
+    /// 1. **Free is always manual-only** per AI Organize spec § 9 and
+    ///    pricing spec § 2 (`Idle (ambient hint + Organize)`). The 3
+    ///    starter assists are tasted by an explicit user tap on the
+    ///    Organize card — never silently burned by an auto-pass. Tom
+    ///    saw the auto-burn happen 2026-05-27; this guard kills it.
+    /// 2. **Plus / Founders auto-runs** consult the user's reserved-
+    ///    for-manual threshold. At default `0` it's equivalent to
+    ///    `canConsumeAssist` (auto-org uses everything until the
+    ///    well is dry). When the user pulls the slider up, auto-org
+    ///    pauses earlier; at `threshold >= totalAssistsRemaining` it
+    ///    never fires.
     var canAutoOrganize: Bool {
-        totalAssistsRemaining > autoOrganizeThreshold
+        isPlus && totalAssistsRemaining > autoOrganizeThreshold
     }
 
     // MARK: - Storage

@@ -80,6 +80,38 @@ struct PricingV5DecisionTests {
         #expect(e.canAutoOrganize == true)
     }
 
+    /// Money test for Tom's 2026-05-27 screenshot: the free user
+    /// who created their first memory had it auto-organized on the
+    /// background pass, silently burning a starter assist. Per
+    /// pricing spec § 2 ("Idle (ambient hint + Organize)") and AI
+    /// Organize spec § 9 ("Auto-organize on Plus / Founder…"), Free
+    /// is manual-only. The gate must return false regardless of the
+    /// starter pack balance.
+    @Test func canAutoOrganize_freeTier_alwaysFalse_evenWithStarterPack() {
+        let snap = EntitlementSnapshot(); defer { snap.restore() }
+        let e = EntitlementService.shared
+        e.setTier(.free)
+        e.debugSetMonthlyUsed(0)
+        e.debugSetPackBalance(3)       // the 3-starter grant
+        e.debugSetAutoOrganizeThreshold(0)
+
+        #expect(e.canAutoOrganize == false)
+    }
+
+    @Test func canAutoOrganize_freeTier_alwaysFalse_evenWithFullMonthlyBalance() {
+        // Defensive: even if someone accidentally credits a free user
+        // a full monthly allowance (Plus regression, debug override),
+        // the tier itself bars auto-org.
+        let snap = EntitlementSnapshot(); defer { snap.restore() }
+        let e = EntitlementService.shared
+        e.setTier(.free)
+        e.debugSetMonthlyUsed(0)
+        e.debugSetPackBalance(0)
+        e.debugSetAutoOrganizeThreshold(0)
+
+        #expect(e.canAutoOrganize == false)
+    }
+
     @Test func canAutoOrganize_thresholdEqualToRemaining_returnsFalse() {
         // remaining = 50 monthly + 0 packs = 50. Threshold = 50. The
         // semantic is "fire while remaining > threshold" — equal

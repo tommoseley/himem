@@ -51,6 +51,8 @@
 <script type="text/babel" src="pricing-screens-modals.jsx"></script>
 <script type="text/babel" src="pricing-screens-tier-states.jsx"></script>
 <script type="text/babel" src="pricing-screens-memory-detail.jsx"></script>
+<script type="text/babel" src="pricing-screens-free-flow.jsx"></script>
+<script type="text/babel" src="pricing-screens-reorganize.jsx"></script>
 <script type="text/babel" src="design-canvas.jsx"></script>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
 
@@ -69,10 +71,10 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 // Artboard frame: each phone screen sits in a 360×755 artboard with rounded
 // inner corners and a thin dark bezel drawn by the artboard background.
 // We keep PhoneScreen at 340×735 and inset it 10/10 inside the artboard.
-function Frame({ children, dark }) {
+function Frame({ children, dark, height = 755 }) {
   return (
     <div style={{
-      width: 360, height: 755, background: '#1A1612',
+      width: 360, height, background: '#1A1612',
       padding: '10px', borderRadius: 0,
     }}>
       <div style={{
@@ -325,6 +327,54 @@ function App() {
           </DCArtboard>
           <DCArtboard id="launch-free" label="Launch · Free (clean)" width={AB} height={ABH}>
             <Frame><ScrLaunchTier tier="free"/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="free-journey" title="14 · Free tier · memory-assist journey"
+                   subtitle="Where free users hit each paywall moment and what each surface looks like at that beat. The diagram is the macro view; the artboards after it are the actual screens. Don't redraw what already exists — free-start / free-3-left reuse existing screens; the rest extend them with new props or are new surfaces (bundle sheet).">
+          <DCArtboard id="free-flow" label="Decision tree · free memory-assist journey" width={920} height={760}>
+            <ScrFreeFlow/>
+          </DCArtboard>
+          <DCArtboard id="free-start" label="Beat 2 · Onboarding starter (reuse)" width={AB} height={ABH}>
+            <Frame><ScrOnboardingStarter/></Frame>
+          </DCArtboard>
+          <DCArtboard id="free-3-left" label="Beat 3 · Memory Detail · 3 of 3 (reuse)" width={AB} height={ABH}>
+            <Frame><ScrMemoryIdle/></Frame>
+          </DCArtboard>
+          <DCArtboard id="free-1-left" label="Paywall 1 · 1 assist left (urgency cue)" width={AB} height={ABH}>
+            <Frame><ScrMemoryIdle assistsLeft={1}/></Frame>
+          </DCArtboard>
+          <DCArtboard id="free-mem-exhaust" label="Paywall 2 · Out of starter (Free)" width={AB} height={ABH}>
+            <Frame><ScrMemoryExhausted variant="free"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="free-bundle-no-ai" label="Side branch · Bundle sheet · timestamp fallback" width={AB} height={ABH}>
+            <Frame><ScrBundleSheetNoAI/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="plus-pack" title="15 · Plus · assist pack purchase"
+                   subtitle="Plus user out for the month: same surface as free-exhausted, different copy and different destination. The pack purchase modal is additive — subscription stays the same, no re-billing flow. After purchase, the Organize card returns with a 'from your pack' micro-caption so the user knows where the next assist is being drawn from.">
+          <DCArtboard id="plus-exhaust" label="Memory Detail · out (Plus)" width={AB} height={ABH}>
+            <Frame><ScrMemoryExhausted variant="plus"/></Frame>
+          </DCArtboard>
+          <DCArtboard id="plus-pack-modal" label="Buy a pack · modal" width={AB} height={ABH}>
+            <Frame><ScrPlusPackModal/></Frame>
+          </DCArtboard>
+          <DCArtboard id="plus-pack-applied" label="Memory Detail · pack purchased" width={AB} height={ABH}>
+            <Frame><ScrMemoryIdle fromPack/></Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="reorganize" title="16 · Memory Detail · Reorganize / Stale"
+                   subtitle="Full vertical stack — nav + metadata + clip + live mentions + Organized·stale expanded review + Reorganize card. Three tiers of exhaustion side-by-side so the cost pill / status badge / CTA copy can be evaluated as a system instead of in isolation. Editorial content is placeholder — the focus is the state-communication chrome.">
+          <DCArtboard id="reorg-available" label="A · Assists available · Refresh · 1 ASSIST" width={AB} height={1240}>
+            <Frame height={1240}><ScrMemoryStaleAvailable/></Frame>
+          </DCArtboard>
+          <DCArtboard id="reorg-free-out" label="B · Free · Starter used · See options" width={AB} height={1240}>
+            <Frame height={1240}><ScrMemoryStaleFreeOut/></Frame>
+          </DCArtboard>
+          <DCArtboard id="reorg-plus-out" label="C · Plus · Monthly used · Resets Jun 1" width={AB} height={1240}>
+            <Frame height={1240}><ScrMemoryStalePlusOut/></Frame>
           </DCArtboard>
         </DCSection>
 
