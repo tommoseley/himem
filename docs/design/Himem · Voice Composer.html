@@ -47,19 +47,12 @@ function App() {
         </DCArtboard>
       </DCSection>
 
-      <DCSection id="countdown" title="Fresh-start countdown" subtitle="Workout-style two-phase ring. Bright draws in clockwise from 180° on Ready; dim overwrites counter-clockwise from 180° during 3·2·1. Continuous sweep. Soft haptic per second. Tap to cancel. Bypassed on Next.">
-        <DCArtboard id="cd-ready" label="Ready · ring drawing in" width={340} height={735}>
-          <ScrVCCountdownReady />
-        </DCArtboard>
-        <DCArtboard id="cd-3" label="3 · dim sweep starts" width={340} height={735}>
-          <ScrVCCountdown3 />
-        </DCArtboard>
-        <DCArtboard id="cd-2" label="2 · sweep at ~38%" width={340} height={735}>
-          <ScrVCCountdown2 />
-        </DCArtboard>
-        <DCArtboard id="cd-1" label="1 · bright crescent at 12 o'clock" width={340} height={735}>
-          <ScrVCCountdown1 />
-        </DCArtboard>
+      <DCSection id="breath" title="Fresh-start countdown · one breath" subtitle="One ochre ring fills clockwise in ~800ms with a 200ms tail. Italic caption inside. Caption rotates across recordings — index persisted in localStorage, advanced when the user commits to the recording (not on cancel). Sixteen captions in the rotation. Soft haptic at start, slightly stronger at the moment recording begins. Tap to cancel. Bypassed on Next-clip (mic never pauses).">
+        {BREATH_CAPTIONS.map((caption, i) => (
+          <DCArtboard key={i} id={`breath-${i}`} label={caption} width={340} height={735}>
+            <ScrVCBreath index={i}/>
+          </DCArtboard>
+        ))}
       </DCSection>
 
       <DCSection id="direct" title="Direct voice composer" subtitle="FAB on Today → Voice. Starts a fresh Memory.">

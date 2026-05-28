@@ -457,57 +457,61 @@ Object.assign(window, {
   ScrVCTightClip1,
   ScrVCTightMidRoll,
   ScrVCTightAppend,
-  ScrVCCountdownReady,
-  ScrVCCountdown3,
-  ScrVCCountdown2,
-  ScrVCCountdown1,
+  ScrVCBreath,
+  BREATH_CAPTIONS,
 });
 
 // ─────────────────────────────────────────────────────────────
-// Fresh-start countdown · steal Apple Workout's language.
-// 3 → 2 → 1 → "Listening" → recording UI.
-// Soft haptic per second. Subtle waveform waking up underneath.
-// Tap anywhere to cancel. Bypassed on Next-clip (mic never pauses).
+// Fresh-start countdown · revised May 27 2026.
+// One second. One ring fills clockwise. Centered caption.
+// "Tap to cancel" hint above. Soft haptic at start, slightly stronger at end.
+// Caption rotates across recordings — index persisted in localStorage,
+// incremented after each start. (Code: bump the index when the user
+// commits to the recording, NOT on cancel.)
+// Bypassed on Next-clip (mic never pauses).
 // ─────────────────────────────────────────────────────────────
-function CountdownRing({ phase = 'sweep', progress = 0, size = 200, stroke = 15 }) {
+
+const BREATH_CAPTIONS = [
+  'Ready when you are.',
+  'Start anywhere.',
+  'Whenever it comes.',
+  'Take your time.',
+  'Go ahead.',
+  'Say it naturally.',
+  "When you're ready.",
+  'Hold the thought.',
+  'Here when you need it.',
+  'Catch the thought.',
+  "Don't lose it.",
+  "We're ready.",
+  'Speak freely.',
+];
+
+function BreathRing({ progress = 1, size = 200, stroke = 14 }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const bright = PX.accentBright; // brighter than --accent for countdown readability
-  const dim = PX.accentDim;
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      {phase === 'draw' ? (
-        <svg width={size} height={size} style={{ position: 'absolute', inset: 0, transform: 'rotate(90deg)' }}>
-          <circle cx={size/2} cy={size/2} r={r}
-            fill="none" stroke={bright} strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={c}
-            strokeDashoffset={c * (1 - progress)}
-          />
-        </svg>
-      ) : (
-        <>
-          <svg width={size} height={size} style={{ position: 'absolute', inset: 0 }}>
-            <circle cx={size/2} cy={size/2} r={r}
-              fill="none" stroke={bright} strokeWidth={stroke}
-            />
-          </svg>
-          <svg width={size} height={size} style={{ position: 'absolute', inset: 0, transform: 'rotate(90deg) scaleX(-1)' }}>
-            <circle cx={size/2} cy={size/2} r={r}
-              fill="none" stroke={dim} strokeWidth={stroke}
-              strokeDasharray={c}
-              strokeDashoffset={c * (1 - progress)}
-            />
-          </svg>
-        </>
-      )}
+      {/* faint dim ring underneath — gives the bright fill something to fill against */}
+      <svg width={size} height={size} style={{ position: 'absolute', inset: 0 }}>
+        <circle cx={size/2} cy={size/2} r={r}
+          fill="none" stroke={PX.accentTint2} strokeWidth={stroke}
+        />
+      </svg>
+      {/* bright ring drawing in clockwise from 12 o'clock */}
+      <svg width={size} height={size} style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+        <circle cx={size/2} cy={size/2} r={r}
+          fill="none" stroke={PX.accent} strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - progress)}
+        />
+      </svg>
     </div>
   );
 }
 
-function WakingWaveform() { return null; }
-
-function CountdownBody({ display, phase = 'sweep', progress, isReady = false }) {
+function BreathBody({ caption, progress = 0.62 }) {
   return (
     <div style={{
       position: 'absolute', top: 110, left: 0, right: 0, bottom: 0,
@@ -522,63 +526,41 @@ function CountdownBody({ display, phase = 'sweep', progress, isReady = false }) 
         Tap to cancel
       </div>
 
-      {/* ring + number/word */}
+      {/* ring + caption inside */}
       <div style={{
         position: 'relative', width: 200, height: 200,
-        marginTop: 64,
+        marginTop: 84,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <CountdownRing phase={phase} progress={progress}/>
+        <BreathRing progress={progress}/>
         <div style={{
-          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", system-ui, sans-serif',
-          fontSize: isReady ? 44 : 108,
-          fontWeight: isReady ? 500 : 200,
-          letterSpacing: isReady ? -0.6 : -3.6,
-          lineHeight: 1, color: PX.ink,
-          fontVariantNumeric: 'tabular-nums',
+          fontFamily: PX.serif,
+          fontStyle: 'italic',
+          fontWeight: 400,
+          fontSize: 22,
+          lineHeight: 1.2,
+          letterSpacing: -0.2,
+          color: PX.ink,
+          textAlign: 'center',
+          padding: '0 18px',
           position: 'relative',
-        }}>{display}</div>
+        }}>{caption}</div>
       </div>
+
+      {/* spacer */}
+      <div style={{ flex: 1 }}/>
     </div>
   );
 }
 
-// 6a. "Ready" · bright ring drawing in clockwise from 180°
-function ScrVCCountdownReady() {
+// One screen per caption — used in the canvas to show the rotation.
+// All show the ring at ~62% progress so the rendered state is identical
+// across all sixteen — only the caption varies.
+function ScrVCBreath({ index = 0 }) {
   return (
     <PhoneScreen>
       <ComposerHeader />
-      <CountdownBody display="Ready" phase="draw" progress={0.72} isReady/>
-    </PhoneScreen>
-  );
-}
-
-// 6b. "3" · dim sweep starts CCW from 180° (just started)
-function ScrVCCountdown3() {
-  return (
-    <PhoneScreen>
-      <ComposerHeader />
-      <CountdownBody display="3" phase="sweep" progress={0.08}/>
-    </PhoneScreen>
-  );
-}
-
-// 7. "2" · dim sweep at ~38%
-function ScrVCCountdown2() {
-  return (
-    <PhoneScreen>
-      <ComposerHeader />
-      <CountdownBody display="2" phase="sweep" progress={0.38}/>
-    </PhoneScreen>
-  );
-}
-
-// 8. "1" · bright crescent at 12 o'clock
-function ScrVCCountdown1() {
-  return (
-    <PhoneScreen>
-      <ComposerHeader />
-      <CountdownBody display="1" phase="sweep" progress={0.72}/>
+      <BreathBody caption={BREATH_CAPTIONS[index]}/>
     </PhoneScreen>
   );
 }
