@@ -151,16 +151,29 @@ final class InboxManifest: ObservableObject {
     func recordTranscriptionAttempt(clipId: UUID, transcript: String) {
         guard let idx = clips.firstIndex(where: { $0.clipId == clipId }) else { return }
         let existing = clips[idx]
+        // CRITICAL: carry `rollGroupId` forward. Before 2026-05-27 this
+        // init call omitted `rollGroupId:`, defaulting it to nil, which
+        // silently wiped the on-a-roll session signal as soon as the
+        // phone's transcriber finished — and since every watch clip goes
+        // through transcription, every clip ended up nil-rolled.
+        // Downstream the grouper fell back to time+location and merged
+        // unrelated recordings into one session card. Carry every field
+        // forward verbatim except `transcript` and `transcriptionAttempted`.
+        //
+        // Also strip ASR leading-noise punctuation from the transcript
+        // — same cleaner used in `StorageService.createVoiceFragment`
+        // — so the Captured Clips card doesn't render ",.," prefixes.
         let updated = InboxClip(
             clipId: existing.clipId,
             capturedAt: existing.capturedAt,
             duration: existing.duration,
-            transcript: transcript,
+            transcript: JournalEntry.cleanedTranscript(transcript),
             latitude: existing.latitude,
             longitude: existing.longitude,
             source: existing.source,
             audioFilename: existing.audioFilename,
-            transcriptionAttempted: true
+            transcriptionAttempted: true,
+            rollGroupId: existing.rollGroupId
         )
         var next = clips
         next[idx] = updated

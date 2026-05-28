@@ -86,12 +86,44 @@ extension JournalEntry {
         }
     }
 
+    /// Characters that ASR sometimes emits at the start of a transcript
+    /// when the recognizer thinks the speaker began mid-sentence —
+    /// "‚..., So here's the thought…" or ",., I'm testing…". Tom's
+    /// 2026-05-27 screenshots showed both stored as content and
+    /// rendered as user-visible card titles + body text. Both call
+    /// sites strip this set + whitespace before display / persistence.
+    static let asrLeadingNoise: Set<Character> = [",", ".", "…", "—", "–", "-", ";", ":"]
+
+    /// Removes ASR leading-noise punctuation + whitespace from the
+    /// front of a transcript. Use at ingest (`StorageService
+    /// .createVoiceFragment`, `EntryLifecycleService
+    /// .updateMediaTranscript`) so the stored data is clean — both
+    /// what the user sees and what the AI prompt receives downstream.
+    static func cleanedTranscript(_ raw: String) -> String {
+        var s = Substring(raw)
+        while let first = s.first,
+              asrLeadingNoise.contains(first) || first.isWhitespace {
+            s = s.dropFirst()
+        }
+        return String(s)
+    }
+
     /// Falls back to the entry's content when the AI didn't return a title.
     /// Takes the first sentence or first ~10 words, trimmed and truncated to
     /// keep the card title compact. Returns nil for empty content (caller
     /// then uses the input-type fallback).
     static func derivedTitle(from content: String) -> String? {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        // Strip leading noise punctuation. Without this, a leading
+        // comma + ellipsis falls into the first-sentence split and
+        // produces a one-character title (",") — Tom's first
+        // 2026-05-27 screenshot.
+        while let first = trimmed.first,
+              Self.asrLeadingNoise.contains(first) || first.isWhitespace {
+            trimmed.removeFirst()
+        }
         guard !trimmed.isEmpty else { return nil }
 
         // First sentence / line: split on . ! ? newline.

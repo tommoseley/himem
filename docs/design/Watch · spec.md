@@ -56,25 +56,41 @@ Three ways the user starts a recording. Listed in order of speed.
 
 **This is the most important surface in the watch app.** Every design decision here cashes the "2 seconds from wrist to capture" promise.
 
-### Fresh-start countdown
+### Fresh-start countdown (revised May 27 2026)
 
-Before recording begins on a fresh start, the watch shows a two-phase countdown borrowed wholesale from Apple Workout:
+Before recording begins on a fresh start, the watch shows a one-second "breath" — same model as the phone, scaled for the smaller surface. Replaces the previous 3·2·1 countdown, which felt slow for a watch interaction.
 
-**Phase 1 · "Ready" (~600ms).** A bright ochre ring (`#E55A22` — a brightened ochre, more saturated than the brand `--accent`, picked for countdown readability on cream; 12pt stroke on watch / 15pt on phone) **draws in clockwise from 180°** (6 o'clock) while the word **Ready** sits centered. SF Pro Display 44pt, weight 500, white on black. Anchors the eye before the numbers arrive.
+**Single phase, ~1 second.** A bright ochre ring (`var(--accent)`, 10pt stroke on watch / 14pt on phone) **fills clockwise from 12 o'clock** over ~800ms, then holds for a 200ms tail. When the ring reaches the top, recording begins. No second phase, no number countdown.
 
-**Phase 2 · "3 · 2 · 1" (~3000ms).** Bright ring is now full. A **dim ochre overlay** (`#9A3815` — deeper ochre, still ochre, not muddy brown) **sweeps counter-clockwise from 180°**, overwriting the bright ring. Continuous sweep, not steps. Numerals 3 → 2 → 1 swap in time with the second-ticks; SF Pro Display 64pt on watch / 108pt on phone, weight 200. The ring's continuous sweep is the primary signal; the numbers are passengers. When the bright crescent closes at 0° (12 o'clock), recording begins.
+**Caption inside the ring.** Source Serif 4 italic, weight 400. 15pt on watch / 22pt on phone. Centered, single line. The caption gives the user a gentle beat to gather a thought without feeling like the app is waiting on them.
 
-**No "Listening" beat.** The ring closing at the top *is* the "go." Don't double the signal.
+**Caption rotates across recordings.** Index persisted in `UserDefaults` (watch) / shared via the App Group with the phone where practical. **Advance the index on commit**, not on cancel — otherwise canceling cycles through captions the user never read. Rotation array (13 entries, locked):
 
-**Soft haptic per second** — `.click` on watch, `UISelectionFeedbackGenerator.selectionChanged` on phone. Three pulses total. Not a buzz, not ticking audio.
+```
+"Ready when you are."
+"Start anywhere."
+"Whenever it comes."
+"Take your time."
+"Go ahead."
+"Say it naturally."
+"When you're ready."
+"Hold the thought."
+"Here when you need it."
+"Catch the thought."
+"Don't lose it."
+"We're ready."
+"Speak freely."
+```
 
-**Tap anywhere to cancel.** No ✕ press required — the whole screen is the cancel target. Returns to the previous surface (Capture page on watch, Today on phone, parent Memory on append).
+**Haptic pattern.** One `.click` at the start of the breath, one `.click` at the moment recording begins (the "go"). Both tactile-only. `.success` was tried and rejected — watchOS pairs it with an audible chime that breaks the quiet "you're free to speak" mood; tactile-only is the call here. No tick-tick-tick.
 
-**Fresh-start only.** Tapping the mic complication, app icon, or Siri opens into the countdown. On-a-roll **Next** bypasses it — the whole point of Next is the mic never pauses, and a 3-second wait would kill that contract.
+**Tap anywhere to cancel.** The whole screen is the cancel target. Returns to the previous surface (Capture page on watch, Today on phone, parent Memory on append). Sub-1-second user reaction is unlikely but supported.
 
-**Settings opt-out.** Power users can disable in *Settings → Capture → Skip countdown*. Default on. Reduced Motion users see the numbers without ring animation but countdown still runs.
+**Fresh-start only.** Tapping the mic complication, app icon, or Siri opens into the breath. On-a-roll **Next** bypasses it — the whole point of Next is the mic never pauses, and any wait would kill that contract.
 
-Why: the previous 2-second-minimum debounce meant a real possibility of a tap-record-immediately-tap-stop cycle producing nothing. The countdown is a calm pause to gather a thought, not a barrier. Calm, lightweight, breathable.
+**Settings opt-out.** Power users can disable in *Settings → Capture → Skip the breath*. Default on. Reduced Motion users see the caption + filled ring without the fill animation; recording still starts after the same total duration (~1 second), so the rhythm of "you have a beat before mic-hot" is preserved.
+
+Why: the previous 3-second countdown felt like theater for an interaction the user had already committed to. One beat is enough to gather a thought; more is wait time.
 
 ### Canonical layout (V1 · shipping)
 

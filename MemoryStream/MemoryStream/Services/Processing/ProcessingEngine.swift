@@ -44,10 +44,18 @@ final class ProcessingEngine {
         let content = entry.content
         let context = storage.backgroundContext()
 
-        // Mark as processing — using the background context's copy
+        // Mark as processing — using the background context's copy.
+        // Lazily mints a ProcessingTask when one is missing: free-tier
+        // saves don't create a task (would leave the entry stuck on
+        // "Queued"), so the manual Organize tap arrives here with no
+        // task to advance. Mint it on the spot rather than silently
+        // bailing on `guard let task`.
         await context.perform {
             do {
                 let bgEntry = try context.existingObject(with: objectID) as! JournalEntry
+                if bgEntry.latestProcessingTask == nil {
+                    _ = try self.storage.createProcessingTask(for: bgEntry, context: context)
+                }
                 guard let task = bgEntry.latestProcessingTask else { return }
                 task.status = ProcessingTask.Status.processing.rawValue
                 task.progressDescription = "Raw note saved. The app is extracting entities and content intent."

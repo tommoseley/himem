@@ -259,17 +259,55 @@ struct OnARollTests {
         #expect(ClipSessionGrouper.sameSession(a, b) == false)
     }
 
-    @Test func sameSession_mixedNilAndNonNilRollGroupIds_fallBackToHeuristic() {
-        // One clip has a rollId (post-feature) and the other doesn't
-        // (legacy). They can't have come from the same roll
-        // structurally, so we fall back to time+location — and they
-        // happen to be close enough here, so they group.
+    @Test func sameSession_mixedNilAndNonNilRollGroupIds_doNotGroup() {
+        // One clip has a rollId, the other doesn't. By the
+        // rollGroupId invariant (every clip in one Record→Stop cycle
+        // shares the id), they CANNOT be from the same recording.
+        // Pre-2026-05-27 this fell back to time+location and merged
+        // nearby clips — that produced Tom's "5.5 min apart, merged"
+        // screenshot. Now mixed-nil always splits.
         let near = Date(timeIntervalSinceReferenceDate: 0)
         let later = near.addingTimeInterval(30)
         let a = clip(captured: near, latitude: 33.0, longitude: -117.0, rollGroupId: UUID())
         let b = clip(captured: later, latitude: 33.0, longitude: -117.0, rollGroupId: nil)
 
-        #expect(ClipSessionGrouper.sameSession(a, b) == true)
+        #expect(ClipSessionGrouper.sameSession(a, b) == false)
+    }
+
+    /// Money test for the 2026-05-27 stacking bug. Reproduces Tom's
+    /// screenshot exactly: two separate Record→Stop recordings ~5.5
+    /// min apart, no location data. Before the fix: merged into one
+    /// session card via the 10-min time window + mixed-nil fallback.
+    /// After: split into two cards.
+    @Test func sameSession_twoSeparateRecordings_doNotGroup_perScreenshotBug() {
+        let firstStart = Date(timeIntervalSinceReferenceDate: 0)
+        // 5 min 29 s — matches the "+329s" offset shown in the
+        // grouped-session card.
+        let secondStart = firstStart.addingTimeInterval(329)
+
+        // Both clips carry their own (different) rollGroupIds — the
+        // normal case when the watch generates a fresh UUID per
+        // start(). Pre-fix this already split (different non-nil
+        // ids), but Tom's data shows they were merging anyway, so
+        // also covering the mixed-nil regression below.
+        let a = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: UUID())
+        let b = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: UUID())
+        #expect(ClipSessionGrouper.sameSession(a, b) == false)
+
+        // Also verify the mixed-nil regression case: one clip has a
+        // rollGroupId, the other doesn't (e.g. one came in via a
+        // legacy code path). Before 2026-05-27 this merged via the
+        // 10-min window even at 5.5 min apart.
+        let c = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: UUID())
+        let d = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: nil)
+        #expect(ClipSessionGrouper.sameSession(c, d) == false)
+
+        // And both-nil at 5.5 min apart: previously inside the 10-min
+        // window so merged; now outside the tightened 3-min window so
+        // splits.
+        let e = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: nil)
+        let f = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: nil)
+        #expect(ClipSessionGrouper.sameSession(e, f) == false)
     }
 
     // MARK: - VoiceClipSplitter offset math (PR 4)

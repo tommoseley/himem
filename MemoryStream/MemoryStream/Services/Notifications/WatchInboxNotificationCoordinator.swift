@@ -80,13 +80,17 @@ final class WatchInboxNotificationCoordinator {
     static let actionSnooze4hIdentifier = "snooze_4h"
     static let actionMuteTodayIdentifier = "mute_today"
 
-    /// UN request identifiers. Inbox push uses a single id (newer pushes
-    /// replace older ones in Notification Center). Stale pushes are
-    /// keyed by clipId.
-    private static let inboxRequestId = "watch_inbox_arrival"
-    private static func staleRequestId(for clipId: UUID) -> String {
-        "watch_inbox_stale_\(clipId.uuidString)"
-    }
+    /// UN request identifiers. All three notification surfaces use a
+    /// single stable identifier each so iOS replaces a prior delivered
+    /// notification in Notification Center rather than letting them
+    /// stack. Per `docs/design/CLAUDE.md` → Notifications, Channel A:
+    /// "one pending notification at a time, body re-rendered in place."
+    /// Before 2026-05-26 the stale and single-passive identifiers
+    /// embedded clipId / a fresh UUID, which is what produced Tom's
+    /// "three stacked stale notifications" screenshot.
+    static let inboxRequestId = "watch_inbox_arrival"
+    static let inboxStaleRequestId = "watch_inbox_stale"
+    static let inboxSinglePassiveRequestId = "watch_inbox_single"
 
     // MARK: - Persisted state
 
@@ -155,15 +159,21 @@ final class WatchInboxNotificationCoordinator {
     }
 
     /// Called when a clip leaves the inbox (moved into an Entry or
-    /// discarded). Cancels its pending stale trigger and the
-    /// `staleFires` counter so future pings start fresh if a *new*
-    /// clip with the same id ever appears (won't happen in practice
-    /// because we use UUIDs, but cheap to clean).
+    /// discarded). The stale notification is shared across clips
+    /// (single identifier), so we only cancel + clear the per-clip
+    /// fire counter when the inbox becomes empty after this removal.
+    /// Otherwise the pending stale should still fire for the
+    /// remaining clips.
     func clipRemoved(clipId: UUID) {
-        cancelStaleTrigger(for: clipId)
         var fires = staleFiresByClip
         fires.removeValue(forKey: clipId.uuidString)
         staleFiresByClip = fires
+        if InboxManifest.shared.count == 0 {
+            cancelPendingStaleNotification()
+            UNUserNotificationCenter.current().removeDeliveredNotifications(
+                withIdentifiers: [Self.inboxStaleRequestId, Self.inboxSinglePassiveRequestId, Self.inboxRequestId]
+            )
+        }
     }
 
     /// Inline action handler — called from the
@@ -230,15 +240,20 @@ final class WatchInboxNotificationCoordinator {
 
     // MARK: - Single-clip passive push
 
-    /// Posts a silent `.passive` notification announcing a single new
-    /// clip, IFF the app isn't foreground and the user hasn't snoozed
-    /// or muted. `.passive` notifications land in Notification Center
-    /// and on the lock screen without lighting the screen, vibrating,
-    /// or playing a sound — so they're exempt from the daily-cap /
-    /// 4-hour suppression / quiet-hours rules that exist to control
-    /// active-push fatigue. Each fire uses a unique request id so
-    /// multiple passive notifications can coexist in Notification
-    /// Center until the user opens the inbox.
+    /// Posts a silent `.passive` notification announcing the inbox
+    /// has new clips, IFF the app isn't foreground and the user hasn't
+    /// snoozed or muted. `.passive` lands in Notification Center / on
+    /// the lock screen without lighting the screen, vibrating, or
+    /// playing a sound — exempt from daily-cap / 4-hour suppression /
+    /// quiet-hours rules that exist to control active-push fatigue.
+    ///
+    /// **Single stable identifier**: per the May 2026 spec
+    /// (`docs/design/CLAUDE.md` → Notifications, Channel A), there is
+    /// one pending captured-clips notification at a time. Subsequent
+    /// arrivals replace the prior delivered notification in place with
+    /// updated body + badge. Before this fix the identifier embedded a
+    /// fresh UUID, so passive notifications stacked in Notification
+    /// Center until manually dismissed.
     private func firePassiveSingleClipPushIfAllowed(now: Date) {
         let gate = SingleClipPushGate.evaluate(
             isAppForeground: UIApplication.shared.applicationState == .active,
@@ -251,25 +266,34 @@ final class WatchInboxNotificationCoordinator {
             return
         }
 
+        let inboxCount = InboxManifest.shared.count
         let content = UNMutableNotificationContent()
         content.title = "HiMem"
-        content.body = "New voice clip from your Watch"
+        content.body = passiveBody(count: inboxCount)
         content.categoryIdentifier = Self.categoryIdentifier
         content.userInfo = ["reason": "single"]
-        content.badge = NSNumber(value: InboxManifest.shared.count)
+        content.badge = NSNumber(value: inboxCount)
         content.sound = nil
         content.interruptionLevel = .passive
 
         let request = UNNotificationRequest(
-            identifier: "watch_inbox_single_\(UUID().uuidString)",
+            identifier: Self.inboxSinglePassiveRequestId,
             content: content,
             trigger: nil
+        )
+        // Clear any prior delivered passive notification with this id so
+        // the new fire replaces it in Notification Center rather than
+        // stacking. Without this, iOS would still leave the prior one
+        // visible (replacement happens on identifier match for pending,
+        // not delivered).
+        UNUserNotificationCenter.current().removeDeliveredNotifications(
+            withIdentifiers: [Self.inboxSinglePassiveRequestId]
         )
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
                 NSLog("[Himem][Notify] single-clip passive fire failed: \(error.localizedDescription)")
             } else {
-                NSLog("[Himem][Notify] single-clip passive fired")
+                NSLog("[Himem][Notify] single-clip passive fired (count=\(inboxCount))")
             }
         }
         // Deliberately do NOT update lastPushAt — passive notifications
@@ -296,9 +320,17 @@ final class WatchInboxNotificationCoordinator {
         content.badge = NSNumber(value: InboxManifest.shared.count)
 
         let request = UNNotificationRequest(
-            identifier: Self.staleRequestId(for: clipId),
+            identifier: Self.inboxStaleRequestId,
             content: content,
             trigger: trigger
+        )
+        // Clear any prior delivered stale notification with the shared
+        // identifier so the user sees ONE stale notification at most.
+        // Without this, iOS leaves prior delivered notifications in
+        // Notification Center even when a new request with the same id
+        // is scheduled (replacement happens for pending only).
+        UNUserNotificationCenter.current().removeDeliveredNotifications(
+            withIdentifiers: [Self.inboxStaleRequestId]
         )
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
@@ -307,9 +339,12 @@ final class WatchInboxNotificationCoordinator {
         }
     }
 
-    private func cancelStaleTrigger(for clipId: UUID) {
+    /// Cancels the (single, shared) pending stale notification. Used
+    /// when the inbox is fully cleared — the spec says the notification
+    /// should disappear when the user clears the inbox.
+    private func cancelPendingStaleNotification() {
         UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: [Self.staleRequestId(for: clipId)]
+            withIdentifiers: [Self.inboxStaleRequestId]
         )
     }
 
@@ -419,6 +454,15 @@ final class WatchInboxNotificationCoordinator {
 
     private func staleBody() -> String {
         "Some clips are still waiting to be organized"
+    }
+
+    /// Passive single-clip body. Single clip reads naturally; multi-
+    /// clip uses the count so the user sees the in-place update when
+    /// a new arrival re-renders the existing notification body.
+    private func passiveBody(count: Int) -> String {
+        count <= 1
+            ? "New voice clip from your Watch"
+            : "\(count) voice clips waiting"
     }
 
     // MARK: - UserDefaults accessors

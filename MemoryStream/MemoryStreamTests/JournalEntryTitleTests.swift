@@ -112,4 +112,88 @@ struct JournalEntryTitleTests {
         let content = "First flower! On the cherry tomato."
         #expect(JournalEntry.derivedTitle(from: content) == "First flower")
     }
+
+    /// Money test for the 2026-05-27 ",..." title bug. The phone-side
+    /// ASR sometimes emits a stray leading comma + ellipsis when it
+    /// thinks the speaker was mid-sentence ("‚..., So here's the
+    /// thought…"). Pre-fix, the sentence splitter treated the first
+    /// dot of the ellipsis as a terminator and produced a single-
+    /// character title (just the comma) — exactly what Tom's
+    /// screenshot showed.
+    @Test func leadingCommaAndEllipsis_strippedBeforeSentenceSplit() {
+        let content = ",... So here's the thought I had.  Pill organizers."
+        #expect(JournalEntry.derivedTitle(from: content) == "So here's the thought I had")
+    }
+
+    @Test func leadingEllipsisOnly_stripped() {
+        let content = "… Then I started thinking about projects."
+        #expect(JournalEntry.derivedTitle(from: content) == "Then I started thinking about projects")
+    }
+
+    @Test func leadingThreeDots_stripped() {
+        // ASCII ellipsis (three dots) — same shape as Tom's case but
+        // without the leading comma.
+        let content = "... I was just walking the dog."
+        #expect(JournalEntry.derivedTitle(from: content) == "I was just walking the dog")
+    }
+
+    @Test func leadingDash_stripped() {
+        // Em-dash / en-dash / hyphen — also common ASR artifacts at
+        // the start when the speaker began mid-thought.
+        let content = "— The tomatoes are early."
+        #expect(JournalEntry.derivedTitle(from: content) == "The tomatoes are early")
+    }
+
+    @Test func onlyLeadingNoise_returnsNil() {
+        // Content that's nothing but noise punctuation falls through
+        // to nil so the caller uses the input-type placeholder
+        // instead of rendering an empty card title.
+        #expect(JournalEntry.derivedTitle(from: ",...") == nil)
+        #expect(JournalEntry.derivedTitle(from: "…—  ") == nil)
+    }
+
+    // MARK: - cleanedTranscript (ingest-time transcript scrubber)
+
+    /// Money test for the 2026-05-27 ",.," body-text bug. The
+    /// phone-side ASR sometimes emits a stray leading punctuation
+    /// cluster ("`,., I'm testing…`") when the recognizer thought
+    /// the speaker began mid-sentence. The title was already cleaned
+    /// by `derivedTitle`'s stripping, but `entry.content` (the body
+    /// shown on the detail card) still rendered the raw noise. This
+    /// scrubber runs at ingest in `StorageService.createVoiceFragment`
+    /// and `InboxManifest.recordTranscriptionAttempt` so stored data
+    /// and downstream consumers (AI prompt, search) see clean text.
+    @Test func cleanedTranscript_stripsLeadingCommaDotComma() {
+        let raw = ",., I'm testing out this new app that I have here."
+        #expect(JournalEntry.cleanedTranscript(raw) == "I'm testing out this new app that I have here.")
+    }
+
+    @Test func cleanedTranscript_stripsLeadingCommaEllipsis() {
+        let raw = ",... So here's the thought I had."
+        #expect(JournalEntry.cleanedTranscript(raw) == "So here's the thought I had.")
+    }
+
+    @Test func cleanedTranscript_stripsLeadingUnicodeEllipsis() {
+        // Single U+2026 character variant.
+        let raw = "… Then I started thinking."
+        #expect(JournalEntry.cleanedTranscript(raw) == "Then I started thinking.")
+    }
+
+    @Test func cleanedTranscript_preservesInternalPunctuation() {
+        // Only leading noise is stripped — punctuation inside the
+        // body (commas, ellipses, dashes) stays intact.
+        let raw = "I had a thought, and… you know how it goes."
+        #expect(JournalEntry.cleanedTranscript(raw) == "I had a thought, and… you know how it goes.")
+    }
+
+    @Test func cleanedTranscript_preservesCleanTranscript() {
+        let raw = "I'm testing out this new app that I have here."
+        #expect(JournalEntry.cleanedTranscript(raw) == raw)
+    }
+
+    @Test func cleanedTranscript_allNoise_returnsEmpty() {
+        #expect(JournalEntry.cleanedTranscript(",.,") == "")
+        #expect(JournalEntry.cleanedTranscript("   …—  ") == "")
+        #expect(JournalEntry.cleanedTranscript("") == "")
+    }
 }

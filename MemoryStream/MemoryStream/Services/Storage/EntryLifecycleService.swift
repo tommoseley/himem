@@ -290,6 +290,19 @@ final class EntryLifecycleService {
                     audioFilename: voiceFilename,
                     transcript: content
                 )
+                // Re-derive `entry.content` from the just-created
+                // voice fragment so it matches the cleaned text. The
+                // raw `content` we wrote to `entry.content` above may
+                // carry ASR leading noise (e.g. ". foo…") that
+                // `createVoiceFragment` stripped from the fragment
+                // transcript. If we leave `entry.content` raw,
+                // `FragmentMigration` sees a mismatch between
+                // `entry.content` and the fragments and mints a
+                // duplicate `.note` to "preserve" the unfragmented
+                // text — Tom's 2026-05-27 screenshot showed the same
+                // recording appearing twice on one entry.
+                entry.content = Self.joinedContent(from: entry)
+                try storage.save(context: storage.viewContext)
             }
 
             if let topicName {
@@ -649,7 +662,8 @@ final class EntryLifecycleService {
     /// `tryConsumeAssist()` is what actually decrements.
     private func processEntry(_ entry: JournalEntry) {
         guard let processingEngine else { return }
-        Task.detached {
+        let entryID = entry.objectID
+        Task.detached { [storage] in
             let shouldProcess: Bool = await MainActor.run {
                 let entitlement = EntitlementService.shared
                 switch entitlement.tier {
@@ -665,8 +679,32 @@ final class EntryLifecycleService {
                     return entitlement.canAutoOrganize
                 }
             }
-            guard shouldProcess else { return }
+            if !shouldProcess {
+                // The save path already minted a `.pending` task on
+                // the assumption auto-org would pick it up. For
+                // manual-only tiers (Free, or Plus at budget cap),
+                // the engine never runs and the task sits pending
+                // forever — UI renders "Queued" / "Working…
+                // Inquiring with the AI" indefinitely (Tom's
+                // 2026-05-27 screenshot). Delete the stale task so
+                // the UI shows the "Organize with AI" card. The
+                // engine's lazy-create path mints a fresh one when
+                // the user actually taps Organize.
+                await Self.dropPendingTask(forEntryID: entryID, storage: storage)
+                return
+            }
             await processingEngine.processEntry(entry)
+        }
+    }
+
+    private static func dropPendingTask(forEntryID entryID: NSManagedObjectID, storage: StorageService) async {
+        await MainActor.run {
+            let ctx = storage.viewContext
+            guard let entry = try? ctx.existingObject(with: entryID) as? JournalEntry,
+                  let task = entry.latestProcessingTask,
+                  task.statusEnum == .pending else { return }
+            ctx.delete(task)
+            try? storage.save(context: ctx)
         }
     }
 

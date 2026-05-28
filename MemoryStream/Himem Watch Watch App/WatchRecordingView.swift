@@ -22,29 +22,26 @@ struct WatchRecordingView: View {
     @StateObject private var nextController: NextClipController
     @State private var didAutoStart = false
     @State private var showDiscardConfirm = false
-    /// Two-phase entry into the recording surface per the v2 spec:
-    /// every fresh start (complication, app-icon, Siri) lands on the
-    /// "Ready" phase first (bright ring draws in clockwise from 180°
-    /// over ~600ms), then transitions to the 3·2·1 countdown phase
-    /// (dim overlay sweeps CCW from 180° continuously over 3s). No
-    /// "Listening" beat — the ring closing at 12 o'clock is the "go."
-    /// Next taps within a roll skip the countdown entirely.
-    @State private var phase: RecordingPhase = .ready
-    /// Handle to the active countdown driver Task so cancel (tap
-    /// anywhere) can abort the timer before it transitions to
-    /// `.recording` and starts the mic.
+    /// One-breath entry into the recording surface per the May 27
+    /// 2026 spec revision. A single ochre ring fills clockwise in
+    /// ~1s; italic serif caption inside rotates across recordings
+    /// from the shared `BreathCaption` list. Next taps within a
+    /// roll skip the breath entirely — the mic never pauses on
+    /// Next per the on-a-roll contract.
+    @State private var phase: RecordingPhase = .breathing
+    /// Handle to the active breath driver Task so cancel (tap
+    /// anywhere) can abort before the mic goes hot.
     @State private var countdownTask: Task<Void, Never>? = nil
-    /// Ring progress for Phase 1 (bright stroke drawing in). 0…1
-    /// driven by an explicit SwiftUI `withAnimation`.
-    @State private var drawProgress: CGFloat = 0
-    /// Ring progress for Phase 2 (dim overlay sweeping over the
-    /// bright ring). 0…1 driven by an explicit SwiftUI animation
-    /// scheduled to last the full 3s of the count.
-    @State private var sweepProgress: CGFloat = 0
+    /// Ring progress 0…1 driven by an explicit SwiftUI animation
+    /// over the 1s breath.
+    @State private var breathProgress: CGFloat = 0
+    /// Caption index for the current breath. Read from UserDefaults
+    /// on first appear; the persisted store is bumped only when the
+    /// user commits to recording, not on cancel.
+    @State private var breathCaptionIndex: Int = 0
 
     enum RecordingPhase: Equatable {
-        case ready            // Phase 1 — bright draw-in (~600ms)
-        case countdown(Int)   // Phase 2 — 3, 2, 1 with CCW dim sweep
+        case breathing        // one-breath ring fill (~1s)
         case recording        // mic hot
         case denied           // permission refused
     }
@@ -73,18 +70,18 @@ struct WatchRecordingView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             switch phase {
-            case .ready, .countdown:
-                countdownContent
+            case .breathing:
+                breathContent
             case .denied:
                 permissionDeniedContent
             case .recording:
                 recordingContent
             }
-            // Per v2 spec: ✕ corner glyph is hidden during the
-            // countdown. The whole screen is the cancel target —
-            // single affordance. The ✕ only re-renders once we're in
-            // the recording phase, where it's the explicit discard
-            // path with the two-tap confirm.
+            // ✕ corner glyph is hidden during the breath. The whole
+            // screen is the cancel target — single affordance. The
+            // ✕ only re-renders once we're in the recording phase,
+            // where it's the explicit discard path with the two-tap
+            // confirm.
             if phase == .recording {
                 cancelButton
                     .padding(.leading, 8)
@@ -130,39 +127,33 @@ struct WatchRecordingView: View {
         .padding(.bottom, 8)
     }
 
-    // MARK: - Countdown content (phase = .ready / .countdown)
+    // MARK: - Breath content (phase = .breathing)
 
-    /// Two-phase countdown panel per the v2 spec. Phase 1 ("Ready")
-    /// shows the bright ring drawing in clockwise from 180°. Phase 2
-    /// (3 · 2 · 1) shows the full bright ring with a dim overlay
-    /// sweeping CCW from 180° continuously over 3 seconds. Numerals
-    /// swap at second ticks but the ring is the primary signal.
-    /// Tap anywhere cancels and routes back to home.
+    /// One-breath panel per the May 27 2026 spec. Faint accent
+    /// underlay; bright accent ring fills clockwise from 12 o'clock
+    /// over ~1s; italic serif caption inside (from the shared
+    /// `BreathCaption` rotation). Tap anywhere cancels and routes
+    /// back to home.
     @ViewBuilder
-    private var countdownContent: some View {
-        let display = countdownLabel
-        let isWord = phase == .ready
+    private var breathContent: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 6)
             Text("TAP TO CANCEL")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(1.2)
                 .foregroundStyle(Color.white.opacity(0.5))
-                .padding(.top, 6)
+                .padding(.top, 0)
+                .offset(y: -4)
             Spacer()
             ZStack {
-                CountdownRing(
-                    phase: phase,
-                    drawProgress: drawProgress,
-                    sweepProgress: sweepProgress,
-                    stroke: 12
-                )
-                Text(display)
-                    .font(.system(size: isWord ? 30 : 64,
-                                  weight: isWord ? .medium : .thin)
-                        .monospacedDigit())
-                    .tracking(isWord ? -0.6 : -2.2)
+                BreathRing(progress: breathProgress, stroke: 10)
+                Text(BreathCaption.caption(forIndex: breathCaptionIndex))
+                    .font(.system(size: 15, design: .serif).italic())
+                    .tracking(-0.2)
                     .foregroundStyle(Color.white)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(1)
+                    .padding(.horizontal, 14)
             }
             .frame(width: 128, height: 128)
             Spacer()
@@ -189,14 +180,6 @@ struct WatchRecordingView: View {
             Spacer()
         }
         .padding(.horizontal, 16)
-    }
-
-    private var countdownLabel: String {
-        switch phase {
-        case .ready:            return "Ready"
-        case .countdown(let n): return "\(n)"
-        default:                return ""
-        }
     }
 
     // MARK: - REC indicator
@@ -415,13 +398,13 @@ struct WatchRecordingView: View {
     /// that's the V3 anti-pattern.
     private var cancelButton: some View {
         Button {
-            // During the ready / countdown / denied phases the
-            // recorder isn't hot yet — cancel routes straight home
-            // without a confirm. In the recording phase, behavior
-            // matches before: empty clip on the first clip discards
+            // During the breathing / denied phases the recorder
+            // isn't hot yet — cancel routes straight home without a
+            // confirm. In the recording phase, behavior matches
+            // before: empty clip on the first clip discards
             // silently; otherwise the two-tap confirm fires.
             switch phase {
-            case .ready, .countdown, .denied:
+            case .breathing, .denied:
                 cancelCountdown()
             case .recording:
                 let currentClipEmpty = recording.elapsed < 1.0 || recording.peakAudioLevel < 0.1
@@ -464,61 +447,57 @@ struct WatchRecordingView: View {
     private func handleAppear() {
         guard !didAutoStart else { return }
         didAutoStart = true
+        // Snapshot the persisted caption index NOW so we show the
+        // right line on the first frame. The index only moves
+        // forward in `runBreath`'s commit path.
+        breathCaptionIndex = UserDefaults.standard.integer(forKey: BreathCaption.defaultsKey)
         countdownTask = Task { @MainActor in
-            // Pre-fetch mic permission before the sweep so the system
-            // prompt doesn't interrupt the countdown on first launch.
+            // Pre-fetch mic permission before the breath so the
+            // system prompt doesn't interrupt the animation on
+            // first launch.
             let granted = await recording.ensureMicPermission()
             guard !Task.isCancelled else { return }
             guard granted else { phase = .denied; return }
-            await runCountdown()
+            await runBreath()
         }
     }
 
-    /// Drives the two-phase countdown:
-    ///  • Phase 1 ("Ready"): bright ring draws in clockwise from
-    ///    180° over 600ms. Anchors the eye before the numbers arrive.
-    ///  • Phase 2 (3 → 2 → 1): bright ring is full; dim overlay
-    ///    sweeps CCW from 180° continuously over 3s. Numerals swap
-    ///    each second with a `.click` haptic. No "Listening" beat —
-    ///    the ring closing at 12 o'clock IS the "go," and recording
-    ///    starts the moment the count reaches zero.
+    /// Drives the one-breath fresh-start per the May 27 2026 spec:
+    ///  • Single ochre ring fills clockwise from 12 o'clock over
+    ///    ~800ms with a 200ms tail. Italic serif caption inside
+    ///    rotates across recordings.
+    ///  • Two `.click` haptics — one at the start of the breath,
+    ///    one at the moment recording begins (the "go" cue).
+    ///    Both are tactile-only; `.success` was rejected because
+    ///    watchOS pairs it with an audible chime that doesn't fit
+    ///    the quiet "you're free to speak" mood.
+    ///  • Tap anywhere cancels; bypassed on Next-clip.
     ///
-    /// Reduced Motion: progress values snap instead of animating;
-    /// the numerals still change per spec.
+    /// Reduced Motion: progress snaps to 1 instead of animating,
+    /// but the same ~1s wait still elapses so the rhythm of "you
+    /// have a beat before mic-hot" is preserved.
     @MainActor
-    private func runCountdown() async {
+    private func runBreath() async {
         let reduceMotion = WKAccessibilityIsReduceMotionEnabled()
 
-        // Phase 1: Ready (600ms, bright ring draws in). Animation
-        // is declared at the view level via `.animation(...)`; just
-        // assign the target value here. For Reduced Motion, wrap the
-        // assignment in a no-animation transaction so the view
-        // modifier doesn't kick in either.
-        phase = .ready
-        snap(&drawProgress, to: 0, animated: false)
-        snap(&sweepProgress, to: 0, animated: false)
-        snap(&drawProgress, to: 1, animated: !reduceMotion)
-        try? await Task.sleep(nanoseconds: 600_000_000)
-        if Task.isCancelled { return }
-
-        // Phase 2: 3 · 2 · 1 (3s continuous dim sweep CCW).
-        phase = .countdown(3)
+        phase = .breathing
+        snap(&breathProgress, to: 0, animated: false)
         WKInterfaceDevice.current().play(.click)
-        snap(&sweepProgress, to: 1, animated: !reduceMotion)
+        snap(&breathProgress, to: 1, animated: !reduceMotion)
         try? await Task.sleep(nanoseconds: 1_000_000_000)
         if Task.isCancelled { return }
 
-        phase = .countdown(2)
+        // Commit haptic — the "go." Tactile-only `.click`; no
+        // chime.
         WKInterfaceDevice.current().play(.click)
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        if Task.isCancelled { return }
 
-        phase = .countdown(1)
-        WKInterfaceDevice.current().play(.click)
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        if Task.isCancelled { return }
+        // Bump the persisted caption index now that the user has
+        // committed to recording. Cancels never advance the index.
+        let next = BreathCaption.nextIndex(after: breathCaptionIndex)
+        breathCaptionIndex = next
+        UserDefaults.standard.set(next, forKey: BreathCaption.defaultsKey)
 
-        // Ring crescent has closed — recording begins now.
+        // Ring is full — recording begins now.
         await recording.start()
         if recording.isRecording {
             nextController.sessionDidStart()
@@ -604,83 +583,34 @@ struct WatchRecordingView: View {
     }
 }
 
-/// Two-phase fresh-start countdown ring per the v2 spec.
-///
-///  • Phase 1 (`.ready`): bright ochre stroke **draws in clockwise
-///    from 180°** (6 o'clock) as `drawProgress` goes 0 → 1. Round
-///    cap so the leading edge reads cleanly.
-///  • Phase 2 (`.countdown`): bright full ring is the base; a dim
-///    ochre overlay (`#6B2510`) **sweeps counter-clockwise from
-///    180°** as `sweepProgress` goes 0 → 1, "eating" the bright
-///    ring down to a crescent at 12 o'clock. Butt cap on the dim
-///    overlay so the sweep edge is a clean radial line.
-///
-/// The animations themselves are driven by the parent via explicit
-/// `withAnimation` calls — this view just reads the current values.
-struct CountdownRing: View {
-    var phase: WatchRecordingView.RecordingPhase
-    var drawProgress: CGFloat
-    var sweepProgress: CGFloat
-    var stroke: CGFloat = 12
-
-    /// Countdown-specific ochre palette — intentionally brighter
-    /// than the brand `WatchTheme.accent` (`#C64A1C`) per spec
-    /// `Watch · spec-2.md`: "a brightened ochre, more saturated
-    /// than the brand --accent for countdown readability." Both
-    /// values inlined here rather than in `WatchTheme` because they
-    /// only exist for the countdown surface.
-    private var brightOchre: Color {
-        Color(red: 0xE5/255, green: 0x5A/255, blue: 0x22/255)
-    }
-    private var dimOchre: Color {
-        Color(red: 0x9A/255, green: 0x38/255, blue: 0x15/255)
-    }
-
-    private var isCountdown: Bool {
-        if case .countdown = phase { return true } else { return false }
-    }
+/// One-breath fresh-start ring per the May 27 2026 spec — watch
+/// side. Faint accent underlay against pure black so the partial
+/// fill reads against something; bright accent stroke trims from
+/// 0 → 1 clockwise starting at 12 o'clock. Mirrors the phone's
+/// `BreathRing` in `VoiceCaptureScreen.swift`; sized for the watch
+/// (128pt frame, 10pt stroke).
+struct BreathRing: View {
+    var progress: CGFloat
+    var stroke: CGFloat = 10
 
     var body: some View {
-        // All three layers are ALWAYS rendered, just opacity-gated
-        // per phase. That gives SwiftUI a stable view identity
-        // across `.ready → .countdown` transitions so the
-        // `.animation(value:)` modifier can interpolate trim
-        // changes cleanly. The previous switch-based structure
-        // created the dim overlay fresh on phase change, which left
-        // it with no prior value to animate from — sweepProgress
-        // jumped to 1 instantly.
         ZStack {
-            // Phase 1: bright stroke drawing in clockwise from 180°.
+            // Faint underlay — `accent` at low alpha against the
+            // OLED-black background. Watch palette doesn't have
+            // an explicit `accentTint2` token so we derive one
+            // inline.
             Circle()
-                .trim(from: 0, to: drawProgress)
-                .stroke(brightOchre,
+                .stroke(WatchTheme.accent.opacity(0.18),
+                        style: StrokeStyle(lineWidth: stroke))
+
+            // Bright ochre fill, clockwise from 12 o'clock. 1s
+            // linear matches the phone driver.
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(WatchTheme.accent,
                         style: StrokeStyle(lineWidth: stroke, lineCap: .round))
-                .rotationEffect(.degrees(90))
-                .opacity(phase == .ready ? 1 : 0)
-                .animation(.linear(duration: 0.6), value: drawProgress)
-
-            // Phase 2: bright full base ring. Identical to the
-            // completed Phase 1 draw-in — invisible swap between
-            // phases.
-            Circle()
-                .stroke(brightOchre, lineWidth: stroke)
-                .opacity(isCountdown ? 1 : 0)
-
-            // Phase 2: dim overlay — single arc, CCW from 12
-            // o'clock, 120°/sec (full circle in 3s). Default
-            // SwiftUI circle path is CW from 3 o'clock;
-            // `rotationEffect(-90°)` moves the start to 12,
-            // `scaleEffect(x: -1)` flips the visual direction to
-            // CCW. `trim(from: 0, to: sweepProgress)` grows the
-            // arc from 12 toward 9 → 6 → 3 → 12.
-            Circle()
-                .trim(from: 0, to: sweepProgress)
-                .stroke(dimOchre,
-                        style: StrokeStyle(lineWidth: stroke, lineCap: .butt))
                 .rotationEffect(.degrees(-90))
-                .scaleEffect(x: -1, y: 1)
-                .opacity(isCountdown ? 1 : 0)
-                .animation(.linear(duration: 3.0), value: sweepProgress)
+                .animation(.linear(duration: 1.0), value: progress)
         }
     }
 }

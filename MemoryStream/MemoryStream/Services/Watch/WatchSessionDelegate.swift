@@ -181,10 +181,47 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// Float32 PCM (~192 KB/sec) because watchOS lacks `AVAssetWriter`;
     /// the phone compresses to AAC (~4 KB/sec, ~48× smaller) so the
     /// on-device storage and CloudKit footprint stay bounded.
+    /// Pure idempotency decision for `acceptArrivedClip`. Per
+    /// `ClipMetadata.clipId`'s documented contract: "Idempotency key
+    /// on the iPhone (a retried transfer with the same id is a
+    /// no-op)." Without this check the split path (where fragments
+    /// get fresh `UUID()` clipIds rather than reusing
+    /// `metadata.clipId`) silently produces a fresh copy of every
+    /// fragment on each redelivery — `InboxManifest.acceptClip`'s
+    /// dedup is keyed on `clip.clipId` and can't see them as dupes.
+    ///
+    /// We treat the master as already-processed when ANY clip in the
+    /// manifest matches by either:
+    ///   - `clip.clipId == metadata.clipId` — single-clip path
+    ///     where the InboxClip directly uses the master's clipId.
+    ///   - `clip.rollGroupId == (metadata.rollGroupId ?? metadata.clipId)`
+    ///     — split-clip path where every fragment carries the
+    ///     master's rollGroupId.
+    static func isMasterAlreadyProcessed(metadata: ClipMetadata, manifestClips: [InboxClip]) -> Bool {
+        let dedupRollGroupId = metadata.rollGroupId ?? metadata.clipId
+        return manifestClips.contains { clip in
+            clip.clipId == metadata.clipId || clip.rollGroupId == dedupRollGroupId
+        }
+    }
+
     @MainActor
     static func acceptArrivedClip(metadata: ClipMetadata, masterFilename: String) async {
         NSLog("[Himem][WC] phone — acceptArrivedClip clipId=\(metadata.clipId) rollGroupId=\(metadata.rollGroupId?.uuidString ?? "nil") offsets=\(metadata.nextTapOffsets.count)")
         let masterURL = InboxManifest.audioURL(for: masterFilename)
+
+        // Idempotency gate — see `isMasterAlreadyProcessed`. Drop the
+        // redelivered master file so disk doesn't bloat.
+        if Self.isMasterAlreadyProcessed(metadata: metadata, manifestClips: InboxManifest.shared.clips) {
+            NSLog("[Himem][WC] phone — duplicate master ignored, clipId=\(metadata.clipId) already processed")
+            try? FileManager.default.removeItem(at: masterURL)
+            // Still ack so the watch can drop the pending row.
+            // `sendConfirmation` is the path the live + durable acks
+            // travel; reusing it here keeps the dedup transparent
+            // to the watch side.
+            WatchSessionDelegate.shared.sendConfirmation(clipId: metadata.clipId)
+            return
+        }
+
         let offsets = metadata.nextTapOffsets
         if offsets.isEmpty {
             // Single-clip session — master file IS the clip. Compress
@@ -341,7 +378,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         NSLog("[Himem][WC] iPhone — flush request sent")
     }
 
-    private func sendConfirmation(clipId: UUID) {
+    func sendConfirmation(clipId: UUID) {
         let session = WCSession.default
         let payload: [String: Any] = ["confirmedClipId": clipId.uuidString]
 

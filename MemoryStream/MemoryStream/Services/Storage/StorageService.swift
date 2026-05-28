@@ -276,7 +276,11 @@ final class StorageService {
         ref.mediaType = MediaReference.MediaType.voice.rawValue
         ref.isAccessible = true
         ref.createdAt = createdAt
-        ref.transcript = transcript
+        // Strip ASR leading-noise punctuation (",.", ",…", "...") so
+        // the stored transcript — and everything downstream (joined
+        // entry.content, AI prompt, card snippet, full-detail body)
+        // — sees clean text. Per Tom's 2026-05-27 screenshots.
+        ref.transcript = JournalEntry.cleanedTranscript(transcript)
         ref.entry = entry
         try save(context: ctx)
         return ref

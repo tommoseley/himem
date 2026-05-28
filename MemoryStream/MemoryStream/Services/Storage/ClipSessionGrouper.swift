@@ -15,9 +15,12 @@ import Foundation
 /// coverage as the session-first redesign lands.
 enum ClipSessionGrouper {
     /// Time gap above which two consecutive clips can't be the same
-    /// session under the legacy heuristic. Unchanged from the
-    /// shipped `ClipInboxView` value.
-    static let sessionTimeWindowSeconds: TimeInterval = 10 * 60
+    /// session under the legacy (no-rollGroupId) heuristic. Tightened
+    /// from 10 min → 3 min on 2026-05-27 after a 5.5-min-apart pair
+    /// merged into one card per Tom's screenshot. 3 min covers "I
+    /// paused to think but kept going"; anything longer reads as a
+    /// fresh sitting.
+    static let sessionTimeWindowSeconds: TimeInterval = 3 * 60
 
     /// Distance threshold (meters) for legacy time+location
     /// sessioning. Two clips both with coordinates further apart
@@ -40,26 +43,40 @@ enum ClipSessionGrouper {
     }
 
     /// True when two clips belong to the same capture session.
-    /// `rollGroupId` is a deterministic override over the time +
-    /// location heuristic — two clips with the same non-nil
-    /// `rollGroupId` always merge regardless of how long the user
-    /// walked between thoughts. Mixed-nil falls back to the legacy
-    /// rule (since a non-nil roll's clips all share the id by
-    /// construction, mixed-nil can't be from the same roll).
+    ///
+    /// `rollGroupId` is the deterministic per-recording signal: every
+    /// clip in one Record→Stop cycle (including all Next-tap splits)
+    /// shares the id, by construction. Mixed-nil therefore CANNOT be
+    /// from the same recording — one clip explicitly knows which
+    /// session it belongs to and the other doesn't. Pre-2026-05-27
+    /// the mixed-nil case fell back to time+location and merged
+    /// nearby clips; that produced one card for two distinct 5.5-min-
+    /// apart recordings in Tom's screenshot. Now: mixed-nil splits.
+    ///
+    /// The time+location legacy heuristic only runs when BOTH clips
+    /// lack a rollGroupId — i.e. truly old data captured before the
+    /// roll feature shipped.
     static func sameSession(_ a: InboxClip, _ b: InboxClip) -> Bool {
-        if let aRoll = a.rollGroupId, let bRoll = b.rollGroupId {
+        switch (a.rollGroupId, b.rollGroupId) {
+        case let (.some(aRoll), .some(bRoll)):
             return aRoll == bRoll
-        }
-        guard abs(a.capturedAt.timeIntervalSince(b.capturedAt)) <= sessionTimeWindowSeconds else {
+        case (.some, .none), (.none, .some):
+            // One clip knows its session, the other doesn't — by the
+            // rollGroupId invariant they're from different sessions.
             return false
+        case (.none, .none):
+            // Legacy time+location fallback.
+            guard abs(a.capturedAt.timeIntervalSince(b.capturedAt)) <= sessionTimeWindowSeconds else {
+                return false
+            }
+            guard let aLat = a.latitude, let aLon = a.longitude,
+                  let bLat = b.latitude, let bLon = b.longitude
+            else {
+                return true
+            }
+            return haversineMeters(lat1: aLat, lon1: aLon, lat2: bLat, lon2: bLon)
+                <= sessionProximityMeters
         }
-        guard let aLat = a.latitude, let aLon = a.longitude,
-              let bLat = b.latitude, let bLon = b.longitude
-        else {
-            return true
-        }
-        return haversineMeters(lat1: aLat, lon1: aLon, lat2: bLat, lon2: bLon)
-            <= sessionProximityMeters
     }
 
     /// Great-circle distance via the haversine formula. Sufficient
