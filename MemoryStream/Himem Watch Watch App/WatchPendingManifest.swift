@@ -198,6 +198,24 @@ final class WatchPendingManifest: ObservableObject {
         remove(clipId: clipId, viaSync: false)
     }
 
+    #if DEBUG
+    /// Test-only seam for replacing the manifest's `clips` without
+    /// going through persistence. Used by ack-pipeline tests to
+    /// drive deterministic scenarios. Skips `persist` because
+    /// hitting UserDefaults from test runs leaks state.
+    func debugReplaceClipsForTesting(_ next: [WatchPendingClip]) {
+        clips = next
+        syncingClipIds = []
+    }
+
+    /// Test-only seam for pinning `lastConfirmedReceiptAt` to a
+    /// known value (e.g., 48 h ago to set up an `isSyncStuck`
+    /// precondition).
+    func debugSetLastConfirmedReceiptForTesting(_ date: Date?) {
+        lastConfirmedReceiptAt = date
+    }
+    #endif
+
     func audioURL(for clipId: UUID) -> URL? {
         guard let clip = clips.first(where: { $0.clipId == clipId }) else { return nil }
         let url = Self.audioURL(for: clip.audioFilename)
