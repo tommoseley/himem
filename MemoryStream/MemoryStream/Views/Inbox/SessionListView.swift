@@ -91,17 +91,44 @@ struct SessionListView: View {
             Text("This audio can't be recovered.")
         }
         .onAppear {
-            sessions = ClipSessionGrouper.group(inbox.clips)
+            sessions = computeSessions()
         }
-        .onChange(of: inbox.clips) { _, newClips in
-            sessions = ClipSessionGrouper.group(newClips)
+        .onChange(of: inbox.clips) { _, _ in
+            sessions = computeSessions()
             // If a session expanded its last clip away, collapse.
             if let id = expandedSessionId,
                !sessions.contains(where: { $0.id == id }) {
                 expandedSessionId = nil
             }
         }
+        .onChange(of: arrivals.phasesByClipId) { _, _ in
+            // In-flight clips are rendered as IncomingCard, NOT as
+            // a SessionCard inside the session list. When the phase
+            // map changes (clip enters or leaves transcribing) the
+            // sessions need to be re-grouped without those clipIds
+            // to avoid double-rendering.
+            sessions = computeSessions()
+        }
         .onDisappear { stopPlayback() }
+    }
+
+    /// Groups the inbox's clips into sessions for the SessionCard
+    /// list, EXCLUDING any clips currently in-flight in the arrival
+    /// tracker — those render separately as `IncomingCard` rows
+    /// above the session list. Without this filter, a clip in the
+    /// `.transcribing` phase (which IS in the inbox manifest) would
+    /// double-render: once as a transcribing IncomingCard and once
+    /// as a session-list row with the legitimate-but-confusing
+    /// "Transcribing…" body variant.
+    private func computeSessions() -> [ClipGroup] {
+        let inFlight = arrivals.phasesByClipId.keys
+        guard !inFlight.isEmpty else {
+            return ClipSessionGrouper.group(inbox.clips)
+        }
+        let inFlightSet = Set(inFlight)
+        return ClipSessionGrouper.group(
+            inbox.clips.filter { !inFlightSet.contains($0.clipId) }
+        )
     }
 
     // MARK: - Empty state
@@ -126,18 +153,23 @@ struct SessionListView: View {
         ScrollView {
             VStack(spacing: 0) {
                 header
-                if arrivals.hasAnyInFlight {
-                    // Pre-render the spec's transcribing IncomingCard
-                    // (Phase 1 of the sync-surface spec — see
-                    // `InboxArrivalTracker` doc). Surfaces the phase
-                    // that was completely invisible before: between
-                    // file-on-disk and transcript-landed. Without
-                    // this, a 5-minute clip that took 30 s to
-                    // transcribe looked identical to one that
-                    // instantly produced "no speech."
-                    transcribingBanner
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, 10)
+                // Sync surface — per-clip IncomingCards above the
+                // ready session list. Spec § SYNC / INCOMING.
+                if !inFlightClipsSorted.isEmpty {
+                    LazyVStack(spacing: 12) {
+                        ForEach(inFlightClipsSorted, id: \.clipId) { clip in
+                            if let phase = arrivals.phase(for: clip.clipId) {
+                                IncomingCard(
+                                    capturedAt: clip.capturedAt,
+                                    durationSeconds: clip.duration,
+                                    placeName: nil,
+                                    phase: phase
+                                )
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
                 }
                 LazyVStack(spacing: 12) {
                     ForEach(sessions) { session in
@@ -175,33 +207,21 @@ struct SessionListView: View {
         .padding(.bottom, 16)
     }
 
-    /// Spec Phase 1 of the sync surface: a single-line "Transcribing"
-    /// banner visible while at least one clip is between file-on-disk
-    /// and transcript-landed. The full `IncomingCard` per-clip
-    /// rendering ships in a follow-up commit; this is the smallest
-    /// honest signal that closes the "clips teleport in" gap right
-    /// now. See `screens-captured-clips-sessions.jsx` sync section.
-    private var transcribingBanner: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-                .scaleEffect(0.7)
-                .accessibilityHidden(true)
-            let n = arrivals.inFlightCount
-            Text(n == 1 ? "Transcribing 1 clip…" : "Transcribing \(n) clips…")
-                .font(.subheadline)
-                .foregroundStyle(Crucible.Color.ink2)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Crucible.Color.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Crucible.Color.hairline, lineWidth: 0.5)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(arrivals.inFlightCount) clip\(arrivals.inFlightCount == 1 ? "" : "s") transcribing")
+    /// In-flight clips for the sync surface, sorted newest first
+    /// (matching the SessionCard list ordering). Phase 2 (this
+    /// commit) ships `.transcribing` rendering by looking the clip
+    /// up in the inbox manifest — transcribing clips are already on
+    /// disk with their metadata populated. Future phases that
+    /// surface `.downloading` / `.waiting` (where the InboxClip
+    /// doesn't exist yet) will swap to a richer InFlightClip model
+    /// that the tracker populates on its own.
+    private var inFlightClipsSorted: [InboxClip] {
+        let inFlight = arrivals.phasesByClipId.keys
+        guard !inFlight.isEmpty else { return [] }
+        let inFlightSet = Set(inFlight)
+        return inbox.clips
+            .filter { inFlightSet.contains($0.clipId) }
+            .sorted { $0.capturedAt > $1.capturedAt }
     }
 
     private var headerTitle: String {
