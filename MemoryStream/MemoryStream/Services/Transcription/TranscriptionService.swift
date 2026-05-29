@@ -141,6 +141,18 @@ final class TranscriptionService {
             return .fileUnreadable(error)
         }
 
+        // Detailed format log. When a transcribe ends with empty text
+        // and the user reports the audio is clearly speech, this is
+        // the line that tells us whether SpeechTranscriber even got
+        // a format it could handle. Common failure modes look like:
+        //   - 8 kHz sample rate (no — needs 16+ kHz)
+        //   - 2 channels with no mixdown (transcriber wants mono)
+        //   - integer PCM where Float32 was expected
+        let fileFmt = audioFile.fileFormat
+        let procFmt = audioFile.processingFormat
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? Int) ?? -1
+        NSLog("[Himem][Transcribe] file open ok bytes=\(fileSize) frames=\(audioFile.length) fileFmt=\(fileFmt) procFmt=\(procFmt)")
+
         // Init with modules only — no input. `start(inputAudioFile:)`
         // provides the input. Passing the file to BOTH init and start
         // trips the "Cannot simultaneously analyze multiple input
@@ -181,8 +193,27 @@ final class TranscriptionService {
         let (text, coverage, count) = await collected
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Coverage / segment cross-tabulation makes empty-result
+        // diagnostics explicit:
+        //   - segments=0 coverage=0  → recognizer rejected the audio
+        //     before producing anything (format mismatch likely)
+        //   - segments=0 coverage>0  → recognizer scanned the file
+        //     but heard nothing recognizable (genuine silence OR
+        //     audio with sub-perceptual speech for the model)
+        //   - segments>0 textLen=0   → very rare; segments returned
+        //     but every chunk was empty
+        let diagnosticTag: String
+        if count == 0 && coverage < 0.1 {
+            diagnosticTag = " [DIAG=rejected]"
+        } else if count == 0 {
+            diagnosticTag = " [DIAG=scanned-no-recognition]"
+        } else if trimmed.isEmpty {
+            diagnosticTag = " [DIAG=segments-but-empty]"
+        } else {
+            diagnosticTag = ""
+        }
         NSLog(
-            "[Himem][Transcribe] done segments=\(count) coverage=\(String(format: "%.2f", coverage))s file=\(String(format: "%.2f", fileDuration))s textLen=\(trimmed.count)"
+            "[Himem][Transcribe] done segments=\(count) coverage=\(String(format: "%.2f", coverage))s file=\(String(format: "%.2f", fileDuration))s textLen=\(trimmed.count)\(diagnosticTag)"
         )
         return .transcribed(Result(text: trimmed, coverageSeconds: coverage, fileDurationSeconds: fileDuration, segmentCount: count))
     }
