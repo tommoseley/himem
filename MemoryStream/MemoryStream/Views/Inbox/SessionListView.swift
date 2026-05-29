@@ -169,23 +169,16 @@ struct SessionListView: View {
     private var headerSubtitle: String {
         guard let first = inbox.clips.map(\.capturedAt).min(),
               let last = inbox.clips.map(\.capturedAt).max() else { return "" }
-        let cal = Calendar.current
-        let dayLabel: String
-        if cal.isDateInToday(first) {
-            dayLabel = "today"
-        } else if cal.isDateInYesterday(first) {
-            dayLabel = "yesterday"
-        } else {
-            let f = DateFormatter(); f.dateFormat = "MMM d"
-            dayLabel = f.string(from: first)
-        }
-        let timeFmt = DateFormatter(); timeFmt.dateFormat = "h:mm a"
-        let firstStr = timeFmt.string(from: first)
-        let lastStr = timeFmt.string(from: last)
-        let range = firstStr == lastStr ? firstStr : "\(firstStr)–\(lastStr)"
-        let n = sessions.count
-        let sessionPart = n == 1 ? "1 session" : "\(n) sessions"
-        return "\(sessionPart) · \(dayLabel), \(range)"
+        // Cross-day handling lives in the pure builder so the
+        // "3 sessions · May 27, 3:37 PM–6:30 PM"-while-the-6:30
+        // PM-was-actually-May-28 bug can't re-emerge silently.
+        // See `CapturedClipsSubtitleBuilder` +
+        // `CapturedClipsHeaderSubtitleTests`.
+        return CapturedClipsSubtitleBuilder.subtitle(
+            earliest: first,
+            latest: last,
+            sessionCount: sessions.count
+        )
     }
 
     // MARK: - Session card (collapsed + expanded variants)
@@ -289,37 +282,35 @@ struct SessionListView: View {
     @ViewBuilder
     private func collapsedBody(_ session: ClipGroup) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let preview = joinedPreview(session) {
-                Text("\u{201C}\(preview)\u{201D}")
+            // Body variant is decided on ClipGroup so the
+            // "Transcribing…" vs "(nothing, the footer carries it)"
+            // vs "preview" choice is unit-testable and can't
+            // contradict the accidental footer below. See
+            // `ClipSessionGrouper.swift` + `SessionCollapsedBody-
+            // VariantTests`.
+            switch session.collapsedBodyVariant {
+            case .preview(let text):
+                Text("\u{201C}\(text)\u{201D}")
                     .font(.system(size: 13.5))
                     .foregroundStyle(Crucible.Color.ink2)
                     .lineSpacing(2)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
-            } else {
+            case .transcribing:
                 Text("Transcribing…")
                     .font(.system(size: 13))
                     .italic()
                     .foregroundStyle(Crucible.Color.ink3)
+            case .allAccidental:
+                // Render nothing here; `accidentalNote` below
+                // carries the messaging ("1 clip auto-excluded ·
+                // no speech"). Showing both was the bug we're
+                // closing.
+                EmptyView()
             }
             accidentalNote(session)
         }
         .padding(.top, 8)
-    }
-
-    /// Joins all usable clips' transcripts into one quoted block,
-    /// separated by " … " between fragments. Returns nil when no
-    /// transcripts are ready yet (caller shows the "Transcribing…"
-    /// placeholder).
-    private func joinedPreview(_ session: ClipGroup) -> String? {
-        let usable = session.usableClips
-        let candidates = usable.isEmpty ? session.clips : usable
-        let fragments = candidates.compactMap { clip -> String? in
-            let t = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            return t.isEmpty ? nil : t
-        }
-        guard !fragments.isEmpty else { return nil }
-        return fragments.joined(separator: " \u{2026} ")
     }
 
     // MARK: - Expanded body (per-clip rows: ring + meta + transcript + chevron)

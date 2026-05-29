@@ -140,4 +140,38 @@ struct ClipGroup: Identifiable, Hashable {
     var isAllAccidental: Bool {
         !clips.isEmpty && usableClips.isEmpty
     }
+
+    /// What the collapsed Captured Clips card should show in its
+    /// body region. Introduced 2026-05-29 to close a contradictory-
+    /// display bug where a single-clip session whose only clip was
+    /// accidental rendered both "Transcribing…" (body) and "1 clip
+    /// auto-excluded · no speech" (footer) at once.
+    ///
+    /// Rules:
+    ///   - At least one usable transcript → `.preview(joined)`
+    ///   - No usable transcripts AND every clip has been attempted
+    ///     (so we know nothing more is coming) → `.allAccidental`,
+    ///     and the body renders nothing (the footer's accidental
+    ///     line carries the message)
+    ///   - At least one clip is still pending (attempted == false)
+    ///     → `.transcribing`, the legitimate in-flight state
+    var collapsedBodyVariant: CollapsedBodyVariant {
+        let fragments = clips.compactMap { clip -> String? in
+            let t = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? nil : t
+        }
+        if !fragments.isEmpty {
+            return .preview(fragments.joined(separator: " \u{2026} "))
+        }
+        if isAllAccidental {
+            return .allAccidental
+        }
+        return .transcribing
+    }
+}
+
+enum CollapsedBodyVariant: Equatable {
+    case preview(String)
+    case transcribing
+    case allAccidental
 }
