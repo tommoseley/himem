@@ -49,7 +49,7 @@ HiMem has two capture modes. **Structured** = user intentionally creates a Memor
 - **Title block.** "N from your Watch" (SF Pro 22, weight 600 — *not* Source Serif; this is operational). Sub-line: "M sessions · today, 12:17 – 3:36 PM" — pure metadata, no instruction.
 - **No helper copy.** No "Tap to select. Swipe to delete." Affordances do their own teaching.
 - **Session cards stacked.** Each card carries, top to bottom:
-  - **Meta row.** "3:36 PM · 4 clips · 0:12" in SF Pro 12 ink2.
+  - **Meta row.** "Thu May 28 · 3:36 PM · 4 clips · 0:12" in SF Pro 12 ink2. Date+time format is `EEE MMM d · h:mm a` (current year) or `EEE MMM d, yyyy · h:mm a` (older year) — same format as Memory Detail clip headers. No relative "Today / Yesterday" labels on session cards; the screen often spans days, and the absolute date avoids ambiguity at a glance. Location (when present) lives on a quieter second line below.
   - **Transcript preview.** A single block of quoted speech, joined with "… " between clips, capped at ~3 lines and ellipsized. Not a list of separate quoted lines.
   - **Auto-exclude note** (when relevant). "1 clip auto-excluded · no speech." Muted ink2. Not a chip, not amber, not a warning — it's a note that we already handled it. Tappable to expand.
   - **Primary action.** `Make a Memory →` as a full-width pill *inside the card*, ochre tinted (cream text on ochre at 100%, OR ochre text on 8% ochre tint — pick the contrast level by hierarchy; on light cards we want the heavy variant). One verb. One tap. This is the action of the card.
@@ -79,7 +79,7 @@ HiMem has two capture modes. **Structured** = user intentionally creates a Memor
 
 - **Header**: `Cancel · New memory · Create` when destination is a new memory; `Cancel · Add to memory · Add` when destination is an existing memory.
 - **Destination toggle** (new, top of sheet, above session summary): segmented control with two options — `Make a new memory` (default) and `Add to existing memory`. Picking the second swaps the body content but stays on the same sheet.
-- **Session summary chip**: ochre-tinted, single line: "3 clips · 3:36 PM · 0:12" with sub-line "1 clip excluded" when relevant. Shown in both modes.
+- **Session summary chip**: ochre-tinted, single line: "Thu May 28 · 3:36 PM · 3 clips · 0:12" with sub-line "1 clip excluded" when relevant. Shown in both modes.
 
 **Make-a-new-memory mode** (default — existing behavior):
 
@@ -127,7 +127,7 @@ The word **Bundle** is retired in user-facing copy. It survives in this spec as 
 | **Empty inbox** | "Nothing new from your Watch" title, sub-line "Audio you record on your Apple Watch lands here." No action button. Reached from Settings → Captured Clips even when count = 0. No eyebrow. |
 | **Inbox with sessions** | Default session list. |
 | **All-excluded session** | Card shows "All clips auto-excluded · no speech" instead of transcript preview. Make a Memory pill is disabled (60% opacity, non-tappable). The `Discard session` link appears on the *collapsed* card here — the only state where it does — because the primary action is dead and the user needs a visible exit. Same two-tap confirm. |
-| **Single-clip session** | Same card shape. Meta row reads "3:36 PM · 1 clip · 0:01". Transcript preview is just that one quote. No regression to a different layout for N=1. |
+| **Single-clip session** | Same card shape. Meta row reads "Thu May 28 · 3:36 PM · 1 clip · 0:01". Transcript preview is just that one quote. No regression to a different layout for N=1. |
 | **Sync in progress** | Card greys to 60% opacity while clips are still uploading. Sub-line "Syncing · N of M". Expand allowed; only already-synced clips show inside. |
 | **Stale (no recent capture)** | List shows in reverse-chrono regardless of age. No "old vs new" partitioning in MVP. |
 

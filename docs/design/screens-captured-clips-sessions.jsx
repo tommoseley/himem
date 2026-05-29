@@ -10,6 +10,10 @@
 //  • Auto-excluded clips are a muted note, never amber, never a chip.
 //  • Operational surface — SF Pro throughout, no Source Serif on the list.
 //  • Vocabulary: "Make a Memory" everywhere. "Bundle" is retired.
+//  • Date+time on every session card. Format `EEE MMM d · h:mm a` (current
+//    year) or `EEE MMM d, yyyy · h:mm a` (older). Matches Memory Detail
+//    clip headers. No relative "Today / Yesterday" — operational surface,
+//    spans days, absolute date avoids ambiguity at a glance.
 
 // ─────────────────────────────────────────────────────────────
 // Top chrome — back ‹ on the left, "Done" on the right. No eyebrow.
@@ -134,12 +138,31 @@ function ClipRow({ offset, duration, transcript, included = true, autoExcluded =
 }
 
 // ─────────────────────────────────────────────────────────────
+// Location pin — small glyph preceding a session's place name.
+// Watch captures location at record time; absent when no GPS fix.
+// ─────────────────────────────────────────────────────────────
+function PinGlyph() {
+  return (
+    <svg width="9" height="11" viewBox="0 0 10 13" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M5 12c2.5-3 4-5.2 4-7a4 4 0 1 0-8 0c0 1.8 1.5 4 4 7z"/>
+      <circle cx="5" cy="5" r="1.4"/>
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Session card.
 // `expanded` swaps the transcript preview for inline clip rows.
 // Action pill is the same in both states.
 // ─────────────────────────────────────────────────────────────
+// Date+time format matches Memory Detail clip headers:
+//   • current year:  "Wed May 27 · 3:36 PM"          (EEE MMM d · h:mm a)
+//   • older year:    "Wed May 27, 2025 · 3:36 PM"    (EEE MMM d, yyyy · h:mm a)
+// Sessions are operational, not editorial, so weekday + absolute date
+// over "Today / Yesterday" relative labels — the screen often spans
+// days and the user needs to disambiguate without doing math.
 function SessionCard({
-  time, clips, duration, previewLine, autoExcluded = 0,
+  dateTime, place, clips, duration, previewLine, autoExcluded = 0,
   expanded = false, clipsDetail = null, disabled = false,
 }) {
   const excludeNote =
@@ -152,16 +175,27 @@ function SessionCard({
       background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 14,
       padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12,
     }}>
-      {/* Meta row */}
-      <div style={{
-        display: 'flex', alignItems: 'baseline', gap: 6,
-        fontSize: 12.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums', letterSpacing: -0.1,
-      }}>
-        <span style={{ fontWeight: 600, color: PX.ink, fontSize: 13.5, letterSpacing: -0.15 }}>{time}</span>
-        <span style={{ color: PX.ink4 }}>·</span>
-        <span>{clips} clip{clips > 1 ? 's' : ''}</span>
-        <span style={{ color: PX.ink4 }}>·</span>
-        <span>{duration}</span>
+      {/* Meta — date+time/clips/duration, then location beneath (if any) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{
+          display: 'flex', alignItems: 'baseline', gap: 6,
+          fontSize: 12.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums', letterSpacing: -0.1,
+        }}>
+          <span style={{ fontWeight: 600, color: PX.ink, fontSize: 13.5, letterSpacing: -0.15 }}>{dateTime}</span>
+          <span style={{ color: PX.ink4 }}>·</span>
+          <span>{clips} clip{clips > 1 ? 's' : ''}</span>
+          <span style={{ color: PX.ink4 }}>·</span>
+          <span>{duration}</span>
+        </div>
+        {place && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            fontSize: 11.5, color: PX.ink3, letterSpacing: -0.05,
+          }}>
+            <span style={{ color: PX.ink4, display: 'inline-flex' }}><PinGlyph /></span>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{place}</span>
+          </div>
+        )}
       </div>
 
       {/* Body — preview when collapsed, clip rows when expanded */}
@@ -207,26 +241,29 @@ function SessionCard({
 function ScrCCSessionList() {
   return (
     <PhoneScreen>
-      <CCHeader count={9} sessions={3} range="today, 12:01 – 3:36 PM" />
+      <CCHeader count={9} sessions={3} range="Wed May 27 12:01 PM – Thu May 28 3:36 PM" />
       <div style={{
         flex: 1, overflow: 'hidden',
         padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10,
       }}>
         <SessionCard
-          time="3:36 PM"
+          dateTime="Thu May 28 · 3:36 PM"
+          place="Marsh Walk, Murrells Inlet"
           clips={4}
           duration="0:12"
           previewLine="One, two, three … one, two, three, four, five … one, two, three, four, five? Hey."
           autoExcluded={1}
         />
         <SessionCard
-          time="2:40 PM"
+          dateTime="Thu May 28 · 2:40 PM"
+          place="18 Columbus Cir, Bluffton"
           clips={3}
           duration="0:08"
           previewLine="The bit about one point eight billion — I stopped them right there, said first of all that's not even the right number …"
         />
         <SessionCard
-          time="12:01 PM"
+          dateTime="Wed May 27 · 12:01 PM"
+          place="Home"
           clips={2}
           duration="0:06"
           previewLine="Garden drip lines need replacing before July … basil starts should be ready Saturday."
@@ -249,13 +286,14 @@ function ScrCCSessionListExpanded() {
   ];
   return (
     <PhoneScreen>
-      <CCHeader count={9} sessions={3} range="today, 12:01 – 3:36 PM" />
+      <CCHeader count={9} sessions={3} range="Wed May 27 12:01 PM – Thu May 28 3:36 PM" />
       <div style={{
         flex: 1, overflow: 'hidden',
         padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10,
       }}>
         <SessionCard
-          time="3:36 PM"
+          dateTime="Thu May 28 · 3:36 PM"
+          place="Marsh Walk, Murrells Inlet"
           clips={4}
           duration="0:12"
           autoExcluded={1}
@@ -263,13 +301,15 @@ function ScrCCSessionListExpanded() {
           clipsDetail={clips336}
         />
         <SessionCard
-          time="2:40 PM"
+          dateTime="Thu May 28 · 2:40 PM"
+          place="18 Columbus Cir, Bluffton"
           clips={3}
           duration="0:08"
           previewLine="The bit about one point eight billion — I stopped them right there, said first of all that's not even the right number …"
         />
         <SessionCard
-          time="12:01 PM"
+          dateTime="Wed May 27 · 12:01 PM"
+          place="Home"
           clips={2}
           duration="0:06"
           previewLine="Garden drip lines need replacing before July … basil starts should be ready Saturday."
@@ -286,10 +326,10 @@ function ScrCCSessionListExpanded() {
 function ScrCCBundleConfirm() {
   const behind = (
     <PhoneScreen>
-      <CCHeader count={9} sessions={3} range="today, 12:01 – 3:36 PM" />
+      <CCHeader count={9} sessions={3} range="Wed May 27 12:01 PM – Thu May 28 3:36 PM" />
       <div style={{ padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <SessionCard
-          time="3:36 PM" clips={4} duration="0:12"
+          dateTime="Thu May 28 · 3:36 PM" place="Marsh Walk, Murrells Inlet" clips={4} duration="0:12"
           previewLine="One, two, three … one, two, three, four, five … one, two, three, four, five? Hey."
           autoExcluded={1}
         />
@@ -320,8 +360,11 @@ function ScrCCBundleConfirm() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>3 clips · 3:36 PM · 0:12</div>
-              <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 2 }}>1 clip excluded</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>Thu May 28 · 3:36 PM · 3 clips · 0:12</div>
+              <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ color: PX.ink4, display: 'inline-flex' }}><PinGlyph /></span>
+                <span>Marsh Walk, Murrells Inlet · 1 clip excluded</span>
+              </div>
             </div>
           </div>
 
