@@ -13,6 +13,7 @@ import AVFoundation
 /// primary verb and lives inside every card.
 struct SessionListView: View {
     @ObservedObject var inbox: InboxManifest = .shared
+    @ObservedObject var arrivals: InboxArrivalTracker = .shared
     @ObservedObject var viewModel: JournalViewModel
     @Environment(\.dismiss) private var dismiss
 
@@ -125,6 +126,19 @@ struct SessionListView: View {
         ScrollView {
             VStack(spacing: 0) {
                 header
+                if arrivals.hasAnyInFlight {
+                    // Pre-render the spec's transcribing IncomingCard
+                    // (Phase 1 of the sync-surface spec — see
+                    // `InboxArrivalTracker` doc). Surfaces the phase
+                    // that was completely invisible before: between
+                    // file-on-disk and transcript-landed. Without
+                    // this, a 5-minute clip that took 30 s to
+                    // transcribe looked identical to one that
+                    // instantly produced "no speech."
+                    transcribingBanner
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 10)
+                }
                 LazyVStack(spacing: 12) {
                     ForEach(sessions) { session in
                         sessionCard(session)
@@ -159,6 +173,35 @@ struct SessionListView: View {
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 16)
+    }
+
+    /// Spec Phase 1 of the sync surface: a single-line "Transcribing"
+    /// banner visible while at least one clip is between file-on-disk
+    /// and transcript-landed. The full `IncomingCard` per-clip
+    /// rendering ships in a follow-up commit; this is the smallest
+    /// honest signal that closes the "clips teleport in" gap right
+    /// now. See `screens-captured-clips-sessions.jsx` sync section.
+    private var transcribingBanner: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .scaleEffect(0.7)
+                .accessibilityHidden(true)
+            let n = arrivals.inFlightCount
+            Text(n == 1 ? "Transcribing 1 clip…" : "Transcribing \(n) clips…")
+                .font(.subheadline)
+                .foregroundStyle(Crucible.Color.ink2)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Crucible.Color.card)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Crucible.Color.hairline, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(arrivals.inFlightCount) clip\(arrivals.inFlightCount == 1 ? "" : "s") transcribing")
     }
 
     private var headerTitle: String {

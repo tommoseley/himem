@@ -179,6 +179,12 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         if #available(iOS 26.0, *) {
             for clip in pending {
                 let url = InboxManifest.audioURL(for: clip.audioFilename)
+                // Surface the "transcribing" phase to the UI so the
+                // user sees a real signal between "audio landed" and
+                // "transcript ready" — addresses the spec's
+                // operational-truth requirement (sync screens 1+2
+                // in `screens-captured-clips-sessions.jsx`).
+                InboxArrivalTracker.shared.recordTranscribingStarted(clipId: clip.clipId)
                 let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
                 // Only flip `transcriptionAttempted` when the
                 // recognizer ran end-to-end (`.transcribed`).
@@ -197,6 +203,12 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 } else {
                     NSLog("[Himem][Inbox] transcribe deferred clip=\(clip.clipId.uuidString.prefix(8)) outcome=\(outcome)")
                 }
+                // Whether the attempt landed (marked) or was deferred
+                // for retry, the transcribing phase is over — the
+                // tracker drops it. A deferred clip stays pending and
+                // the next sweep will re-enter `recordTranscribing-
+                // Started` before its retry.
+                InboxArrivalTracker.shared.clear(clipId: clip.clipId)
             }
         }
     }
