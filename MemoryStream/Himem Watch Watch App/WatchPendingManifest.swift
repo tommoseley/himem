@@ -169,14 +169,24 @@ final class WatchPendingManifest: ObservableObject {
 
     private func performRemoval(clipId: UUID) {
         syncingClipIds.remove(clipId)
-        guard let clip = clips.first(where: { $0.clipId == clipId }) else { return }
+        guard let clip = clips.first(where: { $0.clipId == clipId }) else {
+            // Sink fired but the row was already gone — duplicate
+            // ack, prior sweep already cleared it, or the watch
+            // received an ack for a clip it never had. Log so the
+            // "coordinator removing clipId=X" trace in the
+            // coordinator doesn't dangle with no follow-up.
+            NSLog("[Himem][WC] watch — performRemoval no-op clipId=\(clipId) (not in manifest; remaining=\(clips.count))")
+            return
+        }
         try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
         let next = clips.filter { $0.clipId != clipId }
         replace(with: next)
         // Successful confirmed-receipt — record so the sync-stuck timer
         // resets. Survives across launches via the manifest persistence.
-        lastConfirmedReceiptAt = Date()
+        let nowReceipt = Date()
+        lastConfirmedReceiptAt = nowReceipt
         persistLastConfirmedReceipt()
+        NSLog("[Himem][WC] watch — performRemoval done clipId=\(clipId) remaining=\(next.count) lastConfirmedReceiptAt=\(nowReceipt)")
     }
 
     /// Persistence for `lastConfirmedReceiptAt` — small enough to stash
