@@ -42,7 +42,11 @@ struct TranscriptionServiceLongFormTests {
             return
         }
 
-        let result = await TranscriptionService.shared.transcribe(audioURL: url)
+        let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
+        guard case .transcribed(let result) = outcome else {
+            Issue.record("Long-form fixture produced \(outcome); expected .transcribed")
+            return
+        }
 
         // Money assertions — these would fail on the old SFSpeechRecognizer
         // path because it would have truncated the transcript at the ~60s

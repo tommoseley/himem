@@ -160,11 +160,24 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         if #available(iOS 26.0, *) {
             for clip in pending {
                 let url = InboxManifest.audioURL(for: clip.audioFilename)
-                let result = await TranscriptionService.shared.transcribe(audioURL: url)
-                InboxManifest.shared.recordTranscriptionAttempt(
-                    clipId: clip.clipId,
-                    transcript: result.text
-                )
+                let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
+                // Only flip `transcriptionAttempted` when the
+                // recognizer ran end-to-end (`.transcribed`).
+                // Model-not-installed, file-unreadable, and
+                // transcriber-failed outcomes leave the clip
+                // pending so the next sweep (scene-active, next
+                // watch arrival, manual refresh) retries. Before
+                // 2026-05-29 this branch marked every clip
+                // regardless and silently burned real recordings
+                // that raced the cold-launch model-install task.
+                if InboxTranscriptionDispatcher.shouldMarkAttempted(for: outcome) {
+                    InboxManifest.shared.recordTranscriptionAttempt(
+                        clipId: clip.clipId,
+                        transcript: InboxTranscriptionDispatcher.transcriptForMark(from: outcome)
+                    )
+                } else {
+                    NSLog("[Himem][Inbox] transcribe deferred clip=\(clip.clipId.uuidString.prefix(8)) outcome=\(outcome)")
+                }
             }
         }
     }

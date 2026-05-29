@@ -145,7 +145,11 @@ struct WatchClipTranscriptionTests {
         print("[Test] watch-style processing format: \(readback.processingFormat)")
         print("[Test] watch-style length: \(readback.length) frames @ \(readback.fileFormat.sampleRate) Hz")
 
-        let result = await TranscriptionService.shared.transcribe(audioURL: tmp)
+        let outcome = await TranscriptionService.shared.transcribe(audioURL: tmp)
+        guard case .transcribed(let result) = outcome else {
+            Issue.record("Watch-style CAF produced \(outcome); expected .transcribed")
+            return
+        }
 
         print("[Test] transcribe result: textLen=\(result.text.count) coverage=\(result.coverageSeconds)s segments=\(result.segmentCount) fileDuration=\(result.fileDurationSeconds)s")
 

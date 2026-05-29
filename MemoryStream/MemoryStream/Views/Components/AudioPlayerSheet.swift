@@ -162,9 +162,14 @@ struct AudioPlayerSheet: View {
         isRetryingTranscription = true
         Task {
             let url = SpeechService.audioURL(for: filename)
-            let result = await TranscriptionService.shared.transcribe(audioURL: url)
+            // `.textOrEmpty` preserves the pre-2026-05-29 behavior
+            // here: manual retry that hits a transient failure
+            // (model not ready) silently clears the draft. Known
+            // follow-up: show an inline error so the user knows
+            // it didn't actually run. Out of scope for hero fix.
+            let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
             await MainActor.run {
-                draftTranscript = result.text
+                draftTranscript = outcome.textOrEmpty
                 isRetryingTranscription = false
             }
         }

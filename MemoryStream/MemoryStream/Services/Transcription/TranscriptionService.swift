@@ -32,6 +32,39 @@ final class TranscriptionService {
         let segmentCount: Int
     }
 
+    /// What happened on a `transcribe(audioURL:)` call. Introduced
+    /// 2026-05-29 after a hero-path bug: the prior signature
+    /// returned `Result(text: "")` for four distinct failure modes
+    /// (model-not-installed, file-unreadable, transcriber-failed,
+    /// genuine-no-speech) — so the inbox sweep couldn't tell an
+    /// infrastructure failure apart from a real silent recording
+    /// and marked every empty result as "attempted," silently
+    /// burning real user clips that arrived during the cold-launch
+    /// model-install race.
+    ///
+    /// Callers that act on the outcome (e.g., the inbox-manifest
+    /// sweep deciding whether to flip `transcriptionAttempted`)
+    /// MUST switch on the cases — only `.transcribed` represents
+    /// "model ran end-to-end and produced a definitive answer."
+    /// All other cases are transient failures and the clip should
+    /// stay pending so the next sweep retries.
+    ///
+    /// Callers that genuinely can't act on the failure (a manual
+    /// retry button, a UI surface with no retry queue) may use
+    /// `.textOrEmpty` to fall back to the prior behavior of
+    /// treating any failure as empty text.
+    enum Outcome: Sendable {
+        case transcribed(Result)
+        case modelNotInstalled
+        case fileUnreadable(any Error)
+        case transcriberFailed(any Error)
+
+        var textOrEmpty: String {
+            if case .transcribed(let r) = self { return r.text }
+            return ""
+        }
+    }
+
     private init() {}
 
     // MARK: - Asset / model management
@@ -72,11 +105,14 @@ final class TranscriptionService {
 
     // MARK: - Transcription
 
-    /// Transcribes an audio file at `audioURL`. Returns the joined text +
-    /// diagnostic coverage info. Empty `text` means the engine ran but
-    /// found no speech (or model wasn't available); caller treats that as
-    /// the "no speech detected" state.
-    func transcribe(audioURL: URL, locale: Locale = .current) async -> Result {
+    /// Transcribes an audio file at `audioURL`. Returns an `Outcome`
+    /// distinguishing model-not-installed / file-unreadable /
+    /// transcriber-failed from a genuine "ran end-to-end, no speech"
+    /// result. Critical for inbox-sweep retries: if this method
+    /// returned `Result(text: "")` for all failure modes (as it did
+    /// before 2026-05-29), the inbox would mark transient failures
+    /// as "attempted" and silently lose real clips.
+    func transcribe(audioURL: URL, locale: Locale = .current) async -> Outcome {
         let fileDuration = audioFileDuration(at: audioURL)
 
         // Surface the request before doing any work so a hang shows up in
@@ -85,58 +121,70 @@ final class TranscriptionService {
 
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
 
-        // Verify the model is available — if not, bail early with empty
-        // result. We don't auto-install here because download can be slow
-        // and this method is called inline with watch-clip arrival; the
-        // pre-warm during onboarding is the install path.
+        // Verify the model is available — if not, return a distinct
+        // outcome so the caller can leave the clip pending for the
+        // next sweep. We don't auto-install here because download
+        // can be slow and this method is called inline with watch-
+        // clip arrival; the pre-warm during app launch is the
+        // install path.
         let assetStatus = await AssetInventory.status(forModules: [transcriber])
         guard assetStatus == .installed else {
-            NSLog("[Himem][Transcribe] model not installed (\(assetStatus)), skipping")
-            return Result(text: "", coverageSeconds: 0, fileDurationSeconds: fileDuration, segmentCount: 0)
+            NSLog("[Himem][Transcribe] model not installed (\(assetStatus)), deferring")
+            return .modelNotInstalled
         }
+
+        let audioFile: AVAudioFile
+        do {
+            audioFile = try AVAudioFile(forReading: audioURL)
+        } catch {
+            NSLog("[Himem][Transcribe] file unreadable: \(error.localizedDescription)")
+            return .fileUnreadable(error)
+        }
+
+        // Init with modules only — no input. `start(inputAudioFile:)`
+        // provides the input. Passing the file to BOTH init and start
+        // trips the "Cannot simultaneously analyze multiple input
+        // sequences" precondition.
+        let analyzer = SpeechAnalyzer(modules: [transcriber])
+
+        // Drain the result stream concurrently with the analyzer's
+        // run. `finishAfterFile: true` on `start` guarantees the
+        // stream terminates once the file's been fully consumed.
+        async let collected: (joined: String, coverage: TimeInterval, count: Int) = {
+            var pieces: [String] = []
+            var coverage: TimeInterval = 0
+            var count = 0
+            do {
+                for try await result in transcriber.results {
+                    let chunk = String(result.text.characters)
+                    if !chunk.isEmpty {
+                        pieces.append(chunk)
+                    }
+                    coverage += CMTimeGetSeconds(result.range.duration)
+                    count += 1
+                }
+            } catch {
+                NSLog("[Himem][Transcribe] result stream error: \(error.localizedDescription)")
+            }
+            return (pieces.joined(separator: " "), coverage, count)
+        }()
 
         do {
-            let audioFile = try AVAudioFile(forReading: audioURL)
-            // Init with modules only — no input. `start(inputAudioFile:)`
-            // provides the input. Passing the file to BOTH init and start
-            // trips the "Cannot simultaneously analyze multiple input
-            // sequences" precondition.
-            let analyzer = SpeechAnalyzer(modules: [transcriber])
-
-            // Drain the result stream concurrently with the analyzer's
-            // run. `finishAfterFile: true` on `start` guarantees the
-            // stream terminates once the file's been fully consumed.
-            async let collected: (joined: String, coverage: TimeInterval, count: Int) = {
-                var pieces: [String] = []
-                var coverage: TimeInterval = 0
-                var count = 0
-                do {
-                    for try await result in transcriber.results {
-                        let chunk = String(result.text.characters)
-                        if !chunk.isEmpty {
-                            pieces.append(chunk)
-                        }
-                        coverage += CMTimeGetSeconds(result.range.duration)
-                        count += 1
-                    }
-                } catch {
-                    NSLog("[Himem][Transcribe] result stream error: \(error.localizedDescription)")
-                }
-                return (pieces.joined(separator: " "), coverage, count)
-            }()
-
             try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
-            let (text, coverage, count) = await collected
-
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            NSLog(
-                "[Himem][Transcribe] done segments=\(count) coverage=\(String(format: "%.2f", coverage))s file=\(String(format: "%.2f", fileDuration))s textLen=\(trimmed.count)"
-            )
-            return Result(text: trimmed, coverageSeconds: coverage, fileDurationSeconds: fileDuration, segmentCount: count)
         } catch {
-            NSLog("[Himem][Transcribe] failed: \(error.localizedDescription)")
-            return Result(text: "", coverageSeconds: 0, fileDurationSeconds: fileDuration, segmentCount: 0)
+            NSLog("[Himem][Transcribe] analyzer.start failed: \(error.localizedDescription)")
+            // Cancel the collector so we don't leak. The collector
+            // only stops cleanly when the results stream finishes,
+            // which it won't if start() never produced input.
+            return .transcriberFailed(error)
         }
+        let (text, coverage, count) = await collected
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        NSLog(
+            "[Himem][Transcribe] done segments=\(count) coverage=\(String(format: "%.2f", coverage))s file=\(String(format: "%.2f", fileDuration))s textLen=\(trimmed.count)"
+        )
+        return .transcribed(Result(text: trimmed, coverageSeconds: coverage, fileDurationSeconds: fileDuration, segmentCount: count))
     }
 
     // MARK: - Helpers

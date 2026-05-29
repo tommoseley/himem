@@ -147,6 +147,7 @@
 		A100000738 /* JournalUndoToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000738 /* JournalUndoToast.swift */; };
 		A100000739 /* JournalInboxBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000739 /* JournalInboxBanner.swift */; };
 		A100000740 /* JournalCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000740 /* JournalCaptureCoordinator.swift */; };
+		A100000741 /* InboxTranscriptionDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000741 /* InboxTranscriptionDispatcher.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 		E2AD0E5C2FAD185F009FFEA1 /* Himem Watch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E2E510952FAE5AD3000D2670 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E2E510942FAE5AD3000D2670 /* WidgetKit.framework */; };
@@ -355,6 +356,7 @@
 		B100000738 /* JournalUndoToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalUndoToast.swift; sourceTree = "<group>"; };
 		B100000739 /* JournalInboxBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalInboxBanner.swift; sourceTree = "<group>"; };
 		B100000740 /* JournalCaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCaptureCoordinator.swift; sourceTree = "<group>"; };
+		B100000741 /* InboxTranscriptionDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxTranscriptionDispatcher.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Himem Watch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -746,6 +748,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000312 /* WatchSessionDelegate.swift */,
+				B100000741 /* InboxTranscriptionDispatcher.swift */,
 			);
 			path = Watch;
 			sourceTree = "<group>";
@@ -1140,6 +1143,7 @@
 				A100000738 /* JournalUndoToast.swift in Sources */,
 				A100000739 /* JournalInboxBanner.swift in Sources */,
 				A100000740 /* JournalCaptureCoordinator.swift in Sources */,
+				A100000741 /* InboxTranscriptionDispatcher.swift in Sources */,
 				A100000311 /* InboxManifest.swift in Sources */,
 				A100000690 /* ClipSessionGrouper.swift in Sources */,
 				A100000312 /* WatchSessionDelegate.swift in Sources */,

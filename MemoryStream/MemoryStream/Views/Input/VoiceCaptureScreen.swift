@@ -818,10 +818,19 @@ struct VoiceCaptureScreen: View {
                     // Compress each split before transcribing — saves
                     // disk, and SpeechAnalyzer reads AAC fine.
                     await Self.compressIfPossible(at: url, label: "phone split \(split.audioFilename)")
-                    let result = await TranscriptionService.shared.transcribe(audioURL: url)
+                    // `.textOrEmpty` preserves the pre-2026-05-29
+                    // behavior on this surface: a failed transcribe
+                    // (model not ready, file error) silently lands
+                    // as an empty transcript on the saved fragment.
+                    // This is a known follow-up: voice composer save
+                    // path should surface "transcription deferred"
+                    // distinctly from "no speech," same way the
+                    // inbox sweep now does. Out of scope for the
+                    // hero-path fix.
+                    let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
                     fragments.append(VoiceClipFragment(
                         audioFilename: split.audioFilename,
-                        transcript: result.text,
+                        transcript: outcome.textOrEmpty,
                         duration: split.duration,
                         latitude: lat,
                         longitude: lon

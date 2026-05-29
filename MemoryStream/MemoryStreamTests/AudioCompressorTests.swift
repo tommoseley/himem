@@ -62,7 +62,11 @@ struct AudioCompressorTests {
             print("[Test] skipping transcription leg — model not installed")
             return
         }
-        let result = await TranscriptionService.shared.transcribe(audioURL: dest)
+        let outcome = await TranscriptionService.shared.transcribe(audioURL: dest)
+        guard case .transcribed(let result) = outcome else {
+            Issue.record("AAC file produced \(outcome) — expected .transcribed; round-trip broken")
+            return
+        }
         print("[Test] transcribe textLen=\(result.text.count) coverage=\(result.coverageSeconds)s segments=\(result.segmentCount)")
         #expect(!result.text.isEmpty, "AAC file produced empty transcript — round-trip broken")
         #expect(result.segmentCount > 0, "AAC file produced 0 segments — SpeechAnalyzer rejected the format")
