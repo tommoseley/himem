@@ -188,6 +188,10 @@ final class InboxManifest: ObservableObject {
         let next = clips.filter { $0.clipId != clipId }
         replace(with: next)
         WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: clipId)
+        // Persist the disposal decision so iOS's WC delivery queue
+        // can't ghost-redeliver this clip into the inbox later.
+        // See `InboxProcessedClipIds` for the full rationale (B5).
+        InboxProcessedClipIds.shared.markProcessed(clipId)
     }
 
     /// Removes a batch — used when the user creates a memory from N clips
@@ -200,6 +204,8 @@ final class InboxManifest: ObservableObject {
         for id in clipIds {
             WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: id)
         }
+        // Same persistence as `remove(clipId:)` — see B5 rationale.
+        InboxProcessedClipIds.shared.markProcessed(clipIds)
     }
 
     /// Finds the on-disk audio URL for a clip. Returns nil if the file is
