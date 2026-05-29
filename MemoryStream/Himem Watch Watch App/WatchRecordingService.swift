@@ -366,20 +366,28 @@ final class WatchRecordingService: NSObject, ObservableObject {
     }
 
     /// Maps 0…1 linear peak amplitude to a 0…1 perceptual band for
-    /// the live waveform. Peak dB range -50 → -10 puts ambient near
-    /// zero with headroom for loud peaks to fill the band. Watch mic
-    /// at wrist position captures most normal speech in the -50 to
-    /// -40 dB peak range, so bars often look short — a tighter floor
-    /// was tried (-45) and made things worse (zeroed real speech).
+    /// the live waveform. Peak dB range -50 → -18 matches the phone
+    /// (`SpeechService.normalisedLevel`) so the same speaking volume
+    /// renders at the same bar height on both surfaces. The prior
+    /// ceiling of -10 dB required near-microphone speaking to fill
+    /// the band — Tom QA 2026-05-29 reported the waveform looked
+    /// too small at normal volume, math confirmed it (a -25 dB peak
+    /// landed at 62% on the watch vs 78% on the phone).
+    ///
     /// Below -50 dB is the room-noise floor and zeroed so the
-    /// waveform doesn't twitch in a quiet room.
+    /// waveform doesn't twitch in a quiet room. A tighter floor
+    /// (-45) was tried earlier and made things worse — it zeroed
+    /// real speech captured at wrist distance.
+    ///
+    /// `internal` (was `private`) so `WatchRecordingLevelCurveTests`
+    /// can lock the calibration against future regressions.
     /// `nonisolated` so the audio-thread path can call it without an
     /// actor hop.
-    private nonisolated static func normalisedLevel(forPeakAmplitude peak: Float) -> CGFloat {
+    nonisolated static func normalisedLevel(forPeakAmplitude peak: Float) -> CGFloat {
         guard peak > 0 else { return 0 }
         let db = 20 * log10f(peak)
         let minDb: Float = -50
-        let maxDb: Float = -10
+        let maxDb: Float = -18
         if db < minDb { return 0 }
         if db > maxDb { return 1 }
         return CGFloat((db - minDb) / (maxDb - minDb))
