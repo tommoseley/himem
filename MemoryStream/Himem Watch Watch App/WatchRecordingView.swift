@@ -294,13 +294,15 @@ struct WatchRecordingView: View {
     /// Maps a 0…1 audio level to a bar height in the given band.
     /// Floor of 3pt so a quiet room still shows a faint pulse (a
     /// totally flat row reads as "nothing happening" — the very
-    /// signal we're trying not to send). The 1.4× gain pushes
-    /// conversational speech (~0.4–0.7) up into the upper half of
-    /// the band where it reads as actual movement; loud peaks still
-    /// cap at the band height.
+    /// signal we're trying not to send). The 1.7× gain pushes
+    /// conversational speech up into the upper half of the band
+    /// where it reads as actual movement; loud peaks still cap at
+    /// the band height. Bumped from 1.4 → 1.7 per Tom QA
+    /// 2026-05-29 (round 3) — the throttle-running-peak fix made
+    /// the bars responsive, this gain makes them confident.
     private func barHeight(for level: CGFloat, available: CGFloat) -> CGFloat {
         let minH: CGFloat = 3
-        let amplified = max(level, 0.0) * 1.4
+        let amplified = max(level, 0.0) * 1.7
         return max(minH, min(available, amplified * available))
     }
 
