@@ -4,13 +4,11 @@ import SwiftUI
 /// a ready `SessionCard` so the visual hierarchy of the list reads
 /// the same — but the action pill is replaced with a `PhasePill`
 /// and the body region is replaced with phase-specific content
-/// (shimmer placeholders for transcribing; progress for downloading
-/// in future phases; etc).
+/// (progress bar for downloading, shimmer placeholders for
+/// transcribing, line-up message for waiting, partial-progress
+/// message for paused).
 ///
 /// Spec: `screens-captured-clips-sessions.jsx` § SYNC / INCOMING.
-/// Phase 2 (this commit) ships only the `.transcribing` body. The
-/// other cases land as future phases extend the
-/// `InboxArrivalTracker.Phase` enum.
 struct IncomingCard: View {
     let capturedAt: Date
     let durationSeconds: TimeInterval
@@ -42,6 +40,10 @@ struct IncomingCard: View {
                 .stroke(Crucible.Color.hairline, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        // Waiting cards read as backgrounded — they're real, but
+        // not what's happening right now. Matches the spec's
+        // `opacity: effPhase === 'waiting' ? 0.72 : 1`.
+        .opacity(phase == .waiting ? 0.72 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -81,6 +83,23 @@ struct IncomingCard: View {
     @ViewBuilder
     private var phaseBody: some View {
         switch phase {
+        case .waiting:
+            // Honest queue copy — no false progress bar, just the
+            // line-up status. Spec mock copy verbatim.
+            Text("In line behind the clip downloading now.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Crucible.Color.ink3)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        case .downloading:
+            VStack(alignment: .leading, spacing: 7) {
+                IndeterminateBarberPole()
+                    .frame(height: 6)
+                Text("Receiving audio · \(durationString)")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .monospacedDigit()
+            }
         case .transcribing:
             VStack(alignment: .leading, spacing: 6) {
                 ShimmerLine(widthFraction: 0.96)
@@ -91,6 +110,13 @@ struct IncomingCard: View {
                     .foregroundStyle(Crucible.Color.ink3)
                     .padding(.top, 2)
             }
+        case .paused:
+            // Honest — no blame, no exhortation. Spec voice.
+            Text("Sync paused. Picks up when your Watch is near.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Crucible.Color.ink3)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -110,8 +136,48 @@ struct IncomingCard: View {
     private var accessibilityLabel: String {
         let phaseDescription: String
         switch phase {
+        case .waiting:      phaseDescription = "waiting in line"
+        case .downloading:  phaseDescription = "receiving from watch"
         case .transcribing: phaseDescription = "transcribing"
+        case .paused:       phaseDescription = "paused; watch out of range"
         }
         return "Clip from \(timeString), \(durationString), \(phaseDescription)"
+    }
+}
+
+/// Striped barber-pole progress indicator that animates indefinitely.
+/// iOS's WC layer doesn't expose incoming transfer progress on the
+/// receiving side, so we can't show a byte-accurate bar; this
+/// honestly reads as "something is happening" without claiming a
+/// specific completion %. Matches the spec's `ccBar` keyframes
+/// (repeating linear gradient sliding left to right).
+private struct IndeterminateBarberPole: View {
+    @State private var phase: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Crucible.Color.sunk)
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Crucible.Color.accent.opacity(0.85),
+                            Crucible.Color.accent.opacity(0.55),
+                            Crucible.Color.accent.opacity(0.85),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 70)
+                    .offset(x: phase * (geo.size.width + 70))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+        }
+        .onAppear {
+            phase = -1
+            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                phase = 1
+            }
+        }
     }
 }

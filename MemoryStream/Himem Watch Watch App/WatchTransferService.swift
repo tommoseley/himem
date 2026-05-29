@@ -35,6 +35,34 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
             NSLog("[Himem][WC] watch — file missing at \(url.path), skipping send")
             return
         }
+
+        // Pre-announce via `sendMessage` immediately before the
+        // `transferFile` call so the iPhone can render an
+        // IncomingCard in the sync surface BEFORE the actual file
+        // data arrives. Best-effort delivery — `sendMessage` only
+        // fires when both apps are reachable; if it fails the file
+        // still arrives later via `transferFile` and the iPhone
+        // synthesizes the in-flight entry from the manifest on
+        // arrival. Spec: `screens-captured-clips-sessions.jsx`
+        // § SYNC / INCOMING (2026-05-29).
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+        let announcePayload: [String: Any] = [
+            "preAnnounce": true,
+            "clipId": clip.clipId.uuidString,
+            "capturedAt": clip.capturedAt.timeIntervalSince1970,
+            "duration": clip.duration,
+            "fileSizeBytes": fileSize,
+            "latitude": clip.latitude as Any,
+            "longitude": clip.longitude as Any
+        ]
+        if session.isReachable {
+            session.sendMessage(announcePayload, replyHandler: nil) { error in
+                NSLog("[Himem][WC] watch — pre-announce sendMessage failed for clipId=\(clip.clipId): \(error.localizedDescription) (transferFile will still deliver)")
+            }
+        } else {
+            NSLog("[Himem][WC] watch — pre-announce skipped, not reachable; file delivery is durable")
+        }
+
         let metadata = clip.metadata.asWireDict()
         let transfer = session.transferFile(url, metadata: metadata)
         NSLog("[Himem][WC] watch — transferFile queued for clipId=\(clip.clipId), reachable=\(session.isReachable), transferring=\(transfer.isTransferring)")

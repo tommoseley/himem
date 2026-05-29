@@ -48,6 +48,31 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         WCSession.default.activate()
     }
 
+    // MARK: - Message (pre-announce path)
+
+    /// Receives `sendMessage` payloads from the watch. The only
+    /// expected payload today is the pre-announce that's sent
+    /// immediately before each `transferFile` — see
+    /// `WatchTransferService.send(clip:)` and the parsing/wiring
+    /// in `WatchPreAnnounceParser`.
+    func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        guard let parsed = WatchPreAnnounceParser.parse(message) else {
+            NSLog("[Himem][WC] iPhone — didReceiveMessage ignored, keys=\(Array(message.keys))")
+            return
+        }
+        NSLog("[Himem][WC] iPhone — pre-announce received for clipId=\(parsed.clipId) duration=\(parsed.durationSeconds)s")
+        Task { @MainActor in
+            InboxArrivalTracker.shared.recordPreAnnounce(
+                clipId: parsed.clipId,
+                capturedAt: parsed.capturedAt,
+                durationSeconds: parsed.durationSeconds,
+                latitude: parsed.latitude,
+                longitude: parsed.longitude,
+                fileSizeBytes: parsed.fileSizeBytes
+            )
+        }
+    }
+
     // MARK: - File transfer
 
     func session(_ session: WCSession, didReceive file: WCSessionFile) {
@@ -184,7 +209,22 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 // "transcript ready" — addresses the spec's
                 // operational-truth requirement (sync screens 1+2
                 // in `screens-captured-clips-sessions.jsx`).
-                InboxArrivalTracker.shared.recordTranscribingStarted(clipId: clip.clipId)
+                // Fallback metadata covers the case where the
+                // watch's pre-announce sendMessage was lost (phone
+                // backgrounded at the moment of the send); the
+                // tracker creates the IncomingCard entry from the
+                // manifest's now-arrived clip instead.
+                InboxArrivalTracker.shared.recordTranscribingStarted(
+                    clipId: clip.clipId,
+                    fallbackMetadata: InFlightClipMetadata(
+                        capturedAt: clip.capturedAt,
+                        durationSeconds: clip.duration,
+                        latitude: clip.latitude,
+                        longitude: clip.longitude,
+                        fileSizeBytes: nil,
+                        announcedAt: Date()
+                    )
+                )
                 let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
                 // Only flip `transcriptionAttempted` when the
                 // recognizer ran end-to-end (`.transcribed`).

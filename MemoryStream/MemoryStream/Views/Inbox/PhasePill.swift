@@ -6,13 +6,9 @@ import SwiftUI
 /// `SessionCard` — the at-a-glance signal for what the card is doing.
 ///
 /// Status is never color alone (Crucible accessibility rule): each
-/// case carries its own glyph + label. Pulsing cases are the ones
-/// actively progressing — receiving and transcribing — so the user
-/// can distinguish in-flight work from waiting or paused.
-///
-/// Phase 2 (this commit) covers only `.transcribing`; the other
-/// cases are stubbed out behind a switch that future commits flesh
-/// out without changing this file's public API.
+/// case carries its own SF Symbol glyph + label. Pulsing cases are
+/// the ones actively progressing — receiving and transcribing — so
+/// the user can distinguish in-flight work from queued or paused.
 struct PhasePill: View {
     let phase: InboxArrivalTracker.Phase
 
@@ -35,35 +31,53 @@ struct PhasePill: View {
 
     private var label: String {
         switch phase {
+        case .waiting:      return "Waiting"
+        case .downloading:  return "Receiving"
         case .transcribing: return "Transcribing"
+        case .paused:       return "Paused"
         }
     }
 
     private var foregroundColor: Color {
         switch phase {
+        case .waiting:      return Crucible.Color.ink3
+        case .downloading:  return Crucible.Color.accent
         case .transcribing: return Crucible.Color.ink2
+        case .paused:       return Crucible.Color.warnInk
         }
     }
 
     private var backgroundColor: Color {
         switch phase {
+        case .waiting:      return Crucible.Color.sunk
+        case .downloading:  return Crucible.Color.accentTint
         case .transcribing: return Crucible.Color.sunk
+        case .paused:       return Crucible.Color.warnTint
         }
     }
 
     private var pulsing: Bool {
         switch phase {
-        case .transcribing: return true
+        case .downloading, .transcribing: return true
+        case .waiting, .paused:           return false
         }
     }
 
     @ViewBuilder
     private var icon: some View {
         switch phase {
+        case .waiting:
+            // Clock — queued behind whoever's currently downloading.
+            Image(systemName: "clock")
+        case .downloading:
+            // Down arrow to line — receiving bytes from the watch.
+            Image(systemName: "arrow.down.to.line")
         case .transcribing:
-            // Three horizontal text lines — "reading the audio."
-            // Spec mock used a custom SVG; SF Symbol equivalent.
+            // Three text lines — reading the audio.
             Image(systemName: "text.alignleft")
+        case .paused:
+            // Two vertical bars — sync paused, watch out of range.
+            Image(systemName: "pause.fill")
         }
     }
 }

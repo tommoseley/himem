@@ -4,14 +4,14 @@ import Foundation
 
 /// Money tests for `InboxArrivalTracker` — the per-clipId phase
 /// state introduced 2026-05-29 so SessionListView can render
-/// `IncomingCard`s for clips that are still arriving/transcribing.
+/// `IncomingCard`s for clips arriving and transcribing.
 ///
-/// Invariants locked here:
-///   1. Recording a phase makes `phase(for:)` return it.
-///   2. Clearing removes the entry and `hasAnyInFlight` reflects it.
-///   3. Multiple clipIds coexist independently.
-///   4. The `@Published phasesByClipId` dictionary observed by
-///      SwiftUI views actually fires on mutation.
+/// Locks the contract for all four phase transitions defined in the
+/// sync-surface spec (`screens-captured-clips-sessions.jsx`):
+///   - pre-announce → `.downloading` (first) or `.waiting` (rest)
+///   - file arrived → `.transcribing` + waiting promoted
+///   - reachability lost → all downloading/waiting → `.paused`
+///   - reachability restored → oldest paused → `.downloading`
 @MainActor
 @Suite(.serialized)
 struct InboxArrivalTrackerTests {
@@ -23,58 +23,170 @@ struct InboxArrivalTrackerTests {
         return InboxArrivalTracker.shared
     }
 
-    @Test func recordTranscribingStarted_makesPhaseQueryable() {
+    private func preAnnounce(
+        _ t: InboxArrivalTracker,
+        clipId: UUID = UUID(),
+        capturedAt: Date = Date(),
+        duration: TimeInterval = 10,
+        at announcedAt: Date = Date()
+    ) -> UUID {
+        t.recordPreAnnounce(
+            clipId: clipId,
+            capturedAt: capturedAt,
+            durationSeconds: duration,
+            latitude: nil,
+            longitude: nil,
+            fileSizeBytes: nil,
+            now: announcedAt
+        )
+        return clipId
+    }
+
+    // MARK: - Queue semantics
+
+    @Test func firstPreAnnounce_isDownloading() {
+        let t = freshTracker()
+        let id = preAnnounce(t)
+        #expect(t.phase(for: id) == .downloading)
+    }
+
+    @Test func secondPreAnnounceWhileFirstDownloading_isWaiting() {
+        let t = freshTracker()
+        let a = preAnnounce(t, at: Date(timeIntervalSince1970: 100))
+        let b = preAnnounce(t, at: Date(timeIntervalSince1970: 101))
+        #expect(t.phase(for: a) == .downloading)
+        #expect(t.phase(for: b) == .waiting)
+    }
+
+    @Test func thirdPreAnnounce_alsoWaiting() {
+        let t = freshTracker()
+        let a = preAnnounce(t, at: Date(timeIntervalSince1970: 100))
+        let b = preAnnounce(t, at: Date(timeIntervalSince1970: 101))
+        let c = preAnnounce(t, at: Date(timeIntervalSince1970: 102))
+        #expect(t.phase(for: a) == .downloading)
+        #expect(t.phase(for: b) == .waiting)
+        #expect(t.phase(for: c) == .waiting)
+    }
+
+    @Test func duplicatePreAnnounce_isIdempotent() {
         let t = freshTracker()
         let id = UUID()
-        t.recordTranscribingStarted(clipId: id)
+        _ = preAnnounce(t, clipId: id, at: Date(timeIntervalSince1970: 100))
+        _ = preAnnounce(t, clipId: id, at: Date(timeIntervalSince1970: 200))
+        #expect(t.inFlightCount == 1)
+        #expect(t.phase(for: id) == .downloading)
+    }
+
+    // MARK: - Transcribing transition
+
+    /// File-arrived transition: the downloading clip becomes
+    /// transcribing, and the oldest waiting clip is promoted to
+    /// downloading to keep the queue moving.
+    @Test func transcribingPromotesOldestWaiting() {
+        let t = freshTracker()
+        let a = preAnnounce(t, at: Date(timeIntervalSince1970: 100))
+        let b = preAnnounce(t, at: Date(timeIntervalSince1970: 101))
+        let c = preAnnounce(t, at: Date(timeIntervalSince1970: 102))
+
+        t.recordTranscribingStarted(clipId: a)
+
+        #expect(t.phase(for: a) == .transcribing)
+        #expect(t.phase(for: b) == .downloading, "Oldest waiting should promote to downloading")
+        #expect(t.phase(for: c) == .waiting)
+    }
+
+    @Test func transcribingWithoutPreAnnounce_synthesizesFromFallback() {
+        // sendMessage pre-announce can be lost when the phone is
+        // backgrounded; the file still arrives via transferFile.
+        // The tracker must still get an entry so the IncomingCard
+        // renders during the transcribe window.
+        let t = freshTracker()
+        let id = UUID()
+        let now = Date()
+        t.recordTranscribingStarted(
+            clipId: id,
+            fallbackMetadata: InFlightClipMetadata(
+                capturedAt: now,
+                durationSeconds: 30,
+                latitude: nil,
+                longitude: nil,
+                fileSizeBytes: nil,
+                announcedAt: now
+            )
+        )
         #expect(t.phase(for: id) == .transcribing)
-        #expect(t.hasAnyInFlight)
         #expect(t.inFlightCount == 1)
     }
 
-    @Test func clear_removesFromTracking() {
+    @Test func transcribingWithoutPreAnnounceOrFallback_isNoOp() {
+        // No metadata, no entry — safe early return rather than
+        // crashing or creating a malformed in-flight clip.
         let t = freshTracker()
         let id = UUID()
-        t.recordTranscribingStarted(clipId: id)
-        t.clear(clipId: id)
+        t.recordTranscribingStarted(clipId: id, fallbackMetadata: nil)
         #expect(t.phase(for: id) == nil)
-        #expect(t.hasAnyInFlight == false)
         #expect(t.inFlightCount == 0)
     }
 
-    @Test func multipleClips_trackedIndependently() {
+    // MARK: - Reachability transitions
+
+    @Test func reachabilityLost_pausesDownloadingAndWaiting() {
         let t = freshTracker()
-        let a = UUID()
-        let b = UUID()
+        let a = preAnnounce(t, at: Date(timeIntervalSince1970: 100))
+        let b = preAnnounce(t, at: Date(timeIntervalSince1970: 101))
+        t.recordReachabilityLost()
+        #expect(t.phase(for: a) == .paused)
+        #expect(t.phase(for: b) == .paused)
+    }
+
+    @Test func reachabilityLost_doesNotPauseTranscribing() {
+        // Transcribing isn't waiting on the watch — it's running
+        // locally on the phone. Reachability changes are irrelevant.
+        let t = freshTracker()
+        let a = preAnnounce(t, at: Date(timeIntervalSince1970: 100))
         t.recordTranscribingStarted(clipId: a)
-        t.recordTranscribingStarted(clipId: b)
-        #expect(t.inFlightCount == 2)
-        t.clear(clipId: a)
-        #expect(t.phase(for: a) == nil)
-        #expect(t.phase(for: b) == .transcribing)
-        #expect(t.inFlightCount == 1)
+        t.recordReachabilityLost()
+        #expect(t.phase(for: a) == .transcribing)
     }
 
-    /// SwiftUI views observe the `@Published phasesByClipId`
-    /// dictionary; if mutations don't fire `objectWillChange`, the
-    /// views won't update. Lock that the publisher emits on both
-    /// record and clear.
-    @Test func phasesByClipId_publishesOnMutation() async {
+    @Test func reachabilityRestored_resumesOldestPausedAsDownloading() {
         let t = freshTracker()
-        let id = UUID()
-        // Sanity baseline.
-        #expect(t.phasesByClipId.isEmpty)
-        t.recordTranscribingStarted(clipId: id)
-        #expect(t.phasesByClipId[id] == .transcribing)
-        t.clear(clipId: id)
-        #expect(t.phasesByClipId[id] == nil)
+        let a = preAnnounce(t, at: Date(timeIntervalSince1970: 100))
+        let b = preAnnounce(t, at: Date(timeIntervalSince1970: 101))
+        let c = preAnnounce(t, at: Date(timeIntervalSince1970: 102))
+        t.recordReachabilityLost()
+        t.recordReachabilityRestored()
+        #expect(t.phase(for: a) == .downloading)
+        #expect(t.phase(for: b) == .waiting)
+        #expect(t.phase(for: c) == .waiting)
     }
 
-    /// `clear` for an id that was never recorded is a no-op (no
-    /// crash, no spurious published change). Important because the
-    /// arrival path always clears after a transcribe attempt, even
-    /// if a code path skipped the `recordTranscribingStarted` call
-    /// (e.g., the dedup early-return).
+    // MARK: - Clear + sort + queries
+
+    @Test func clear_removesEntry_andPromotesNextWaiting() {
+        // If the transcribing clip clears (transcription attempt
+        // landed) and there's still a waiting clip in the queue
+        // with no active downloader, the waiting one promotes.
+        let t = freshTracker()
+        let a = preAnnounce(t, at: Date(timeIntervalSince1970: 100))
+        let b = preAnnounce(t, at: Date(timeIntervalSince1970: 101))
+        t.recordTranscribingStarted(clipId: a)
+        // a is transcribing, b is now downloading.
+        t.clear(clipId: a)
+        // After clear, b is still downloading — no waiting to promote.
+        #expect(t.phase(for: a) == nil)
+        #expect(t.phase(for: b) == .downloading)
+    }
+
+    @Test func sortedNewestFirst_orderingMatchesCapturedAtDescending() {
+        let t = freshTracker()
+        let a = preAnnounce(t, clipId: UUID(), capturedAt: Date(timeIntervalSince1970: 100))
+        let b = preAnnounce(t, clipId: UUID(), capturedAt: Date(timeIntervalSince1970: 300))
+        let c = preAnnounce(t, clipId: UUID(), capturedAt: Date(timeIntervalSince1970: 200))
+        let order = t.sortedNewestFirst().map(\.clipId)
+        #expect(order == [b, c, a])
+    }
+
     @Test func clearUntracked_isHarmless() {
         let t = freshTracker()
         let id = UUID()

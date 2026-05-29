@@ -101,12 +101,12 @@ struct SessionListView: View {
                 expandedSessionId = nil
             }
         }
-        .onChange(of: arrivals.phasesByClipId) { _, _ in
+        .onChange(of: arrivals.clipsInFlight) { _, _ in
             // In-flight clips are rendered as IncomingCard, NOT as
-            // a SessionCard inside the session list. When the phase
-            // map changes (clip enters or leaves transcribing) the
-            // sessions need to be re-grouped without those clipIds
-            // to avoid double-rendering.
+            // a SessionCard inside the session list. When the
+            // tracker changes (clip enters/leaves any in-flight
+            // phase) the sessions need to be re-grouped without
+            // those clipIds to avoid double-rendering.
             sessions = computeSessions()
         }
         .onDisappear { stopPlayback() }
@@ -121,7 +121,7 @@ struct SessionListView: View {
     /// as a session-list row with the legitimate-but-confusing
     /// "Transcribing…" body variant.
     private func computeSessions() -> [ClipGroup] {
-        let inFlight = arrivals.phasesByClipId.keys
+        let inFlight = arrivals.clipsInFlight.keys
         guard !inFlight.isEmpty else {
             return ClipSessionGrouper.group(inbox.clips)
         }
@@ -155,17 +155,16 @@ struct SessionListView: View {
                 header
                 // Sync surface — per-clip IncomingCards above the
                 // ready session list. Spec § SYNC / INCOMING.
-                if !inFlightClipsSorted.isEmpty {
+                let inFlight = arrivals.sortedNewestFirst()
+                if !inFlight.isEmpty {
                     LazyVStack(spacing: 12) {
-                        ForEach(inFlightClipsSorted, id: \.clipId) { clip in
-                            if let phase = arrivals.phase(for: clip.clipId) {
-                                IncomingCard(
-                                    capturedAt: clip.capturedAt,
-                                    durationSeconds: clip.duration,
-                                    placeName: nil,
-                                    phase: phase
-                                )
-                            }
+                        ForEach(inFlight) { clip in
+                            IncomingCard(
+                                capturedAt: clip.capturedAt,
+                                durationSeconds: clip.durationSeconds,
+                                placeName: nil,
+                                phase: clip.phase
+                            )
                         }
                     }
                     .padding(.horizontal, 14)
@@ -207,22 +206,6 @@ struct SessionListView: View {
         .padding(.bottom, 16)
     }
 
-    /// In-flight clips for the sync surface, sorted newest first
-    /// (matching the SessionCard list ordering). Phase 2 (this
-    /// commit) ships `.transcribing` rendering by looking the clip
-    /// up in the inbox manifest — transcribing clips are already on
-    /// disk with their metadata populated. Future phases that
-    /// surface `.downloading` / `.waiting` (where the InboxClip
-    /// doesn't exist yet) will swap to a richer InFlightClip model
-    /// that the tracker populates on its own.
-    private var inFlightClipsSorted: [InboxClip] {
-        let inFlight = arrivals.phasesByClipId.keys
-        guard !inFlight.isEmpty else { return [] }
-        let inFlightSet = Set(inFlight)
-        return inbox.clips
-            .filter { inFlightSet.contains($0.clipId) }
-            .sorted { $0.capturedAt > $1.capturedAt }
-    }
 
     private var headerTitle: String {
         let n = inbox.count
