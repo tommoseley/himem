@@ -48,6 +48,28 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         WCSession.default.activate()
     }
 
+    /// Pauses / resumes in-flight clips based on session reachability.
+    /// Spec § SYNC / INCOMING screen 3 ("Stalled · Watch out of
+    /// range"): when reachability drops while any clip is downloading
+    /// or waiting, transition them to `.paused`. When it returns,
+    /// resume the oldest as `.downloading`.
+    ///
+    /// `isReachable` is a proxy — iOS doesn't expose Bluetooth
+    /// proximity directly. False here can also mean the watch app
+    /// is backgrounded; for the user-facing case (Captured Clips
+    /// open, transfer stalled mid-flight) the signal is correct.
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        let reachable = session.isReachable
+        NSLog("[Himem][WC] iPhone — sessionReachabilityDidChange reachable=\(reachable)")
+        Task { @MainActor in
+            if reachable {
+                InboxArrivalTracker.shared.recordReachabilityRestored()
+            } else {
+                InboxArrivalTracker.shared.recordReachabilityLost()
+            }
+        }
+    }
+
     // MARK: - Message (pre-announce path)
 
     /// Receives `sendMessage` payloads from the watch. The only
