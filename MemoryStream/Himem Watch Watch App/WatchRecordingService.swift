@@ -54,6 +54,15 @@ final class WatchRecordingService: NSObject, ObservableObject {
     /// audio tap thread can read/write without crossing actor
     /// boundaries on every buffer. Guarded by `levelLock`.
     private nonisolated(unsafe) var lastLevelPublishedAt: CFTimeInterval = 0
+    /// Running peak amplitude over all audio buffers received since
+    /// the last `lastLevelPublishedAt` reset. Without this, the
+    /// 100 ms throttle was sampling a single ~10 ms buffer per
+    /// window — if that buffer fell between syllables the level
+    /// published as near-silence even though the surrounding 90 ms
+    /// had real speech. Tom QA 2026-05-29: waveform stayed flat
+    /// during normal speaking. Guarded by `levelLock` like the
+    /// throttle clock.
+    private nonisolated(unsafe) var runningPeakSinceLastPublish: Float = 0
     private let levelLock = NSLock()
     /// On-a-roll session id. Stamped at `start()`; every clip in the
     /// session — the initial clip plus each clip created via a
@@ -180,6 +189,13 @@ final class WatchRecordingService: NSObject, ObservableObject {
             transcript = ""
             audioLevel = 0
             peakAudioLevel = 0
+            // Reset the running peak so leftovers from a prior
+            // session can't leak into the first published level of
+            // this one.
+            levelLock.lock()
+            runningPeakSinceLastPublish = 0
+            lastLevelPublishedAt = 0
+            levelLock.unlock()
             currentRollGroupId = UUID()
             isRecording = true
             WatchSharedState.isRecording = true
@@ -340,21 +356,31 @@ final class WatchRecordingService: NSObject, ObservableObject {
     /// the audio thread and we want to avoid every buffer racing
     /// the main queue.
     private nonisolated func publishAudioLevelIfDue(from buffer: AVAudioPCMBuffer) {
+        // Compute peak for THIS buffer first — every buffer counts
+        // toward the running max, not just the one that happens to
+        // sit on the 100 ms throttle boundary. Cheap (~40 frames @
+        // 16 kHz of float scan per ~5 ms buffer).
+        var bufferPeak: Float = 0
+        if let channelData = buffer.floatChannelData?[0] {
+            let frameLength = Int(buffer.frameLength)
+            for i in 0..<frameLength {
+                let s = abs(channelData[i])
+                if s > bufferPeak { bufferPeak = s }
+            }
+        }
         // `CACurrentMediaTime` is iOS/macOS only; `systemUptime` is the
         // monotonic equivalent available on watchOS.
         let now = ProcessInfo.processInfo.systemUptime
-        levelLock.lock()
-        let due = (now - lastLevelPublishedAt) >= 0.1
-        if due { lastLevelPublishedAt = now }
-        levelLock.unlock()
-        guard due else { return }
-        guard let channelData = buffer.floatChannelData?[0] else { return }
-        let frameLength = Int(buffer.frameLength)
-        var peak: Float = 0
-        for i in 0..<frameLength {
-            let s = abs(channelData[i])
-            if s > peak { peak = s }
-        }
+        // Merge buffer peak into the running window peak; if the
+        // throttle is due, snapshot + reset for the next window.
+        let peakToPublish = WaveformLevelThrottle.observe(
+            bufferPeak: bufferPeak,
+            now: now,
+            lastPublishedAt: &lastLevelPublishedAt,
+            runningPeak: &runningPeakSinceLastPublish,
+            lock: levelLock
+        )
+        guard let peak = peakToPublish else { return }
         let normalized = Self.normalisedLevel(forPeakAmplitude: peak)
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -362,6 +388,42 @@ final class WatchRecordingService: NSObject, ObservableObject {
             if normalized > self.peakAudioLevel {
                 self.peakAudioLevel = normalized
             }
+        }
+    }
+
+    /// Throttle helper exposed for unit testing — the bug fix is
+    /// load-bearing here and the function above is hard to drive
+    /// from tests because it takes a live `AVAudioPCMBuffer`.
+    enum WaveformLevelThrottle {
+        /// Standard 100 ms publish cadence — once per waveform bar
+        /// at the watch's 10 Hz visual refresh. Public constant so
+        /// tests can drive boundary cases deterministically.
+        static let intervalSeconds: TimeInterval = 0.1
+
+        /// Tracks the loudest peak seen across all buffers in the
+        /// current 100 ms window. Returns the snapshot when the
+        /// window closes (and resets the running peak), or `nil`
+        /// otherwise. Pure besides the inout state — the lock makes
+        /// the running-peak read-modify-write safe under the audio
+        /// thread + main-thread access pattern.
+        static func observe(
+            bufferPeak: Float,
+            now: TimeInterval,
+            lastPublishedAt: inout CFTimeInterval,
+            runningPeak: inout Float,
+            lock: NSLock
+        ) -> Float? {
+            lock.lock()
+            if bufferPeak > runningPeak { runningPeak = bufferPeak }
+            let due = (now - lastPublishedAt) >= intervalSeconds
+            var snapshot: Float? = nil
+            if due {
+                snapshot = runningPeak
+                runningPeak = 0
+                lastPublishedAt = now
+            }
+            lock.unlock()
+            return snapshot
         }
     }
 
