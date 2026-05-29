@@ -150,4 +150,76 @@ struct CapturedClipsHeaderSubtitleTests {
         #expect(!s.contains("9:00 AM–9:00 AM"))
         #expect(!s.contains("9:00 AM-9:00 AM"))
     }
+
+    // MARK: - Sync-aware variant (Phase 5)
+
+    /// When nothing is in flight, the sync-aware variant collapses
+    /// back to the simple "N session(s)" counts portion — same as
+    /// the non-sync variant. Drift-prevention for the format.
+    @Test func syncAware_noInFlight_collapsesToSimpleSessionCount() {
+        let s = CapturedClipsSubtitleBuilder.syncAwareSubtitle(
+            earliest: date(2026, 5, 29, 9, 0),
+            latest: date(2026, 5, 29, 10, 30),
+            readySessionCount: 3,
+            syncingClipCount: 0,
+            now: now,
+            calendar: calendar
+        )
+        #expect(s.hasPrefix("3 sessions ·"))
+        #expect(!s.contains("syncing"))
+        #expect(!s.contains("ready"))
+    }
+
+    /// With clips in flight, the counts portion splits into
+    /// "K ready · J syncing" so the user sees both numbers without
+    /// having to drill in.
+    @Test func syncAware_someSyncing_splitsCountsIntoReadyAndSyncing() {
+        let s = CapturedClipsSubtitleBuilder.syncAwareSubtitle(
+            earliest: date(2026, 5, 29, 9, 0),
+            latest: date(2026, 5, 29, 10, 30),
+            readySessionCount: 2,
+            syncingClipCount: 2,
+            now: now,
+            calendar: calendar
+        )
+        #expect(s.contains("2 ready"))
+        #expect(s.contains("2 syncing"))
+        // Cross-tab: time range still rendered, day label still
+        // applied — sync-awareness can't break the underlying
+        // contract from the bug-fix that started this file.
+        #expect(s.contains("today"))
+        #expect(s.contains("9:00 AM"))
+    }
+
+    /// One syncing clip pluralizes correctly (no "1 syncings").
+    @Test func syncAware_singleSyncing_singularizes() {
+        let s = CapturedClipsSubtitleBuilder.syncAwareSubtitle(
+            earliest: date(2026, 5, 29, 9, 0),
+            latest: date(2026, 5, 29, 10, 30),
+            readySessionCount: 0,
+            syncingClipCount: 1,
+            now: now,
+            calendar: calendar
+        )
+        #expect(s.contains("1 syncing"))
+        #expect(!s.contains("1 syncings"))
+    }
+
+    /// Cross-day still honored under the sync-aware variant — Tom's
+    /// original B3 bug must not regress just because the counts
+    /// portion changed shape.
+    @Test func syncAware_crossDay_stillEmitsBothDayLabels() {
+        let s = CapturedClipsSubtitleBuilder.syncAwareSubtitle(
+            earliest: date(2026, 5, 27, 15, 37),
+            latest: date(2026, 5, 28, 18, 30),
+            readySessionCount: 2,
+            syncingClipCount: 1,
+            now: now,
+            calendar: calendar
+        )
+        #expect(s.contains("May 27"))
+        #expect(s.contains("yesterday"))
+        #expect(s.contains("2 ready"))
+        #expect(s.contains("1 syncing"))
+    }
 }

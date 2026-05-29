@@ -153,10 +153,20 @@ struct SessionListView: View {
         ScrollView {
             VStack(spacing: 0) {
                 header
-                // Sync surface — per-clip IncomingCards above the
-                // ready session list. Spec § SYNC / INCOMING.
                 let inFlight = arrivals.sortedNewestFirst()
                 if !inFlight.isEmpty {
+                    // Global sync state at-a-glance. Spec § SYNC /
+                    // INCOMING — `SyncStrip` reads aggregate phase
+                    // and shifts visual state for paused vs receiving.
+                    SyncStrip(
+                        receivingIndex: receivingIndex(among: inFlight),
+                        totalInFlight: inFlight.count,
+                        allPaused: allPaused(among: inFlight)
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 10)
+                    // Per-clip IncomingCards above the ready session
+                    // list.
                     LazyVStack(spacing: 12) {
                         ForEach(inFlight) { clip in
                             IncomingCard(
@@ -208,23 +218,70 @@ struct SessionListView: View {
 
 
     private var headerTitle: String {
-        let n = inbox.count
+        // Title counts EVERYTHING the watch is sending, ready or
+        // in-flight — "N from your Watch" stays honest about the
+        // full incoming workload. Manifest clips include the
+        // already-in-flight ones (the file lands in the manifest
+        // at `acceptArrivedClip` time, before transcription); add
+        // any pre-announced clips that aren't yet in the manifest.
+        let inFlightOnly = arrivals.clipsInFlight.keys.filter { id in
+            !inbox.clips.contains(where: { $0.clipId == id })
+        }.count
+        let n = inbox.count + inFlightOnly
         return n == 1 ? "1 from your Watch" : "\(n) from your Watch"
     }
 
     private var headerSubtitle: String {
-        guard let first = inbox.clips.map(\.capturedAt).min(),
-              let last = inbox.clips.map(\.capturedAt).max() else { return "" }
-        // Cross-day handling lives in the pure builder so the
-        // "3 sessions · May 27, 3:37 PM–6:30 PM"-while-the-6:30
-        // PM-was-actually-May-28 bug can't re-emerge silently.
-        // See `CapturedClipsSubtitleBuilder` +
-        // `CapturedClipsHeaderSubtitleTests`.
+        // Range covers every clip we know about — ready manifest
+        // rows AND in-flight tracker entries. Pre-announced but
+        // not-yet-landed clips carry their `capturedAt` from the
+        // wire payload.
+        let manifestCapturedAts = inbox.clips.map(\.capturedAt)
+        let inFlightCapturedAts = arrivals.clipsInFlight.values.map(\.capturedAt)
+        let all = manifestCapturedAts + inFlightCapturedAts
+        guard let first = all.min(), let last = all.max() else { return "" }
+        let syncingCount = arrivals.inFlightCount
+        // When syncing, swap to the sync-aware variant so the user
+        // sees "K ready · J syncing · time-range" instead of the
+        // plain session count. Cross-day handling and the bug-fix
+        // contract from `CapturedClipsHeaderSubtitleTests` are
+        // preserved inside the builder.
+        if syncingCount > 0 {
+            return CapturedClipsSubtitleBuilder.syncAwareSubtitle(
+                earliest: first,
+                latest: last,
+                readySessionCount: sessions.count,
+                syncingClipCount: syncingCount
+            )
+        }
         return CapturedClipsSubtitleBuilder.subtitle(
             earliest: first,
             latest: last,
             sessionCount: sessions.count
         )
+    }
+
+    /// 1-indexed position of the first non-paused in-flight clip
+    /// (the one actively downloading or transcribing). Defaults to
+    /// 1 when nothing is actively progressing.
+    private func receivingIndex(among inFlight: [InboxArrivalTracker.InFlightClip]) -> Int {
+        guard let idx = inFlight.firstIndex(where: { clip in
+            switch clip.phase {
+            case .downloading, .transcribing: return true
+            case .waiting, .paused: return false
+            }
+        }) else { return 1 }
+        return idx + 1
+    }
+
+    /// `true` when every in-flight clip is paused — drives the
+    /// SyncStrip's warn-tint "Watch out of range" rendering.
+    private func allPaused(among inFlight: [InboxArrivalTracker.InFlightClip]) -> Bool {
+        guard !inFlight.isEmpty else { return false }
+        return inFlight.allSatisfy { clip in
+            if case .paused = clip.phase { return true }
+            return false
+        }
     }
 
     // MARK: - Session card (collapsed + expanded variants)

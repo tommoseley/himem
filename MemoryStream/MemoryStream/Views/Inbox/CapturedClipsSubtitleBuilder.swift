@@ -49,6 +49,51 @@ enum CapturedClipsSubtitleBuilder {
         return "\(sessionPart) · \(earliestDay) \(earliestTime) – \(latestDay) \(latestTime)"
     }
 
+    /// Sync-aware variant. When at least one clip is syncing
+    /// (downloading / waiting / transcribing in
+    /// `InboxArrivalTracker`), the counts portion of the subtitle
+    /// breaks out "K ready · J syncing" so the user sees both
+    /// totals at a glance. Time range covers the full set so the
+    /// header window reflects everything in the inbox, in flight
+    /// or not. Spec § SYNC / INCOMING (`CCHeaderSync`).
+    static func syncAwareSubtitle(
+        earliest: Date,
+        latest: Date,
+        readySessionCount: Int,
+        syncingClipCount: Int,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        // Counts portion adapts to whether anything is in flight.
+        let countsPart: String
+        if syncingClipCount > 0 {
+            let readyLabel = "\(readySessionCount) ready"
+            let syncingLabel = syncingClipCount == 1
+                ? "1 syncing"
+                : "\(syncingClipCount) syncing"
+            countsPart = "\(readyLabel) · \(syncingLabel)"
+        } else {
+            countsPart = readySessionCount == 1
+                ? "1 session"
+                : "\(readySessionCount) sessions"
+        }
+
+        // Time-range portion is the same dance as `subtitle(...)`.
+        let timeFmt = DateFormatter()
+        timeFmt.calendar = calendar
+        timeFmt.timeZone = calendar.timeZone
+        timeFmt.dateFormat = "h:mm a"
+        let earliestTime = timeFmt.string(from: earliest)
+        let latestTime = timeFmt.string(from: latest)
+        let earliestDay = dayLabel(for: earliest, now: now, calendar: calendar)
+        let latestDay = dayLabel(for: latest, now: now, calendar: calendar)
+        if calendar.isDate(earliest, inSameDayAs: latest) {
+            let timeRange = earliestTime == latestTime ? earliestTime : "\(earliestTime)–\(latestTime)"
+            return "\(countsPart) · \(earliestDay), \(timeRange)"
+        }
+        return "\(countsPart) · \(earliestDay) \(earliestTime) – \(latestDay) \(latestTime)"
+    }
+
     /// Same rules as the existing header used: today / yesterday /
     /// "MMM d". Pulled into a helper so both ends of a cross-day
     /// range can reuse it.
