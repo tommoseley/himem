@@ -258,20 +258,21 @@ final class WatchRecordingService: NSObject, ObservableObject {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
-        // Drain the file-write queue so any tail-end buffers still
-        // in flight finish writing before we release the AVAudioFile
-        // handle. The serial queue preserves write order; sync here
-        // returns only after the last enqueued write completes.
-        // Without this, the final ~hundreds-of-ms of audio could be
-        // lost if the queue still had pending writes when the
-        // AVAudioFile got dealloc'd (the header finalize would race
-        // any in-flight write).
-        fileWriteQueue.sync {}
-        // Closing the AVAudioFile happens by releasing the reference
-        // — the file finalizes its header on dealloc, so any further
-        // attempt to read it would race that flush. Drop our handle
-        // before computing duration, since `duration` reads `elapsed`
-        // (not the file).
+        // Closing the AVAudioFile is handled by ARC. Our reference
+        // drops here, but every pending closure in `fileWriteQueue`
+        // captured `file` strongly — the AVAudioFile stays alive
+        // until the last write completes, then dealloc-time header
+        // finalize runs at that moment. We deliberately do NOT
+        // sync-drain the queue here: under sustained watch flash
+        // pressure (housekeeping spikes), the queue can have a
+        // multi-second backlog at stop time, and a sync drain on
+        // the main thread triggers the iOS watchdog (Tom QA
+        // 2026-05-30 crash at libsystem_kernel.dylib`mach_msg2_trap
+        // on the main thread). The trade-off is a small window
+        // where `currentAudioURL` exists but is still being
+        // appended-to — but `send(clip:)` only fires later through
+        // the manifest sweep / reachability triggers, by which
+        // point the queue has drained and the header is finalized.
         audioFile = nil
         stopTimer()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -499,11 +500,10 @@ final class WatchRecordingService: NSObject, ObservableObject {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
-        // Same drain pattern as `stop(save:)` — make sure any
-        // in-flight writes complete before the AVAudioFile handle
-        // releases. Error path may delete the file anyway, but
-        // dropping mid-write would leak the queued buffers.
-        fileWriteQueue.sync {}
+        // Same ARC-based cleanup as `stop(save:)` — no sync drain;
+        // closures retain the AVAudioFile until they complete and
+        // releasing our reference is safe (see `stop` for the
+        // watchdog-crash rationale).
         audioFile = nil
         startedAt = nil
         currentClipId = nil
