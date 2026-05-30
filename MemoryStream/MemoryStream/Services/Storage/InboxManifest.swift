@@ -405,6 +405,17 @@ final class InboxManifest: ObservableObject {
         return nil
     }
 
+    /// True if any clip (active or tombstone) is tagged with this
+    /// `rollGroupId`. Drives the efficiency leg of
+    /// `WatchSessionDelegate.shouldDropArrivedMaster`: a master with
+    /// a rollGroupId the manifest already split is a redundant
+    /// delivery — re-splitting would produce the same children
+    /// (deterministic UUIDs, Step A), but skip the work.
+    func isRollGroupKnown(_ rollGroupId: UUID) -> Bool {
+        clips.contains { $0.rollGroupId == rollGroupId }
+            || disposedClips.contains { $0.rollGroupId == rollGroupId }
+    }
+
     /// Turn an active row into a tombstone — drops audio reference
     /// (file is already gone), stamps `disposedAt`, status to
     /// `.disposed`. All other fields preserved for forensic / future

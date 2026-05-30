@@ -302,27 +302,30 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// Float32 PCM (~192 KB/sec) because watchOS lacks `AVAssetWriter`;
     /// the phone compresses to AAC (~4 KB/sec, ~48× smaller) so the
     /// on-device storage and CloudKit footprint stay bounded.
-    /// Pure idempotency decision for `acceptArrivedClip`. Per
-    /// `ClipMetadata.clipId`'s documented contract: "Idempotency key
-    /// on the iPhone (a retried transfer with the same id is a
-    /// no-op)." Without this check the split path (where fragments
-    /// get fresh `UUID()` clipIds rather than reusing
-    /// `metadata.clipId`) silently produces a fresh copy of every
-    /// fragment on each redelivery — `InboxManifest.acceptClip`'s
-    /// dedup is keyed on `clip.clipId` and can't see them as dupes.
     ///
-    /// We treat the master as already-processed when ANY clip in the
-    /// manifest matches by either:
-    ///   - `clip.clipId == metadata.clipId` — single-clip path
-    ///     where the InboxClip directly uses the master's clipId.
-    ///   - `clip.rollGroupId == (metadata.rollGroupId ?? metadata.clipId)`
-    ///     — split-clip path where every fragment carries the
-    ///     master's rollGroupId.
-    static func isMasterAlreadyProcessed(metadata: ClipMetadata, manifestClips: [InboxClip]) -> Bool {
-        let dedupRollGroupId = metadata.rollGroupId ?? metadata.clipId
-        return manifestClips.contains { clip in
-            clip.clipId == metadata.clipId || clip.rollGroupId == dedupRollGroupId
+    /// Pure idempotency decision for `acceptArrivedClip`. Replaces
+    /// the prior three-layer dedup (manifest-membership +
+    /// rollGroupId-match + `InboxProcessedClipIds.contains`) with a
+    /// single predicate over the consolidated status field.
+    ///
+    /// Drop the arriving master when:
+    ///   - The manifest already has a meaningful status for the
+    ///     clipId — anything other than `.announced` means we
+    ///     accepted, split, or disposed of it before. `.announced`
+    ///     is the pre-announce placeholder, which is the row this
+    ///     arrival is meant to fulfill.
+    ///   - OR the rollGroupId is already in use by any clip in the
+    ///     manifest. After Step A's deterministic split UUIDs
+    ///     re-running the split would just rewrite the same files;
+    ///     skipping is purely an efficiency win.
+    static func shouldDropArrivedMaster(
+        manifestStatusForClipId: InboxClip.Status?,
+        rollGroupIdAlreadyInUse: Bool
+    ) -> Bool {
+        if let status = manifestStatusForClipId, status != .announced {
+            return true
         }
+        return rollGroupIdAlreadyInUse
     }
 
     @MainActor
@@ -346,9 +349,16 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         }
         defer { AcceptanceCriticalSection.exit(clipId: metadata.clipId) }
 
-        // Idempotency gate — see `isMasterAlreadyProcessed`. Drop the
-        // redelivered master file so disk doesn't bloat.
-        if Self.isMasterAlreadyProcessed(metadata: metadata, manifestClips: InboxManifest.shared.clips) {
+        // Single consolidated dedup gate — see
+        // `shouldDropArrivedMaster`. Drop the redelivered master
+        // file so disk doesn't bloat.
+        let manifest = InboxManifest.shared
+        let dedupRollGroupId = metadata.rollGroupId ?? metadata.clipId
+        let shouldDrop = Self.shouldDropArrivedMaster(
+            manifestStatusForClipId: manifest.status(for: metadata.clipId),
+            rollGroupIdAlreadyInUse: manifest.isRollGroupKnown(dedupRollGroupId)
+        )
+        if shouldDrop {
             NSLog("[Himem][WC] phone — duplicate master ignored, clipId=\(metadata.clipId) already processed")
             try? FileManager.default.removeItem(at: masterURL)
             // Still ack so the watch can drop the pending row.
@@ -356,11 +366,6 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             // travel; reusing it here keeps the dedup transparent
             // to the watch side.
             WatchSessionDelegate.shared.sendConfirmation(clipId: metadata.clipId)
-            // Clear any orphaned tracker entry for the master.
-            // Possible when the first arrival's split-path left an
-            // orphan and a late re-delivery is the chance to clean
-            // it up. § 8.6 of the system reference doc.
-            InboxArrivalTracker.shared.clear(clipId: metadata.clipId)
             return
         }
 

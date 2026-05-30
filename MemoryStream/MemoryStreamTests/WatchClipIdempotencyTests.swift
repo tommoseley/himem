@@ -10,10 +10,13 @@ import Foundation
 /// `UUID()` fragment clipIds that bypassed
 /// `InboxManifest.acceptClip`'s clipId-based dedup.
 ///
-/// Fix: `WatchSessionDelegate.isMasterAlreadyProcessed` — when the
+/// Fix: `WatchSessionDelegate.shouldDropArrivedMaster` — when the
 /// master's clipId or rollGroupId is already represented in the
-/// manifest (single path uses clipId; split path uses rollGroupId
-/// on every fragment), treat the redelivery as a no-op.
+/// manifest (single path uses clipId, split path uses rollGroupId on
+/// every fragment), treat the redelivery as a no-op. After Step F's
+/// consolidation the predicate operates on the manifest's `status`
+/// enum + an `isRollGroupKnown` query; these tests exercise that
+/// composed contract.
 ///
 /// `ClipMetadata.clipId` is documented as the iPhone-side
 /// idempotency key. These tests assert the gate honors that.
@@ -55,13 +58,27 @@ struct WatchClipIdempotencyTests {
         )
     }
 
+    /// Helper that composes the same decision the live
+    /// `acceptArrivedClip` makes: look up the clipId's status in the
+    /// given clips, check if any clip uses the master's rollGroupId,
+    /// hand both to `shouldDropArrivedMaster`. Mirrors the live
+    /// call site so a regression there shows up here.
+    private func wouldDrop(
+        _ metadata: ClipMetadata,
+        in manifestClips: [InboxClip]
+    ) -> Bool {
+        let status = manifestClips.first { $0.clipId == metadata.clipId }?.status
+        let rollGroupId = metadata.rollGroupId ?? metadata.clipId
+        let rollGroupInUse = manifestClips.contains { $0.rollGroupId == rollGroupId }
+        return WatchSessionDelegate.shouldDropArrivedMaster(
+            manifestStatusForClipId: status,
+            rollGroupIdAlreadyInUse: rollGroupInUse
+        )
+    }
+
     @Test func emptyManifest_isNotDuplicate() {
         let metadata = makeMetadata()
-        let isDup = WatchSessionDelegate.isMasterAlreadyProcessed(
-            metadata: metadata,
-            manifestClips: []
-        )
-        #expect(isDup == false)
+        #expect(wouldDrop(metadata, in: []) == false)
     }
 
     @Test func singlePath_clipIdAlreadyInManifest_isDuplicate() {
@@ -70,11 +87,7 @@ struct WatchClipIdempotencyTests {
         let masterClipId = UUID()
         let existing = makeInboxClip(clipId: masterClipId, rollGroupId: nil)
         let metadata = makeMetadata(clipId: masterClipId, rollGroupId: nil)
-        let isDup = WatchSessionDelegate.isMasterAlreadyProcessed(
-            metadata: metadata,
-            manifestClips: [existing]
-        )
-        #expect(isDup == true)
+        #expect(wouldDrop(metadata, in: [existing]) == true)
     }
 
     /// The exact regression: split-path fragments carry the master's
@@ -85,19 +98,13 @@ struct WatchClipIdempotencyTests {
     @Test func splitPath_rollGroupIdAlreadyInManifest_isDuplicate() {
         let masterClipId = UUID()
         let rollId = UUID()
-        // Simulate a fragment that the previous delivery already
-        // wrote: fresh clipId, master's rollGroupId.
         let fragment = makeInboxClip(clipId: UUID(), rollGroupId: rollId)
         let metadata = makeMetadata(
             clipId: masterClipId,
             rollGroupId: rollId,
             nextTapOffsets: [3.0]
         )
-        let isDup = WatchSessionDelegate.isMasterAlreadyProcessed(
-            metadata: metadata,
-            manifestClips: [fragment]
-        )
-        #expect(isDup == true)
+        #expect(wouldDrop(metadata, in: [fragment]) == true)
     }
 
     /// Split-path edge case: metadata had no rollGroupId, so the
@@ -111,23 +118,13 @@ struct WatchClipIdempotencyTests {
             rollGroupId: nil,
             nextTapOffsets: [3.0]
         )
-        let isDup = WatchSessionDelegate.isMasterAlreadyProcessed(
-            metadata: metadata,
-            manifestClips: [fragment]
-        )
-        #expect(isDup == true)
+        #expect(wouldDrop(metadata, in: [fragment]) == true)
     }
 
     @Test func differentMaster_inManifest_isNotDuplicate() {
-        // A completely unrelated existing clip shouldn't flag a
-        // fresh master as a duplicate.
         let existing = makeInboxClip(clipId: UUID(), rollGroupId: UUID())
         let metadata = makeMetadata(clipId: UUID(), rollGroupId: UUID())
-        let isDup = WatchSessionDelegate.isMasterAlreadyProcessed(
-            metadata: metadata,
-            manifestClips: [existing]
-        )
-        #expect(isDup == false)
+        #expect(wouldDrop(metadata, in: [existing]) == false)
     }
 
     /// Tom's screenshot scenario: the on-a-roll master is in the
@@ -143,16 +140,10 @@ struct WatchClipIdempotencyTests {
             rollGroupId: rollId,
             nextTapOffsets: [3.0]
         )
-        let isDup = WatchSessionDelegate.isMasterAlreadyProcessed(
-            metadata: redelivery,
-            manifestClips: [fragmentA, fragmentB]
-        )
-        #expect(isDup == true)
+        #expect(wouldDrop(redelivery, in: [fragmentA, fragmentB]) == true)
     }
 
     @Test func unrelatedRollIdInManifest_isNotDuplicate() {
-        // A different on-a-roll session shouldn't suppress a new
-        // master delivery.
         let unrelatedRoll = UUID()
         let other = makeInboxClip(clipId: UUID(), rollGroupId: unrelatedRoll)
         let metadata = makeMetadata(
@@ -160,10 +151,6 @@ struct WatchClipIdempotencyTests {
             rollGroupId: UUID(),  // different roll
             nextTapOffsets: [3.0]
         )
-        let isDup = WatchSessionDelegate.isMasterAlreadyProcessed(
-            metadata: metadata,
-            manifestClips: [other]
-        )
-        #expect(isDup == false)
+        #expect(wouldDrop(metadata, in: [other]) == false)
     }
 }
