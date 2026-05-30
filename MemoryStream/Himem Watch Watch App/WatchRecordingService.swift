@@ -50,6 +50,20 @@ final class WatchRecordingService: NSObject, ObservableObject {
     private var currentClipId: UUID?
     private var currentAudioURL: URL?
     private var currentLocation: CLLocation?
+    /// Serial background queue for AVAudioFile writes. Apple's
+    /// guidance is explicit: don't do file I/O on the audio tap
+    /// thread. Watch flash write latency drifts up under sustained
+    /// load (housekeeping, compaction); a single ~50 ms write spike
+    /// on the audio thread back-pressures the engine, tap callbacks
+    /// fire less often, level publishes slow, and the visual
+    /// waveform appears to slow down after ~10 s — Tom QA
+    /// 2026-05-30. The queue is `.userInteractive` because we need
+    /// writes to keep up with the realtime tap rate; falling behind
+    /// here would balloon memory holding queued buffers.
+    private let fileWriteQueue = DispatchQueue(
+        label: "com.himem.watch.recording.fileWrite",
+        qos: .userInteractive
+    )
     /// Audio-level throttle clock — `nonisolated(unsafe)` so the
     /// audio tap thread can read/write without crossing actor
     /// boundaries on every buffer. Guarded by `levelLock`.
@@ -169,9 +183,25 @@ final class WatchRecordingService: NSObject, ObservableObject {
             let inputNode = engine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
             let file = try AVAudioFile(forWriting: url, settings: recordingFormat.settings)
+            // Copy the buffer's audio data before dispatching the
+            // write — AVAudioPCMBuffer's storage is reused by the
+            // engine after the tap callback returns, so retaining
+            // the buffer across the async boundary would race the
+            // next callback. The copy is cheap (a few KB at this
+            // sample rate) and stays on the audio thread for level
+            // peak scanning before being handed off.
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self, file] buffer, _ in
-                try? file.write(from: buffer)
                 self?.publishAudioLevelIfDue(from: buffer)
+                let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength)
+                if let copy {
+                    copy.frameLength = buffer.frameLength
+                    if let src = buffer.floatChannelData?[0], let dst = copy.floatChannelData?[0] {
+                        memcpy(dst, src, Int(buffer.frameLength) * MemoryLayout<Float>.size)
+                    }
+                    self?.fileWriteQueue.async {
+                        try? file.write(from: copy)
+                    }
+                }
             }
 
             // Assign before start so any subsequent main-actor work
@@ -228,6 +258,15 @@ final class WatchRecordingService: NSObject, ObservableObject {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
+        // Drain the file-write queue so any tail-end buffers still
+        // in flight finish writing before we release the AVAudioFile
+        // handle. The serial queue preserves write order; sync here
+        // returns only after the last enqueued write completes.
+        // Without this, the final ~hundreds-of-ms of audio could be
+        // lost if the queue still had pending writes when the
+        // AVAudioFile got dealloc'd (the header finalize would race
+        // any in-flight write).
+        fileWriteQueue.sync {}
         // Closing the AVAudioFile happens by releasing the reference
         // — the file finalizes its header on dealloc, so any further
         // attempt to read it would race that flush. Drop our handle
@@ -460,6 +499,11 @@ final class WatchRecordingService: NSObject, ObservableObject {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
+        // Same drain pattern as `stop(save:)` — make sure any
+        // in-flight writes complete before the AVAudioFile handle
+        // releases. Error path may delete the file anyway, but
+        // dropping mid-write would leak the queued buffers.
+        fileWriteQueue.sync {}
         audioFile = nil
         startedAt = nil
         currentClipId = nil
