@@ -315,6 +315,22 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         NSLog("[Himem][WC] phone — acceptArrivedClip clipId=\(metadata.clipId) rollGroupId=\(metadata.rollGroupId?.uuidString ?? "nil") offsets=\(metadata.nextTapOffsets.count)")
         let masterURL = InboxManifest.audioURL(for: masterFilename)
 
+        // Per-clipId critical section against the double-delivery
+        // race documented in § 8.2 of the system reference doc. The
+        // `await`s on VoiceClipSplitter.split and AudioCompressor
+        // .compressInPlace release @MainActor between the dedup
+        // check below and the manifest write; without this gate two
+        // concurrent Tasks for the same master can both pass dedup
+        // and each spawn N children. See
+        // `AcceptanceCriticalSection` for the full story.
+        guard AcceptanceCriticalSection.tryEnter(clipId: metadata.clipId) else {
+            NSLog("[Himem][WC] phone — acceptArrivedClip race avoided clipId=\(metadata.clipId) (already in flight); dropping redelivered master")
+            try? FileManager.default.removeItem(at: masterURL)
+            WatchSessionDelegate.shared.sendConfirmation(clipId: metadata.clipId)
+            return
+        }
+        defer { AcceptanceCriticalSection.exit(clipId: metadata.clipId) }
+
         // Idempotency gate — see `isMasterAlreadyProcessed`. Drop the
         // redelivered master file so disk doesn't bloat.
         if Self.isMasterAlreadyProcessed(metadata: metadata, manifestClips: InboxManifest.shared.clips) {

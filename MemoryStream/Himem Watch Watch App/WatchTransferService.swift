@@ -36,6 +36,25 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
             return
         }
 
+        // Watch-side belt against the double-delivery race documented
+        // in `docs/architecture/Captured Clips · watch-to-phone sync
+        // system.md` § 8.2. If iOS is already queueing a transferFile
+        // for this clipId (e.g., recording-end + retryPendingTransfers
+        // + sessionReachabilityDidChange all firing in one window),
+        // re-queueing would double-deliver. The phone-side
+        // `AcceptanceCriticalSection` catches the race regardless, but
+        // it's cheaper to not generate the duplicate transfer in the
+        // first place.
+        let alreadyQueued = session.outstandingFileTransfers.contains { transfer in
+            guard let metaClipIdStr = transfer.file.metadata?["clipId"] as? String,
+                  let metaClipId = UUID(uuidString: metaClipIdStr) else { return false }
+            return metaClipId == clip.clipId
+        }
+        if alreadyQueued {
+            NSLog("[Himem][WC] watch — send(clip:) refused; clipId=\(clip.clipId) already in outstandingFileTransfers")
+            return
+        }
+
         // Pre-announce via `sendMessage` immediately before the
         // `transferFile` call so the iPhone can render an
         // IncomingCard in the sync surface BEFORE the actual file
