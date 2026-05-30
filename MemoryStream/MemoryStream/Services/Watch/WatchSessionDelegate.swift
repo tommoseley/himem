@@ -386,8 +386,13 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         }
 
         // Roll session — split the master into per-clip InboxClips
-        // sharing the master's rollGroupId. Each split clip gets a
-        // fresh clipId so manifest-side dedup keys stay unique.
+        // sharing the master's rollGroupId. Each child clipId is
+        // derived deterministically from (master.clipId, offsetIndex)
+        // so a redelivered master produces the same children and
+        // `InboxManifest.acceptClip`'s clipId-keyed dedup drops the
+        // dupes by construction. See `VoiceClipSplitter
+        // .deterministicChildClipId` and § 8.6 / § 8.2 of the system
+        // reference doc.
         let rollGroupId = metadata.rollGroupId ?? metadata.clipId
         let outputDir = InboxManifest.audioDirectory
         do {
@@ -412,7 +417,10 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             let starts: [Date] = [sessionStart] + offsets.map { sessionStart.addingTimeInterval($0) }
             for (idx, fragment) in fragments.enumerated() {
                 let clip = InboxClip(
-                    clipId: UUID(),
+                    clipId: VoiceClipSplitter.deterministicChildClipId(
+                        master: metadata.clipId,
+                        offsetIndex: idx
+                    ),
                     capturedAt: idx < starts.count ? starts[idx] : sessionStart,
                     duration: fragment.duration,
                     transcript: "",

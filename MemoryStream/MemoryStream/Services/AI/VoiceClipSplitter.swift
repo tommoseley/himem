@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CryptoKit
 
 /// Splits a phone master audio file into N per-clip audio files at
 /// the offsets recorded by `NextClipController.nextTapOffsets`.
@@ -10,8 +11,14 @@ import AVFoundation
 /// master-file-then-split"). At Save time we slice that file into the
 /// per-clip outputs the rest of the app expects.
 ///
-/// Watch doesn't use this — it commits each clip at Next-tap time via
-/// `WatchRecordingService.handoffToNewClip(rollGroupId:)`.
+/// Watch on-a-roll multi-clip recordings also feed this splitter: the
+/// watch ships one master file plus `nextTapOffsets`, and
+/// `WatchSessionDelegate.acceptArrivedClip` runs `split` to produce N
+/// children. Each child's `clipId` is derived deterministically from
+/// `(masterClipId, offsetIndex)` via `deterministicChildClipId` so a
+/// redelivered master always produces the same children —
+/// `InboxManifest.acceptClip`'s dedup then handles redelivery without
+/// per-clipId race gating.
 enum VoiceClipSplitter {
 
     /// One slice of the master file, ready for downstream
@@ -92,6 +99,35 @@ enum VoiceClipSplitter {
             last = o
         }
         return out
+    }
+
+    // MARK: - Deterministic child clipId
+
+    /// Derives a stable child `clipId` for the split fragment at
+    /// `offsetIndex` of `master`. Same inputs → same UUID, every time.
+    /// Redelivery of the same master produces children with the same
+    /// clipIds the manifest already has — `InboxManifest.acceptClip`'s
+    /// dedup then drops the duplicates by construction, with no
+    /// per-clipId critical section needed.
+    ///
+    /// Seed format: `"clip-fragment|<master.uuidString>|<offsetIndex>"`.
+    /// Hashed with SHA-256; first 16 bytes form the UUID. Matches the
+    /// `FragmentMigration.deterministicUUID` idiom already shipping in
+    /// this project, so contributors meet the same pattern twice.
+    ///
+    /// Seed format is locked: changing it would invalidate every
+    /// persisted split clipId for in-flight roll sessions on Tom's
+    /// dev devices. Treat as a stable contract.
+    static func deterministicChildClipId(master: UUID, offsetIndex: Int) -> UUID {
+        let seed = "clip-fragment|\(master.uuidString)|\(offsetIndex)"
+        let digest = SHA256.hash(data: Data(seed.utf8))
+        let bytes = Array(digest.prefix(16))
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
     }
 
     // MARK: - File I/O
