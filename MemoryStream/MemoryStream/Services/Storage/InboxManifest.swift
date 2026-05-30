@@ -148,8 +148,18 @@ struct InboxClip: Codable, Identifiable, Equatable {
 final class InboxManifest: ObservableObject {
     static let shared = InboxManifest()
 
-    /// Surfaced to the inbox UI and the Today banner. Sorted newest-first.
+    /// Active inbox rows (status != `.disposed`). Sorted newest-first.
+    /// Published so UI, badge, and watch-ack reconcile paths refresh
+    /// automatically. Tombstones live in `disposedClips`; both arrays
+    /// persist to the same JSON file.
     @Published private(set) var clips: [InboxClip] = []
+
+    /// Tombstones — rows with `status == .disposed`. NOT published;
+    /// no UI surfaces this list, but the B5 dedup gate reads it via
+    /// `status(for:)` to drop ghost re-deliveries iOS's WC queue
+    /// resurfaces after the user already disposed of a clip. Aged
+    /// out on load via `pruned(_:olderThan:now:)`.
+    private var disposedClips: [InboxClip] = []
 
     /// Folders. Created lazily on first access. Marked `nonisolated` so the
     /// WatchSessionDelegate can resolve paths off the main actor — the
@@ -198,6 +208,48 @@ final class InboxManifest: ObservableObject {
     /// any ghost re-delivery we'd want to gate against is still
     /// caught by the tombstone.
     static let defaultPruneDays: Int = 90
+
+    /// Location of the legacy `InboxProcessedClipIds.json` file (one
+    /// JSON array of UUIDs). Computed so tests can swap the dir.
+    nonisolated static var legacyProcessedClipIdsURL: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return docs.appendingPathComponent("InboxProcessedClipIds.json")
+    }
+
+    /// One-shot migration of the legacy `InboxProcessedClipIds.json`
+    /// into `.disposed` tombstones. Returns the rows to insert into
+    /// `disposedClips`; the legacy file is deleted on the way out so
+    /// subsequent loads skip the work. Best-effort: absent or corrupt
+    /// files yield an empty result and don't throw.
+    ///
+    /// `now` is the timestamp stamped on every migrated tombstone
+    /// (we don't know when the user actually disposed, so we use one
+    /// migration moment — close enough for the 90-day prune window).
+    nonisolated static func migrateLegacyDisposedSet(legacyURL: URL, now: Date) -> [InboxClip] {
+        guard FileManager.default.fileExists(atPath: legacyURL.path) else { return [] }
+        defer { try? FileManager.default.removeItem(at: legacyURL) }
+        guard let data = try? Data(contentsOf: legacyURL),
+              let ids = try? JSONDecoder().decode([UUID].self, from: data) else {
+            return []
+        }
+        return ids.map { id in
+            InboxClip(
+                clipId: id,
+                capturedAt: now,
+                duration: 0,
+                transcript: "",
+                latitude: nil,
+                longitude: nil,
+                source: "watch",
+                audioFilename: "",
+                transcriptionAttempted: false,
+                rollGroupId: nil,
+                status: .disposed,
+                disposedAt: now
+            )
+        }
+    }
 
     private init() {
         load()
@@ -304,42 +356,74 @@ final class InboxManifest: ObservableObject {
 
     /// Removes a single clip and its audio file. Called when the user
     /// deletes from the inbox or after a clip is promoted into a memory.
+    /// The row stays in `disposedClips` as a tombstone so the B5 gate
+    /// (`status(for:) == .disposed`) catches ghost re-deliveries iOS's
+    /// WC queue resurfaces hours/days later.
     func remove(clipId: UUID) {
         guard let clip = clips.first(where: { $0.clipId == clipId }) else { return }
         try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
-        // Snapshot the ack decision BEFORE the array is filtered — the
-        // clip's rollGroupId is what we need to send, and after
-        // `replace(with: next)` it's gone from `clips`.
+        // Snapshot the ack decision BEFORE the array is mutated — the
+        // clip's rollGroupId is what we need to send.
         let actions = Self.ackActions(for: [clipId], in: clips)
         let next = clips.filter { $0.clipId != clipId }
+        disposedClips.append(tombstone(from: clip))
         replace(with: next)
         WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: clipId)
-        // Persist the disposal decision so iOS's WC delivery queue
-        // can't ghost-redeliver this clip into the inbox later.
-        // See `InboxProcessedClipIds` for the full rationale (B5).
-        InboxProcessedClipIds.shared.markProcessed(clipId)
         emitAcks(actions)
-        NSLog("[Himem][Inbox] remove(clipId:) emitted \(actions.count) ack(s) for clipId=\(clipId)")
+        NSLog("[Himem][Inbox] remove(clipId:) emitted \(actions.count) ack(s) for clipId=\(clipId), tombstones=\(disposedClips.count)")
     }
 
     /// Removes a batch — used when the user creates a memory from N clips
     /// or appends N clips to an existing memory. The audio files have
     /// already been moved out by the caller; we just drop the rows here.
+    /// Each row becomes a `.disposed` tombstone for the same reason as
+    /// `remove(clipId:)`.
     func removeBatch(clipIds: [UUID]) {
         // Same snapshot-before-mutate pattern as `remove`: capture
         // ack actions while the clips still have their rollGroupId
         // readable in `clips`.
         let actions = Self.ackActions(for: clipIds, in: clips)
         let idSet = Set(clipIds)
+        let removed = clips.filter { idSet.contains($0.clipId) }
         let next = clips.filter { !idSet.contains($0.clipId) }
+        disposedClips.append(contentsOf: removed.map { tombstone(from: $0) })
         replace(with: next)
         for id in clipIds {
             WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: id)
         }
-        // Same persistence as `remove(clipId:)` — see B5 rationale.
-        InboxProcessedClipIds.shared.markProcessed(clipIds)
         emitAcks(actions)
-        NSLog("[Himem][Inbox] removeBatch emitted \(actions.count) ack(s) for \(clipIds.count) clipId(s)")
+        NSLog("[Himem][Inbox] removeBatch emitted \(actions.count) ack(s) for \(clipIds.count) clipId(s), tombstones=\(disposedClips.count)")
+    }
+
+    /// Status of a clipId across both active and disposed rows. nil
+    /// when the manifest has no entry — the rebuild's single-source
+    /// query that replaces `InboxProcessedClipIds.contains(_:)` and
+    /// the multi-array idempotency checks in `acceptArrivedClip`.
+    func status(for clipId: UUID) -> InboxClip.Status? {
+        if let c = clips.first(where: { $0.clipId == clipId }) { return c.status }
+        if let t = disposedClips.first(where: { $0.clipId == clipId }) { return t.status }
+        return nil
+    }
+
+    /// Turn an active row into a tombstone — drops audio reference
+    /// (file is already gone), stamps `disposedAt`, status to
+    /// `.disposed`. All other fields preserved for forensic / future
+    /// re-ack scenarios.
+    private func tombstone(from clip: InboxClip) -> InboxClip {
+        InboxClip(
+            clipId: clip.clipId,
+            capturedAt: clip.capturedAt,
+            duration: clip.duration,
+            transcript: clip.transcript,
+            latitude: clip.latitude,
+            longitude: clip.longitude,
+            source: clip.source,
+            audioFilename: "",
+            transcriptionAttempted: clip.transcriptionAttempted,
+            rollGroupId: clip.rollGroupId,
+            status: .disposed,
+            disposedAt: Date()
+        )
     }
 
     private func emitAcks(_ actions: [AckAction]) {
@@ -388,7 +472,11 @@ final class InboxManifest: ObservableObject {
         let url = Self.manifestURL
         let tmp = url.appendingPathExtension("tmp")
         do {
-            let data = try JSONEncoder.iso8601.encode(clips)
+            // Single JSON file holds both active and disposed rows;
+            // partitioned by `status` on load. Active first so a
+            // human reading the file sees the live inbox at the top.
+            let combined = clips + disposedClips
+            let data = try JSONEncoder.iso8601.encode(combined)
             try data.write(to: tmp, options: .atomic)
             // Atomic rename — if we crash between the write and the rename
             // the manifest stays at the previous version, never half-written.
@@ -403,32 +491,70 @@ final class InboxManifest: ObservableObject {
     private func load() {
         let url = Self.manifestURL
         defer { syncIconBadge(to: clips.count) }
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
         // One-shot backup of the legacy manifest before the new schema
         // first rewrites it. The backup-file existence is its own
         // idempotency gate — once written, subsequent loads skip it.
         // Protects against any decode-time loss as the Step C
         // migration lands on Tom's dev devices.
         Self.backupManifestIfNeeded()
+        // Pull legacy `InboxProcessedClipIds.json` into tombstones the
+        // first time we run. After this returns the legacy file is gone.
+        let migrated = Self.migrateLegacyDisposedSet(
+            legacyURL: Self.legacyProcessedClipIdsURL,
+            now: Date()
+        )
+        if !migrated.isEmpty {
+            NSLog("[Himem][Inbox] migrated \(migrated.count) legacy disposed clipId(s) to tombstones")
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            // Fresh install or no prior manifest — just take the migrated set.
+            disposedClips = Self.pruned(migrated, olderThan: Self.defaultPruneDays, now: Date())
+            return
+        }
         do {
             let data = try Data(contentsOf: url)
             let loaded = try JSONDecoder.iso8601.decode([InboxClip].self, from: data)
-            // Drop rows whose audio file is gone — defensive against partial
-            // states from older crashes. Audio-missing only applies to
-            // active (non-disposed) rows; tombstones are bookkeeping
-            // entries with no audio expected.
-            let withFiles = loaded.filter { clip in
-                clip.status == .disposed
-                    || FileManager.default.fileExists(atPath: Self.audioURL(for: clip.audioFilename).path)
+            // Drop active rows whose audio file is gone — defensive
+            // against partial states from older crashes. Tombstones
+            // never had audio (we cleared `audioFilename` on disposal),
+            // so the file check doesn't apply.
+            let (active, disposed) = partition(loaded)
+            let activeWithFiles = active.filter { clip in
+                FileManager.default.fileExists(atPath: Self.audioURL(for: clip.audioFilename).path)
             }
-            // Age out old tombstones so the manifest doesn't grow
-            // unboundedly. Active rows pass through unchanged.
-            let aged = Self.pruned(withFiles, olderThan: Self.defaultPruneDays, now: Date())
-            clips = aged.sorted { $0.capturedAt > $1.capturedAt }
+            // Merge migrated legacy IDs with the disposed set, dedupe
+            // by clipId so a clipId already a tombstone in the new
+            // schema isn't doubled.
+            let mergedDisposed = mergeDisposed(existing: disposed, migrated: migrated)
+            // Age out old tombstones. Active rows pass through.
+            let agedDisposed = Self.pruned(mergedDisposed, olderThan: Self.defaultPruneDays, now: Date())
+            clips = activeWithFiles.sorted { $0.capturedAt > $1.capturedAt }
+            disposedClips = agedDisposed
         } catch {
             // Corrupt manifest — start fresh rather than block the user.
+            // Still carry the migrated tombstones forward so the B5
+            // gate continues to catch ghost re-deliveries.
             clips = []
+            disposedClips = Self.pruned(migrated, olderThan: Self.defaultPruneDays, now: Date())
         }
+    }
+
+    private func partition(_ all: [InboxClip]) -> (active: [InboxClip], disposed: [InboxClip]) {
+        var active: [InboxClip] = []
+        var disposed: [InboxClip] = []
+        for clip in all {
+            if clip.status == .disposed {
+                disposed.append(clip)
+            } else {
+                active.append(clip)
+            }
+        }
+        return (active, disposed)
+    }
+
+    private func mergeDisposed(existing: [InboxClip], migrated: [InboxClip]) -> [InboxClip] {
+        let known = Set(existing.map(\.clipId))
+        return existing + migrated.filter { !known.contains($0.clipId) }
     }
 
     /// Writes a copy of `manifest.json` to

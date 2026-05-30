@@ -95,8 +95,8 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 NSLog("[Himem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already in manifest")
                 return
             }
-            if InboxProcessedClipIds.shared.contains(parsed.clipId) {
-                NSLog("[Himem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already processed (disposed)")
+            if InboxManifest.shared.status(for: parsed.clipId) == .disposed {
+                NSLog("[Himem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already disposed (manifest tombstone)")
                 return
             }
             InboxArrivalTracker.shared.recordPreAnnounce(
@@ -129,21 +129,21 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         let clipId = clipMetadata.clipId
         NSLog("[Himem][WC] decoded clipId=\(clipId), duration=\(clipMetadata.duration)")
 
-        // B5 dedup: if this clipId was ever processed (promoted,
-        // user-deleted, session-discarded), iOS is ghost-redelivering
-        // it from its system WC queue hours/days after the user already
-        // made their decision. Send the ack so the watch can clear
-        // any lingering pending row, but DON'T copy the file or add
-        // to the inbox — that'd re-file a clip the user explicitly
-        // disposed of. See `InboxProcessedClipIds` for the bug story.
-        // Cross-actor read: contains/markProcessed are @MainActor but
-        // this delegate is nonisolated; we dispatch synchronously so
-        // the dedup decision is made before the early return below.
-        let isProcessed = DispatchQueue.main.sync {
-            InboxProcessedClipIds.shared.contains(clipId)
+        // B5 dedup: if this clipId is a tombstone in the manifest
+        // (status == .disposed), iOS is ghost-redelivering it from
+        // its system WC queue hours/days after the user already made
+        // their decision. Send the ack so the watch can clear any
+        // lingering pending row, but DON'T copy the file or add to
+        // the inbox — that'd re-file a clip the user explicitly
+        // disposed of. Cross-actor read: `status(for:)` is
+        // @MainActor but this delegate is nonisolated; we dispatch
+        // synchronously so the dedup decision is made before the
+        // early return below.
+        let isDisposed = DispatchQueue.main.sync {
+            InboxManifest.shared.status(for: clipId) == .disposed
         }
-        if isProcessed {
-            NSLog("[Himem][WC] dropping clipId=\(clipId) — already in processed set (B5 dedup); sending ack")
+        if isDisposed {
+            NSLog("[Himem][WC] dropping clipId=\(clipId) — manifest tombstone (B5 dedup); sending ack")
             self.sendConfirmation(clipId: clipId)
             return
         }

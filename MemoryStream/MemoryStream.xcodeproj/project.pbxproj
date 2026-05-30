@@ -149,7 +149,6 @@
 		A100000740 /* JournalCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000740 /* JournalCaptureCoordinator.swift */; };
 		A100000741 /* InboxTranscriptionDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000741 /* InboxTranscriptionDispatcher.swift */; };
 		A100000742 /* CapturedClipsSubtitleBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000742 /* CapturedClipsSubtitleBuilder.swift */; };
-		A100000743 /* InboxProcessedClipIds.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000743 /* InboxProcessedClipIds.swift */; };
 		A100000744 /* InboxArrivalTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000744 /* InboxArrivalTracker.swift */; };
 		A100000745 /* PhasePill.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000745 /* PhasePill.swift */; };
 		A100000746 /* ShimmerLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000746 /* ShimmerLine.swift */; };
@@ -367,7 +366,6 @@
 		B100000740 /* JournalCaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCaptureCoordinator.swift; sourceTree = "<group>"; };
 		B100000741 /* InboxTranscriptionDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxTranscriptionDispatcher.swift; sourceTree = "<group>"; };
 		B100000742 /* CapturedClipsSubtitleBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedClipsSubtitleBuilder.swift; sourceTree = "<group>"; };
-		B100000743 /* InboxProcessedClipIds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxProcessedClipIds.swift; sourceTree = "<group>"; };
 		B100000744 /* InboxArrivalTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxArrivalTracker.swift; sourceTree = "<group>"; };
 		B100000745 /* PhasePill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhasePill.swift; sourceTree = "<group>"; };
 		B100000746 /* ShimmerLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShimmerLine.swift; sourceTree = "<group>"; };
@@ -641,7 +639,6 @@
 				B100000055 /* TopicSlugHelper.swift */,
 				B100000057 /* EntryLifecycleService.swift */,
 				B100000734 /* EntryQueryService.swift */,
-				B100000743 /* InboxProcessedClipIds.swift */,
 				B100000744 /* InboxArrivalTracker.swift */,
 				B100000311 /* InboxManifest.swift */,
 				B100000690 /* ClipSessionGrouper.swift */,
@@ -1172,7 +1169,6 @@
 				A100000740 /* JournalCaptureCoordinator.swift in Sources */,
 				A100000741 /* InboxTranscriptionDispatcher.swift in Sources */,
 				A100000742 /* CapturedClipsSubtitleBuilder.swift in Sources */,
-				A100000743 /* InboxProcessedClipIds.swift in Sources */,
 				A100000744 /* InboxArrivalTracker.swift in Sources */,
 				A100000745 /* PhasePill.swift in Sources */,
 				A100000746 /* ShimmerLine.swift in Sources */,
