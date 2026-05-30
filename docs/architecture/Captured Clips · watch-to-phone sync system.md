@@ -608,6 +608,41 @@ correct on reachability return, but they're visible to the user
 during the wrong window. A timer-based "no progress in N seconds"
 stall detector would be more honest. Open work.
 
+### 8.6 · Master clipId orphans in the tracker after split — **fixed 2026-05-30**
+
+The watch sends a pre-announce keyed on the master clipId. The
+file arrives; for an On-a-roll session, `acceptArrivedClip`'s
+split-success branch writes N children to the manifest with
+**brand-new UUIDs** (the master clipId is not preserved as any
+InboxClip). `transcribePendingInboxClips` iterates manifest rows
+and calls `recordTranscribingStarted` per row — for the
+children's UUIDs, which weren't in the tracker, so each
+synthesizes a new entry from fallback metadata.
+
+The **master's** pre-announce tracker entry was never seen by
+the transcribe sweep and never got `cleared`. It sat in
+`.downloading` until the next reachability dip, then went to
+`.paused`, then stayed there forever because no file delivery
+was actually pending for that clipId — the master's content was
+already split into children that processed normally.
+
+Tom QA 2026-05-30 visible symptom: two paused `IncomingCard`s
+("Waiting for your Watch") sitting above the ready
+SessionCards they corresponded to. Durations slightly off
+(0:26 paused ↔ 0:27 ready) because the watch's pre-announce
+duration was measured live during recording, while the file's
+actual duration came from the saved-file metadata.
+
+Fix: `acceptArrivedClip`'s split-success branch explicitly calls
+`InboxArrivalTracker.shared.clear(clipId: metadata.clipId)`
+after writing the children. The duplicate-master dedup branch
+also calls `clear`, in case a redelivery is the chance to clean
+up a prior arrival's orphan. The pre-announce delegate gates
+against the inverse race (file arrived + processed before
+sendMessage was delivered) by checking `InboxManifest` and
+`InboxProcessedClipIds` membership before calling
+`recordPreAnnounce`.
+
 ### 8.5 · Transcription false-negatives at duration extremes
 
 QA 2026-05-29: 6-second and 5-minute clips of clear speech both

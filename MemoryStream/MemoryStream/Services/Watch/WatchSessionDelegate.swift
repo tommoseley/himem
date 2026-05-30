@@ -84,6 +84,21 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         }
         NSLog("[Himem][WC] iPhone — pre-announce received for clipId=\(parsed.clipId) duration=\(parsed.durationSeconds)s")
         Task { @MainActor in
+            // Gate against the late pre-announce race: if sendMessage
+            // was delayed by a hop through the WC layer while
+            // transferFile delivered + processed quickly, the clip is
+            // already in the manifest by the time we get here. Adding
+            // an InFlightClip entry now would orphan it (the
+            // transcribe sweep already ran). Same for clips the user
+            // already disposed of — pre-announce shouldn't resurrect.
+            if InboxManifest.shared.clips.contains(where: { $0.clipId == parsed.clipId }) {
+                NSLog("[Himem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already in manifest")
+                return
+            }
+            if InboxProcessedClipIds.shared.contains(parsed.clipId) {
+                NSLog("[Himem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already processed (disposed)")
+                return
+            }
             InboxArrivalTracker.shared.recordPreAnnounce(
                 clipId: parsed.clipId,
                 capturedAt: parsed.capturedAt,
@@ -341,6 +356,11 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             // travel; reusing it here keeps the dedup transparent
             // to the watch side.
             WatchSessionDelegate.shared.sendConfirmation(clipId: metadata.clipId)
+            // Clear any orphaned tracker entry for the master.
+            // Possible when the first arrival's split-path left an
+            // orphan and a late re-delivery is the chance to clean
+            // it up. § 8.6 of the system reference doc.
+            InboxArrivalTracker.shared.clear(clipId: metadata.clipId)
             return
         }
 
@@ -407,6 +427,15 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             // The master file's contents now live in the N fragments.
             try? FileManager.default.removeItem(at: masterURL)
             NSLog("[Himem][WC] split master into \(fragments.count) clips (rollGroupId=\(rollGroupId))")
+            // Clear the master clipId from the arrival tracker.
+            // The pre-announce was keyed on master.clipId, but the
+            // manifest now holds N children with fresh UUIDs.
+            // Without this clear, the master entry stays in
+            // .downloading (or .paused after a reachability drop)
+            // forever — no file is coming for it, because the
+            // master was already consumed by the split. § 8.6 of
+            // the system reference doc.
+            InboxArrivalTracker.shared.clear(clipId: metadata.clipId)
         } catch {
             // Split failed — fall back to one inbox row pointing at
             // the master, so we don't lose audio. User sees the

@@ -194,4 +194,67 @@ struct InboxArrivalTrackerTests {
         #expect(t.phase(for: id) == nil)
         #expect(t.inFlightCount == 0)
     }
+
+    // MARK: - Split-master orphan-clear (§ 8.6)
+
+    /// THE BUG. A multi-clip On-a-roll session pre-announces with
+    /// the master clipId; when the file arrives, `acceptArrivedClip`
+    /// splits into N children with brand-new UUIDs and writes them
+    /// to the manifest. The master clipId is never written to the
+    /// manifest — so `transcribePendingInboxClips` never sees it,
+    /// never calls `clear` for it, and the tracker entry sits in
+    /// `.downloading` (then `.paused` after a reachability dip)
+    /// forever. Tom QA 2026-05-30 saw two such orphaned IncomingCards
+    /// "Waiting for your Watch" with the watch's pending list empty.
+    ///
+    /// Fix: `acceptArrivedClip`'s split-success branch explicitly
+    /// calls `clear(clipId: master.clipId)`. This test locks the
+    /// tracker behavior — the integration is exercised manually
+    /// via the trace lines added in the same commit.
+    @Test func masterClear_afterSplit_doesNotAffectChildEntries() {
+        let t = freshTracker()
+        let masterId = UUID()
+        let childA = UUID()
+        let childB = UUID()
+        _ = preAnnounce(t, clipId: masterId, at: Date(timeIntervalSince1970: 100))
+        // Simulate split: clear the master (the fix), then the
+        // transcribe sweep records the children from their fallback
+        // metadata.
+        t.clear(clipId: masterId)
+        t.recordTranscribingStarted(
+            clipId: childA,
+            fallbackMetadata: InFlightClipMetadata(
+                capturedAt: Date(timeIntervalSince1970: 100),
+                durationSeconds: 5, latitude: nil, longitude: nil,
+                fileSizeBytes: nil, announcedAt: Date()
+            )
+        )
+        t.recordTranscribingStarted(
+            clipId: childB,
+            fallbackMetadata: InFlightClipMetadata(
+                capturedAt: Date(timeIntervalSince1970: 105),
+                durationSeconds: 5, latitude: nil, longitude: nil,
+                fileSizeBytes: nil, announcedAt: Date()
+            )
+        )
+        #expect(t.phase(for: masterId) == nil, "Master entry must be cleared after split")
+        #expect(t.phase(for: childA) == .transcribing)
+        #expect(t.phase(for: childB) == .transcribing)
+    }
+
+    /// Same fix path, but exercising the duplicate-master case: if
+    /// a redelivered master arrives later, the dedup branch should
+    /// also clear any leftover orphan from a prior arrival.
+    @Test func masterClear_onDuplicateRedelivery_isIdempotent() {
+        let t = freshTracker()
+        let masterId = UUID()
+        _ = preAnnounce(t, clipId: masterId, at: Date(timeIntervalSince1970: 100))
+        // Orphan exists from a prior arrival's pre-announce.
+        #expect(t.phase(for: masterId) == .downloading)
+        // Duplicate-master dedup branch calls clear; second clear
+        // is idempotent.
+        t.clear(clipId: masterId)
+        t.clear(clipId: masterId)
+        #expect(t.phase(for: masterId) == nil)
+    }
 }
