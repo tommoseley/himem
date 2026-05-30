@@ -643,6 +643,37 @@ sendMessage was delivered) by checking `InboxManifest` and
 `InboxProcessedClipIds` membership before calling
 `recordPreAnnounce`.
 
+### 8.7 · Phone-side delete didn't re-ack the watch — **fixed 2026-05-30**
+
+`InboxManifest.remove(clipId:)` and `removeBatch(clipIds:)` cleared
+the manifest, deleted the audio file, marked the disposal in B5,
+and posted the notification-coordinator hook — but did **not**
+re-broadcast an ack to the watch. The system relied on the original
+file-arrival ack (`session(_:didReceive:)` →
+`sendConfirmation(clipId:)`) to clear the watch's pending row. If
+that ack was lost — sendMessage failed because the watch wasn't
+reachable in the exact ms after the file landed, transferUserInfo
+backup got stuck in iOS's delivery queue, etc. — the watch row
+became permanently stuck.
+
+Tom QA 2026-05-30 visible symptom: 4-second clip recorded on watch
+→ landed on phone → user deleted on phone immediately → watch row
+stayed.
+
+Fix: `remove` and `removeBatch` now send `sendConfirmation` per
+clipId. The ack is idempotent on the watch side (already-removed
+rows are no-ops in `WatchPendingManifest.performRemoval`), so this
+is safe even when the original arrival ack succeeded. For
+**single-clip** sessions this works directly because
+`InboxClip.clipId == metadata.clipId == watch row's clipId`. For
+**split-clip** (On-a-roll) sessions where the child
+`InboxClip.clipId` is a fresh UUID different from the master, the
+re-ack is a no-op — the original arrival ack for `metadata.clipId`
+is still the only signal that reaches the watch row, and § 7.2's
+`isMasterAlreadyProcessed` dedup handles the persistence side. A
+proper split-session fix would carry `master.clipId` on each child
+InboxClip; queued as follow-up.
+
 ### 8.5 · Transcription false-negatives at duration extremes
 
 QA 2026-05-29: 6-second and 5-minute clips of clear speech both

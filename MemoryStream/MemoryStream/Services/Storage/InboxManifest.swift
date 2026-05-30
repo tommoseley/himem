@@ -192,6 +192,19 @@ final class InboxManifest: ObservableObject {
         // can't ghost-redeliver this clip into the inbox later.
         // See `InboxProcessedClipIds` for the full rationale (B5).
         InboxProcessedClipIds.shared.markProcessed(clipId)
+        // Explicit ack to the watch. The original arrival ack
+        // (`session(_:didReceive:)` → `sendConfirmation`) should
+        // have already cleared the watch's pending row, but if
+        // that ack was lost (sendMessage failed and the
+        // transferUserInfo backup got stuck in the system queue),
+        // the watch row stays stuck. Tom QA 2026-05-30: 4-second
+        // clip arrived, user deleted, watch still showed the row.
+        // Re-acking on disposal closes the loop for single-clip
+        // sessions where `clip.clipId == watch row's clipId`. The
+        // ack is idempotent on the watch side — already-removed
+        // rows are no-ops.
+        WatchSessionDelegate.shared.sendConfirmation(clipId: clipId)
+        NSLog("[Himem][Inbox] remove(clipId:) re-acked watch for clipId=\(clipId)")
     }
 
     /// Removes a batch — used when the user creates a memory from N clips
@@ -206,6 +219,11 @@ final class InboxManifest: ObservableObject {
         }
         // Same persistence as `remove(clipId:)` — see B5 rationale.
         InboxProcessedClipIds.shared.markProcessed(clipIds)
+        // Same explicit-ack rationale as `remove(clipId:)`.
+        for id in clipIds {
+            WatchSessionDelegate.shared.sendConfirmation(clipId: id)
+        }
+        NSLog("[Himem][Inbox] removeBatch re-acked watch for \(clipIds.count) clipId(s)")
     }
 
     /// Finds the on-disk audio URL for a clip. Returns nil if the file is
