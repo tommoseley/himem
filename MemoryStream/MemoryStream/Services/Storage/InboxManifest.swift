@@ -591,6 +591,19 @@ final class InboxManifest: ObservableObject {
     func syncBadgeNow() {
         syncIconBadge(to: clips.count)
     }
+
+    #if DEBUG
+    /// Test seam — replaces the manifest's `clips` and
+    /// `disposedClips` (partitioned by status) without going through
+    /// persistence. Lets tests seed precise scenarios without
+    /// touching disk. Tombstones in `next` route to `disposedClips`;
+    /// everything else is treated as active.
+    func debugReplaceClipsForTesting(_ next: [InboxClip]) {
+        let (active, disposed) = partition(next)
+        clips = active.sorted { $0.capturedAt > $1.capturedAt }
+        disposedClips = disposed
+    }
+    #endif
 }
 
 private extension JSONEncoder {

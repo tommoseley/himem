@@ -18,6 +18,22 @@ import Combine
 /// metadata required to render before the audio actually lands in
 /// `InboxManifest`.
 ///
+/// **Relationship to `InboxManifest`** (post-consolidation, 2026-05-30):
+///
+/// The manifest is the authoritative source of truth for clip
+/// lifecycle status (`.announced` / `.received` / `.transcribing` /
+/// `.transcribed` / `.disposed`). The tracker is a thin transient
+/// view-model layered on top — it holds the announce-time metadata
+/// (announcedAt, fileSizeBytes) the manifest doesn't carry, and the
+/// queue-position bookkeeping (which clip is `.downloading` vs
+/// `.waiting`). Every public method cross-checks
+/// `InboxManifest.shared.status(for:)` so the tracker can never
+/// surface an entry the manifest has moved to `.disposed`. Without
+/// the cross-check, a user delete mid-transcription would leave a
+/// stale `IncomingCard` lingering until the transcribe sweep cleared
+/// it; with the check, the next `phase(for:)` returns nil and the
+/// stale entry is purged.
+///
 /// **Phase queue semantics.** Only one clip downloads at a time —
 /// iOS's WC layer serializes file transfers. Per-clip phases:
 ///
@@ -30,14 +46,6 @@ import Combine
 /// has arrived), the oldest waiting clip is promoted to downloading
 /// so there's always at most one downloading clip alongside zero
 /// or more waiting and transcribing clips.
-///
-/// Phase wiring across commits:
-///   - Phase 1: `.transcribing` only (manifest-driven)
-///   - Phase 2: SwiftUI views (`PhasePill`, `IncomingCard`)
-///   - **Phase 3 (this commit):** `.waiting` + `.downloading` via
-///     watch-side pre-announce sendMessage
-///   - Phase 4: `.paused` via reachability observer
-///   - Phase 5: `SyncStrip` + `CCHeaderSync`
 @MainActor
 final class InboxArrivalTracker: ObservableObject {
     static let shared = InboxArrivalTracker()
@@ -110,10 +118,19 @@ final class InboxArrivalTracker: ObservableObject {
         fileSizeBytes: Int64?,
         now: Date = Date()
     ) {
+        purgeDisposed()
         // Idempotent — duplicate pre-announces (sendMessage +
         // transferUserInfo backup, or a re-send after reachability
         // restoration) shouldn't bump the queue or reset metadata.
         guard clipsInFlight[clipId] == nil else { return }
+        // Manifest is authoritative for "have I seen this clipId?"
+        // Skip if the manifest already knows about it — either
+        // already processed (.received / .transcribed) or already
+        // disposed (.disposed tombstone). Prevents resurrecting a
+        // clip the user just deleted; redundant with the
+        // WatchSessionDelegate pre-announce gates but cheap and
+        // closes the gap if anything calls the tracker directly.
+        if InboxManifest.shared.status(for: clipId) != nil { return }
         let hasActiveDownload = clipsInFlight.values.contains { entry in
             if case .downloading = entry.phase { return true }
             return false
@@ -207,24 +224,54 @@ final class InboxArrivalTracker: ObservableObject {
 
     /// `true` when any clip is currently in-flight. Drives the
     /// `SyncStrip` global banner's visibility.
-    var hasAnyInFlight: Bool { !clipsInFlight.isEmpty }
+    var hasAnyInFlight: Bool {
+        purgeDisposed()
+        return !clipsInFlight.isEmpty
+    }
 
     /// Total in-flight count for header subtitle math.
-    var inFlightCount: Int { clipsInFlight.count }
+    var inFlightCount: Int {
+        purgeDisposed()
+        return clipsInFlight.count
+    }
 
-    /// Look up a clip's phase. Returns nil for clipIds not in flight.
+    /// Look up a clip's phase. Returns nil for clipIds not in flight
+    /// or for clipIds the manifest has moved to `.disposed`.
     func phase(for clipId: UUID) -> Phase? {
-        clipsInFlight[clipId]?.phase
+        purgeDisposed()
+        return clipsInFlight[clipId]?.phase
     }
 
     /// In-flight clips, ordered newest-captured first (matches the
     /// SessionCard list ordering so IncomingCards at the top of the
     /// list read like a continuation of the same time-sorted feed).
     func sortedNewestFirst() -> [InFlightClip] {
-        clipsInFlight.values.sorted { $0.capturedAt > $1.capturedAt }
+        purgeDisposed()
+        return clipsInFlight.values.sorted { $0.capturedAt > $1.capturedAt }
     }
 
     // MARK: - Private
+
+    /// Drops entries the manifest has moved to `.disposed`. Cheap
+    /// (O(N) where N is the small in-flight count) and keeps the
+    /// tracker honest against user deletes that happen
+    /// mid-transcription. Without this, a stale entry would sit in
+    /// `clipsInFlight` until the transcribe sweep ran its `clear`,
+    /// which never fires for a clip the user has already removed.
+    private func purgeDisposed() {
+        let manifest = InboxManifest.shared
+        let disposed = clipsInFlight.keys.filter {
+            manifest.status(for: $0) == .disposed
+        }
+        for id in disposed {
+            clipsInFlight.removeValue(forKey: id)
+        }
+        if !disposed.isEmpty {
+            // Disposal can leave the queue without a downloading
+            // entry — re-elect.
+            promoteOldestWaitingIfRoom()
+        }
+    }
 
     /// Promotes the oldest `.waiting` clip to `.downloading` IFF
     /// there's no currently-downloading clip. Idempotent.

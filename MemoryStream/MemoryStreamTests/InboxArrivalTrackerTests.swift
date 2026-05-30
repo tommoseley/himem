@@ -257,4 +257,76 @@ struct InboxArrivalTrackerTests {
         t.clear(clipId: masterId)
         #expect(t.phase(for: masterId) == nil)
     }
+
+    // MARK: - Manifest drift guard (Step E)
+
+    /// The manifest is the authoritative source of truth for clip
+    /// lifecycle. If a clipId is already in the manifest in any
+    /// status (received / transcribed / disposed), the tracker
+    /// shouldn't take a fresh pre-announce — that would either
+    /// duplicate a known clip or resurrect a tombstone the user
+    /// already disposed of.
+    @Test func recordPreAnnounce_skipped_whenManifestHasClipInAnyStatus() {
+        let t = freshTracker()
+        let clipId = UUID()
+        // Seed the manifest with a tombstone for this clipId. The
+        // tracker's pre-announce should now be a no-op for it.
+        let tombstone = InboxClip(
+            clipId: clipId,
+            capturedAt: Date(),
+            duration: 5,
+            transcript: "",
+            latitude: nil,
+            longitude: nil,
+            source: "watch",
+            audioFilename: "",
+            transcriptionAttempted: false,
+            rollGroupId: nil,
+            status: .disposed,
+            disposedAt: Date()
+        )
+        let priorClips = InboxManifest.shared.clips
+        defer { InboxManifest.shared.debugReplaceClipsForTesting(priorClips) }
+        InboxManifest.shared.debugReplaceClipsForTesting(priorClips + [tombstone])
+
+        _ = preAnnounce(t, clipId: clipId)
+        #expect(t.inFlightCount == 0, "Pre-announce must not resurrect a disposed clipId")
+        #expect(t.phase(for: clipId) == nil)
+    }
+
+    /// If the manifest moves a clip to `.disposed` while the
+    /// tracker still holds an entry for it (e.g., user manually
+    /// deletes mid-transcription), the next tracker query must
+    /// silently drop the stale entry. Without this, the
+    /// `IncomingCard` would linger until the next reachability
+    /// cycle or app launch.
+    @Test func phase_returnsNil_andDropsEntry_whenManifestDisposesClip() {
+        let t = freshTracker()
+        let clipId = UUID()
+        _ = preAnnounce(t, clipId: clipId)
+        #expect(t.phase(for: clipId) == .downloading)
+
+        // Simulate the user-deletion path that disposes a clip the
+        // tracker still has as in-flight.
+        let priorClips = InboxManifest.shared.clips
+        defer { InboxManifest.shared.debugReplaceClipsForTesting(priorClips) }
+        let tombstone = InboxClip(
+            clipId: clipId,
+            capturedAt: Date(),
+            duration: 5,
+            transcript: "",
+            latitude: nil,
+            longitude: nil,
+            source: "watch",
+            audioFilename: "",
+            transcriptionAttempted: false,
+            rollGroupId: nil,
+            status: .disposed,
+            disposedAt: Date()
+        )
+        InboxManifest.shared.debugReplaceClipsForTesting(priorClips + [tombstone])
+
+        #expect(t.phase(for: clipId) == nil, "Tracker must drop entries the manifest has disposed")
+        #expect(t.inFlightCount == 0)
+    }
 }
