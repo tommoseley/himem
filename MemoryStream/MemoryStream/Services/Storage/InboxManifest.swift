@@ -180,11 +180,58 @@ final class InboxManifest: ObservableObject {
         replace(with: next)
     }
 
+    /// What ack the iPhone needs to send to the watch for a disposed
+    /// clipId. Roll-session clips collapse into a single rollGroup ack
+    /// — one message clears the watch's pending row (keyed on the
+    /// master clipId, which the watch stored as the rollGroupId) even
+    /// when only some children were removed. Single clips (nil
+    /// rollGroupId) emit a clipId ack as before.
+    ///
+    /// Closes the split-clip re-ack gap (§ 8.7 of the system reference
+    /// doc): for split sessions the children carry fresh clipIds the
+    /// watch never knew, so per-clipId acks couldn't match the watch
+    /// row. Now one rollGroup ack covers master + every child.
+    enum AckAction: Hashable {
+        case clip(UUID)
+        case rollGroup(UUID)
+    }
+
+    /// Pure decision: turn a batch of about-to-be-removed clipIds into
+    /// the minimum set of ack messages. Reads `manifestClips` to find
+    /// each clipId's `rollGroupId`; missing entries fall back to a
+    /// clip ack (the watch's no-op-on-unknown handler absorbs stale
+    /// requests).
+    ///
+    /// Order isn't part of the contract — callers should not depend
+    /// on it. Caller is responsible for actually emitting the acks.
+    ///
+    /// `nonisolated` because the function is pure over value types
+    /// (`InboxClip` is `Codable`/`Equatable`, no actor state). Lets
+    /// unit tests drive it without hopping to MainActor.
+    nonisolated static func ackActions(for clipIds: [UUID], in manifestClips: [InboxClip]) -> [AckAction] {
+        var rollGroupIds = Set<UUID>()
+        var clipAcks: [UUID] = []
+        for clipId in clipIds {
+            let clip = manifestClips.first { $0.clipId == clipId }
+            if let rg = clip?.rollGroupId {
+                rollGroupIds.insert(rg)
+            } else {
+                clipAcks.append(clipId)
+            }
+        }
+        return rollGroupIds.map { AckAction.rollGroup($0) }
+            + clipAcks.map { AckAction.clip($0) }
+    }
+
     /// Removes a single clip and its audio file. Called when the user
     /// deletes from the inbox or after a clip is promoted into a memory.
     func remove(clipId: UUID) {
         guard let clip = clips.first(where: { $0.clipId == clipId }) else { return }
         try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
+        // Snapshot the ack decision BEFORE the array is filtered — the
+        // clip's rollGroupId is what we need to send, and after
+        // `replace(with: next)` it's gone from `clips`.
+        let actions = Self.ackActions(for: [clipId], in: clips)
         let next = clips.filter { $0.clipId != clipId }
         replace(with: next)
         WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: clipId)
@@ -192,25 +239,18 @@ final class InboxManifest: ObservableObject {
         // can't ghost-redeliver this clip into the inbox later.
         // See `InboxProcessedClipIds` for the full rationale (B5).
         InboxProcessedClipIds.shared.markProcessed(clipId)
-        // Explicit ack to the watch. The original arrival ack
-        // (`session(_:didReceive:)` → `sendConfirmation`) should
-        // have already cleared the watch's pending row, but if
-        // that ack was lost (sendMessage failed and the
-        // transferUserInfo backup got stuck in the system queue),
-        // the watch row stays stuck. Tom QA 2026-05-30: 4-second
-        // clip arrived, user deleted, watch still showed the row.
-        // Re-acking on disposal closes the loop for single-clip
-        // sessions where `clip.clipId == watch row's clipId`. The
-        // ack is idempotent on the watch side — already-removed
-        // rows are no-ops.
-        WatchSessionDelegate.shared.sendConfirmation(clipId: clipId)
-        NSLog("[Himem][Inbox] remove(clipId:) re-acked watch for clipId=\(clipId)")
+        emitAcks(actions)
+        NSLog("[Himem][Inbox] remove(clipId:) emitted \(actions.count) ack(s) for clipId=\(clipId)")
     }
 
     /// Removes a batch — used when the user creates a memory from N clips
     /// or appends N clips to an existing memory. The audio files have
     /// already been moved out by the caller; we just drop the rows here.
     func removeBatch(clipIds: [UUID]) {
+        // Same snapshot-before-mutate pattern as `remove`: capture
+        // ack actions while the clips still have their rollGroupId
+        // readable in `clips`.
+        let actions = Self.ackActions(for: clipIds, in: clips)
         let idSet = Set(clipIds)
         let next = clips.filter { !idSet.contains($0.clipId) }
         replace(with: next)
@@ -219,11 +259,19 @@ final class InboxManifest: ObservableObject {
         }
         // Same persistence as `remove(clipId:)` — see B5 rationale.
         InboxProcessedClipIds.shared.markProcessed(clipIds)
-        // Same explicit-ack rationale as `remove(clipId:)`.
-        for id in clipIds {
-            WatchSessionDelegate.shared.sendConfirmation(clipId: id)
+        emitAcks(actions)
+        NSLog("[Himem][Inbox] removeBatch emitted \(actions.count) ack(s) for \(clipIds.count) clipId(s)")
+    }
+
+    private func emitAcks(_ actions: [AckAction]) {
+        for action in actions {
+            switch action {
+            case .clip(let id):
+                WatchSessionDelegate.shared.sendConfirmation(clipId: id)
+            case .rollGroup(let id):
+                WatchSessionDelegate.shared.sendConfirmation(rollGroupId: id)
+            }
         }
-        NSLog("[Himem][Inbox] removeBatch re-acked watch for \(clipIds.count) clipId(s)")
     }
 
     /// Finds the on-disk audio URL for a clip. Returns nil if the file is

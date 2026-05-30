@@ -208,6 +208,28 @@ final class WatchPendingManifest: ObservableObject {
         remove(clipId: clipId, viaSync: false)
     }
 
+    /// Clears every pending row whose `rollGroupId` matches the
+    /// iPhone-acked roll group. Used for the split-clip ack path:
+    /// the iPhone collapses N child clipId acks into one rollGroup
+    /// ack so the watch can drop the master row (keyed on the
+    /// rollGroupId) even if it never saw any child clipId. Closes
+    /// § 8.7 of the system reference doc.
+    ///
+    /// Each match goes through `remove(clipId:viaSync:)` so the
+    /// "Synced ✓" flash and `lastConfirmedReceiptAt` update fire
+    /// the same way as a per-clip ack. No-op if no rows match.
+    func removeByRollGroup(rollGroupId: UUID) {
+        let matching = clips.filter { $0.rollGroupId == rollGroupId }
+        guard !matching.isEmpty else {
+            NSLog("[Himem][WC] watch — removeByRollGroup no-op rollGroupId=\(rollGroupId) (no matches)")
+            return
+        }
+        NSLog("[Himem][WC] watch — removeByRollGroup matched \(matching.count) row(s) for rollGroupId=\(rollGroupId)")
+        for clip in matching {
+            remove(clipId: clip.clipId, viaSync: true)
+        }
+    }
+
     #if DEBUG
     /// Test-only seam for replacing the manifest's `clips` without
     /// going through persistence. Used by ack-pipeline tests to

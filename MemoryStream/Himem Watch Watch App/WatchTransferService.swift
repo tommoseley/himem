@@ -9,6 +9,12 @@ import WatchConnectivity
 @MainActor
 final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate {
     @Published var lastAckedClipId: UUID?
+    /// Published when the iPhone acks a whole roll group at once —
+    /// covers split-session siblings and master rows the watch never
+    /// cleared because the original arrival ack got lost. Coordinator
+    /// fans out to every pending row whose `rollGroupId` matches.
+    /// Closes § 8.7 of the system reference doc.
+    @Published var lastAckedRollGroupId: UUID?
 
     func start() {
         guard WCSession.isSupported() else {
@@ -103,18 +109,40 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
 
     /// Pure parsing for an ack payload from the iPhone. Extracted from the
     /// delegate methods so the unit tests can drive it without a real
-    /// WCSession. Sets `lastAckedClipId` on the main actor when the payload
-    /// contains a valid `confirmedClipId`; no-op otherwise.
+    /// WCSession.
+    ///
+    /// Accepts two wire formats:
+    ///   * `{ "confirmed": "<uuid>", "kind": "clip" | "rollGroup" }`
+    ///     — current shape. Routes to `lastAckedClipId` or
+    ///     `lastAckedRollGroupId`.
+    ///   * `{ "confirmedClipId": "<uuid>" }` — legacy shape. Routes to
+    ///     `lastAckedClipId`. Kept so any acks queued by iOS's
+    ///     transferUserInfo store before the format change still
+    ///     deliver during the rollout window; once that queue drains
+    ///     the legacy branch goes cold.
     nonisolated func handleAckPayload(_ payload: [String: Any]) {
-        guard let str = payload["confirmedClipId"] as? String,
-              let clipId = UUID(uuidString: str) else {
-            NSLog("[Himem][WC] watch — handleAckPayload IGNORED, keys=\(Array(payload.keys))")
+        if let value = payload["confirmed"] as? String,
+           let id = UUID(uuidString: value),
+           let kind = payload["kind"] as? String {
+            switch kind {
+            case "rollGroup":
+                NSLog("[Himem][WC] watch — handleAckPayload accepted rollGroupId=\(id)")
+                Task { @MainActor in self.lastAckedRollGroupId = id }
+            case "clip":
+                NSLog("[Himem][WC] watch — handleAckPayload accepted clipId=\(id)")
+                Task { @MainActor in self.lastAckedClipId = id }
+            default:
+                NSLog("[Himem][WC] watch — handleAckPayload unknown kind=\(kind), id=\(id)")
+            }
             return
         }
-        NSLog("[Himem][WC] watch — handleAckPayload accepted clipId=\(clipId)")
-        Task { @MainActor in
-            self.lastAckedClipId = clipId
+        if let str = payload["confirmedClipId"] as? String,
+           let clipId = UUID(uuidString: str) {
+            NSLog("[Himem][WC] watch — handleAckPayload accepted legacy clipId=\(clipId)")
+            Task { @MainActor in self.lastAckedClipId = clipId }
+            return
         }
+        NSLog("[Himem][WC] watch — handleAckPayload IGNORED, keys=\(Array(payload.keys))")
     }
 
     /// Ack via `sendMessage` — used when both apps are reachable. Kept for

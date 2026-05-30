@@ -43,6 +43,16 @@ final class WatchAppCoordinator: ObservableObject {
             }
             .store(in: &bag)
 
+        // RollGroup acks fan out to every pending row sharing the
+        // rollGroupId — covers the split-session re-ack gap (§ 8.7).
+        transfer.$lastAckedRollGroupId
+            .compactMap { $0 }
+            .sink { [weak self] rollGroupId in
+                NSLog("[Himem][WC] watch — coordinator removing rollGroupId=\(rollGroupId) from manifest")
+                self?.pending.removeByRollGroup(rollGroupId: rollGroupId)
+            }
+            .store(in: &bag)
+
         // Re-attempt unsent clips on app launch — transferFile is durable
         // across launches but we ping the queue once at startup so the
         // user sees recent progress.

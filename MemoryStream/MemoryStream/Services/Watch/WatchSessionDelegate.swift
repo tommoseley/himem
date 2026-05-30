@@ -537,9 +537,42 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         NSLog("[Himem][WC] iPhone — flush request sent")
     }
 
+    /// Pure construction of the ack wire payload. Extracted so unit
+    /// tests can lock the format without standing up a `WCSession`.
+    /// Exactly one of `clipId` / `rollGroupId` must be non-nil;
+    /// passing neither traps in debug.
+    ///
+    /// Wire format: `{ "confirmed": "<uuid>", "kind": "clip" | "rollGroup" }`.
+    /// Replaces the prior `{ "confirmedClipId": "<uuid>" }` shape.
+    /// Watch-side `handleAckPayload` still accepts the legacy shape so
+    /// any acks already in iOS's transferUserInfo queue from before
+    /// this change continue to deliver during the rollout window.
+    static func confirmationPayload(clipId: UUID?, rollGroupId: UUID?) -> [String: Any] {
+        precondition(
+            (clipId == nil) != (rollGroupId == nil),
+            "confirmationPayload requires exactly one of clipId, rollGroupId"
+        )
+        if let rollGroupId {
+            return ["confirmed": rollGroupId.uuidString, "kind": "rollGroup"]
+        }
+        return ["confirmed": clipId!.uuidString, "kind": "clip"]
+    }
+
+    /// Single-clip ack — preserved as a sugar overload so existing
+    /// arrival-path call sites don't need rewording.
     func sendConfirmation(clipId: UUID) {
+        sendConfirmation(clipId: clipId, rollGroupId: nil)
+    }
+
+    /// RollGroup ack — closes the split-clip re-ack gap (§ 8.7).
+    func sendConfirmation(rollGroupId: UUID) {
+        sendConfirmation(clipId: nil, rollGroupId: rollGroupId)
+    }
+
+    private func sendConfirmation(clipId: UUID?, rollGroupId: UUID?) {
         let session = WCSession.default
-        let payload: [String: Any] = ["confirmedClipId": clipId.uuidString]
+        let payload = Self.confirmationPayload(clipId: clipId, rollGroupId: rollGroupId)
+        let label = clipId.map { "clipId=\($0)" } ?? "rollGroupId=\(rollGroupId!)"
 
         // Fast path — try `sendMessage` unconditionally. We previously
         // guarded on `session.isReachable`, but the iPhone's view of
@@ -551,14 +584,14 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         // the errorHandler (no exception, no side effect) — the
         // durable transferUserInfo below covers either way.
         session.sendMessage(payload, replyHandler: nil) { error in
-            NSLog("[Himem][WC] iPhone — sendMessage confirmation failed for clipId=\(clipId): \(error.localizedDescription) (transferUserInfo backup will deliver)")
+            NSLog("[Himem][WC] iPhone — sendMessage confirmation failed for \(label): \(error.localizedDescription) (transferUserInfo backup will deliver)")
         }
-        NSLog("[Himem][WC] iPhone — sendMessage confirmation attempted for clipId=\(clipId)")
+        NSLog("[Himem][WC] iPhone — sendMessage confirmation attempted for \(label)")
 
         // Durable backup — always queued. System delivers when watch
         // next activates / both apps next become reachable.
         let transfer = session.transferUserInfo(payload)
-        NSLog("[Himem][WC] iPhone — transferUserInfo queued for clipId=\(clipId), transferring=\(transfer.isTransferring)")
+        NSLog("[Himem][WC] iPhone — transferUserInfo queued for \(label), transferring=\(transfer.isTransferring)")
     }
 
     /// Re-asserts every clip the iPhone already holds in its inbox to the
