@@ -10,6 +10,35 @@ import UserNotifications
 /// memory), the audio file moves to the iOS-side voice store and the row
 /// is removed from this manifest.
 struct InboxClip: Codable, Identifiable, Equatable {
+    /// Lifecycle of a single clip in the inbox. Single source of
+    /// truth replacing the three-store split (`InboxManifest` +
+    /// `InboxProcessedClipIds` + `InboxArrivalTracker`). See
+    /// `docs/architecture/Captured Clips · watch-to-phone sync
+    /// system.md` for the rebuild rationale.
+    ///
+    /// Transitions:
+    ///   `.announced` → `.received` → `.transcribing` → `.transcribed`
+    ///                                                       ↓
+    ///                                                  `.disposed`
+    /// A `.disposed` row stays in the manifest as a tombstone so
+    /// `acceptArrivedClip` can recognize and drop iOS WC-queue ghost
+    /// re-deliveries by reading status — no separate dedup set
+    /// needed. Tombstones age out via `InboxManifest.pruned`.
+    enum Status: String, Codable {
+        /// Pre-announce received, file not yet on disk.
+        case announced
+        /// File copied into the inbox audio dir, transcription not started.
+        case received
+        /// Compressed + transcription in flight.
+        case transcribing
+        /// Transcription attempt completed (transcript may be empty
+        /// if the recognizer found no speech).
+        case transcribed
+        /// User removed or promoted to a memory. Retained as
+        /// tombstone to gate redeliveries until pruned.
+        case disposed
+    }
+
     let clipId: UUID
     let capturedAt: Date
     let duration: TimeInterval
@@ -21,13 +50,23 @@ struct InboxClip: Codable, Identifiable, Equatable {
     /// True after the iPhone-side speech recognizer has run for this clip,
     /// even if it returned no text. Combined with `transcript.isEmpty` this
     /// distinguishes "still in flight" from "ran, found no speech" — UI
-    /// shows different copy and styling for each.
+    /// shows different copy and styling for each. Retained alongside
+    /// `status == .transcribed` so existing UI checks don't break in
+    /// Step C; later steps simplify these into one read.
     let transcriptionAttempted: Bool
     /// On-a-roll grouping signal — clips with the same non-nil
     /// `rollGroupId` always land in one Memory regardless of
     /// time/location heuristics. Optional so older manifest rows that
     /// predate the feature decode cleanly.
     let rollGroupId: UUID?
+    /// Lifecycle state. Decoded with legacy-shape migration in
+    /// `init(from:)` — entries written before this field existed
+    /// infer `.transcribed` if a transcript was already attempted,
+    /// otherwise `.received`.
+    let status: Status
+    /// When this row transitioned to `.disposed`. Drives the
+    /// tombstone-aging prune in `InboxManifest.pruned`.
+    let disposedAt: Date?
 
     var id: UUID { clipId }
 
@@ -41,7 +80,9 @@ struct InboxClip: Codable, Identifiable, Equatable {
         source: String,
         audioFilename: String,
         transcriptionAttempted: Bool = false,
-        rollGroupId: UUID? = nil
+        rollGroupId: UUID? = nil,
+        status: Status = .received,
+        disposedAt: Date? = nil
     ) {
         self.clipId = clipId
         self.capturedAt = capturedAt
@@ -53,15 +94,20 @@ struct InboxClip: Codable, Identifiable, Equatable {
         self.audioFilename = audioFilename
         self.transcriptionAttempted = transcriptionAttempted
         self.rollGroupId = rollGroupId
+        self.status = status
+        self.disposedAt = disposedAt
     }
 
-    // Custom decoding so old persisted manifests (without
-    // `transcriptionAttempted`) round-trip with the field defaulted to
-    // false — anything in the existing inbox is treated as "still pending"
-    // until we either replace its transcript or re-attempt recognition.
+    // Custom decoding so legacy manifests (no `status`/`disposedAt`,
+    // and older still without `transcriptionAttempted`) round-trip.
+    // Inference rule for missing `status`:
+    //   - transcript present OR `transcriptionAttempted == true`
+    //     → `.transcribed` (recognizer ran, result may be empty)
+    //   - else → `.received` (audio on disk, recognizer hasn't run)
     private enum CodingKeys: String, CodingKey {
         case clipId, capturedAt, duration, transcript, latitude, longitude
         case source, audioFilename, transcriptionAttempted, rollGroupId
+        case status, disposedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -76,6 +122,14 @@ struct InboxClip: Codable, Identifiable, Equatable {
         audioFilename = try c.decode(String.self, forKey: .audioFilename)
         transcriptionAttempted = try c.decodeIfPresent(Bool.self, forKey: .transcriptionAttempted) ?? false
         rollGroupId = try c.decodeIfPresent(UUID.self, forKey: .rollGroupId)
+        if let s = try c.decodeIfPresent(Status.self, forKey: .status) {
+            status = s
+        } else if transcriptionAttempted || !transcript.isEmpty {
+            status = .transcribed
+        } else {
+            status = .received
+        }
+        disposedAt = try c.decodeIfPresent(Date.self, forKey: .disposedAt)
     }
 }
 
@@ -121,6 +175,29 @@ final class InboxManifest: ObservableObject {
     }
     nonisolated static var manifestURL: URL { inboxRoot.appendingPathComponent("manifest.json") }
     nonisolated static func audioURL(for filename: String) -> URL { audioDirectory.appendingPathComponent(filename) }
+
+    /// Pure: drops `.disposed` rows whose `disposedAt` is strictly
+    /// older than `(days * 86400)` seconds before `now`. Tombstones
+    /// without a `disposedAt` are kept (we can't prove they're old).
+    /// Active statuses (`.announced` / `.received` / `.transcribing`
+    /// / `.transcribed`) are never pruned.
+    ///
+    /// Tested by `InboxManifestPruneTests`.
+    nonisolated static func pruned(_ clips: [InboxClip], olderThan days: Int, now: Date) -> [InboxClip] {
+        let threshold = TimeInterval(days * 86_400)
+        return clips.filter { clip in
+            guard clip.status == .disposed, let disposedAt = clip.disposedAt else {
+                return true
+            }
+            return now.timeIntervalSince(disposedAt) <= threshold
+        }
+    }
+
+    /// Default tombstone retention. 90 days is comfortably longer
+    /// than iOS's transferUserInfo / transferFile retry windows, so
+    /// any ghost re-delivery we'd want to gate against is still
+    /// caught by the tombstone.
+    static let defaultPruneDays: Int = 90
 
     private init() {
         load()
@@ -173,7 +250,9 @@ final class InboxManifest: ObservableObject {
             source: existing.source,
             audioFilename: existing.audioFilename,
             transcriptionAttempted: true,
-            rollGroupId: existing.rollGroupId
+            rollGroupId: existing.rollGroupId,
+            status: .transcribed,
+            disposedAt: existing.disposedAt
         )
         var next = clips
         next[idx] = updated
@@ -325,17 +404,54 @@ final class InboxManifest: ObservableObject {
         let url = Self.manifestURL
         defer { syncIconBadge(to: clips.count) }
         guard FileManager.default.fileExists(atPath: url.path) else { return }
+        // One-shot backup of the legacy manifest before the new schema
+        // first rewrites it. The backup-file existence is its own
+        // idempotency gate — once written, subsequent loads skip it.
+        // Protects against any decode-time loss as the Step C
+        // migration lands on Tom's dev devices.
+        Self.backupManifestIfNeeded()
         do {
             let data = try Data(contentsOf: url)
             let loaded = try JSONDecoder.iso8601.decode([InboxClip].self, from: data)
             // Drop rows whose audio file is gone — defensive against partial
-            // states from older crashes.
-            clips = loaded
-                .filter { FileManager.default.fileExists(atPath: Self.audioURL(for: $0.audioFilename).path) }
-                .sorted { $0.capturedAt > $1.capturedAt }
+            // states from older crashes. Audio-missing only applies to
+            // active (non-disposed) rows; tombstones are bookkeeping
+            // entries with no audio expected.
+            let withFiles = loaded.filter { clip in
+                clip.status == .disposed
+                    || FileManager.default.fileExists(atPath: Self.audioURL(for: clip.audioFilename).path)
+            }
+            // Age out old tombstones so the manifest doesn't grow
+            // unboundedly. Active rows pass through unchanged.
+            let aged = Self.pruned(withFiles, olderThan: Self.defaultPruneDays, now: Date())
+            clips = aged.sorted { $0.capturedAt > $1.capturedAt }
         } catch {
             // Corrupt manifest — start fresh rather than block the user.
             clips = []
+        }
+    }
+
+    /// Writes a copy of `manifest.json` to
+    /// `manifest.backup.<unix-seconds>.json` the first time `load`
+    /// runs on a build that has the backup hook. The presence of any
+    /// `manifest.backup.*.json` file in the inbox root gates
+    /// subsequent runs to a no-op — idempotent without UserDefaults.
+    private static func backupManifestIfNeeded() {
+        let fm = FileManager.default
+        let root = inboxRoot
+        let url = manifestURL
+        guard fm.fileExists(atPath: url.path) else { return }
+        let existing = (try? fm.contentsOfDirectory(atPath: root.path)) ?? []
+        if existing.contains(where: { $0.hasPrefix("manifest.backup.") }) {
+            return
+        }
+        let stamp = Int(Date().timeIntervalSince1970)
+        let dest = root.appendingPathComponent("manifest.backup.\(stamp).json")
+        do {
+            try fm.copyItem(at: url, to: dest)
+            NSLog("[Himem][Inbox] wrote one-shot backup at \(dest.lastPathComponent)")
+        } catch {
+            NSLog("[Himem][Inbox] backup copy failed: \(error.localizedDescription)")
         }
     }
 
