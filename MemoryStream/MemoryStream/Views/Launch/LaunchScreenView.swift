@@ -270,13 +270,19 @@ struct LaunchScreenView: View {
         }
     }
 
-    /// Schedules `FragmentMigration.runIfNeeded` on a background context.
-    /// Safe to call multiple times — the migration's internal in-flight
-    /// guard and idempotent per-entry checks make repeat calls cheap.
-    /// Per 2026-05-09 issue doc, only call after CloudKit's initial import
-    /// has settled (or the 3s safety timeout) — running concurrently with
-    /// import raises an ObjC NSException that can't be caught.
+    /// Schedules `FragmentMigration.runIfNeeded` on a background context
+    /// and runs `InboxManifest`'s deferred startup migrations. Safe to
+    /// call multiple times — both migrations are internally idempotent.
+    ///
+    /// Per 2026-05-09 issue doc, only call after CloudKit's initial
+    /// import has settled (or the 3s safety timeout) — running
+    /// concurrently with import raises an ObjC NSException that can't
+    /// be caught. The same window is what crashed the InboxManifest
+    /// backup + legacy `InboxProcessedClipIds.json` migration on Tom's
+    /// 2026-05-30 device run; deferring both to this hook eliminates
+    /// the race for both.
     private func runMigration() {
+        InboxManifest.shared.runStartupMigrationsIfNeeded()
         if FragmentMigration.hasCompleted { return }
         let context = StorageService.shared.backgroundContext()
         context.perform {

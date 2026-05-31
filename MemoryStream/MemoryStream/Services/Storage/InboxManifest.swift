@@ -500,54 +500,89 @@ final class InboxManifest: ObservableObject {
     }
 
     private func load() {
+        // Fast path: read + partition `manifest.json` only. No
+        // backup write, no legacy `InboxProcessedClipIds.json`
+        // migration — those are deferred to
+        // `runStartupMigrationsIfNeeded()` which `LaunchScreenView`
+        // calls after CloudKit's initial import has settled.
+        //
+        // The reason: the singleton is lazily initialized on first
+        // access, which on Tom's dev device with a WC backlog
+        // happens inside `WatchSessionDelegate.session(_:didReceive:)`
+        // via a `main.sync` from the background WC delegate thread.
+        // That fires DURING the `NSPersistentCloudKitContainer`
+        // initial-import window, where Core Data is fragile —
+        // running heavy main-thread I/O here trips the
+        // two-NSManagedObjectModel race documented in
+        // LaunchScreenView.swift:230 and crashes the app.
+        //
+        // 2026-05-30: confirmed by Tom's device run — first launch
+        // with the rebuild crashed during CloudKit setup; second
+        // launch (migration already inert) was clean; fresh install
+        // (no legacy file → no migration) was clean.
         let url = Self.manifestURL
         defer { syncIconBadge(to: clips.count) }
-        // One-shot backup of the legacy manifest before the new schema
-        // first rewrites it. The backup-file existence is its own
-        // idempotency gate — once written, subsequent loads skip it.
-        // Protects against any decode-time loss as the Step C
-        // migration lands on Tom's dev devices.
-        Self.backupManifestIfNeeded()
-        // Pull legacy `InboxProcessedClipIds.json` into tombstones the
-        // first time we run. After this returns the legacy file is gone.
-        let migrated = Self.migrateLegacyDisposedSet(
-            legacyURL: Self.legacyProcessedClipIdsURL,
-            now: Date()
-        )
-        if !migrated.isEmpty {
-            NSLog("[Himem][Inbox] migrated \(migrated.count) legacy disposed clipId(s) to tombstones")
-        }
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            // Fresh install or no prior manifest — just take the migrated set.
-            disposedClips = Self.pruned(migrated, olderThan: Self.defaultPruneDays, now: Date())
-            return
-        }
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             let data = try Data(contentsOf: url)
             let loaded = try JSONDecoder.iso8601.decode([InboxClip].self, from: data)
+            let (active, disposed) = partition(loaded)
             // Drop active rows whose audio file is gone — defensive
             // against partial states from older crashes. Tombstones
             // never had audio (we cleared `audioFilename` on disposal),
             // so the file check doesn't apply.
-            let (active, disposed) = partition(loaded)
             let activeWithFiles = active.filter { clip in
                 FileManager.default.fileExists(atPath: Self.audioURL(for: clip.audioFilename).path)
             }
-            // Merge migrated legacy IDs with the disposed set, dedupe
-            // by clipId so a clipId already a tombstone in the new
-            // schema isn't doubled.
-            let mergedDisposed = mergeDisposed(existing: disposed, migrated: migrated)
             // Age out old tombstones. Active rows pass through.
-            let agedDisposed = Self.pruned(mergedDisposed, olderThan: Self.defaultPruneDays, now: Date())
+            let agedDisposed = Self.pruned(disposed, olderThan: Self.defaultPruneDays, now: Date())
             clips = activeWithFiles.sorted { $0.capturedAt > $1.capturedAt }
             disposedClips = agedDisposed
         } catch {
             // Corrupt manifest — start fresh rather than block the user.
-            // Still carry the migrated tombstones forward so the B5
-            // gate continues to catch ghost re-deliveries.
             clips = []
-            disposedClips = Self.pruned(migrated, olderThan: Self.defaultPruneDays, now: Date())
         }
+    }
+
+    /// Runs the heavy migration steps that must not race with
+    /// CloudKit's initial-import window:
+    ///   - Backup write of `manifest.json` (one-shot, gated by
+    ///     existence of `manifest.backup.*.json`).
+    ///   - Pull legacy `InboxProcessedClipIds.json` into `.disposed`
+    ///     tombstones, then delete the legacy file (gated by
+    ///     existence of that legacy file).
+    ///
+    /// Idempotent — safe to call multiple times. After the first
+    /// successful run both file-existence gates become falsy and
+    /// subsequent calls are no-ops.
+    ///
+    /// Call site: `LaunchScreenView.runMigration()` (which also
+    /// drives `FragmentMigration`), invoked after the CloudKit
+    /// import-success event OR the 3-second safety net fires. Per
+    /// the existing comment in LaunchScreenView.swift:230 that
+    /// window is where the two-MOM race lives; running our
+    /// migration after it eliminates the crash.
+    ///
+    /// Trade-off: between app launch and this hook firing, the B5
+    /// dedup gate (`status(for:) == .disposed`) won't catch clipIds
+    /// whose only record was in the legacy file. The window is
+    /// narrow (1-3 seconds typical) and the consequence — a ghost
+    /// re-delivery from one of those clipIds slipping through —
+    /// only matters for the FIRST launch after the rebuild lands
+    /// on a device that has a legacy file. Subsequent launches the
+    /// migration has already absorbed them into tombstones.
+    func runStartupMigrationsIfNeeded() {
+        Self.backupManifestIfNeeded()
+        let migrated = Self.migrateLegacyDisposedSet(
+            legacyURL: Self.legacyProcessedClipIdsURL,
+            now: Date()
+        )
+        guard !migrated.isEmpty else { return }
+        NSLog("[Himem][Inbox] migrated \(migrated.count) legacy disposed clipId(s) to tombstones")
+        let merged = mergeDisposed(existing: disposedClips, migrated: migrated)
+        let aged = Self.pruned(merged, olderThan: Self.defaultPruneDays, now: Date())
+        disposedClips = aged
+        persist()
     }
 
     private func partition(_ all: [InboxClip]) -> (active: [InboxClip], disposed: [InboxClip]) {
