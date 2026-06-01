@@ -132,6 +132,7 @@
 		A100000672 /* MinClipDebouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000670 /* MinClipDebouncer.swift */; };
 		A100000673 /* NextClipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000671 /* NextClipController.swift */; };
 		A100000680 /* VoiceClipSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000680 /* VoiceClipSplitter.swift */; };
+		A100000681 /* VoiceCaptureOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000681 /* VoiceCaptureOrchestrator.swift */; };
 		A100000690 /* ClipSessionGrouper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000690 /* ClipSessionGrouper.swift */; };
 		A100000691 /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000691 /* SessionListView.swift */; };
 		A100000693 /* SwipeToDelete.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000693 /* SwipeToDelete.swift */; };
@@ -351,6 +352,7 @@
 		B100000670 /* MinClipDebouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MinClipDebouncer.swift; path = Shared/MinClipDebouncer.swift; sourceTree = "<group>"; };
 		B100000671 /* NextClipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NextClipController.swift; path = Shared/NextClipController.swift; sourceTree = "<group>"; };
 		B100000680 /* VoiceClipSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClipSplitter.swift; sourceTree = "<group>"; };
+		B100000681 /* VoiceCaptureOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCaptureOrchestrator.swift; sourceTree = "<group>"; };
 		B100000690 /* ClipSessionGrouper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipSessionGrouper.swift; sourceTree = "<group>"; };
 		B100000691 /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
 		B100000693 /* SwipeToDelete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDelete.swift; sourceTree = "<group>"; };
@@ -660,6 +662,7 @@
 				B100000093 /* VoiceSilenceWatcher.swift */,
 				B100000030 /* AudioPlayerService.swift */,
 				B100000680 /* VoiceClipSplitter.swift */,
+				B100000681 /* VoiceCaptureOrchestrator.swift */,
 				B100000034 /* CameraService.swift */,
 				B100000035 /* ThumbnailService.swift */,
 				B100000633 /* SummaryRenderer.swift */,
@@ -1241,6 +1244,7 @@
 				A100000011 /* SearchEngine.swift in Sources */,
 				A100000012 /* SpeechService.swift in Sources */,
 				A100000680 /* VoiceClipSplitter.swift in Sources */,
+				A100000681 /* VoiceCaptureOrchestrator.swift in Sources */,
 				A100000013 /* ConnectivityMonitor.swift in Sources */,
 				A100000014 /* ProcessingEngine.swift in Sources */,
 				A100000015 /* DisplayModels.swift in Sources */,

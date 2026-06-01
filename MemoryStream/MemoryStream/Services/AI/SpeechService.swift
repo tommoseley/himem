@@ -98,7 +98,7 @@ final class SpeechService: ObservableObject {
 
     // MARK: - Audio Directory
 
-    static var audioDirectory: URL {
+    nonisolated static var audioDirectory: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let dir = docs.appendingPathComponent("VoiceEntries", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -493,7 +493,7 @@ final class SpeechService: ObservableObject {
 
     // MARK: - Playback
 
-    static func audioURL(for filename: String) -> URL {
+    nonisolated static func audioURL(for filename: String) -> URL {
         audioDirectory.appendingPathComponent(filename)
     }
 }

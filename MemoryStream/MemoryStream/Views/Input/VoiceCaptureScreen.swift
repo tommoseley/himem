@@ -697,39 +697,24 @@ struct VoiceCaptureScreen: View {
         _ = nextController.handleNextTap()
         if nextController.nextTapOffsets.count > prevCount {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            writeOffsetsSidecarIfPossible()
+            // Crash-safety sidecar so an in-progress session can be
+            // recovered after relaunch. The orchestrator owns the
+            // JSON write; the view supplies the session metadata.
+            if let masterFilename = speechService.lastRecordingPath {
+                VoiceCaptureOrchestrator.writeOffsetsSidecar(
+                    masterURL: SpeechService.audioURL(for: masterFilename),
+                    rollGroupId: nextController.rollGroupId,
+                    offsets: nextController.nextTapOffsets
+                )
+            }
         }
-    }
-
-    /// Crash-safety sidecar — JSON file `<sessionId>.offsets.json`
-    /// next to the master audio file. Recovery on relaunch: if both
-    /// master file and sidecar exist for an in-progress session, run
-    /// the split + transcribe pass and surface the clips. (Recovery
-    /// wiring is forward-looking; this method writes the sidecar.)
-    private func writeOffsetsSidecarIfPossible() {
-        guard let masterFilename = speechService.lastRecordingPath else { return }
-        let baseURL = SpeechService.audioURL(for: masterFilename)
-            .deletingPathExtension()
-        let sidecarURL = baseURL.appendingPathExtension("offsets.json")
-        let payload: [String: Any] = [
-            "rollGroupId": nextController.rollGroupId?.uuidString ?? "",
-            "offsets": nextController.nextTapOffsets
-        ]
-        if let data = try? JSONSerialization.data(withJSONObject: payload, options: []) {
-            try? data.write(to: sidecarURL, options: [.atomic])
-        }
-    }
-
-    private func deleteOffsetsSidecarIfAny(masterFilename: String) {
-        let baseURL = SpeechService.audioURL(for: masterFilename)
-            .deletingPathExtension()
-        let sidecarURL = baseURL.appendingPathExtension("offsets.json")
-        try? FileManager.default.removeItem(at: sidecarURL)
     }
 
     /// Save: stop recording, split the master file, re-transcribe
     /// each clip, emit the session. Cancel: stop and delete
-    /// everything.
+    /// everything. The split / compress / transcribe loop lives in
+    /// `VoiceCaptureOrchestrator`; this method only manages view
+    /// state (`isFinalizing`, `dismiss`, `onFinish`/`onCancel`).
     private func finishOrAbandon(saveResult: Bool) async {
         if speechService.isRecording {
             speechService.stopRecording()
@@ -739,7 +724,9 @@ struct VoiceCaptureScreen: View {
         guard saveResult else {
             if let path = speechService.lastRecordingPath {
                 AudioPlayerService.deleteAudio(filename: path)
-                deleteOffsetsSidecarIfAny(masterFilename: path)
+                VoiceCaptureOrchestrator.deleteOffsetsSidecarIfAny(
+                    masterURL: SpeechService.audioURL(for: path)
+                )
             }
             nextController.sessionDidEnd()
             onCancel()
@@ -758,143 +745,40 @@ struct VoiceCaptureScreen: View {
         let offsets = nextController.nextTapOffsets
         let rollId = nextController.rollGroupId ?? UUID()
         let liveTranscript = speechService.transcribedText
+        let lat = sessionLocation?.coordinate.latitude
+        let lon = sessionLocation?.coordinate.longitude
         finalizingClipCount = offsets.count + 1
         isFinalizing = true
 
-        let fragments = await runSplitAndTranscribe(
-            masterURL: masterURL,
-            offsets: offsets,
-            rollGroupId: rollId,
-            liveTranscript: liveTranscript
-        )
+        let fragments: [VoiceClipFragment]
+        if #available(iOS 26.0, *) {
+            fragments = await VoiceCaptureOrchestrator.runSplitAndTranscribe(
+                masterURL: masterURL,
+                offsets: offsets,
+                rollGroupId: rollId,
+                liveTranscript: liveTranscript,
+                sessionLatitude: lat,
+                sessionLongitude: lon
+            )
+        } else {
+            fragments = await VoiceCaptureOrchestrator.runSplitWithoutTranscription(
+                masterURL: masterURL,
+                offsets: offsets,
+                rollGroupId: rollId,
+                liveTranscript: liveTranscript,
+                sessionLatitude: lat,
+                sessionLongitude: lon
+            )
+        }
 
         AudioPlayerService.deleteAudio(filename: masterFilename)
-        deleteOffsetsSidecarIfAny(masterFilename: masterFilename)
+        VoiceCaptureOrchestrator.deleteOffsetsSidecarIfAny(masterURL: masterURL)
         nextController.sessionDidEnd()
 
         onFinish(fragments, rollId)
         dismiss()
     }
 
-    /// Splits the master file at the recorded offsets and runs a
-    /// local transcription pass on each split. Single-clip case (no
-    /// Next taps) short-circuits the split work and reuses the live
-    /// transcript, since splitting a 1-clip session would just
-    /// re-encode the same audio for no benefit.
-    private func runSplitAndTranscribe(
-        masterURL: URL,
-        offsets: [TimeInterval],
-        rollGroupId: UUID,
-        liveTranscript: String
-    ) async -> [VoiceClipFragment] {
-        let lat = sessionLocation?.coordinate.latitude
-        let lon = sessionLocation?.coordinate.longitude
-        if offsets.isEmpty {
-            // Single-clip session — master IS the clip. Compress before
-            // returning so the journal entry attaches a small AAC file
-            // instead of the multi-megabyte PCM master.
-            await Self.compressIfPossible(at: masterURL, label: "phone single-clip master")
-            let duration = audioDuration(at: masterURL)
-            return [VoiceClipFragment(
-                audioFilename: masterURL.lastPathComponent,
-                transcript: liveTranscript,
-                duration: duration,
-                latitude: lat,
-                longitude: lon
-            )]
-        }
-        do {
-            let outputDir = masterURL.deletingLastPathComponent()
-            let splits = try await VoiceClipSplitter.split(
-                masterURL: masterURL,
-                nextTapOffsets: offsets,
-                outputDir: outputDir,
-                rollGroupId: rollGroupId
-            )
-            var fragments: [VoiceClipFragment] = []
-            // Track whether any clip's transcription deferred due to
-            // an infrastructure failure (model not yet installed,
-            // file unreadable, transcriber threw). The save path
-            // can't retry — we're in the foreground, the recording
-            // is over — so surface a single user-facing message
-            // after the loop. Each split with a deferral lands with
-            // an empty transcript (`outcome.textOrEmpty` preserves
-            // the prior behavior); the toast tells the user the
-            // empty-ness is a deferral, not genuine silence.
-            var transcriptionDeferred = false
-            if #available(iOS 26.0, *) {
-                for split in splits {
-                    let url = SpeechService.audioURL(for: split.audioFilename)
-                    // Compress each split before transcribing — saves
-                    // disk, and SpeechAnalyzer reads AAC fine.
-                    await Self.compressIfPossible(at: url, label: "phone split \(split.audioFilename)")
-                    let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
-                    if outcome.userFacingDeferralMessage != nil {
-                        transcriptionDeferred = true
-                    }
-                    fragments.append(VoiceClipFragment(
-                        audioFilename: split.audioFilename,
-                        transcript: outcome.textOrEmpty,
-                        duration: split.duration,
-                        latitude: lat,
-                        longitude: lon
-                    ))
-                }
-                if transcriptionDeferred,
-                   let message = TranscriptionService.Outcome.modelNotInstalled.userFacingDeferralMessage {
-                    await MainActor.run {
-                        ErrorState.shared.report(.mediaError(message))
-                    }
-                }
-            } else {
-                fragments = splits.map {
-                    VoiceClipFragment(
-                        audioFilename: $0.audioFilename,
-                        transcript: "",
-                        duration: $0.duration,
-                        latitude: lat,
-                        longitude: lon
-                    )
-                }
-            }
-            return fragments
-        } catch {
-            ErrorState.shared.report(.mediaError("Voice clip split failed: \(error.localizedDescription)"))
-            // Split failed — surface the unsplit master as one fragment.
-            // Compress it so the fallback isn't penalized by size either.
-            await Self.compressIfPossible(at: masterURL, label: "phone split-fallback master")
-            let duration = audioDuration(at: masterURL)
-            return [VoiceClipFragment(
-                audioFilename: masterURL.lastPathComponent,
-                transcript: liveTranscript,
-                duration: duration,
-                latitude: lat,
-                longitude: lon
-            )]
-        }
-    }
-
-    private func audioDuration(at url: URL) -> TimeInterval {
-        guard let file = try? AVAudioFile(forReading: url) else { return 0 }
-        let sampleRate = file.processingFormat.sampleRate
-        return TimeInterval(file.length) / sampleRate
-    }
-
-    /// Compress a finalized audio file in place to AAC. Failure is
-    /// logged and swallowed — losing the size win is better than losing
-    /// the clip. Mirrors `WatchSessionDelegate.compressIfPossible`.
-    static func compressIfPossible(at url: URL, label: String) async {
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        let before = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
-        do {
-            try await AudioCompressor.compressInPlace(at: url)
-            let after = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
-            let ratio = before > 0 && after > 0 ? Double(before) / Double(after) : 0
-            NSLog("[Himem][Compress] \(label): \(before)→\(after) bytes (\(String(format: "%.1fx", ratio)))")
-        } catch {
-            NSLog("[Himem][Compress] failed for \(label): \(error.localizedDescription) — keeping raw PCM")
-        }
-    }
 }
 
 /// One-breath fresh-start ring per the May 27 2026 spec. A faint
