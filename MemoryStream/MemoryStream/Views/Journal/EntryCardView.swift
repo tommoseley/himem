@@ -116,40 +116,21 @@ struct EntryCardView: View {
                 .foregroundStyle(Crucible.Color.accent)
             }
 
-            // Processing status card (when actively processing)
-            if density != .compact,
-               let processingStatus = entry.processingStatus, processingStatus != .completed {
-                ProcessingStatusCard(status: processingStatus, progressDescription: entry.progressDescription)
-            }
+            // Per `docs/design/AI Organize · spec.md` § 8.1 (May 31
+            // 2026 retirement): the Memories list shows NO review
+            // chrome — no processing-status card, no inline inference
+            // prompt, no "App is inferring" half-summary. Review
+            // happens only inside Memory Detail via the
+            // `Organized · review` card (`OrganizeMemorySection`).
+            // `ProcessingStatusCard` is deleted; `InferenceCard` struct
+            // remains below because `EntryExpandedView`'s
+            // `LegacyInferenceCardSlot` still uses it for pre-v2
+            // entries without an `OrganizePass`.
 
             // Entity tags — only visible in Rich mode (search-only in Standard/Compact)
             if density == .rich && !smartTagsCache.isEmpty {
                 EntityTagsRow(tags: smartTagsCache, onEntityTap: onEntityTap)
             }
-
-            // Inference summary card
-            if density == .rich {
-                // Rich: always show inference if available
-                if let inference = entry.inferenceSummary {
-                    InferenceCard(
-                        summary: inference,
-                        feedbackState: entry.feedbackState,
-                        onFeedback: { state in onFeedback?(entry.id, state) },
-                        onAdjust: { correction in onAdjust?(entry.id, correction) }
-                    )
-                }
-            } else if density == .standard {
-                // Standard: only show while pending
-                if let inference = entry.inferenceSummary, entry.feedbackState == nil {
-                    InferenceCard(
-                        summary: inference,
-                        feedbackState: entry.feedbackState,
-                        onFeedback: { state in onFeedback?(entry.id, state) },
-                        onAdjust: { correction in onAdjust?(entry.id, correction) }
-                    )
-                }
-            }
-            // Compact: no inference card
 
             // Voice playback and append moved to expanded view
         }
@@ -297,41 +278,6 @@ struct StatusBadge: View {
             .background(style.background)
             .foregroundStyle(style.foreground)
             .clipShape(Capsule())
-    }
-}
-
-// MARK: - Processing Status Card
-
-struct ProcessingStatusCard: View {
-    let status: ProcessingTask.Status
-    let progressDescription: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text("PROCESSING")
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .tracking(0.5)
-                    .foregroundStyle(.secondary)
-
-                if status == .processing {
-                    ProgressView()
-                        .scaleEffect(0.6)
-                }
-            }
-
-            if let progressDescription {
-                Text(progressDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Crucible.Color.sunk)
-        .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.sm))
     }
 }
 
