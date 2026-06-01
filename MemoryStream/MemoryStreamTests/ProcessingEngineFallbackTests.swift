@@ -82,7 +82,8 @@ struct ProcessingEngineFallbackTests {
         let engine = ProcessingEngine(
             storage: storage,
             analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
-            localExtractor: LocalEntityExtractor()
+            localExtractor: LocalEntityExtractor(),
+            consumeAssist: { /* test doesn't exercise the debit path */ }
         )
 
         let entry = try storage.createEntry(
@@ -141,7 +142,8 @@ struct ProcessingEngineFallbackTests {
         let engine = ProcessingEngine(
             storage: storage,
             analyzer: SuccessfulAnalyzer(title: "Note", entityValue: "Bob", topic: "Work"),
-            localExtractor: LocalEntityExtractor()
+            localExtractor: LocalEntityExtractor(),
+            consumeAssist: { /* test doesn't exercise the debit path */ }
         )
 
         let entry = try storage.createEntry(content: "Coffee with Bob.", inputType: .typed)
@@ -165,7 +167,8 @@ struct ProcessingEngineFallbackTests {
         let storage = StorageService(inMemory: true)
         let engine = ProcessingEngine(
             storage: storage,
-            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden")
+            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
+            consumeAssist: { /* test doesn't exercise the debit path */ }
         )
 
         let entry = try storage.createEntry(content: "Met with Sarah", inputType: .typed)
@@ -247,7 +250,8 @@ struct ProcessingEngineFallbackTests {
         // online transition.
         let onlineEngine = ProcessingEngine(
             storage: storage,
-            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden")
+            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
+            consumeAssist: { /* test doesn't exercise the debit path */ }
         )
         await onlineEngine.reprocessLocallyHandledEntries()
         storage.viewContext.refreshAllObjects()

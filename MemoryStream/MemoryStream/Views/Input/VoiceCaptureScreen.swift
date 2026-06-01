@@ -812,22 +812,26 @@ struct VoiceCaptureScreen: View {
                 rollGroupId: rollGroupId
             )
             var fragments: [VoiceClipFragment] = []
+            // Track whether any clip's transcription deferred due to
+            // an infrastructure failure (model not yet installed,
+            // file unreadable, transcriber threw). The save path
+            // can't retry — we're in the foreground, the recording
+            // is over — so surface a single user-facing message
+            // after the loop. Each split with a deferral lands with
+            // an empty transcript (`outcome.textOrEmpty` preserves
+            // the prior behavior); the toast tells the user the
+            // empty-ness is a deferral, not genuine silence.
+            var transcriptionDeferred = false
             if #available(iOS 26.0, *) {
                 for split in splits {
                     let url = SpeechService.audioURL(for: split.audioFilename)
                     // Compress each split before transcribing — saves
                     // disk, and SpeechAnalyzer reads AAC fine.
                     await Self.compressIfPossible(at: url, label: "phone split \(split.audioFilename)")
-                    // `.textOrEmpty` preserves the pre-2026-05-29
-                    // behavior on this surface: a failed transcribe
-                    // (model not ready, file error) silently lands
-                    // as an empty transcript on the saved fragment.
-                    // This is a known follow-up: voice composer save
-                    // path should surface "transcription deferred"
-                    // distinctly from "no speech," same way the
-                    // inbox sweep now does. Out of scope for the
-                    // hero-path fix.
                     let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
+                    if outcome.userFacingDeferralMessage != nil {
+                        transcriptionDeferred = true
+                    }
                     fragments.append(VoiceClipFragment(
                         audioFilename: split.audioFilename,
                         transcript: outcome.textOrEmpty,
@@ -835,6 +839,12 @@ struct VoiceCaptureScreen: View {
                         latitude: lat,
                         longitude: lon
                     ))
+                }
+                if transcriptionDeferred,
+                   let message = TranscriptionService.Outcome.modelNotInstalled.userFacingDeferralMessage {
+                    await MainActor.run {
+                        ErrorState.shared.report(.mediaError(message))
+                    }
                 }
             } else {
                 fragments = splits.map {

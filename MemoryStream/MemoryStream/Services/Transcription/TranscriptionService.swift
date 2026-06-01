@@ -63,6 +63,31 @@ final class TranscriptionService {
             if case .transcribed(let r) = self { return r.text }
             return ""
         }
+
+        /// User-facing message for surfaces with no retry queue
+        /// (phone-direct voice composer save path). `nil` when the
+        /// outcome was definitive (transcribed, including empty for
+        /// genuine silence) — the user doesn't need to be told
+        /// anything; the transcript (or its absence) IS the answer.
+        ///
+        /// For infrastructure failures (model not installed, file
+        /// unreadable, transcriber threw) the message tells the user
+        /// transcription will be deferred — they don't need to know
+        /// which specific failure mode hit. Honest-label voice; never
+        /// blames the user; never blames the device.
+        ///
+        /// The watch-arrival inbox path uses
+        /// `InboxTranscriptionDispatcher.shouldMarkAttempted` instead
+        /// — the sweep retries transient failures automatically, so
+        /// the user never needs to know.
+        var userFacingDeferralMessage: String? {
+            switch self {
+            case .transcribed:
+                return nil
+            case .modelNotInstalled, .fileUnreadable, .transcriberFailed:
+                return "Transcription deferred — we'll try again next time."
+            }
+        }
     }
 
     private init() {}

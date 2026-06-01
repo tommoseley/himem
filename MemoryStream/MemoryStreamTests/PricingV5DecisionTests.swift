@@ -345,7 +345,8 @@ struct PricingV5DecisionTests {
                 topics: ["Garden"],
                 nextSteps: ["Call Sarah about the garden", "Pick up tomatoes Tuesday"]
             ),
-            localExtractor: LocalEntityExtractor()
+            localExtractor: LocalEntityExtractor(),
+            consumeAssist: { /* test doesn't exercise the debit path */ }
         )
 
         let entry = try storage.createEntry(content: "Notes.", inputType: .typed)
@@ -371,7 +372,8 @@ struct PricingV5DecisionTests {
                 topics: ["Garden"],
                 nextSteps: nil
             ),
-            localExtractor: LocalEntityExtractor()
+            localExtractor: LocalEntityExtractor(),
+            consumeAssist: { /* test doesn't exercise the debit path */ }
         )
 
         let entry = try storage.createEntry(content: "The light hit the kitchen at sunset.", inputType: .typed)
@@ -469,7 +471,8 @@ struct PricingV5DecisionTests {
                 topics: ["Garden"],
                 nextSteps: []
             ),
-            localExtractor: LocalEntityExtractor()
+            localExtractor: LocalEntityExtractor(),
+            consumeAssist: { /* test doesn't exercise the debit path */ }
         )
 
         let entry = try storage.createEntry(content: "test", inputType: .typed)
@@ -515,7 +518,8 @@ struct PricingV5DecisionTests {
         let engine = ProcessingEngine(
             storage: storage,
             analyzer: V5SuccessAnalyzer(title: "Garden meeting", entityValue: "Sarah", topics: ["Garden", "Backyard"]),
-            localExtractor: LocalEntityExtractor()
+            localExtractor: LocalEntityExtractor(),
+            consumeAssist: { /* test doesn't exercise the debit path */ }
         )
 
         let entry = try storage.createEntry(content: "Met with Sarah.", inputType: .typed)
