@@ -158,6 +158,9 @@
 		A100000748 /* WatchPreAnnounceParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000748 /* WatchPreAnnounceParser.swift */; };
 		A100000749 /* SyncStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000749 /* SyncStrip.swift */; };
 		A100000750 /* AcceptanceCriticalSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000750 /* AcceptanceCriticalSection.swift */; };
+		A100000760 /* ProjectMembershipSuggester.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000760 /* ProjectMembershipSuggester.swift */; };
+		A100000761 /* ProjectSuggestionDismissalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000761 /* ProjectSuggestionDismissalStore.swift */; };
+		A100000762 /* ProjectSuggestionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000762 /* ProjectSuggestionsViewModel.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 		E2AD0E5C2FAD185F009FFEA1 /* Himem Watch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E2E510952FAE5AD3000D2670 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E2E510942FAE5AD3000D2670 /* WidgetKit.framework */; };
@@ -377,6 +380,9 @@
 		B100000748 /* WatchPreAnnounceParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchPreAnnounceParser.swift; sourceTree = "<group>"; };
 		B100000749 /* SyncStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStrip.swift; sourceTree = "<group>"; };
 		B100000750 /* AcceptanceCriticalSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcceptanceCriticalSection.swift; sourceTree = "<group>"; };
+		B100000760 /* ProjectMembershipSuggester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMembershipSuggester.swift; sourceTree = "<group>"; };
+		B100000761 /* ProjectSuggestionDismissalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSuggestionDismissalStore.swift; sourceTree = "<group>"; };
+		B100000762 /* ProjectSuggestionsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSuggestionsViewModel.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
 		E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Himem Watch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -868,6 +874,9 @@
 			isa = PBXGroup;
 			children = (
 				B100000660 /* SuggestionPrefilter.swift */,
+				B100000760 /* ProjectMembershipSuggester.swift */,
+				B100000761 /* ProjectSuggestionDismissalStore.swift */,
+				B100000762 /* ProjectSuggestionsViewModel.swift */,
 			);
 			path = Projects;
 			sourceTree = "<group>";
@@ -1208,6 +1217,9 @@
 				A100000655 /* ProjectAssistGate.swift in Sources */,
 				A100000656 /* OrganizeCardState.swift in Sources */,
 				A100000660 /* SuggestionPrefilter.swift in Sources */,
+				A100000760 /* ProjectMembershipSuggester.swift in Sources */,
+				A100000761 /* ProjectSuggestionDismissalStore.swift in Sources */,
+				A100000762 /* ProjectSuggestionsViewModel.swift in Sources */,
 				A100000670 /* MinClipDebouncer.swift in Sources */,
 				A100000671 /* NextClipController.swift in Sources */,
 				A100000602 /* StoreKitService.swift in Sources */,

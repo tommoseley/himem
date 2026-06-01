@@ -22,6 +22,8 @@ struct ProjectDetailView: View {
     @State private var shareItems: [Any] = []
     @State private var isPreparingShare = false
     @State private var showProjectAssistUpsell = false
+    @State private var showSuggestionsSheet = false
+    @StateObject private var suggestionsVM = ProjectSuggestionsViewModel()
     @ObservedObject private var entitlement = EntitlementService.shared
 
     /// Coordinates the trailing-edge swipe across memory rows so only
@@ -132,6 +134,11 @@ struct ProjectDetailView: View {
                 // copy so the user discovers the affordance early.
                 // Activates at ≥3 per the Projects MVP spec.
                 findTheThreadButton
+
+                // Suggested memberships — local topic-match.
+                // Hidden when there are zero candidates so the
+                // section's presence is its own affordance.
+                suggestionsAffordance
 
                 // Memory count
                 let displayCount = topicFilter == nil ? entries.count : entries.filter { $0.topicNames.contains(topicFilter!) }.count
@@ -271,16 +278,37 @@ struct ProjectDetailView: View {
         .sheet(isPresented: $showShareSheet) {
             ShareSheet(items: shareItems)
         }
-        .sheet(isPresented: $showAddMemorySheet, onDismiss: { loadProjectEntries() }) {
+        .sheet(isPresented: $showAddMemorySheet, onDismiss: {
+            loadProjectEntries()
+            // Membership changed: a memory the user just added is
+            // no longer a "may belong" candidate. Recompute so the
+            // affordance row's count stays honest.
+            suggestionsVM.reload(projectId: projectId)
+        }) {
             AddMemoryToProjectSheet(projectId: projectId, projectVM: projectVM)
         }
         .sheet(isPresented: $showProjectAssistUpsell) {
             ProjectAssistUpsellSheet()
                 .presentationDetents([.medium])
         }
+        .sheet(isPresented: $showSuggestionsSheet) {
+            // Reload after dismissal so the affordance row's count
+            // reflects whatever the user just committed/skipped.
+            suggestionsVM.reload(projectId: projectId)
+            loadProjectEntries()
+        } content: {
+            SuggestedMemoriesSheet(
+                projectName: project?.name ?? "this project",
+                suggestions: suggestionsVM.suggestions,
+                onCommit: { accepted in
+                    suggestionsVM.commit(acceptedIDs: accepted, projectId: projectId)
+                }
+            )
+        }
         .onAppear {
             loadProject()
             loadProjectEntries()
+            suggestionsVM.reload(projectId: projectId)
         }
     }
 
@@ -312,6 +340,48 @@ struct ProjectDetailView: View {
     /// (Projects MVP § States) wants `Add a memory first.` for the
     /// ≥1 path and `Add a few more memories first.` for the gated-
     /// off conservative path.
+
+    /// "N memories may belong here" affordance row. Hidden when
+    /// the local suggester returns zero candidates — the section's
+    /// presence is its own affordance, same pattern the spec uses
+    /// for the post-AI "N memories may belong here · Review" card.
+    /// This row ships local-match only (Plan B); the AI re-rank
+    /// version is a v1.1 upgrade that pipes these candidates
+    /// through `/himem/project-assist`.
+    @ViewBuilder
+    private var suggestionsAffordance: some View {
+        let n = suggestionsVM.suggestions.count
+        if n > 0 {
+            Button {
+                showSuggestionsSheet = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.aiBlue)
+                    Text("\(n) memor\(n == 1 ? "y" : "ies") may belong here")
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(Crucible.Color.ink)
+                    Spacer(minLength: 0)
+                    HStack(spacing: 2) {
+                        Text("Review")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.aiBlue)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.aiBlue)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Crucible.Color.aiBlueTint.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Review \(n) memory suggestions")
+        }
+    }
+
     @ViewBuilder
     private var findTheThreadButton: some View {
         let enabled = ProjectAssistGate.isEnabled(memoryCount: entries.count)
