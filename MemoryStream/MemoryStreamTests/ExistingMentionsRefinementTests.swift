@@ -20,9 +20,13 @@ struct ExistingMentionsRefinementTests {
     private final class RecordingAnalyzer: EntryAnalyzer, @unchecked Sendable {
         var capturedExistingMentions: [String] = []
         var capturedExistingTopics: [String] = []
-        func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult {
+        var capturedTier: String = ""
+        var capturedAction: String = ""
+        func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String], tier: String, action: String) async throws -> ClaudeAPIService.AnalysisResult {
             capturedExistingTopics = existingTopics
             capturedExistingMentions = existingMentions
+            capturedTier = tier
+            capturedAction = action
             return ClaudeAPIService.AnalysisResult(
                 entities: [],
                 topics: [],

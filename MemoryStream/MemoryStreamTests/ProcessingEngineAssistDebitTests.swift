@@ -17,7 +17,7 @@ struct ProcessingEngineAssistDebitTests {
         let title: String
         let entityValue: String
         let topic: String
-        func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult {
+        func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String], tier: String, action: String) async throws -> ClaudeAPIService.AnalysisResult {
             ClaudeAPIService.AnalysisResult(
                 entities: [.init(type: "person", value: entityValue, confidence: 0.95)],
                 topics: [topic],

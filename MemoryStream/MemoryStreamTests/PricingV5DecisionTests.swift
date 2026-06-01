@@ -605,7 +605,7 @@ private struct V5SuccessAnalyzer: EntryAnalyzer {
     let topics: [String]
     var nextSteps: [String]? = nil
 
-    func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult {
+    func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String], tier: String, action: String) async throws -> ClaudeAPIService.AnalysisResult {
         ClaudeAPIService.AnalysisResult(
             entities: [.init(type: "person", value: entityValue, confidence: 0.95)],
             topics: topics,

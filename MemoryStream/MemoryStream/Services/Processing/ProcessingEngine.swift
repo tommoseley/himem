@@ -4,6 +4,14 @@ import CoreData
 /// Abstraction over the cloud entry analyzer so ProcessingEngine can be
 /// driven by a stub in tests (and to keep the fallback-on-failure path
 /// exercised without real network access).
+///
+/// `tier` and `action` plumb through to the server's COGS log (see
+/// `docs/api/himem-cost-logging.md`). Tier is the
+/// `EntitlementService.Tier` rawValue captured at the moment of the
+/// call; action is one of a small locked vocabulary
+/// (`memory_organize`, `project_assist`, …). Tests pass any string
+/// they like; the protocol only requires the parameters exist so
+/// production call sites can't accidentally drop them.
 protocol EntryAnalyzer {
     /// `existingMentions` carries the case-folded-deduped entity values
     /// already attached to this entry. Empty on first-organize. Server
@@ -12,7 +20,7 @@ protocol EntryAnalyzer {
     /// paraphrasing — kills the "Reusable Sausage Process" /
     /// "Sausage making process" / "Develop Reusable Sausage Process"
     /// paraphrase accumulation observed 2026-05-18.
-    func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult
+    func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String], tier: String, action: String) async throws -> ClaudeAPIService.AnalysisResult
 }
 
 extension ClaudeAPIService: EntryAnalyzer {}
@@ -30,18 +38,28 @@ final class ProcessingEngine {
     /// Money path — see `ProcessingEngineAssistDebitTests`.
     private let consumeAssist: @MainActor () throws -> Void
 
+    /// Injectable tier-read closure. Default reads the live
+    /// `EntitlementService.shared.tier.rawValue` so the COGS log
+    /// attributes spend to the tier that authorized the assist
+    /// (`docs/api/himem-cost-logging.md`). Tests inject a fixed
+    /// string so the call site is exercised without racing on the
+    /// shared singleton across parallel suites.
+    private let readTier: @MainActor () -> String
+
     init(
         storage: StorageService = .shared,
         analyzer: EntryAnalyzer = ClaudeAPIService.shared,
         localExtractor: LocalEntityExtractor = .shared,
         connectivity: ConnectivityMonitor = .shared,
-        consumeAssist: @escaping @MainActor () throws -> Void = { try EntitlementService.shared.tryConsumeAssist() }
+        consumeAssist: @escaping @MainActor () throws -> Void = { try EntitlementService.shared.tryConsumeAssist() },
+        readTier: @escaping @MainActor () -> String = { EntitlementService.shared.tier.rawValue }
     ) {
         self.storage = storage
         self.analyzer = analyzer
         self.localExtractor = localExtractor
         self.connectivity = connectivity
         self.consumeAssist = consumeAssist
+        self.readTier = readTier
     }
 
     // MARK: - Process Entry
@@ -110,10 +128,17 @@ final class ProcessingEngine {
                 return out
             }
 
+            // Capture the tier at the moment of the call — if the user
+            // upgrades / downgrades mid-pass, the COGS log attributes
+            // spend to the tier that authorized the assist, not the
+            // tier they end up at.
+            let tier = await MainActor.run { self.readTier() }
             let result = try await analyzer.analyzeEntry(
                 content,
                 existingTopics: existingTopics,
-                existingMentions: existingMentions
+                existingMentions: existingMentions,
+                tier: tier,
+                action: "memory_organize"
             )
 
             let saveSucceeded: Bool = await context.perform { [self] in
