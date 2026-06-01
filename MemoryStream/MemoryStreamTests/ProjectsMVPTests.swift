@@ -193,14 +193,15 @@ struct ProjectsMVPTests {
 
     // MARK: - Project Assist entitlement bucket (PR 3)
     //
-    // EntitlementService is a `@MainActor` singleton — these tests
-    // exercise it carefully, snapshot/restore the relevant fields so
-    // adjacent tests aren't affected.
+    // These tests use a fresh `EntitlementService` backed by an
+    // in-memory `StorageService` so the singleton can't race with
+    // other suites that mutate `EntitlementService.shared.tier`
+    // (notably `ProcessingEngineFallbackTests`, which sets
+    // `.plusMonthly` and would flip these tests' `isPlus` branch
+    // under cross-suite parallelism).
 
     @Test func projectAssist_freeUser_firstTapConsumesStarter() throws {
-        let svc = EntitlementService.shared
-        let originalUsed = svc.starterProjectAssistUsed
-        defer { svc.debugSetStarterProjectAssistUsed(originalUsed) }
+        let svc = EntitlementService(storage: StorageService(inMemory: true))
         svc.debugSetStarterProjectAssistUsed(false)
 
         #expect(svc.canConsumeProjectAssist == true)
@@ -210,9 +211,7 @@ struct ProjectsMVPTests {
     }
 
     @Test func projectAssist_freeUser_secondTapThrows() throws {
-        let svc = EntitlementService.shared
-        let originalUsed = svc.starterProjectAssistUsed
-        defer { svc.debugSetStarterProjectAssistUsed(originalUsed) }
+        let svc = EntitlementService(storage: StorageService(inMemory: true))
         svc.debugSetStarterProjectAssistUsed(true)
 
         #expect(svc.canConsumeProjectAssist == false)

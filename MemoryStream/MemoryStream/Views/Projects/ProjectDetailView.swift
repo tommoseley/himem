@@ -24,6 +24,7 @@ struct ProjectDetailView: View {
     @State private var showProjectAssistUpsell = false
     @State private var showSuggestionsSheet = false
     @StateObject private var suggestionsVM = ProjectSuggestionsViewModel()
+    @StateObject private var assistVM = ProjectAssistViewModel()
     @ObservedObject private var entitlement = EntitlementService.shared
 
     /// Coordinates the trailing-edge swipe across memory rows so only
@@ -128,6 +129,12 @@ struct ProjectDetailView: View {
                         }
                     }
                 }
+
+                // Project Assist summary — spec § States state 4
+                // "Summarized". Rendered above the memory list
+                // when a prior Find-the-thread run has persisted
+                // a summary. Re-running replaces in place.
+                projectThreadSummaryCard
 
                 // Find the thread — Project Assist affordance.
                 // Visible below 3 memories but disabled with helper
@@ -312,23 +319,25 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// Routes the "Find the thread" tap. Free user with starter
-    /// available → consume silently and (later) invoke project
-    /// assist. Free user with starter spent → present upsell.
-    /// Plus / Founders → consume from the monthly bucket. The actual
-    /// server invocation lands in a follow-up PR; this scope wires
-    /// the entitlement bucket end-to-end so behavior is correct.
+    /// Routes the "Find the thread" tap. Free with starter
+    /// available → run + debit one starter. Free with starter
+    /// spent → upsell. Plus / Founders → run + debit from monthly
+    /// bucket. The view-model owns the call ordering: gate-check
+    /// here, full network round-trip in `assistVM.run`, debit on
+    /// success only.
     private func handleFindTheThreadTap() {
         guard entitlement.canConsumeProjectAssist else {
             showProjectAssistUpsell = true
             return
         }
-        do {
-            try entitlement.tryConsumeProjectAssist()
-            // TODO: invoke project assist (summary + suggestions).
-            // Server-side endpoint design lands as a sibling change.
-        } catch {
-            showProjectAssistUpsell = true
+        Task {
+            await assistVM.run(projectId: projectId)
+            // Reload project state so the new summary renders +
+            // the suggester refreshes (Find the thread doesn't
+            // change membership today, but re-reading is cheap
+            // and future-proofs).
+            loadProject()
+            suggestionsVM.reload(projectId: projectId)
         }
     }
 
@@ -419,22 +428,31 @@ struct ProjectDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button {
-                guard enabled else { return }
+                guard enabled, !assistVM.isRunning else { return }
                 handleFindTheThreadTap()
             } label: {
-                Text("Run")
-                    .font(.system(size: 13, weight: .semibold))
-                    .tracking(-0.1)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .frame(height: 30)
-                    .background(enabled
-                                ? Crucible.Color.aiBlue
-                                : Crucible.Color.aiBlue.opacity(0.35))
-                    .clipShape(Capsule())
+                Group {
+                    if assistVM.isRunning {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                            .scaleEffect(0.8)
+                    } else {
+                        Text(project?.lastThreadSummary == nil ? "Run" : "Refresh")
+                            .font(.system(size: 13, weight: .semibold))
+                            .tracking(-0.1)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 30)
+                .background(enabled
+                            ? Crucible.Color.aiBlue
+                            : Crucible.Color.aiBlue.opacity(0.35))
+                .clipShape(Capsule())
             }
             .buttonStyle(.plain)
-            .disabled(!enabled)
+            .disabled(!enabled || assistVM.isRunning)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -444,6 +462,81 @@ struct ProjectDetailView: View {
                 .stroke(Crucible.Color.hairline, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// Project Assist synthesis card — spec § States state 4
+    /// "Summarized". Renders when `project.lastThreadSummary` is
+    /// non-nil. Body is serif (reflective register), framed with
+    /// the AI-blue tint and an AI-blue 1px border. The Dismiss
+    /// action clears local state only; the assist is not refunded
+    /// (the work happened).
+    @ViewBuilder
+    private var projectThreadSummaryCard: some View {
+        if let summary = project?.lastThreadSummary, !summary.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("THE THREAD")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .tracking(1.4)
+                }
+                .foregroundStyle(Crucible.Color.aiBlue)
+
+                Text(summary)
+                    .font(.system(size: 15, design: .serif))
+                    .foregroundStyle(Crucible.Color.ink)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 6) {
+                    if let when = project?.lastThreadGeneratedAt {
+                        Text("Generated \(Self.summaryTimestamp(when))")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Crucible.Color.ink3)
+                    }
+                    Spacer(minLength: 0)
+                    Menu {
+                        Button {
+                            UIPasteboard.general.string = summary
+                        } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                        Button(role: .destructive) {
+                            assistVM.dismissSummary(projectId: projectId)
+                            loadProject()
+                        } label: {
+                            Label("Dismiss", systemImage: "xmark")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.ink3)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                    }
+                    .accessibilityLabel("Thread actions")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Crucible.Color.aiBlueTint.opacity(0.4))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Crucible.Color.aiBlue.opacity(0.35), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    private static let _summaryTimestampFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d · h:mm a"
+        return f
+    }()
+
+    private static func summaryTimestamp(_ date: Date) -> String {
+        _summaryTimestampFormatter.string(from: date)
     }
 
     private func composeProjectText() -> String {

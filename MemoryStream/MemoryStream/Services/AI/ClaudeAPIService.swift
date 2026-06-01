@@ -5,6 +5,7 @@ final class ClaudeAPIService {
 
     private static let analyzeURLString = "https://api.thecombine.ai/himem/analyze"
     private static let cleanupURLString = "https://api.thecombine.ai/himem/cleanup"
+    private static let projectAssistURLString = "https://api.thecombine.ai/himem/project-assist"
     private static let costReportURLString = "https://api.thecombine.ai/himem/cost-report"
 
     private let analyzeURL = URL(string: analyzeURLString)!
@@ -37,6 +38,33 @@ final class ClaudeAPIService {
 
     struct CleanupResult: Codable {
         let text: String
+    }
+
+    // MARK: - Project Assist
+
+    /// One memory's worth of context sent to `/himem/project-assist`.
+    /// Per `Projects · MVP spec.md` § "What it sees": title, topics,
+    /// existing AI summary, date. **Never raw transcripts** — that's
+    /// Studio's territory.
+    struct ProjectMemoryInput: Codable, Equatable {
+        let title: String?
+        let topics: [String]
+        let summary: String?
+        let createdAt: String  // ISO-8601
+
+        enum CodingKeys: String, CodingKey {
+            case title
+            case topics
+            case summary
+            case createdAt = "created_at"
+        }
+    }
+
+    /// Server response from `/himem/project-assist`. v1 is summary-
+    /// only; suggested-membership re-rank (with rationales) is a
+    /// v1.1 layered on top of Plan B's local prefilter.
+    struct ProjectAssistResult: Codable, Equatable {
+        let summary: String
     }
 
     /// Cost-report aggregate as returned by `GET /himem/cost-report`.
@@ -115,6 +143,42 @@ final class ClaudeAPIService {
         // types (String, [String], [String:Any] of the same). A
         // serialization failure here would mean the runtime is
         // broken in a way the app can't recover from.
+        return try! JSONSerialization.data(withJSONObject: body)
+    }
+
+    /// Pure builder for the project-assist request body. Tested
+    /// in `ProjectAssistAPITests`. Locks two contracts:
+    /// 1. Memories carry title / topics / summary / created_at only
+    ///    — no raw transcripts. The view-model is responsible for
+    ///    filtering at the boundary.
+    /// 2. project_goal is omitted when nil/empty so the server's
+    ///    prompt skips the goal phrase rather than rendering a
+    ///    bare "(goal: "")".
+    static func makeProjectAssistRequestBody(
+        projectName: String,
+        projectGoal: String?,
+        memories: [ProjectMemoryInput],
+        tier: String,
+        action: String = "project_assist"
+    ) -> Data {
+        var body: [String: Any] = [
+            "project_name": projectName,
+            "memories": memories.map { memory -> [String: Any] in
+                var dict: [String: Any] = [
+                    "topics": memory.topics,
+                    "created_at": memory.createdAt,
+                ]
+                if let title = memory.title { dict["title"] = title }
+                if let summary = memory.summary { dict["summary"] = summary }
+                return dict
+            },
+            "tier": tier,
+            "action": action,
+        ]
+        if let goal = projectGoal?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !goal.isEmpty {
+            body["project_goal"] = goal
+        }
         return try! JSONSerialization.data(withJSONObject: body)
     }
 
@@ -197,6 +261,47 @@ final class ClaudeAPIService {
         }
 
         return try JSONDecoder().decode(CleanupResult.self, from: data).text
+    }
+
+    // MARK: - Project Assist
+
+    /// Calls `/himem/project-assist` and returns the synthesized
+    /// summary. The view-model debits the assist on success only —
+    /// a thrown error here means no debit (see
+    /// `ProjectDetailFindTheThreadTests.findTheThread_failure_doesNotDebitAssist`).
+    func generateProjectThread(
+        projectName: String,
+        projectGoal: String?,
+        memories: [ProjectMemoryInput],
+        tier: String
+    ) async throws -> ProjectAssistResult {
+        let url = URL(string: Self.projectAssistURLString)!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Project Assist can do more work than analyze (more
+        // memories in context = bigger prompt = longer response).
+        // 30s ceiling matches /cleanup; bump later if we hit the
+        // wall in production.
+        request.timeoutInterval = 30
+
+        request.httpBody = Self.makeProjectAssistRequestBody(
+            projectName: projectName,
+            projectGoal: projectGoal,
+            memories: memories,
+            tier: tier
+        )
+
+        let (data, httpResponse) = try await URLSession.shared.data(for: request)
+
+        guard let response = httpResponse as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        guard response.statusCode == 200 else {
+            throw APIError.httpError(statusCode: response.statusCode)
+        }
+
+        return try JSONDecoder().decode(ProjectAssistResult.self, from: data)
     }
 
     // MARK: - Cost report

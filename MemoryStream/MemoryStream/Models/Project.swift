@@ -12,6 +12,13 @@ public class Project: NSManagedObject, Identifiable {
     @NSManaged public var purpose: String?
     @NSManaged public var createdAt: Date
     @NSManaged public var updatedAt: Date
+    /// Last Project Assist synthesis ("Find the thread" output).
+    /// Persisted so the "Summarized" state survives app launches —
+    /// re-opening a project re-renders the same summary without
+    /// re-charging an assist. Cleared by the user via Dismiss; the
+    /// assist is NOT refunded (the call already happened).
+    @NSManaged public var lastThreadSummary: String?
+    @NSManaged public var lastThreadGeneratedAt: Date?
     @NSManaged public var entries: NSSet?
 }
 

@@ -96,6 +96,42 @@ Keep the meaning and tone identical. Return only the corrected text, nothing els
 """
 
 
+# Project Assist · Find the thread. Spec source of truth lives at
+# `docs/design/Projects · MVP spec.md`. The prompt is deliberately
+# constrained — narrative paragraph only, no LinkedIn-AI dressed-up
+# bullet lists. Locked in `test_project_assist_prompt_anti_patterns`
+# (server-side) and reviewed against the spec in PR.
+_PROJECT_ASSIST_PROMPT = """\
+You are reading a user's project — a named collection of memories \
+they captured over time and grouped together. Synthesize the thread \
+running through these memories.
+
+Project name: {project_name}{project_goal_block}
+
+Memories ({memory_count}):
+{memories_block}
+
+Write a 2–4 paragraph synthesis in the user's voice and register. \
+Honest Label tone — describe what's actually in the memories. Use \
+phrases like "you mentioned…", "the memories center on…", "across \
+these, you returned to…".
+
+Strict rules:
+- Narrative paragraphs only. No bullet lists, no numbered headings.
+- Do NOT extract "open loops", "next steps", "action items", or any \
+forward-looking suggestions. The user did not ask for advice.
+- Do NOT rank memories as "important" or "key". You're describing \
+the thread, not curating.
+- Do NOT write "what's becoming" or "how this is evolving" \
+interpretation framing. Describe what was captured, not how the \
+user is changing.
+- Do NOT invent connections that aren't supported by the memories. \
+If only two memories share a thread, say so.
+
+Return only the synthesis paragraphs. No preamble, no closing line.\
+"""
+
+
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
@@ -145,6 +181,29 @@ class CostReport(BaseModel):
     by_tier: dict[str, float]
     by_action: dict[str, float]
     by_model: dict[str, float]
+
+
+class ProjectMemoryInput(BaseModel):
+    """A single in-project memory as far as Project Assist is
+    concerned. Spec § "What it sees" — title, topic, date, and
+    existing AI summary. Never raw transcripts; the iOS client is
+    responsible for filtering at the boundary."""
+    title: str | None = None
+    topics: list[str] = []
+    summary: str | None = None
+    created_at: str  # ISO-8601
+
+
+class ProjectAssistRequest(BaseModel):
+    project_name: str
+    project_goal: str | None = None
+    memories: list[ProjectMemoryInput]
+    tier: str = "anonymous"
+    action: str = "project_assist"
+
+
+class ProjectAssistResponse(BaseModel):
+    summary: str
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +531,99 @@ async def cleanup_text(request: CleanupRequest) -> CleanupResponse:
             corrected += block.get("text", "")
 
     return CleanupResponse(text=corrected.strip())
+
+
+@app.post("/himem/project-assist", response_model=ProjectAssistResponse)
+async def project_assist(request: ProjectAssistRequest) -> ProjectAssistResponse:
+    """Project Assist · "Find the thread". Synthesizes the
+    narrative thread across a project's memories. Spec in
+    `docs/design/Projects · MVP spec.md` § Find the thread.
+
+    Caller passes title / topics / summary / created_at per
+    memory — never raw transcripts. Server returns a 2–4 paragraph
+    synthesis. COGS log writes with `action = "project_assist"`.
+
+    v1: summary only. Server-side candidate re-rank (the "N
+    memories may belong here" pipeline) is a v1.1 layered on top
+    of Plan B's local prefilter.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+
+    if not request.memories:
+        # Project Assist at 0 memories has nothing to synthesize.
+        # The iOS gate disables the Run button below the minimum
+        # threshold so this should never fire — but a 400 here is
+        # the right hard signal if a client bypasses the gate.
+        raise HTTPException(status_code=400, detail="Project has no memories to synthesize")
+
+    if request.project_goal:
+        project_goal_block = f' (goal: "{request.project_goal}")'
+    else:
+        project_goal_block = ""
+
+    # One memory per block. Topics inlined; missing fields rendered
+    # as bracketed placeholders so the model can't fabricate.
+    memory_lines: list[str] = []
+    for i, m in enumerate(request.memories, start=1):
+        topics_inline = ", ".join(m.topics) if m.topics else "no topics"
+        title = m.title or "[untitled]"
+        summary = m.summary or "[no AI summary yet]"
+        memory_lines.append(
+            f"{i}. \"{title}\" — {m.created_at} — topics: {topics_inline}\n"
+            f"   {summary}"
+        )
+    memories_block = "\n\n".join(memory_lines)
+
+    prompt = _PROJECT_ASSIST_PROMPT.format(
+        project_name=request.project_name,
+        project_goal_block=project_goal_block,
+        memory_count=len(request.memories),
+        memories_block=memories_block,
+    )
+
+    body = {
+        "model": _MODEL,
+        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": _API_VERSION,
+        "content-type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(_ANTHROPIC_URL, json=body, headers=headers)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Anthropic API timed out")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Request failed: {e}")
+
+    if resp.status_code != 200:
+        logger.error("Anthropic error %s: %s", resp.status_code, resp.text)
+        raise HTTPException(status_code=502, detail=f"Anthropic error {resp.status_code}")
+
+    response_json = resp.json()
+
+    usage = response_json.get("usage", {})
+    _log_call(
+        tier=request.tier,
+        action=request.action,
+        endpoint="project-assist",
+        model=_MODEL,
+        input_tokens=int(usage.get("input_tokens", 0)),
+        output_tokens=int(usage.get("output_tokens", 0)),
+    )
+
+    summary = ""
+    for block in response_json.get("content", []):
+        if block.get("type") == "text":
+            summary += block.get("text", "")
+
+    return ProjectAssistResponse(summary=summary.strip())
 
 
 @app.get("/himem/cost-report", response_model=CostReport)

@@ -72,6 +72,8 @@
         <attribute name="purpose" optional="YES" attributeType="String"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="lastThreadSummary" optional="YES" attributeType="String"/>
+        <attribute name="lastThreadGeneratedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="entries" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="projects" inverseEntity="JournalEntry"/>
     </entity>
     <entity name="MediaReference" representedClassName="MediaReference" syncable="YES">
