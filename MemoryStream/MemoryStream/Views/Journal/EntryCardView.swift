@@ -113,7 +113,7 @@ struct EntryCardView: View {
                     withAnimation(.easeInOut(duration: 0.2)) { isContentExpanded.toggle() }
                 }
                 .font(.caption)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Crucible.Color.accent)
             }
 
             // Processing status card (when actively processing)
@@ -574,7 +574,7 @@ struct VoicePlaybackRow: View {
                 HStack(spacing: 6) {
                     Image(systemName: isThisPlaying ? "stop.circle.fill" : "play.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Crucible.Color.accent)
                         .accessibilityHidden(true)
 
                     Text(isThisPlaying ? "Stop playback" : "Play voice entry")
@@ -589,7 +589,7 @@ struct VoicePlaybackRow: View {
             Button(action: { showShare = true }) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Crucible.Color.accent)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Share voice recording")
