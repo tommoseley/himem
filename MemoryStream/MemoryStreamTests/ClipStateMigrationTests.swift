@@ -128,6 +128,86 @@ struct ClipStateMigrationTests {
         }
     }
 
+    // MARK: - Announce-time metadata (Step 12 — schema pre-position)
+
+    /// Pre-position for the future `InboxArrivalTracker` full
+    /// demotion: the announce-time metadata (`announcedAt`,
+    /// `fileSizeBytes`) lives on `InboxClip` so a later post-launch
+    /// commit can move `.announced` state from the tracker into the
+    /// manifest without a second codable migration. Today the
+    /// tracker still owns the in-memory queue; these fields land as
+    /// nullable optionals so legacy rows decode unchanged.
+    @Test func legacyEntry_withoutAnnouncedAt_decodesAsNil() throws {
+        let json = #"""
+        {
+          "clipId": "55555555-5555-5555-5555-555555555555",
+          "capturedAt": "2026-06-01T10:00:00Z",
+          "duration": 4.0,
+          "transcript": "",
+          "source": "watch",
+          "audioFilename": "55555555-5555-5555-5555-555555555555.caf"
+        }
+        """#
+        let clip = try JSONDecoder.iso8601forTest.decode(InboxClip.self, from: Data(json.utf8))
+        #expect(clip.announcedAt == nil)
+    }
+
+    @Test func legacyEntry_withoutFileSizeBytes_decodesAsNil() throws {
+        let json = #"""
+        {
+          "clipId": "66666666-6666-6666-6666-666666666666",
+          "capturedAt": "2026-06-01T10:00:00Z",
+          "duration": 4.0,
+          "transcript": "",
+          "source": "watch",
+          "audioFilename": "66666666-6666-6666-6666-666666666666.caf"
+        }
+        """#
+        let clip = try JSONDecoder.iso8601forTest.decode(InboxClip.self, from: Data(json.utf8))
+        #expect(clip.fileSizeBytes == nil)
+    }
+
+    @Test func newSchema_roundTrips_preservesAnnouncedAt() throws {
+        let announcedAt = Date(timeIntervalSinceReferenceDate: 900_000)
+        let clip = makeClipWithAnnounceMetadata(
+            clipId: UUID(),
+            status: .announced,
+            announcedAt: announcedAt,
+            fileSizeBytes: nil
+        )
+        let data = try JSONEncoder.iso8601forTest.encode(clip)
+        let decoded = try JSONDecoder.iso8601forTest.decode(InboxClip.self, from: data)
+        #expect(decoded.announcedAt == announcedAt)
+    }
+
+    @Test func newSchema_roundTrips_preservesFileSizeBytes() throws {
+        let clip = makeClipWithAnnounceMetadata(
+            clipId: UUID(),
+            status: .announced,
+            announcedAt: nil,
+            fileSizeBytes: 192_456
+        )
+        let data = try JSONEncoder.iso8601forTest.encode(clip)
+        let decoded = try JSONDecoder.iso8601forTest.decode(InboxClip.self, from: data)
+        #expect(decoded.fileSizeBytes == 192_456)
+    }
+
+    /// Both fields are independently nullable; an entry can have
+    /// one set without the other (e.g., a pre-announce that didn't
+    /// carry size on the wire). Round-trip locks this.
+    @Test func newSchema_roundTrips_bothAnnounceFieldsNil() throws {
+        let clip = makeClipWithAnnounceMetadata(
+            clipId: UUID(),
+            status: .announced,
+            announcedAt: nil,
+            fileSizeBytes: nil
+        )
+        let data = try JSONEncoder.iso8601forTest.encode(clip)
+        let decoded = try JSONDecoder.iso8601forTest.decode(InboxClip.self, from: data)
+        #expect(decoded.announcedAt == nil)
+        #expect(decoded.fileSizeBytes == nil)
+    }
+
     // MARK: - Helpers
 
     private func makeClip(
@@ -148,6 +228,30 @@ struct ClipStateMigrationTests {
             rollGroupId: nil,
             status: status,
             disposedAt: disposedAt
+        )
+    }
+
+    private func makeClipWithAnnounceMetadata(
+        clipId: UUID,
+        status: InboxClip.Status,
+        announcedAt: Date?,
+        fileSizeBytes: Int64?
+    ) -> InboxClip {
+        InboxClip(
+            clipId: clipId,
+            capturedAt: Date(timeIntervalSinceReferenceDate: 100_000),
+            duration: 10,
+            transcript: "",
+            latitude: nil,
+            longitude: nil,
+            source: "watch",
+            audioFilename: "\(clipId.uuidString).caf",
+            transcriptionAttempted: false,
+            rollGroupId: nil,
+            status: status,
+            disposedAt: nil,
+            announcedAt: announcedAt,
+            fileSizeBytes: fileSizeBytes
         )
     }
 }

@@ -67,6 +67,20 @@ struct InboxClip: Codable, Identifiable, Equatable {
     /// When this row transitioned to `.disposed`. Drives the
     /// tombstone-aging prune in `InboxManifest.pruned`.
     let disposedAt: Date?
+    /// When the watch's pre-announce `sendMessage` was received on
+    /// the phone, if applicable. Currently still maintained
+    /// transiently by `InboxArrivalTracker`; the field is positioned
+    /// on `InboxClip` so a future post-launch demotion of the
+    /// tracker (Step 12 full-form, queued) can move `.announced`
+    /// rows into the manifest without a second codable migration.
+    /// `nil` on every existing row + any row whose status is past
+    /// `.announced` and pre-announce timing wasn't preserved.
+    let announcedAt: Date?
+    /// File size in bytes carried on the pre-announce. Same
+    /// queued-demotion rationale as `announcedAt`. Optional because
+    /// older pre-announce wire payloads (and every non-announced
+    /// row) don't carry it.
+    let fileSizeBytes: Int64?
 
     var id: UUID { clipId }
 
@@ -82,7 +96,9 @@ struct InboxClip: Codable, Identifiable, Equatable {
         transcriptionAttempted: Bool = false,
         rollGroupId: UUID? = nil,
         status: Status = .received,
-        disposedAt: Date? = nil
+        disposedAt: Date? = nil,
+        announcedAt: Date? = nil,
+        fileSizeBytes: Int64? = nil
     ) {
         self.clipId = clipId
         self.capturedAt = capturedAt
@@ -96,18 +112,23 @@ struct InboxClip: Codable, Identifiable, Equatable {
         self.rollGroupId = rollGroupId
         self.status = status
         self.disposedAt = disposedAt
+        self.announcedAt = announcedAt
+        self.fileSizeBytes = fileSizeBytes
     }
 
-    // Custom decoding so legacy manifests (no `status`/`disposedAt`,
-    // and older still without `transcriptionAttempted`) round-trip.
+    // Custom decoding so legacy manifests (no `status`/`disposedAt`/
+    // `announcedAt`/`fileSizeBytes`, and older still without
+    // `transcriptionAttempted`) round-trip.
     // Inference rule for missing `status`:
     //   - transcript present OR `transcriptionAttempted == true`
     //     → `.transcribed` (recognizer ran, result may be empty)
     //   - else → `.received` (audio on disk, recognizer hasn't run)
+    // `announcedAt` / `fileSizeBytes` decode as nil on legacy entries.
     private enum CodingKeys: String, CodingKey {
         case clipId, capturedAt, duration, transcript, latitude, longitude
         case source, audioFilename, transcriptionAttempted, rollGroupId
         case status, disposedAt
+        case announcedAt, fileSizeBytes
     }
 
     init(from decoder: Decoder) throws {
@@ -130,6 +151,8 @@ struct InboxClip: Codable, Identifiable, Equatable {
             status = .received
         }
         disposedAt = try c.decodeIfPresent(Date.self, forKey: .disposedAt)
+        announcedAt = try c.decodeIfPresent(Date.self, forKey: .announcedAt)
+        fileSizeBytes = try c.decodeIfPresent(Int64.self, forKey: .fileSizeBytes)
     }
 }
 
