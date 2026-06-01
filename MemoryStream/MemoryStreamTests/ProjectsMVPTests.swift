@@ -180,6 +180,17 @@ struct ProjectsMVPTests {
         #expect(ProjectAssistGate.isEnabled(memoryCount: expectedThreshold - 1) == false)
     }
 
+    /// Spec contract from `docs/design/CLAUDE.md` § Projects: *"≥ 1
+    /// memory before Project Assist activates."* Hard-codes the
+    /// spec-aligned threshold so future flips of the flag back to
+    /// `false` break this test loudly. Set as a launch-ready
+    /// contract test once Tom validates the 1-memory output in
+    /// TestFlight (2026-06-01).
+    @Test func assistGate_withOneMemory_isEnabled_perSpec() {
+        #expect(ProjectAssistGate.isEnabled(memoryCount: 1) == true)
+        #expect(ProjectAssistGate.minimumMemories == 1)
+    }
+
     // MARK: - Project Assist entitlement bucket (PR 3)
     //
     // EntitlementService is a `@MainActor` singleton — these tests

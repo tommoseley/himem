@@ -15,8 +15,11 @@ import Foundation
 enum ProjectAssistGate {
     /// Set to `true` to use the spec-intended ≥1 memory threshold.
     /// `false` keeps the previous conservative ≥3 behavior for the
-    /// "until we're sure it's working well" window.
-    static let allowSingleMemoryThreshold: Bool = false
+    /// "until we're sure it's working well" window. Flipped to `true`
+    /// 2026-06-01 ahead of TestFlight QA — the spec is the contract,
+    /// and the one-memory paraphrase output is honest per `docs/design
+    /// /CLAUDE.md` § Projects.
+    static let allowSingleMemoryThreshold: Bool = true
 
     static var minimumMemories: Int {
         allowSingleMemoryThreshold ? 1 : 3
