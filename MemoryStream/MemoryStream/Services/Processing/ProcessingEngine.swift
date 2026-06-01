@@ -24,17 +24,24 @@ final class ProcessingEngine {
     private let analyzer: EntryAnalyzer
     private let localExtractor: LocalEntityExtractor
     private let connectivity: ConnectivityMonitor
+    /// Injectable assist-debit closure. Default routes to
+    /// `EntitlementService.shared.tryConsumeAssist()`; tests swap
+    /// for a throwing closure to exercise the failure-surface path.
+    /// Money path — see `ProcessingEngineAssistDebitTests`.
+    private let consumeAssist: @MainActor () throws -> Void
 
     init(
         storage: StorageService = .shared,
         analyzer: EntryAnalyzer = ClaudeAPIService.shared,
         localExtractor: LocalEntityExtractor = .shared,
-        connectivity: ConnectivityMonitor = .shared
+        connectivity: ConnectivityMonitor = .shared,
+        consumeAssist: @escaping @MainActor () throws -> Void = { try EntitlementService.shared.tryConsumeAssist() }
     ) {
         self.storage = storage
         self.analyzer = analyzer
         self.localExtractor = localExtractor
         self.connectivity = connectivity
+        self.consumeAssist = consumeAssist
     }
 
     // MARK: - Process Entry
@@ -133,8 +140,29 @@ final class ProcessingEngine {
             // `markFailed` leaves the counter untouched. (The cloud-
             // network failure path doesn't even reach here — it's
             // handled by the outer catch that falls back to local.)
+            //
+            // Debit failure handling: surface to `ErrorState` (user
+            // sees something went wrong) but do NOT mark the pass
+            // failed — the analyzer ran, Core Data committed, the
+            // entry is in a good state. Rolling back would lose real
+            // work; quietly swallowing the debit (the pre-2026-06-01
+            // `try?` behavior) loses real money state. The middle
+            // path is "log it, tell the user, don't undo the win."
             if saveSucceeded {
-                await MainActor.run { try? EntitlementService.shared.tryConsumeAssist() }
+                let debitFailure: Error? = await MainActor.run { () -> Error? in
+                    do {
+                        try self.consumeAssist()
+                        return nil
+                    } catch {
+                        return error
+                    }
+                }
+                if let debitFailure {
+                    NSLog("[Himem][Pricing] tryConsumeAssist failed after successful pass: \(debitFailure.localizedDescription)")
+                    await MainActor.run {
+                        ErrorState.shared.report(.processingFailed("Couldn't record assist usage: \(debitFailure.localizedDescription). Please retry."))
+                    }
+                }
             }
         } catch {
             // Cloud unreachable or timed out (weak connection, server error,
