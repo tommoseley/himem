@@ -313,7 +313,21 @@ final class EntitlementService: ObservableObject {
     private func loadOrCreate() {
         let ctx = storage.viewContext
         let req = AssistBalance.fetchSingleton()
-        if let existing = (try? ctx.fetch(req))?.first {
+        let existing: AssistBalance?
+        do {
+            existing = try ctx.fetch(req).first
+        } catch {
+            // Fetch failure on this query means the Core Data stack
+            // is in a corrupt state (the predicate is fixed, the
+            // entity exists in the model). We can't recover: the
+            // money ledger is unreachable, and silently creating a
+            // fresh zero-balance record on top of an unfetchable
+            // existing one would compound the corruption. Crash
+            // loudly so the failure is visible in launch logs
+            // rather than invisible debit-loss in production.
+            fatalError("[Himem][Pricing] AssistBalance fetch failed — Core Data store is corrupt: \(error)")
+        }
+        if let existing {
             balanceRecord = existing
         } else {
             let new = AssistBalance(context: ctx)
@@ -329,7 +343,11 @@ final class EntitlementService: ObservableObject {
             new.autoOrganizeThreshold = 0
             new.monthlyResetDate = Self.nextResetDate(from: Date())
             new.lastUpdated = Date()
-            try? ctx.save()
+            do {
+                try ctx.save()
+            } catch {
+                NSLog("[Himem][Pricing] AssistBalance initial save failed: \(error.localizedDescription) — in-memory record published but not persisted; next mutation will retry the save")
+            }
             balanceRecord = new
         }
         recomputePublished()
@@ -341,7 +359,21 @@ final class EntitlementService: ObservableObject {
         guard let record = balanceRecord else { return }
         block(record)
         record.lastUpdated = Date()
-        try? storage.viewContext.save()
+        do {
+            try storage.viewContext.save()
+        } catch {
+            // Save failure leaves the in-memory record dirty (the
+            // block ran, the fields changed) but not persisted. We
+            // re-publish the derived state anyway so the UI matches
+            // the in-memory record; the next mutation will attempt
+            // the save again and either succeed (transient HAL /
+            // disk hiccup) or fail the same way (persistent). The
+            // alternative — reverting the in-memory mutation mid-
+            // flight — is itself a mutation that needs to persist,
+            // and would require undoing the `block` we can't
+            // introspect. Logging loudly is the honest middle path.
+            NSLog("[Himem][Pricing] AssistBalance mutate save failed: \(error.localizedDescription) — in-memory record advanced; next save will retry")
+        }
         recomputePublished()
     }
 
