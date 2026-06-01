@@ -71,7 +71,11 @@ final class EntryLifecycleService {
             if shouldCaptureLocation {
                 captureLocation(for: entry)
             }
-            Task { await NotificationService.shared.refreshDailyNudge(hadEntryToday: true) }
+            // A capture just happened — pass `Date()` so the policy
+            // sees lastCaptureAt = now and suppresses any pending
+            // nudge (the user is covered for at least one rollover
+            // window).
+            Task { await NotificationService.shared.refreshDailyNudge(lastCaptureAt: Date()) }
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }
@@ -317,7 +321,11 @@ final class EntryLifecycleService {
             captureLocation(for: entry)
             processEntry(entry)
             // An entry was created today — cancel any pending nudge.
-            Task { await NotificationService.shared.refreshDailyNudge(hadEntryToday: true) }
+            // A capture just happened — pass `Date()` so the policy
+            // sees lastCaptureAt = now and suppresses any pending
+            // nudge (the user is covered for at least one rollover
+            // window).
+            Task { await NotificationService.shared.refreshDailyNudge(lastCaptureAt: Date()) }
             return entry.id
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))

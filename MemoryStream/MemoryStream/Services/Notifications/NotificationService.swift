@@ -93,33 +93,42 @@ final class NotificationService {
     // MARK: - Daily nudge
 
     /// Called from app-active / scenePhase observers and from
-    /// EntryLifecycleService save paths. Cancels today's pending nudge if
-    /// `hadEntryToday` is true (or if the nudge toggle is off), otherwise
-    /// schedules today's nudge for the user's chosen time — provided that
-    /// time hasn't already passed today.
-    func refreshDailyNudge(hadEntryToday: Bool) async {
+    /// EntryLifecycleService save paths. Cancels today's pending
+    /// nudge if the toggle is off OR the user captured anything
+    /// inside the chosen-time rollover window ending now; otherwise
+    /// schedules the next nudge fire at the next chosen-time tick
+    /// (today if it hasn't passed yet, tomorrow if it has).
+    ///
+    /// `lastCaptureAt` is the createdAt of the most recent
+    /// non-recycled JournalEntry (see `StorageService
+    /// .mostRecentEntryAt`); pass `nil` if no entries exist (first
+    /// launch). Rollover semantics live in `DailyNudgePolicy
+    /// .nextFireDate` — see its docstring for the chosen-time
+    /// window definition and the midnight-rollover special case.
+    ///
+    /// Signature changed 2026-06-01 from `hadEntryToday: Bool`
+    /// (midnight rollover) to `lastCaptureAt: Date?` (chosen-time
+    /// rollover) — Tom's intent per the Settings copy: *"if you
+    /// haven't captured anything by your chosen time."*
+    func refreshDailyNudge(lastCaptureAt: Date?) async {
         let id = todayNudgeIdentifier()
         center.removePendingNotificationRequests(withIdentifiers: [id])
 
         guard UserDefaults.standard.bool(forKey: Keys.notifyDailyNudge) else { return }
-        guard !hadEntryToday else { return }
 
-        let nudgeMinute = UserDefaults.standard.integer(forKey: Keys.nudgeTimeMinutes)
-        let hour = nudgeMinute / 60
-        let minute = nudgeMinute % 60
-
+        let nudgeMinutes = UserDefaults.standard.integer(forKey: Keys.nudgeTimeMinutes)
         let now = Date()
-        let cal = Calendar.current
-        guard
-            let nudgeDate = cal.date(bySettingHour: hour, minute: minute, second: 0, of: now),
-            nudgeDate > now
-        else {
-            // Time already passed today — no reschedule. Tomorrow's nudge will
-            // be scheduled the next time refresh is called (next app activate).
+        guard let fireDate = DailyNudgePolicy.nextFireDate(
+            lastCaptureAt: lastCaptureAt,
+            nudgeMinutes: nudgeMinutes,
+            now: now
+        ) else {
+            // Suppressed (capture inside window) — leave the
+            // pending request canceled above and return.
             return
         }
 
-        let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: nudgeDate)
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
 
         let content = UNMutableNotificationContent()

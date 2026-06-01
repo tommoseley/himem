@@ -293,8 +293,8 @@ struct MemoryStreamApp: App {
     /// scene activation so the nudge stays in sync with the user's day.
     @MainActor
     private func refreshDailyNudge() async {
-        let hasEntry = StorageService.shared.hasEntryCreatedToday()
-        await NotificationService.shared.refreshDailyNudge(hadEntryToday: hasEntry)
+        let lastCapture = StorageService.shared.mostRecentEntryAt()
+        await NotificationService.shared.refreshDailyNudge(lastCaptureAt: lastCapture)
     }
 
     /// Scene-active backstop for inbox transcription. Picks up rows

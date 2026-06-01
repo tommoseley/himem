@@ -92,6 +92,7 @@
 		A100000502 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000502 /* TranscriptionService.swift */; };
 		A100000503 /* FragmentMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000503 /* FragmentMigration.swift */; };
 		A100000510 /* WatchInboxNotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000510 /* WatchInboxNotificationCoordinator.swift */; };
+		A100000511 /* DailyNudgePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000511 /* DailyNudgePolicy.swift */; };
 		A100000600 /* AssistBalance.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000600 /* AssistBalance.swift */; };
 		A100000601 /* EntitlementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000601 /* EntitlementService.swift */; };
 		A100000602 /* StoreKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000602 /* StoreKitService.swift */; };
@@ -312,6 +313,7 @@
 		B100000502 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		B100000503 /* FragmentMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FragmentMigration.swift; sourceTree = "<group>"; };
 		B100000510 /* WatchInboxNotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchInboxNotificationCoordinator.swift; sourceTree = "<group>"; };
+		B100000511 /* DailyNudgePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyNudgePolicy.swift; sourceTree = "<group>"; };
 		B100000600 /* AssistBalance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistBalance.swift; sourceTree = "<group>"; };
 		B100000601 /* EntitlementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementService.swift; sourceTree = "<group>"; };
 		B100000602 /* StoreKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitService.swift; sourceTree = "<group>"; };
@@ -805,6 +807,7 @@
 			children = (
 				B100000500 /* NotificationService.swift */,
 				B100000510 /* WatchInboxNotificationCoordinator.swift */,
+				B100000511 /* DailyNudgePolicy.swift */,
 			);
 			path = Notifications;
 			sourceTree = "<group>";
@@ -1195,6 +1198,7 @@
 				A100000008 /* StorageService.swift in Sources */,
 				A100000500 /* NotificationService.swift in Sources */,
 				A100000510 /* WatchInboxNotificationCoordinator.swift in Sources */,
+				A100000511 /* DailyNudgePolicy.swift in Sources */,
 				A100000600 /* AssistBalance.swift in Sources */,
 				A100000601 /* EntitlementService.swift in Sources */,
 				A100000654 /* ProjectCapPolicy.swift in Sources */,

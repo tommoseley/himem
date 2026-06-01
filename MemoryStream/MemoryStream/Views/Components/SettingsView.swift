@@ -376,14 +376,14 @@ struct SettingsView: View {
             .onChange(of: notifyDailyNudge) { _, isOn in
                 Task {
                     if isOn { await ensurePermissionAndRefresh() }
-                    let hasEntry = StorageService.shared.hasEntryCreatedToday()
-                    await NotificationService.shared.refreshDailyNudge(hadEntryToday: hasEntry)
+                    let lastCapture = StorageService.shared.mostRecentEntryAt()
+                    await NotificationService.shared.refreshDailyNudge(lastCaptureAt: lastCapture)
                 }
             }
             .onChange(of: nudgeTimeMinutes) { _, _ in
                 Task {
-                    let hasEntry = StorageService.shared.hasEntryCreatedToday()
-                    await NotificationService.shared.refreshDailyNudge(hadEntryToday: hasEntry)
+                    let lastCapture = StorageService.shared.mostRecentEntryAt()
+                    await NotificationService.shared.refreshDailyNudge(lastCaptureAt: lastCapture)
                 }
             }
             .sheet(isPresented: $showRecycleBin) {
