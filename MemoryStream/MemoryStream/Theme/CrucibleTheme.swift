@@ -381,7 +381,11 @@ final class TopicPaletteStore {
             }
         }
         if dirty {
-            try? StorageService.shared.save(context: context)
+            do {
+                try StorageService.shared.save(context: context)
+            } catch {
+                NSLog("[Himem][Theme] topic palette backfill save failed: \(error.localizedDescription)")
+            }
         }
     }
 }

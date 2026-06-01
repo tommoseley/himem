@@ -129,7 +129,11 @@ final class NotificationService {
         content.categoryIdentifier = Category.dailyNudge.rawValue
 
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
-        try? await center.add(request)
+        do {
+            try await center.add(request)
+        } catch {
+            NSLog("[Himem][Notify] daily-nudge schedule failed: \(error.localizedDescription)")
+        }
     }
 
     private func todayNudgeIdentifier() -> String {

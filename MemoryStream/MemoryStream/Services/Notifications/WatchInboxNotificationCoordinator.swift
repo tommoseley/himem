@@ -181,11 +181,13 @@ final class WatchInboxNotificationCoordinator {
     func handleAction(identifier: String) {
         switch identifier {
         case Self.actionSnooze4hIdentifier:
-            snoozedUntil = Date().addingTimeInterval(4 * 3600)
-            NSLog("[Himem][Notify] snoozed for 4h until \(snoozedUntil!)")
+            let until = Date().addingTimeInterval(4 * 3600)
+            snoozedUntil = until
+            NSLog("[Himem][Notify] snoozed for 4h until \(until)")
         case Self.actionMuteTodayIdentifier:
-            mutedUntil = endOfTodayLocal(from: Date())
-            NSLog("[Himem][Notify] muted until midnight local \(mutedUntil!)")
+            let until = endOfTodayLocal(from: Date())
+            mutedUntil = until
+            NSLog("[Himem][Notify] muted until midnight local \(until)")
         default:
             break
         }
