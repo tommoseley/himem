@@ -24,6 +24,26 @@ struct CaptureFlowHost: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // Stop any active speech recording BEFORE the camera /
+            // photo-library surfaces present. Both `UIImagePickerController`
+            // (camera) and `PHPickerViewController` (library) compete
+            // with `SpeechService` for the singleton `AVAudioSession` —
+            // presenting while voice is `.record`-active can leave the
+            // camera's internal capture session unable to start, which
+            // surfaces as a black preview and `appleh16camerad: failed
+            // preProcessJasper jasper` errors in the device console.
+            // Project `CLAUDE.md` § Audio Session Coordination makes
+            // this stop step mandatory at every camera-trigger button.
+            // `SpeechService.stopRecording()` is a safe no-op when the
+            // session wasn't recording (post-Step-9 guard).
+            .onChange(of: activeModality) { _, newValue in
+                switch newValue {
+                case .photo, .video, .attach:
+                    speechService.stopRecording()
+                default:
+                    break
+                }
+            }
             .sheet(isPresented: voiceBinding) {
                 VoiceCaptureScreen(
                     onFinish: { clips, rollGroupId in

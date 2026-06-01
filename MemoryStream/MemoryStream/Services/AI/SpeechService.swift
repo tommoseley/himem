@@ -381,6 +381,19 @@ final class SpeechService: ObservableObject {
     }
 
     func stopRecording() {
+        // Snapshot the recording flag BEFORE the teardown ticks the
+        // engine + analyzer state — so the conditional `setActive(false)`
+        // below can tell "we were actually recording" from "this is a
+        // no-op stop on an already-stopped session." Calling
+        // `setActive(false)` on an already-inactive session churns the
+        // audio HAL (project `CLAUDE.md` § Audio Session Coordination)
+        // and produces the black-camera-preview / appleh16camerad
+        // failures Tom flagged. The append-camera flow now calls
+        // `stopRecording()` defensively before presenting the picker
+        // (see `CaptureFlowHost`), so the no-op-stop path is the common
+        // case and must not touch the audio session.
+        let wasRecording = isRecording
+
         audioEngine?.stop()
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine = nil
@@ -404,7 +417,9 @@ final class SpeechService: ObservableObject {
 
         audioFile = nil
 
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if wasRecording {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
         // Release the wake lock acquired in `startRecording`. Safe
         // to call even if startRecording bailed before acquire — the
         // refcount guard treats release with count==0 as a no-op.
