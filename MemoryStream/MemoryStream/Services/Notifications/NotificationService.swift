@@ -90,62 +90,6 @@ final class NotificationService {
         await center.notificationSettings().authorizationStatus
     }
 
-    // MARK: - Inbox arrival
-
-    /// Called from `WatchSessionDelegate` after a clip is added to the
-    /// inbox manifest. Fires a banner immediately with the live cumulative
-    /// inbox count. Each call uses the same identifier — UNN updates the
-    /// existing banner in place AND alerts again (because `.active`
-    /// interruption + sound), so a second clip pings as loudly as the first
-    /// while Notification Center stays at one row reflecting the latest
-    /// total.
-    ///
-    /// No Swift `Task.sleep` debounce — that gets killed when the process
-    /// suspends (typical when iPhone is locked and only briefly woken to
-    /// handle WC delivery). The completion-handler form of `add` returns
-    /// fast enough that the request reaches UNN before suspension can
-    /// drop it.
-    func notifyInboxArrival() {
-        // No app-side toggle gate — watch-clip arrival is a first-class
-        // event the user implicitly opts in to via the system-level
-        // notification permission. If iOS-Notifications is on, we fire;
-        // if off, the request is no-op silently by the system.
-        let inboxCount = InboxManifest.shared.count
-        guard inboxCount > 0 else {
-            NSLog("[Himem][Notify] inbox empty, skipping")
-            return
-        }
-
-        let content = UNMutableNotificationContent()
-        content.title = "HiMem"
-        content.body = inboxCount == 1
-            ? "1 voice clip ready to organize"
-            : "\(inboxCount) voice clips ready to organize"
-        content.categoryIdentifier = Category.inboxArrival.rawValue
-        content.interruptionLevel = .active
-        content.sound = .default
-
-        let request = UNNotificationRequest(
-            identifier: Identifiers.inboxArrival,
-            content: content,
-            trigger: nil // deliver immediately
-        )
-
-        // Remove any prior delivered notification with this identifier
-        // before re-adding. iOS throttles the alert tone on same-identifier
-        // updates that look like in-place edits — clearing first forces
-        // each fire to register as a fresh delivery so the buzz/sound
-        // reliably plays for every count increment.
-        center.removeDeliveredNotifications(withIdentifiers: [Identifiers.inboxArrival])
-        center.add(request) { error in
-            if let error {
-                NSLog("[Himem][Notify] schedule failed: \(error.localizedDescription)")
-            } else {
-                NSLog("[Himem][Notify] inbox-arrival fired, count=\(inboxCount)")
-            }
-        }
-    }
-
     // MARK: - Daily nudge
 
     /// Called from app-active / scenePhase observers and from

@@ -257,7 +257,6 @@ final class EntitlementService: ObservableObject {
         }
         if !starterProjectAssistUsed {
             mutate {
-                $0.starterProjectAssistGranted = true
                 $0.starterProjectAssistUsed = true
             }
             return
