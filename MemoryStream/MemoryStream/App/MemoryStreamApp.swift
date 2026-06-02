@@ -177,29 +177,20 @@ struct MemoryStreamApp: App {
         // Bring up WatchConnectivity so transferred clips from the watch
         // land in the iPhone's inbox manifest. The session keeps the app
         // wakeable in the background to receive transfers even when HiMem
-        // isn't foregrounded.
+        // isn't foregrounded. Doesn't touch Core Data.
         WatchSessionDelegate.shared.start()
-        // Bring up the entitlement + StoreKit layer. EntitlementService
-        // loads/creates the singleton AssistBalance record. StoreKitService
-        // loads products in the background and starts the long-running
-        // transaction observer so renewals and family-sharing updates land
-        // even while no purchase sheet is open. FoundersCounter pulls the
-        // CloudKit public DB cap state so the upgrade hub renders honestly.
-        DispatchQueue.main.async {
-            _ = EntitlementService.shared
-            StoreKitService.shared.start()
-            Task { await FoundersCounter.shared.refresh() }
-            TenureTracker.shared.start()
-        }
         // Seed UserDefaults with notification setting defaults (toggles off,
         // 8pm nudge time) before any @AppStorage in SettingsView reads them.
         NotificationService.registerDefaults()
-        // Register the inbox-arrival notification category + inline
-        // actions (Snooze 4h / Mute for today) so when the coordinator
-        // fires a push, the actions are surfaced.
-        DispatchQueue.main.async {
-            WatchInboxNotificationCoordinator.shared.registerCategories()
-        }
+        // EntitlementService / StoreKitService / FoundersCounter /
+        // TenureTracker / WatchInboxNotificationCoordinator bootstrap
+        // moved to LaunchScreenView.onStorageLoaded — they require
+        // viewContext (EntitlementService.init's loadOrCreate fetches
+        // the AssistBalance record), and running them here pre-empted
+        // LaunchScreenView's off-main storage warm because main.async
+        // fires before WindowGroup body evaluation. Net effect was a
+        // 2-3s sync loadPersistentStores on the main thread during
+        // every cold launch. See feedback_cold_launch_target memory.
         // Pre-warm the en-US SpeechTranscriber model so the first watch
         // clip transcription isn't a blocking download. Best-effort —
         // logs and moves on if the install fails (no network, etc.); the

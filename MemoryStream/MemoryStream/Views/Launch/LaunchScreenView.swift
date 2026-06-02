@@ -5,7 +5,6 @@ struct LaunchScreenView: View {
     let onStorageReady: () -> Void
     let onComplete: () -> Void
 
-    @ObservedObject private var entitlement = EntitlementService.shared
     @State private var storageLoaded = false
     @State private var syncProgress: CGFloat = 0
     @State private var syncDone = false
@@ -76,19 +75,32 @@ struct LaunchScreenView: View {
                     }
                     .animation(.easeInOut(duration: 0.6), value: wordmarkExpanded)
 
-                    TierMark(
-                        tier: entitlement.tier,
-                        supporter: entitlement.isSupporter,
-                        size: 18
-                    )
-                    .offset(y: -10) // align baseline with wordmark cap
+                    // TierMark and Founder line are gated on storageLoaded
+                    // so EntitlementService.shared isn't accessed during
+                    // the splash's initial body evaluation — that access
+                    // would force loadPersistentStores synchronously on
+                    // the main thread (loadOrCreate fetches AssistBalance
+                    // from viewContext). After storage loads (and the
+                    // bootstrap inside onStorageLoaded runs), the tier
+                    // mark fades in on the splash's last re-render before
+                    // dismissal. For Free/anonymous users this changes
+                    // nothing visible.
+                    if storageLoaded {
+                        TierMark(
+                            tier: EntitlementService.shared.tier,
+                            supporter: EntitlementService.shared.isSupporter,
+                            size: 18
+                        )
+                        .offset(y: -10) // align baseline with wordmark cap
+                    }
                 }
                 .padding(.top, 18)
 
                 // Founder line — unbounded acknowledgment under the
                 // wordmark. Plus / Supporter / Free see nothing here;
-                // the TierMark above is their identity.
-                if entitlement.tier == .founders {
+                // the TierMark above is their identity. Same
+                // storageLoaded gating as the TierMark above.
+                if storageLoaded && EntitlementService.shared.tier == .founders {
                     Text("Thanks for being a founder.")
                         .font(.custom("Georgia-Italic", size: 13))
                         .foregroundStyle(ink.opacity(0.6))
@@ -212,10 +224,26 @@ struct LaunchScreenView: View {
     // MARK: - Storage Ready
 
     private func onStorageLoaded() {
-        storageLoaded = true
         LaunchSignposter.interval("launchScreen.topicPaletteLoad") {
             TopicPaletteStore.shared.loadFromCoreData()
         }
+        // Bootstrap entitlement + StoreKit AFTER storage is ready.
+        // Previously these ran inside MemoryStreamApp.init's
+        // DispatchQueue.main.async block, which pre-empted the
+        // off-main storage warm (EntitlementService.init fetches
+        // AssistBalance from viewContext, forcing a sync
+        // loadPersistentStores on the main thread). Running them
+        // here means viewContext is already live, so the fetch is
+        // cheap and doesn't block first paint. See
+        // feedback_cold_launch_target memory.
+        LaunchSignposter.interval("launchScreen.entitlementBootstrap") {
+            _ = EntitlementService.shared
+            StoreKitService.shared.start()
+            Task { await FoundersCounter.shared.refresh() }
+            TenureTracker.shared.start()
+            WatchInboxNotificationCoordinator.shared.registerCategories()
+        }
+        storageLoaded = true
         onStorageReady()
 
         // Update epigraph with real entry count
@@ -301,17 +329,20 @@ struct LaunchScreenView: View {
         syncDone = true
         withAnimation(.easeInOut(duration: 0.3)) { syncProgress = 1.0 }
 
-        // 1. Brief hold so user sees "Ready" (0.3s)
-        // 2. Expand wordmark: "HiMem" → "Hi, Memories!" (0.6s)
-        // 3. Hold so user reads it (0.5s)
-        // 4. Fade to feed (0.3s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        // Cold-launch fix 2026-06-02: dismiss splash immediately rather
+        // than holding for the 1.4s sequential brand moment (0.3s "Ready"
+        // hold + 0.6s wordmark expand + 0.5s "HiMemories!" read pause).
+        // That hold was pure UX delay tacked onto the front of every cold
+        // launch — exactly what poisons the 400ms-to-interactive target.
+        // The wordmark expand still fires so the brand moment plays out
+        // during the fade-out animation; users see "HiMemories!" flash as
+        // the splash dissolves into the feed. See
+        // feedback_cold_launch_target memory.
+        withAnimation(.easeInOut(duration: 0.6)) {
             wordmarkExpanded = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                onComplete()
-            }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            onComplete()
         }
     }
 }
