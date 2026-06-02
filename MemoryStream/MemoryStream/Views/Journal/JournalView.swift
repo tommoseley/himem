@@ -239,6 +239,16 @@ struct JournalView: View {
             upgradePromptCoord.evaluate()
             handlePendingVoiceRecordRequest()
         }
+        // Cold-launch fix 2026-06-02: the initial Core Data fetch +
+        // duplicate-merge sweep used to live in JournalViewModel.init,
+        // blocking first paint by 1–3s on populated devices. Moving it
+        // here lets the empty-state JournalView render first, then the
+        // feed populates via @Published. `.task` ties the work to view
+        // lifecycle so it doesn't fire from test bundles that never
+        // mount the view.
+        .task {
+            await viewModel.loadInitial()
+        }
         .onChange(of: captureRequests.pendingVoiceRecord) { _, pending in
             if pending { handlePendingVoiceRecordRequest() }
         }

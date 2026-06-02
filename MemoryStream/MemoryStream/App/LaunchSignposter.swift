@@ -2,9 +2,11 @@ import Foundation
 import os.signpost
 
 /// Cold-start instrumentation. Wraps `OSSignposter` so launch-path
-/// intervals show up under Instruments → Points of Interest →
-/// `com.himem.app: launch`, and `os_signpost` debug logs from
-/// `log stream --predicate 'subsystem == "com.himem.app"'`.
+/// intervals show up under Instruments → **Points of Interest** track
+/// automatically (the category name `"PointsOfInterest"` is the
+/// Apple-blessed magic string that routes signposts to that track —
+/// any other category goes into a generic os_signpost lane that
+/// requires a separate instrument).
 ///
 /// Added 2026-06-01 after a >9s cold-launch report. Used in the
 /// suspected hot spots (StorageService.loadPersistentStores, the
@@ -16,7 +18,7 @@ import os.signpost
 enum LaunchSignposter {
     static let signposter = OSSignposter(
         subsystem: "com.himem.app",
-        category: "launch"
+        category: "PointsOfInterest"
     )
 
     /// Wraps a synchronous block in begin/end signposts. Use sparingly

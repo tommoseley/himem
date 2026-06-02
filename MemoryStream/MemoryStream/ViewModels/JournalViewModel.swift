@@ -36,8 +36,26 @@ class JournalViewModel: ObservableObject {
         observeRemoteChanges()
         observeForeground()
         observeFilterInputs()
+        // Cold-launch fix 2026-06-02: heavy fetches moved to loadInitial().
+        // Previously init ran loadEntries + mergeDuplicateTopics +
+        // mergeDuplicateEntities synchronously on the main thread — that
+        // blocked the JournalView's first paint by 1–3s on populated
+        // devices (mergeDuplicateEntities scales with every entity row in
+        // the library). JournalView fires loadInitial() in `.task`, so
+        // the work runs after the first frame is rendered. Tests can call
+        // loadInitial() directly when they need populated state.
+        // See feedback_cold_launch_target memory.
+    }
+
+    /// First-paint load. Runs the same work that previously lived in
+    /// `init`, but invoked AFTER the view has had a chance to render its
+    /// empty/skeleton state. Idempotent — safe to call multiple times.
+    func loadInitial() async {
         loadEntries()
-        // Sweep up CloudKit-induced duplicate topics on launch.
+        // Sweep up CloudKit-induced duplicate topics + entities on launch.
+        // These still use viewContext (main-only), but running them after
+        // loadEntries means the feed renders first; the merges happen
+        // immediately after on the same MainActor turn.
         try? storage.mergeDuplicateTopics()
         try? storage.mergeDuplicateEntities()
     }

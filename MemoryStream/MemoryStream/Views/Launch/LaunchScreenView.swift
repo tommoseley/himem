@@ -255,19 +255,26 @@ struct LaunchScreenView: View {
         }
         EpigraphService.shared.refreshFromAPI()
 
-        // Animate progress to 70%
-        withAnimation(.easeInOut(duration: 0.8)) { syncProgress = 0.7 }
+        // Animate progress to 100% and dismiss splash IMMEDIATELY now that
+        // storage is loaded. Cold-launch fix 2026-06-02: the previous code
+        // waited for either CloudKit's eventChangedNotification or a 3s
+        // safety net before dismissing — which put a 3s floor under every
+        // cold launch where CloudKit had nothing new to import (most cold
+        // launches). The splash's job is "hold the user's attention while
+        // the data layer comes up"; the data layer is up now, so dismiss.
+        // The CloudKit observer + 3s net below are now purely for gating
+        // FragmentMigration (which genuinely needs CloudKit's initial
+        // import to settle — see 2026-05-09 issue doc), separated from
+        // the user-visible dismissal.
+        completeSync()
 
-        // Watch for CloudKit import completion — this drives the handoff
-        // AND is the gate for FragmentMigration. The two-NSManagedObjectModel
+        // Watch for CloudKit import completion — the gate for
+        // FragmentMigration only now. The two-NSManagedObjectModel
         // race that crashes the migration only exists while CloudKit's
         // import is in flight; once `.import .succeeded` fires, only our
         // model is live and writes are safe. We run migration on EVERY
         // import-success event (not just the first) because CloudKit can
-        // deliver entries across multiple batches — entries that arrive
-        // in the second batch were missed by the first migration call,
-        // and the next-launch flag won't help if the first call set it
-        // prematurely (see 2026-05-09 issue doc).
+        // deliver entries across multiple batches.
         NotificationCenter.default.addObserver(
             forName: NSPersistentCloudKitContainer.eventChangedNotification,
             object: StorageService.shared.container,
@@ -278,27 +285,16 @@ struct LaunchScreenView: View {
             // type 1 = import
             if event.type.rawValue == 1 && event.succeeded {
                 runMigration()
-                completeSync()
-            }
-        }
-
-        // If entries already exist (sync happened during store load), complete
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            if !syncDone && EpigraphService.shared.entryCount() > 0 {
-                runMigration()
-                completeSync()
             }
         }
 
         // Safety net — if CloudKit never reports (no iCloud account, no
         // network, or empty store with nothing to import), still run
-        // migration once and hand off so the user isn't stuck on the
-        // splash. The migration's own UserDefaults flag is set only when
-        // we confirm the steady state, so 0-entry runs from this path
-        // get retried on next launch.
+        // migration once. The migration's own UserDefaults flag is set
+        // only when we confirm the steady state, so 0-entry runs from
+        // this path get retried on next launch.
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             runMigration()
-            if !syncDone { completeSync() }
         }
     }
 
