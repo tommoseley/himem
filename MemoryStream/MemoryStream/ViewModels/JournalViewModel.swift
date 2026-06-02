@@ -96,6 +96,16 @@ class JournalViewModel: ObservableObject {
     /// keeps showing the EntryDisplayModel snapshot from before the bg save.
     /// This observer closes the loop so the feed reloads as soon as the
     /// remote change lands.
+    ///
+    /// Cold-launch fix 2026-06-02: duplicate-merging was previously
+    /// invoked here on every remote-change batch. During CloudKit's
+    /// initial mirror import (the slow 10+s post-launch window) the
+    /// debounced sink fired up to once every 250ms; each fire ran two
+    /// scaled-with-library Core Data fetches on the main thread, leaving
+    /// the feed unresponsive during the entire import. The merges are
+    /// now invoked in `loadInitial()` (once per launch) and
+    /// `observeForeground` (rare user-driven event), which catches all
+    /// the duplicate-introduction cases without hammering the runloop.
     private func observeRemoteChanges() {
         remoteChangeObserver = NotificationCenter.default.publisher(
             for: NSNotification.Name.NSPersistentStoreRemoteChange,
@@ -103,12 +113,7 @@ class JournalViewModel: ObservableObject {
         )
         .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
         .sink { [weak self] _ in
-            guard let self else { return }
-            self.loadEntries()
-            // CloudKit may have pulled duplicate topics from another
-            // device; merge before they're displayed to the user.
-            try? self.storage.mergeDuplicateTopics()
-            try? self.storage.mergeDuplicateEntities()
+            self?.loadEntries()
         }
     }
 

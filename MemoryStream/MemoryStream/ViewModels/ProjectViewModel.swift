@@ -13,6 +13,14 @@ class ProjectViewModel: ObservableObject {
     init(storage: StorageService = .shared) {
         self.storage = storage
         observeChanges()
+        // Cold-launch fix 2026-06-02: loadProjects() moved out of init.
+        // JournalView fires loadInitial() in `.task` so the fetch runs
+        // after the first frame is rendered. Same shape as the
+        // JournalViewModel fix; see feedback_cold_launch_target memory.
+    }
+
+    /// First-paint load. Called by JournalView's `.task`. Idempotent.
+    func loadInitial() async {
         loadProjects()
     }
 

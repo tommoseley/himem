@@ -171,6 +171,19 @@ struct MemoryStreamApp: App {
     }
 
     init() {
+        // Phase-1 signpost: wraps the entire App.init body so the next
+        // Instruments trace shows whether the 5s "wordmark only" cold-
+        // launch phase is iOS storyboard / system framework loading
+        // (everything BEFORE this interval), or in-app work
+        // (the interval's duration). If the interval is sub-100ms,
+        // phase 1 is system-level (dyld, framework loading) and not
+        // ours to fix at this layer.
+        let appInitState = LaunchSignposter.signposter.beginInterval(
+            "app.init",
+            id: LaunchSignposter.signposter.makeSignpostID()
+        )
+        defer { LaunchSignposter.signposter.endInterval("app.init", appInitState) }
+
         DispatchQueue.main.async {
             HiMemShortcuts.updateAppShortcutParameters()
         }
