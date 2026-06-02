@@ -51,13 +51,19 @@ class JournalViewModel: ObservableObject {
     /// `init`, but invoked AFTER the view has had a chance to render its
     /// empty/skeleton state. Idempotent — safe to call multiple times.
     func loadInitial() async {
-        loadEntries()
-        // Sweep up CloudKit-induced duplicate topics + entities on launch.
-        // These still use viewContext (main-only), but running them after
-        // loadEntries means the feed renders first; the merges happen
-        // immediately after on the same MainActor turn.
-        try? storage.mergeDuplicateTopics()
-        try? storage.mergeDuplicateEntities()
+        LaunchSignposter.interval("journalVM.loadInitial") {
+            loadEntries()
+            // Sweep up CloudKit-induced duplicate topics + entities on launch.
+            // These still use viewContext (main-only), but running them after
+            // loadEntries means the feed renders first; the merges happen
+            // immediately after on the same MainActor turn.
+            LaunchSignposter.interval("journalVM.mergeDuplicateTopics") {
+                try? storage.mergeDuplicateTopics()
+            }
+            LaunchSignposter.interval("journalVM.mergeDuplicateEntities") {
+                try? storage.mergeDuplicateEntities()
+            }
+        }
     }
 
     func refresh() {
@@ -81,6 +87,7 @@ class JournalViewModel: ObservableObject {
         )
         .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
         .sink { [weak self] _ in
+            LaunchSignposter.signposter.emitEvent("journalVM.observeStorageChange")
             self?.loadEntries()
         }
     }
@@ -113,6 +120,7 @@ class JournalViewModel: ObservableObject {
         )
         .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
         .sink { [weak self] _ in
+            LaunchSignposter.signposter.emitEvent("journalVM.observeRemoteChange")
             self?.loadEntries()
         }
     }
@@ -270,13 +278,15 @@ class JournalViewModel: ObservableObject {
     // MARK: - Load from Core Data
 
     private func loadEntries() {
-        let request = JournalEntry.fetchAllChronological()
-        do {
-            let journalEntries = try storage.viewContext.fetch(request)
-            entries = journalEntries.map { mapToDisplayModel($0) }
-            loadTopics()
-        } catch {
-            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        LaunchSignposter.interval("journalVM.loadEntries") {
+            let request = JournalEntry.fetchAllChronological()
+            do {
+                let journalEntries = try storage.viewContext.fetch(request)
+                entries = journalEntries.map { mapToDisplayModel($0) }
+                loadTopics()
+            } catch {
+                ErrorState.shared.report(.saveFailed(error.localizedDescription))
+            }
         }
     }
 
