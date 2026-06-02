@@ -193,7 +193,9 @@ struct LaunchScreenView: View {
         // This is the real work the hairline tracks
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             DispatchQueue.global(qos: .userInitiated).async {
-                _ = StorageService.shared
+                LaunchSignposter.interval("launchScreen.awaitStorageShared") {
+                    _ = StorageService.shared
+                }
                 // FragmentMigration is intentionally NOT called here —
                 // running it before CloudKit's initial import has settled
                 // races against the importer and raises an ObjC NSException
@@ -211,7 +213,9 @@ struct LaunchScreenView: View {
 
     private func onStorageLoaded() {
         storageLoaded = true
-        TopicPaletteStore.shared.loadFromCoreData()
+        LaunchSignposter.interval("launchScreen.topicPaletteLoad") {
+            TopicPaletteStore.shared.loadFromCoreData()
+        }
         onStorageReady()
 
         // Update epigraph with real entry count

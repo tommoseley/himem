@@ -54,8 +54,10 @@ final class StorageService {
         )
 
         var loadError: Error?
-        container.loadPersistentStores { _, error in
-            if let error { loadError = error }
+        LaunchSignposter.interval("storage.loadPersistentStores") {
+            container.loadPersistentStores { _, error in
+                if let error { loadError = error }
+            }
         }
 
         // CloudKit-backed load failed (rare — typically a transient setup
@@ -64,9 +66,11 @@ final class StorageService {
         if loadError != nil {
             description.cloudKitContainerOptions = nil
             container.persistentStoreDescriptions = [description]
-            container.loadPersistentStores { _, error in
-                if let error {
-                    fatalError("Core Data failed to load even without CloudKit: \(error.localizedDescription)")
+            LaunchSignposter.interval("storage.loadPersistentStores.fallback") {
+                container.loadPersistentStores { _, error in
+                    if let error {
+                        fatalError("Core Data failed to load even without CloudKit: \(error.localizedDescription)")
+                    }
                 }
             }
         }
@@ -96,7 +100,9 @@ final class StorageService {
         // debug build by accident.
         let schemaInitKey = "com.himem.cloudkit.schemaInitializedV1"
         if !UserDefaults.standard.bool(forKey: schemaInitKey) {
-            try? cloudKitContainer.initializeCloudKitSchema(options: [])
+            LaunchSignposter.interval("storage.initializeCloudKitSchema") {
+                try? cloudKitContainer.initializeCloudKitSchema(options: [])
+            }
             UserDefaults.standard.set(true, forKey: schemaInitKey)
         }
         #endif
