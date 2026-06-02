@@ -230,12 +230,26 @@ struct JournalView: View {
             }
         }
         .onAppear {
-            Task {
-                let _ = await speechService.requestAuthorization()
-                await cameraService.requestAuthorization()
-            }
-            // Check whether the upgrade prompt should fire on launch.
-            // Idempotent — won't re-fire if already shown.
+            // Cold-launch fix 2026-06-02: removed the pre-fetch of speech +
+            // photo-library authorization. On fresh install, these two
+            // requestAuthorization calls fired the iOS permission prompts
+            // immediately on the user's first cold launch — each prompt
+            // suspends the app, and a typical user takes 4–5 seconds total
+            // to dismiss both. That dead time dominated the perceived
+            // cold-launch experience on first install.
+            //
+            // Both permissions are now requested on demand at the moment
+            // they're needed: SpeechService.requestAuthorization is
+            // already wired in VoiceCaptureScreen.onAppear (the voice
+            // composer's first body evaluation); Photos auth fires when
+            // CameraService.savePhoto / saveVideo invoke PHPhotoLibrary;
+            // Camera auth fires when UIImagePickerController is presented
+            // for .camera source. Net first-install impact: 4–5s back.
+            //
+            // Subsequent cold launches were unaffected by the pre-fetch
+            // (cached auth status returns instantly with no prompt), so
+            // this change is a pure win for the fresh-install experience
+            // and a no-op for everyone else.
             upgradePromptCoord.evaluate()
             handlePendingVoiceRecordRequest()
         }
