@@ -44,6 +44,15 @@ struct PermissionWizardView: View {
     /// but the visible count won't stabilize until everything's on
     /// disk.
     @State private var lastCountChangeAt: Date = Date()
+    /// Flips true the first time we observe evidence that CloudKit has
+    /// actually started doing work — either an `.import` event or a
+    /// growing entry count. Without this gate, the very first
+    /// iteration of the settle-check fires trivially: at t=5s the
+    /// event-silence + count-stable conditions are met because nothing
+    /// has happened yet, and we'd advance through the restore screen
+    /// in the middle of CloudKit's setup phase before any data
+    /// arrived. Gating on "we've at least seen CK start" prevents that.
+    @State private var hasSeenCloudKitActivity: Bool = false
     /// In-flight `.import` event identifiers (start emitted with
     /// endDate=nil, end emitted with endDate set). When this set
     /// is empty AND silence-since-last-event exceeds the settle
@@ -411,6 +420,9 @@ struct PermissionWizardView: View {
                 if count != restoredCount {
                     restoredCount = count
                     lastCountChangeAt = Date()
+                    // Growing count is independent evidence of CK
+                    // activity even if we somehow missed the event.
+                    hasSeenCloudKitActivity = true
                 }
             }
 
@@ -422,15 +434,25 @@ struct PermissionWizardView: View {
                 break
             }
 
-            // Settled: no CK import in flight + last import event ≥5s
-            // ago + count stable ≥4s. activeImports prevents us from
-            // mistaking a mid-batch pause for the end; countStable
-            // prevents us from advancing while records are still being
-            // written.
+            // Settled requires FOUR signals together:
+            //  1. hasSeenCloudKitActivity — CK has at least started
+            //     doing work. Without this, the t=5s iteration trivially
+            //     satisfies the other three conditions (no events, no
+            //     count change) during CK's setup phase, before any
+            //     data has arrived. Fixed 2026-06-03 after Tom observed
+            //     "loading screen vanished but still syncing."
+            //  2. activeImportIDs empty — no in-flight import batch.
+            //  3. eventSilentFor > silenceThreshold — bridges typical
+            //     gaps between batches.
+            //  4. countStableFor > stableThreshold — strongest signal;
+            //     CK end events can fire before all relationship records
+            //     finish writing, but the visible count won't stop
+            //     changing until everything's on disk.
             let noActiveImports = activeImportIDs.isEmpty
             let eventSilentFor = Date().timeIntervalSince(lastImportEventAt)
             let countStableFor = Date().timeIntervalSince(lastCountChangeAt)
-            if noActiveImports
+            if hasSeenCloudKitActivity
+                && noActiveImports
                 && eventSilentFor > settleSilenceSeconds
                 && countStableFor > countStableSeconds {
                 await MainActor.run {
@@ -465,6 +487,7 @@ struct PermissionWizardView: View {
             let isStarted = event.endDate == nil
             Task { @MainActor in
                 self.lastImportEventAt = Date()
+                self.hasSeenCloudKitActivity = true
                 if isStarted {
                     self.activeImportIDs.insert(id)
                 } else {
