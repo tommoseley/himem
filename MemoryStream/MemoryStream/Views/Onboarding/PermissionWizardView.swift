@@ -38,6 +38,12 @@ struct PermissionWizardView: View {
     // window with a live count instead of theater.
     @State private var restoredCount: Int = 0
     @State private var lastImportEventAt: Date = Date()
+    /// Timestamp of the most recent change in `restoredCount`. Used as
+    /// a stronger settle signal than CK events alone — events can fire
+    /// end-of-import before the relationship records finish writing,
+    /// but the visible count won't stabilize until everything's on
+    /// disk.
+    @State private var lastCountChangeAt: Date = Date()
     /// In-flight `.import` event identifiers (start emitted with
     /// endDate=nil, end emitted with endDate set). When this set
     /// is empty AND silence-since-last-event exceeds the settle
@@ -386,15 +392,27 @@ struct PermissionWizardView: View {
 
     private func runRestoreStateMachine() async {
         installCloudKitEventObserver()
-        lastImportEventAt = Date()
+        let now = Date()
+        lastImportEventAt = now
+        lastCountChangeAt = now
         let pollInterval: UInt64 = 250_000_000   // 0.25s
-        let settleSilenceSeconds: TimeInterval = 10.0
-        let maxWaitSeconds: TimeInterval = 120.0
+        // Per the spec ("the rest keep arriving in the background.
+        // Nothing waits on this screen."), we advance once the user has
+        // seen enough of their data to feel oriented — not when every
+        // last record is on disk. Tightened thresholds:
+        let settleSilenceSeconds: TimeInterval = 5.0
+        let countStableSeconds: TimeInterval = 4.0
+        let maxWaitSeconds: TimeInterval = 18.0
         let startedAt = Date()
 
         while !Task.isCancelled, step == .restoring {
             let count = await fetchEntryCount()
-            await MainActor.run { restoredCount = count }
+            await MainActor.run {
+                if count != restoredCount {
+                    restoredCount = count
+                    lastCountChangeAt = Date()
+                }
+            }
 
             let totalElapsed = Date().timeIntervalSince(startedAt)
             if totalElapsed > maxWaitSeconds {
@@ -404,9 +422,17 @@ struct PermissionWizardView: View {
                 break
             }
 
+            // Settled: no CK import in flight + last import event ≥5s
+            // ago + count stable ≥4s. activeImports prevents us from
+            // mistaking a mid-batch pause for the end; countStable
+            // prevents us from advancing while records are still being
+            // written.
             let noActiveImports = activeImportIDs.isEmpty
-            let silentFor = Date().timeIntervalSince(lastImportEventAt)
-            if noActiveImports && silentFor > settleSilenceSeconds {
+            let eventSilentFor = Date().timeIntervalSince(lastImportEventAt)
+            let countStableFor = Date().timeIntervalSince(lastCountChangeAt)
+            if noActiveImports
+                && eventSilentFor > settleSilenceSeconds
+                && countStableFor > countStableSeconds {
                 await MainActor.run {
                     withWizardAnim { step = .restoreDone }
                 }
