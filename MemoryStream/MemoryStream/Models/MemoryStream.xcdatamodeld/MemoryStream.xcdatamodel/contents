@@ -93,10 +93,6 @@
         <attribute name="text" optional="YES" attributeType="String"/>
         <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="mediaReferences" inverseEntity="JournalEntry"/>
     </entity>
-    <entity name="SyncPing" representedClassName="SyncPing" syncable="YES">
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-    </entity>
     <entity name="TextSegment" representedClassName="TextSegment" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="text" optional="YES" attributeType="String" defaultValueString=""/>
