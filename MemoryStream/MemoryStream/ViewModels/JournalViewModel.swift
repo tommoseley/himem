@@ -279,13 +279,7 @@ class JournalViewModel: ObservableObject {
 
     private func loadEntries() {
         LaunchSignposter.interval("journalVM.loadEntries") {
-            // TEMPORARY: limit lifted from default 500 → 100_000 for the
-            // scaling test. Restore to `.fetchAllChronological()` (default)
-            // before shipping — the 500 cap exists for a reason, namely
-            // that loading + EntryMapper-mapping 20k records onto MainActor
-            // is exactly what we're trying to measure here. See ad-hoc
-            // testing thread, 2026-06-03.
-            let request = JournalEntry.fetchAllChronological(limit: 100_000)
+            let request = JournalEntry.fetchAllChronological()
             do {
                 let journalEntries = try storage.viewContext.fetch(request)
                 entries = journalEntries.map { mapToDisplayModel($0) }
