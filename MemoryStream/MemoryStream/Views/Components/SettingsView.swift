@@ -54,12 +54,7 @@ struct SettingsView: View {
                         TextField("Your name", text: $displayName)
                             .multilineTextAlignment(.trailing)
                             .foregroundStyle(Crucible.Color.ink2)
-                            .onSubmit {
-                                let name = displayName.trimmingCharacters(in: .whitespaces)
-                                guard !name.isEmpty else { return }
-                                let _ = KeychainService.shared.save(key: "userName", value: name)
-                                AuthService.shared.userName = name
-                            }
+                            .onSubmit { commitDisplayName() }
                     }
                 } header: {
                     Text("Profile")
@@ -405,8 +400,20 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        // Commit any pending name edit before the sheet
+                        // tears down. .onSubmit only fires on Return key;
+                        // most users tap Done to leave Settings, so this
+                        // is the canonical save moment.
+                        commitDisplayName()
+                        dismiss()
+                    }
                 }
+            }
+            .onDisappear {
+                // Catches swipe-to-dismiss and any other dismissal path
+                // that bypasses the Done button.
+                commitDisplayName()
             }
             .navigationDestination(isPresented: $showInbox) {
                 if let viewModel {
@@ -475,6 +482,19 @@ struct SettingsView: View {
                 )
             }
         }
+    }
+
+    // MARK: - Profile
+
+    /// Commits the profile name edit through the canonical AuthService
+    /// API so it lands in Keychain + iCloud KV + @Published in one
+    /// call. Idempotent: empty input is a no-op (handled by
+    /// setUserName); re-saving the existing value is harmless. Wired
+    /// to .onSubmit (Return key), Done toolbar button, and
+    /// .onDisappear so name changes save regardless of how the user
+    /// leaves Settings.
+    private func commitDisplayName() {
+        AuthService.shared.setUserName(displayName)
     }
 
     // MARK: - Topics
