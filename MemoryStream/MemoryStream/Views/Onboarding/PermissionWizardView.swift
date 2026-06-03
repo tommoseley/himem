@@ -171,8 +171,10 @@ struct PermissionWizardView: View {
     private func nameComplete() {
         let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
-            auth.userName = trimmed
-            _ = KeychainService.shared.save(key: "userName", value: trimmed)
+            // Routes through AuthService.setUserName so the value lands
+            // in @Published + Keychain + iCloud KV sidecar in one call.
+            // The KV write is what survives uninstall+reinstall.
+            auth.setUserName(trimmed)
         }
         withWizardAnim { step = .mic }
     }

@@ -11,6 +11,18 @@ final class AuthService: ObservableObject {
     private let keychain = KeychainService.shared
     private let userIDKey = "appleUserID"
     private let userNameKey = "userName"
+    /// iCloud Key-Value Store key for the user's display name.
+    /// Survives an app reinstall on the same Apple ID — Sign in with
+    /// Apple only returns `fullName` on the FIRST sign-in ever for a
+    /// given Apple ID + bundle ID combination, so without an iCloud-
+    /// scoped sidecar the user has to retype their name after every
+    /// uninstall+reinstall. NSUbiquitousKeyValueStore is the 4KB
+    /// iCloud-backed dictionary designed exactly for this case — no
+    /// CloudKit container needed, no schema, no first-launch sync
+    /// delay. The Keychain (ThisDeviceOnly) stays the per-device
+    /// authoritative store for the userID itself.
+    private let kvUserNameKey = "userName.v1"
+    private var kvStore: NSUbiquitousKeyValueStore { .default }
 
     init() {
         loadStoredCredentials()
@@ -42,11 +54,37 @@ final class AuthService: ObservableObject {
             // under the previous `WhenUnlockedThisDeviceOnly` class
             // get upgraded the first time we successfully read them.
             _ = keychain.save(key: userNameKey, value: name)
+            // Keep the iCloud KV sidecar in sync — propagates the
+            // Keychain value to other Apple-ID-paired installs and
+            // future reinstalls of this app.
+            kvStore.set(name, forKey: kvUserNameKey)
+        } else if let kvName = kvStore.string(forKey: kvUserNameKey),
+                  !kvName.isEmpty {
+            // Reinstall path: Keychain wiped by iOS on uninstall, but
+            // the iCloud KV sidecar from the previous install (or a
+            // companion device) still holds the name. Restore it to
+            // both the published state and this device's Keychain.
+            userName = kvName
+            _ = keychain.save(key: userNameKey, value: kvName)
         }
         if let userID = keychain.retrieve(key: userIDKey) {
             isAuthenticated = true
             _ = keychain.save(key: userIDKey, value: userID)
         }
+    }
+
+    /// Writes `userName` to the @Published property, Keychain, and
+    /// iCloud KV in one call. Use this from any code that mutates the
+    /// user's display name (Sign in with Apple result, wizard name
+    /// edit, future profile-edit surface) so all three stores stay in
+    /// sync. Empty input is rejected.
+    func setUserName(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        userName = trimmed
+        _ = keychain.save(key: userNameKey, value: trimmed)
+        kvStore.set(trimmed, forKey: kvUserNameKey)
+        kvStore.synchronize() // best-effort immediate push; iOS still owns the schedule
     }
 
     // MARK: - Sign in with Apple
@@ -59,15 +97,27 @@ final class AuthService: ObservableObject {
             let userID = credential.user
             let _ = keychain.save(key: userIDKey, value: userID)
 
-            // Apple only provides the name on FIRST sign-in
+            // Apple only provides the name on FIRST sign-in. Subsequent
+            // sign-ins return fullName=nil even for the same user — by
+            // design, privacy-protective. The iCloud KV sidecar (see
+            // `setUserName`) survives uninstall+reinstall on the same
+            // Apple ID so reinstalls don't lose the name.
             if let fullName = credential.fullName {
                 let first = fullName.givenName ?? ""
                 let name = first.isEmpty ? "there" : first
-                userName = name
-                let _ = keychain.save(key: userNameKey, value: name)
+                setUserName(name)
             } else if userName.isEmpty {
-                // Returning user — name was stored previously
-                userName = keychain.retrieve(key: userNameKey) ?? "there"
+                // Returning user, no name in @Published yet — try
+                // Keychain, then KV sidecar, then fall back.
+                if let stored = keychain.retrieve(key: userNameKey),
+                   !stored.isEmpty {
+                    userName = stored
+                } else if let kvName = kvStore.string(forKey: kvUserNameKey),
+                          !kvName.isEmpty {
+                    setUserName(kvName)
+                } else {
+                    userName = "there"
+                }
             }
 
             isAuthenticated = true
