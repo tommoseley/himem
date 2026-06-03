@@ -11,6 +11,13 @@ final class AuthService: ObservableObject {
     private let keychain = KeychainService.shared
     private let userIDKey = "appleUserID"
     private let userNameKey = "userName"
+    /// UserDefaults key for the "user finished the permission wizard
+    /// on this install" flag. UserDefaults is wiped on app uninstall
+    /// by iOS reliably (unlike Keychain, which we've observed
+    /// persisting across uninstall on real devices despite the
+    /// ThisDeviceOnly access class). That makes UserDefaults the
+    /// right signal for "should the wizard show on next launch."
+    private let wizardCompletedKey = "wizardCompletedOnThisInstall.v1"
     /// iCloud Key-Value Store key for the user's display name.
     /// Survives an app reinstall on the same Apple ID — Sign in with
     /// Apple only returns `fullName` on the FIRST sign-in ever for a
@@ -30,8 +37,33 @@ final class AuthService: ObservableObject {
 
     // MARK: - Stored State
 
+    /// True if the user is signed in with Apple on this device.
+    /// Backed by the Keychain `appleUserID` entry. Used by the auth /
+    /// credential-verification flow, NOT by the wizard gate — Apple
+    /// Sign In is step 1 of 7 in the wizard, and we don't want
+    /// the gate to flip true while the user is mid-flow. Use
+    /// `hasCompletedOnboardingWizard` for the gate.
     var hasCompletedOnboarding: Bool {
         keychain.retrieve(key: userIDKey) != nil
+    }
+
+    /// True if the user finished the PermissionWizard end-to-end on
+    /// the current install. Backed by UserDefaults (wiped on
+    /// uninstall, persistent across force-quit). This is the
+    /// canonical signal for "should the wizard show on next cold
+    /// launch." Survives force-quit + relaunch within the same
+    /// install; reset on uninstall so reinstall users see the
+    /// wizard fresh and re-grant permissions (which iOS makes them
+    /// re-grant anyway).
+    var hasCompletedOnboardingWizard: Bool {
+        UserDefaults.standard.bool(forKey: wizardCompletedKey)
+    }
+
+    /// Called once by `PermissionWizardView` from its `onComplete`
+    /// callback. Idempotent — safe to call multiple times if for
+    /// some reason the user replays the wizard via the DEBUG reset.
+    func markOnboardingWizardComplete() {
+        UserDefaults.standard.set(true, forKey: wizardCompletedKey)
     }
 
     /// Re-reads the Keychain into `isAuthenticated` / `userName`.
@@ -161,6 +193,7 @@ final class AuthService: ObservableObject {
         _ = keychain.delete(key: userNameKey)
         kvStore.removeObject(forKey: kvUserNameKey)
         kvStore.synchronize()
+        UserDefaults.standard.removeObject(forKey: wizardCompletedKey)
         isAuthenticated = false
         userName = ""
     }

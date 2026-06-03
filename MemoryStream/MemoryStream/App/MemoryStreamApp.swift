@@ -160,10 +160,19 @@ struct MemoryStreamApp: App {
     @State private var splashComplete = false
     @State private var storageReady = false
     /// Initialized at App-struct creation from `AuthService.shared
-    /// .hasCompletedOnboarding`. True for returning users (Keychain
-    /// holds their Apple userID), false for fresh installs. The
-    /// PermissionWizardView flips it to true on completion.
-    @State private var onboardingComplete: Bool = AuthService.shared.hasCompletedOnboarding
+    /// .hasCompletedOnboardingWizard` — UserDefaults-backed. True
+    /// when the user finished the PermissionWizard end-to-end on
+    /// this install, false otherwise. Use this instead of
+    /// `hasCompletedOnboarding` (which is the Keychain
+    /// `appleUserID` check — that flips true after Page 1's Apple
+    /// sign-in and would skip the wizard mid-flow if a user bails
+    /// after only signing in). UserDefaults is also wiped on
+    /// uninstall reliably; Keychain has been observed persisting
+    /// across uninstall on real devices despite ThisDeviceOnly
+    /// access class, which made the previous Keychain gate skip
+    /// the wizard for reinstalled users who needed to re-grant
+    /// permissions.
+    @State private var onboardingComplete: Bool = AuthService.shared.hasCompletedOnboardingWizard
     @Environment(\.scenePhase) private var scenePhase
     /// User's appearance choice. Drives the root
     /// `.preferredColorScheme(...)` modifier below; default is
@@ -271,6 +280,11 @@ struct MemoryStreamApp: App {
                 // this branch is dead for them.
                 if !onboardingComplete {
                     PermissionWizardView {
+                        // Persist the completion to UserDefaults BEFORE
+                        // flipping local state, so a force-quit during
+                        // the fade animation still leaves us in the
+                        // "wizard done" state for the next launch.
+                        auth.markOnboardingWizardComplete()
                         withAnimation(.easeInOut(duration: 0.3)) {
                             onboardingComplete = true
                         }
