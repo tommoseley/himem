@@ -128,6 +128,33 @@ final class AuthService: ObservableObject {
         }
     }
 
+    // MARK: - DEBUG · onboarding reset
+
+    #if DEBUG
+    /// Clears Keychain (userID, userName) and the iCloud KV sidecar
+    /// so the next cold launch enters the PermissionWizardView fresh.
+    /// Resets in-memory state so the same Settings UI that triggered
+    /// the reset doesn't keep showing the old user. Real iOS-system
+    /// permission grants (mic, speech, photos, camera, location,
+    /// notifications) are NOT reset — those live in iOS Settings and
+    /// no app-level API can clear them. To test the actual prompts,
+    /// use Settings → General → Transfer or Reset iPhone → Reset →
+    /// Reset Location & Privacy.
+    ///
+    /// IMPORTANT: `@State private var onboardingComplete` in
+    /// `MemoryStreamApp` is captured at App-struct creation, so this
+    /// reset does NOT affect the current session — the user must
+    /// force-quit and re-launch HiMem for the wizard to actually show.
+    func debugResetOnboardingState() {
+        _ = keychain.delete(key: userIDKey)
+        _ = keychain.delete(key: userNameKey)
+        kvStore.removeObject(forKey: kvUserNameKey)
+        kvStore.synchronize()
+        isAuthenticated = false
+        userName = ""
+    }
+    #endif
+
     // MARK: - Credential Check
 
     func verifyCredentialState() {

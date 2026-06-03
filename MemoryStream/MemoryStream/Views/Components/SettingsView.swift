@@ -40,6 +40,7 @@ struct SettingsView: View {
     @State private var scaleSeedProgress: (current: Int, total: Int)? = nil
     @State private var scaleStatusMessage: String? = nil
     @State private var scaleWorking: Bool = false
+    @State private var showResetOnboardingAlert = false
     #endif
 
     var body: some View {
@@ -336,10 +337,29 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
+
+                    Button {
+                        AuthService.shared.debugResetOnboardingState()
+                        showResetOnboardingAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.counterclockwise.circle.fill")
+                                .foregroundStyle(.purple)
+                            Text("Reset onboarding")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
                 } header: {
                     Text("Debug")
                 } footer: {
                     Text("Developer-only. Compiled out of Release builds — App Store users never see this section.")
+                }
+                .alert("Onboarding reset", isPresented: $showResetOnboardingAlert) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text("Cleared Keychain (userID, userName) and the iCloud KV sidecar. Force-quit HiMem from the app switcher and re-launch to see the permission wizard. iOS permission grants (mic, camera, etc.) are NOT reset — those live in Settings → HiMem.")
                 }
 
                 // MARK: - Scaling test
