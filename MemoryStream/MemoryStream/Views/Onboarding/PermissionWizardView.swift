@@ -1,6 +1,7 @@
 import SwiftUI
 import AuthenticationServices
 import AVFoundation
+import CoreData
 import Photos
 import Speech
 import CoreLocation
@@ -31,6 +32,14 @@ struct PermissionWizardView: View {
     @State private var notifyNudgeOn: Bool = false  // Channel B, locked notif spec default OFF
     @State private var blockedReason: RequiredPermission? = nil
 
+    // Restore flow state — populated on the reinstall path. The
+    // permission cascade is bypassed entirely for returning users
+    // per docs/design spec; we honestly cover the CloudKit catch-up
+    // window with a live count instead of theater.
+    @State private var restoredCount: Int = 0
+    @State private var lastRemoteChangeAt: Date = Date()
+    @State private var remoteChangeObserver: NSObjectProtocol? = nil
+
     var body: some View {
         ZStack {
             Crucible.Color.paper.ignoresSafeArea()
@@ -60,6 +69,16 @@ struct PermissionWizardView: View {
                                             name: auth.userName,
                                             onCaptureFirst: handleLandCaptureFirst,
                                             onLookAround: onComplete)
+                    case .restoring:    ScrReinstallRestore(
+                                            name: auth.userName,
+                                            count: restoredCount,
+                                            onKeepGoing: onComplete)
+                                        .task { await runRestoreStateMachine() }
+                                        .onDisappear { teardownRemoteChangeObserver() }
+                    case .restoreDone:  ScrReinstallRestoreDone(
+                                            finalCount: restoredCount,
+                                            onGo: onComplete)
+                                        .task { await runRestoreDoneAutoAdvance() }
                     }
                 }
                 .transition(.asymmetric(
@@ -156,19 +175,63 @@ struct PermissionWizardView: View {
     // MARK: - Sign in flow
 
     private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        // Capture whether Apple shared fullName THIS sign-in. Apple only
+        // returns fullName on the first sign-in ever for an Apple ID +
+        // bundle ID combination — subsequent sign-ins (including post-
+        // reinstall on the same Apple ID) return fullName=nil. That gives
+        // us a reliable returning-user signal independent of any local
+        // state that uninstall might or might not wipe.
+        let appleSharedName = Self.fullNameProvided(in: result)
         auth.handleSignInResult(result)
-        if auth.isAuthenticated {
+
+        guard auth.isAuthenticated else {
+            if case .failure = result {
+                // User cancelled or sheet errored. Apple sheet can re-show
+                // in place; route to the blocked screen for the warm
+                // "Try again with Apple" CTA rather than a stuck page.
+                withWizardAnim { blockedReason = .apple }
+            }
+            return
+        }
+
+        if appleSharedName {
+            // True first-sign-in to HiMem — Apple just gave us a name to
+            // confirm. Run the full wizard: Name → Mic → Speech → Photos
+            // → Camera → Location → Notifications → Land.
             withWizardAnim {
-                editedName = auth.userName.isEmpty ? "" : auth.userName
+                editedName = auth.userName
                 step = .name
             }
-        } else if case .failure = result {
-            // User cancelled or sheet errored. The Apple sheet can be
-            // re-presented in place; route to the blocked screen so the
-            // user gets the calm "try again" surface rather than a stuck
-            // first page.
-            withWizardAnim { blockedReason = .apple }
+        } else if !auth.userName.isEmpty {
+            // Returning user — Apple won't re-share fullName, but the
+            // iCloud KV sidecar (restored via AuthService.loadStoredCredentials)
+            // already populated userName from a previous install. Skip
+            // the permission cascade entirely per spec; the restore
+            // screen covers the CloudKit catch-up window honestly.
+            Task { await advance(to: .restoring) }
+        } else {
+            // Edge case: Apple didn't share a name AND we have no stored
+            // name (no KV, never used HiMem on this Apple ID — but Apple
+            // returned nil fullName anyway for whatever reason). Treat as
+            // fresh user so they can type a name; the full wizard runs.
+            withWizardAnim {
+                editedName = ""
+                step = .name
+            }
         }
+    }
+
+    /// Returns true if the `ASAuthorization` result contains a non-empty
+    /// fullName.givenName. Used by handleAppleSignIn to distinguish a
+    /// first-ever sign-in from a returning user's re-authentication.
+    private static func fullNameProvided(in result: Result<ASAuthorization, Error>) -> Bool {
+        guard case .success(let authorization) = result,
+              let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let given = credential.fullName?.givenName?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !given.isEmpty
+        else { return false }
+        return true
     }
 
     private func nameComplete() {
@@ -281,7 +344,7 @@ struct PermissionWizardView: View {
             let settings = await UNUserNotificationCenter.current().notificationSettings()
             let hasNudgePref = UserDefaults.standard.object(forKey: NotificationService.Keys.notifyDailyNudge) != nil
             return (settings.authorizationStatus == .authorized && hasNudgePref) ? .land : nil
-        case .apple, .name, .land:
+        case .apple, .name, .land, .restoring, .restoreDone:
             return nil
         }
     }
@@ -295,6 +358,74 @@ struct PermissionWizardView: View {
     private func handleLandCaptureFirst() {
         CaptureRequestBus.shared.pendingVoiceRecord = true
         onComplete()
+    }
+
+    // MARK: - Restore state machine
+    //
+    // Owned by the parent view so the child screens stay pure presentation.
+    // Lifecycle:
+    //   .restoring   - poll CD_JournalEntry count every 250ms, listen for
+    //                  NSPersistentStoreRemoteChange to track last-event-at.
+    //                  When ≥5s elapse with no events: transition to
+    //                  .restoreDone. User tapping "Keep going" calls
+    //                  onComplete directly, bypassing the done screen.
+    //   .restoreDone - briefly displays the final count for ~1.5s, then
+    //                  auto-advances to Today via onComplete.
+
+    private func runRestoreStateMachine() async {
+        installRemoteChangeObserver()
+        lastRemoteChangeAt = Date()
+        let pollInterval: UInt64 = 250_000_000
+        let settleSeconds: TimeInterval = 5.0
+        while !Task.isCancelled, step == .restoring {
+            let count = await fetchEntryCount()
+            await MainActor.run { restoredCount = count }
+            let silentFor = Date().timeIntervalSince(lastRemoteChangeAt)
+            if silentFor > settleSeconds {
+                await MainActor.run {
+                    withWizardAnim { step = .restoreDone }
+                }
+                break
+            }
+            try? await Task.sleep(nanoseconds: pollInterval)
+        }
+        teardownRemoteChangeObserver()
+    }
+
+    private func runRestoreDoneAutoAdvance() async {
+        try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s confirmation beat
+        guard !Task.isCancelled, step == .restoreDone else { return }
+        await MainActor.run { onComplete() }
+    }
+
+    private func installRemoteChangeObserver() {
+        guard remoteChangeObserver == nil else { return }
+        let observer = NotificationCenter.default.addObserver(
+            forName: .NSPersistentStoreRemoteChange,
+            object: nil,
+            queue: nil
+        ) { _ in
+            Task { @MainActor in
+                self.lastRemoteChangeAt = Date()
+            }
+        }
+        remoteChangeObserver = observer
+    }
+
+    private func teardownRemoteChangeObserver() {
+        if let observer = remoteChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            remoteChangeObserver = nil
+        }
+    }
+
+    private func fetchEntryCount() async -> Int {
+        let ctx = StorageService.shared.viewContext
+        return await ctx.perform {
+            let req = NSFetchRequest<NSFetchRequestResult>(entityName: "JournalEntry")
+            req.includesSubentities = false
+            return (try? ctx.count(for: req)) ?? 0
+        }
     }
 
     // MARK: - Blocked flow
@@ -351,8 +482,16 @@ enum WizardStep {
     case location
     case notifications
     case land
+    /// Returning-user-only steps: reinstall on the same Apple ID.
+    /// Bypass the permission cascade per the locked spec — anything
+    /// iOS revoked on uninstall is re-asked in context at first
+    /// capture, not as a fresh wall of 7 pages.
+    case restoring
+    case restoreDone
 
     /// Visible step number on the progress rail (Apple + Name are both step 1).
+    /// Restore screens don't render the progress rail (they have their own
+    /// layout) so the displayed step doesn't apply.
     var displayedStep: Int {
         switch self {
         case .apple, .name: return 1
@@ -363,6 +502,7 @@ enum WizardStep {
         case .location: return 6
         case .notifications: return 7
         case .land: return 7
+        case .restoring, .restoreDone: return 1
         }
     }
 }
@@ -1153,6 +1293,224 @@ private extension BlockedCopy.BlockedFix {
         switch self {
         case .retry: return .white
         case .settings: return Crucible.Color.accentInk
+        }
+    }
+}
+
+// MARK: - Reinstall · Restore from iCloud
+//
+// Shown only on the reinstall path (Apple Sign In returned nil
+// fullName + iCloud KV had a stored userName). The permission cascade
+// is bypassed entirely per the locked spec — anything iOS revoked on
+// uninstall is re-requested in context at first capture, not as a
+// fresh wall of 7 pages. The restore screen honestly covers the
+// CloudKit catch-up window by showing the user the true thing:
+// memories coming back, counted as they land.
+
+/// Restoring state — live count + indeterminate progress bar. Auto-
+/// advances to ScrReinstallRestoreDone when 5s pass with no
+/// `NSPersistentStoreRemoteChange` events; the parent runs that state
+/// machine via `.task { runRestoreStateMachine() }`.
+struct ScrReinstallRestore: View {
+    let name: String
+    let count: Int
+    let onKeepGoing: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Crucible.Color.accentTint)
+                    .frame(width: 64, height: 64)
+                restoreGlyph
+                    .foregroundStyle(Crucible.Color.accent)
+            }
+            .padding(.top, 56)
+
+            (Text("Welcome back, ").foregroundColor(Crucible.Color.ink)
+             + Text(displayName).italic().foregroundColor(Crucible.Color.accent))
+                .font(.system(size: 30, design: .serif))
+                .lineSpacing(2)
+                .padding(.top, 22)
+
+            Text("Bringing your memories back from iCloud. They\u{2019}ll keep arriving even after you go in.")
+                .font(.system(size: 14.5))
+                .foregroundStyle(Crucible.Color.ink2)
+                .lineSpacing(4)
+                .padding(.top, 12)
+                .frame(maxWidth: 280, alignment: .leading)
+
+            // Hero count — the true, reassuring thing.
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("\(count)")
+                        .font(.system(size: 56, design: .serif))
+                        .fontWeight(.regular)
+                        .monospacedDigit()
+                        .foregroundStyle(Crucible.Color.ink)
+                    Text("memories back so far")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
+                IndeterminateBar()
+                    .frame(height: 4)
+                Text("Counting up as they land — on a new device this can take a moment.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .lineSpacing(2)
+            }
+            .padding(.top, 34)
+
+            Spacer(minLength: 0)
+
+            VStack(spacing: 10) {
+                Button(action: onKeepGoing) {
+                    Text("Keep going while it finishes")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(RoundedRectangle(cornerRadius: 15)
+                            .fill(Crucible.Color.accent))
+                        .foregroundStyle(Crucible.Color.accentInk)
+                }
+                Text("The rest keep arriving in the background. Nothing waits on this screen.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .padding(.horizontal, 8)
+            }
+            .padding(.bottom, 28)
+        }
+        .padding(.horizontal, 26)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var displayName: String {
+        name.isEmpty ? "you" : "\(name)."
+    }
+
+    private var restoreGlyph: some View {
+        // Soft cloud + downward return arrow — memories coming home.
+        // Matches the SVG geometry in the spec's RestoreGlyph component.
+        ZStack {
+            Path { p in
+                p.move(to: CGPoint(x: 7, y: 18))
+                p.addCurve(to: CGPoint(x: 6.5, y: 10.03),
+                           control1: CGPoint(x: 4.5, y: 18),
+                           control2: CGPoint(x: 3, y: 13))
+                p.addCurve(to: CGPoint(x: 17.1, y: 8.48),
+                           control1: CGPoint(x: 7.5, y: 5),
+                           control2: CGPoint(x: 15.5, y: 5))
+                p.addCurve(to: CGPoint(x: 17.5, y: 16),
+                           control1: CGPoint(x: 20, y: 10),
+                           control2: CGPoint(x: 21, y: 14))
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1.9, lineCap: .round, lineJoin: .round))
+            Path { p in
+                p.move(to: CGPoint(x: 12, y: 11))
+                p.addLine(to: CGPoint(x: 12, y: 18))
+                p.move(to: CGPoint(x: 9, y: 15))
+                p.addLine(to: CGPoint(x: 12, y: 18))
+                p.addLine(to: CGPoint(x: 15, y: 15))
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1.9, lineCap: .round, lineJoin: .round))
+        }
+        .frame(width: 32, height: 32)
+    }
+}
+
+/// Settled state — restore quieted (no remote-change events for 5s).
+/// Parent auto-advances to Today via `.task { runRestoreDoneAutoAdvance }`
+/// after a brief confirmation beat. The "Go to Himem" button is the
+/// user's manual shortcut for the same advance.
+struct ScrReinstallRestoreDone: View {
+    let finalCount: Int
+    let onGo: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Crucible.Color.confirmedTint)
+                    .frame(width: 64, height: 64)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundStyle(Crucible.Color.confirmed)
+            }
+            .padding(.top, 56)
+
+            Text("That\u{2019}s everything.")
+                .font(.system(size: 30, design: .serif))
+                .fontWeight(.regular)
+                .lineSpacing(2)
+                .foregroundStyle(Crucible.Color.ink)
+                .padding(.top, 22)
+
+            Text("Your Memory Box is whole again. Picking up right where you left off.")
+                .font(.system(size: 14.5))
+                .foregroundStyle(Crucible.Color.ink2)
+                .lineSpacing(4)
+                .padding(.top, 12)
+                .frame(maxWidth: 280, alignment: .leading)
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("\(finalCount)")
+                    .font(.system(size: 56, design: .serif))
+                    .fontWeight(.regular)
+                    .monospacedDigit()
+                    .foregroundStyle(Crucible.Color.ink)
+                Text("memories restored")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Crucible.Color.ink2)
+            }
+            .padding(.top, 34)
+
+            Spacer(minLength: 0)
+
+            VStack(spacing: 10) {
+                Button(action: onGo) {
+                    Text("Go to Himem")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(RoundedRectangle(cornerRadius: 15)
+                            .fill(Crucible.Color.accent))
+                        .foregroundStyle(Crucible.Color.accentInk)
+                }
+                Text("Taking you in\u{2026}")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.bottom, 28)
+        }
+        .padding(.horizontal, 26)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// Indeterminate-progress bar — slides a fixed-width capsule across the
+/// track on infinite repeat. No percent, no fake countdown. Matches the
+/// spec's `wrBar` keyframe animation.
+private struct IndeterminateBar: View {
+    @State private var phase: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Crucible.Color.sunk)
+                Capsule()
+                    .fill(Crucible.Color.accent)
+                    .frame(width: geo.size.width * 0.32)
+                    .offset(x: geo.size.width * phase)
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                    phase = 1.0
+                }
+            }
         }
     }
 }
