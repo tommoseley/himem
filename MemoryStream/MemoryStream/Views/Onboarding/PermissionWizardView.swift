@@ -37,8 +37,13 @@ struct PermissionWizardView: View {
     // per docs/design spec; we honestly cover the CloudKit catch-up
     // window with a live count instead of theater.
     @State private var restoredCount: Int = 0
-    @State private var lastRemoteChangeAt: Date = Date()
-    @State private var remoteChangeObserver: NSObjectProtocol? = nil
+    @State private var lastImportEventAt: Date = Date()
+    /// In-flight `.import` event identifiers (start emitted with
+    /// endDate=nil, end emitted with endDate set). When this set
+    /// is empty AND silence-since-last-event exceeds the settle
+    /// threshold, the restore is considered complete.
+    @State private var activeImportIDs: Set<UUID> = []
+    @State private var cloudKitEventObserver: NSObjectProtocol? = nil
 
     var body: some View {
         ZStack {
@@ -74,7 +79,7 @@ struct PermissionWizardView: View {
                                             count: restoredCount,
                                             onKeepGoing: onComplete)
                                         .task { await runRestoreStateMachine() }
-                                        .onDisappear { teardownRemoteChangeObserver() }
+                                        .onDisappear { teardownCloudKitEventObserver() }
                     case .restoreDone:  ScrReinstallRestoreDone(
                                             finalCount: restoredCount,
                                             onGo: onComplete)
@@ -362,34 +367,55 @@ struct PermissionWizardView: View {
 
     // MARK: - Restore state machine
     //
-    // Owned by the parent view so the child screens stay pure presentation.
+    // Owned by the parent view so the child screens stay pure
+    // presentation. Detection uses NSPersistentCloudKitContainer's
+    // .import events directly (start + end notifications) instead of
+    // inferring from NSPersistentStoreRemoteChange silence: the
+    // silence heuristic fired too early during natural pauses between
+    // batches (e.g. Topic records → JournalEntry → relationship
+    // records arrive in waves with multi-second gaps).
+    //
     // Lifecycle:
-    //   .restoring   - poll CD_JournalEntry count every 250ms, listen for
-    //                  NSPersistentStoreRemoteChange to track last-event-at.
-    //                  When ≥5s elapse with no events: transition to
-    //                  .restoreDone. User tapping "Keep going" calls
-    //                  onComplete directly, bypassing the done screen.
+    //   .restoring   - poll CD_JournalEntry count every 250ms while
+    //                  observing CK import events. "Settled" requires
+    //                  BOTH: no in-flight imports AND no import events
+    //                  for `settleSilenceSeconds`. Absolute ceiling of
+    //                  `maxWaitSeconds` so we never hang forever.
     //   .restoreDone - briefly displays the final count for ~1.5s, then
     //                  auto-advances to Today via onComplete.
 
     private func runRestoreStateMachine() async {
-        installRemoteChangeObserver()
-        lastRemoteChangeAt = Date()
-        let pollInterval: UInt64 = 250_000_000
-        let settleSeconds: TimeInterval = 5.0
+        installCloudKitEventObserver()
+        lastImportEventAt = Date()
+        let pollInterval: UInt64 = 250_000_000   // 0.25s
+        let settleSilenceSeconds: TimeInterval = 10.0
+        let maxWaitSeconds: TimeInterval = 120.0
+        let startedAt = Date()
+
         while !Task.isCancelled, step == .restoring {
             let count = await fetchEntryCount()
             await MainActor.run { restoredCount = count }
-            let silentFor = Date().timeIntervalSince(lastRemoteChangeAt)
-            if silentFor > settleSeconds {
+
+            let totalElapsed = Date().timeIntervalSince(startedAt)
+            if totalElapsed > maxWaitSeconds {
                 await MainActor.run {
                     withWizardAnim { step = .restoreDone }
                 }
                 break
             }
+
+            let noActiveImports = activeImportIDs.isEmpty
+            let silentFor = Date().timeIntervalSince(lastImportEventAt)
+            if noActiveImports && silentFor > settleSilenceSeconds {
+                await MainActor.run {
+                    withWizardAnim { step = .restoreDone }
+                }
+                break
+            }
+
             try? await Task.sleep(nanoseconds: pollInterval)
         }
-        teardownRemoteChangeObserver()
+        teardownCloudKitEventObserver()
     }
 
     private func runRestoreDoneAutoAdvance() async {
@@ -398,24 +424,35 @@ struct PermissionWizardView: View {
         await MainActor.run { onComplete() }
     }
 
-    private func installRemoteChangeObserver() {
-        guard remoteChangeObserver == nil else { return }
+    private func installCloudKitEventObserver() {
+        guard cloudKitEventObserver == nil else { return }
         let observer = NotificationCenter.default.addObserver(
-            forName: .NSPersistentStoreRemoteChange,
+            forName: NSPersistentCloudKitContainer.eventChangedNotification,
             object: nil,
             queue: nil
-        ) { _ in
+        ) { note in
+            guard let event = note.userInfo?[
+                NSPersistentCloudKitContainer.eventNotificationUserInfoKey
+            ] as? NSPersistentCloudKitContainer.Event else { return }
+            guard event.type == .import else { return }
+            let id = event.identifier
+            let isStarted = event.endDate == nil
             Task { @MainActor in
-                self.lastRemoteChangeAt = Date()
+                self.lastImportEventAt = Date()
+                if isStarted {
+                    self.activeImportIDs.insert(id)
+                } else {
+                    self.activeImportIDs.remove(id)
+                }
             }
         }
-        remoteChangeObserver = observer
+        cloudKitEventObserver = observer
     }
 
-    private func teardownRemoteChangeObserver() {
-        if let observer = remoteChangeObserver {
+    private func teardownCloudKitEventObserver() {
+        if let observer = cloudKitEventObserver {
             NotificationCenter.default.removeObserver(observer)
-            remoteChangeObserver = nil
+            cloudKitEventObserver = nil
         }
     }
 
