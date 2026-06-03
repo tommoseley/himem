@@ -763,8 +763,11 @@ struct ScrW1Apple: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            WizardTopBar(step: 1, skippable: false, showBack: false, onBack: nil, onSkip: nil)
-
+            // No WizardTopBar on the entry page — the "N of 7" progress
+            // rail makes a hard promise about flow length before we know
+            // whether the user is heading down the 7-step fresh-user path
+            // or the 2-step reinstall restore. The counter starts on
+            // ScrW1Name (fresh user) where the 7-step flow is committed.
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
                     Text("Hi")
@@ -776,7 +779,9 @@ struct ScrW1Apple: View {
                         .italic()
                         .foregroundStyle(Crucible.Color.accent)
                 }
-                .padding(.top, 48)
+                .padding(.top, 80) // ~48 + ~32 to preserve the wordmark's
+                                   // approximate Y-position without the
+                                   // (removed) top bar.
 
                 Text("A quiet place for the thoughts you don\u{2019}t want to lose.")
                     .font(.system(size: 21, design: .serif))
