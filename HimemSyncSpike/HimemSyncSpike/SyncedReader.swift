@@ -20,15 +20,11 @@ struct JournalEntrySnapshot: Identifiable, Hashable {
 /// care about is FIRST launch (no persisted state) — that's what's analogous
 /// to HiMem's NSPersistentCloudKitContainer first-launch behavior.
 @MainActor
-final class SyncedReader: NSObject, ObservableObject, CKSyncEngineDelegate {
+final class SyncedReader: ObservableObject, CKSyncEngineDelegate {
     @Published private(set) var entries: [JournalEntrySnapshot] = []
     @Published private(set) var status: String = "Initializing…"
 
     private let containerID = "iCloud.com.himem.app"
-    private let coreDataZoneID = CKRecordZone.ID(
-        zoneName: "com.apple.coredata.cloudkit.zone",
-        ownerName: CKCurrentUserDefaultName
-    )
 
     private let stateURL: URL = {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -39,8 +35,7 @@ final class SyncedReader: NSObject, ObservableObject, CKSyncEngineDelegate {
     private var hasEmittedFirstRecordSignpost = false
     private var hasEmittedFirstEventSignpost = false
 
-    override init() {
-        super.init()
+    init() {
         SpikeSignposter.interval("spike.reader.init") {
             createEngine()
         }
