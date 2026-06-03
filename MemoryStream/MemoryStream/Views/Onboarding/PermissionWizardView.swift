@@ -812,11 +812,20 @@ struct ScrWLand: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            (Text("You\u{2019}re all set, ").foregroundColor(Crucible.Color.ink)
-             + Text("\(name.isEmpty ? "" : name).").italic().foregroundColor(Crucible.Color.accent))
-                .font(.system(size: 29, design: .serif))
-                .lineSpacing(2)
-                .padding(.top, 60)
+            // Empty name → "You're all set." (no comma, no stray period).
+            // Filled name → "You're all set, Tom." (italic + ochre on name).
+            Group {
+                if name.isEmpty {
+                    Text("You\u{2019}re all set.")
+                        .foregroundColor(Crucible.Color.ink)
+                } else {
+                    Text("You\u{2019}re all set, ").foregroundColor(Crucible.Color.ink)
+                    + Text("\(name).").italic().foregroundColor(Crucible.Color.accent)
+                }
+            }
+            .font(.system(size: 29, design: .serif))
+            .lineSpacing(2)
+            .padding(.top, 60)
 
             Text("Your bin is empty — which is exactly right. The best first capture is the one closest to your tongue right now.")
                 .font(.system(size: 14.5))

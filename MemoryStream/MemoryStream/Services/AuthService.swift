@@ -99,25 +99,36 @@ final class AuthService: ObservableObject {
 
             // Apple only provides the name on FIRST sign-in. Subsequent
             // sign-ins return fullName=nil even for the same user — by
-            // design, privacy-protective. The iCloud KV sidecar (see
-            // `setUserName`) survives uninstall+reinstall on the same
-            // Apple ID so reinstalls don't lose the name.
+            // design, privacy-protective. Apple's "first" determination
+            // is per-Apple-ID + per-bundle-ID, not per-install: even
+            // after Keychain wipe, Apple won't re-share the name unless
+            // the user explicitly stops using Apple ID for HiMem in
+            // iOS Settings. The iCloud KV sidecar (see `setUserName`)
+            // covers most reinstall cases so the name still pre-fills.
+            //
+            // When neither Apple, Keychain, nor the KV sidecar has a
+            // name, leave userName empty. The wizard's Page 1b shows
+            // an empty editable field with placeholder copy; the user
+            // types their preferred name and Continue commits it via
+            // setUserName. NEVER store "there" as the userName — that
+            // string is a display-time greeting fallback only, used by
+            // LaunchScreenView.greeting when name.isEmpty.
             if let fullName = credential.fullName {
-                let first = fullName.givenName ?? ""
-                let name = first.isEmpty ? "there" : first
-                setUserName(name)
+                let first = (fullName.givenName ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !first.isEmpty {
+                    setUserName(first)
+                }
             } else if userName.isEmpty {
-                // Returning user, no name in @Published yet — try
-                // Keychain, then KV sidecar, then fall back.
                 if let stored = keychain.retrieve(key: userNameKey),
-                   !stored.isEmpty {
+                   !stored.isEmpty, stored != "there" {
                     userName = stored
                 } else if let kvName = kvStore.string(forKey: kvUserNameKey),
                           !kvName.isEmpty {
                     setUserName(kvName)
-                } else {
-                    userName = "there"
                 }
+                // If we got here, no name source had anything. userName
+                // stays empty; the wizard's name step handles that case.
             }
 
             isAuthenticated = true
