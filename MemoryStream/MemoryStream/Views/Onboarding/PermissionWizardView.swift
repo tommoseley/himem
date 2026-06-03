@@ -56,7 +56,10 @@ struct PermissionWizardView: View {
                                             onBack: { withWizardAnim { step = .location } },
                                             onSkip: { withWizardAnim { step = .land } },
                                             onContinue: handleNotifications)
-                    case .land:         ScrWLand(name: auth.userName, onEnter: onComplete)
+                    case .land:         ScrWLand(
+                                            name: auth.userName,
+                                            onCaptureFirst: handleLandCaptureFirst,
+                                            onLookAround: onComplete)
                     }
                 }
                 .transition(.asymmetric(
@@ -230,6 +233,17 @@ struct PermissionWizardView: View {
         // Persist Channel B preference; Channel A is implicit.
         UserDefaults.standard.set(notifyNudgeOn, forKey: NotificationService.Keys.notifyDailyNudge)
         withWizardAnim { step = .land }
+    }
+
+    /// Wired to the Land screen's primary "Capture your first memory"
+    /// CTA. Sets CaptureRequestBus.pendingVoiceRecord BEFORE dismissing
+    /// the wizard so the JournalView's onAppear (which checks the bus)
+    /// auto-opens the voice composer the moment it mounts. Net effect:
+    /// the user's first tap after onboarding lands them already
+    /// recording, matching the spec note "capture is the invitation."
+    private func handleLandCaptureFirst() {
+        CaptureRequestBus.shared.pendingVoiceRecord = true
+        onComplete()
     }
 
     // MARK: - Blocked flow
@@ -806,14 +820,22 @@ struct ScrW7Notifications: View {
 
 // MARK: - Land
 
+/// Spec update 2026-06-03: action-first footer. Replaces the earlier
+/// FAB-hint+text-link footer with a two-button stack — ochre primary
+/// "Capture your first memory" (wires to CaptureRequestBus so the
+/// voice composer auto-opens in JournalView) and outlined secondary
+/// "Later — let me look around" (just dismisses the wizard to the
+/// empty Today). The body copy + prompt-card eyebrow also shifted.
 struct ScrWLand: View {
     let name: String
-    let onEnter: () -> Void
+    let onCaptureFirst: () -> Void
+    let onLookAround: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Empty name → "You're all set." (no comma, no stray period).
-            // Filled name → "You're all set, Tom." (italic + ochre on name).
+            // Empty name → "You're all set." (no trailing comma + bare
+            // period). Filled name → "You're all set, Tom." with italic
+            // ochre on the name.
             Group {
                 if name.isEmpty {
                     Text("You\u{2019}re all set.")
@@ -823,31 +845,30 @@ struct ScrWLand: View {
                     + Text("\(name).").italic().foregroundColor(Crucible.Color.accent)
                 }
             }
-            .font(.system(size: 29, design: .serif))
+            .font(.system(size: 30, design: .serif))
             .lineSpacing(2)
-            .padding(.top, 60)
+            .padding(.top, 58)
 
-            Text("Your bin is empty — which is exactly right. The best first capture is the one closest to your tongue right now.")
+            Text("Himem works best when capture is easy. Start with the thought closest to your tongue — or look around first.")
                 .font(.system(size: 14.5))
                 .foregroundStyle(Crucible.Color.ink2)
                 .lineSpacing(4)
                 .padding(.top, 12)
                 .frame(maxWidth: 280, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 7) {
-                Text("A SMALL PROMPT")
+            VStack(alignment: .leading, spacing: 9) {
+                Text("TO GET YOU GOING")
                     .font(.system(size: 10, weight: .bold))
                     .tracking(1.3)
                     .foregroundStyle(Crucible.Color.ink3)
                 Text("\u{201C}What\u{2019}s something you don\u{2019}t want to forget today?\u{201D}")
-                    .font(.system(size: 16, design: .serif))
+                    .font(.system(size: 18, design: .serif))
                     .italic()
                     .foregroundStyle(Crucible.Color.ink)
                     .lineSpacing(3)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 16)
-            .padding(.horizontal, 18)
+            .padding(18)
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Crucible.Color.card)
@@ -856,14 +877,43 @@ struct ScrWLand: View {
                             .stroke(Crucible.Color.hairline, lineWidth: 1)
                     )
             )
-            .padding(.top, 28)
+            .padding(.top, 26)
 
             Spacer(minLength: 0)
 
-            Button("Later — let me look around", action: onEnter)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Crucible.Color.ink2)
-                .padding(.bottom, 26)
+            // Action-first footer. Primary: ochre fill + mic + shadow.
+            // Secondary: hairline-outlined transparent. Stacked, 12pt gap.
+            VStack(spacing: 12) {
+                Button(action: onCaptureFirst) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 19, weight: .semibold))
+                        Text("Capture your first memory")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(Crucible.Color.accent)
+                    )
+                    .foregroundStyle(Crucible.Color.accentInk)
+                    .shadow(color: Crucible.Color.accent.opacity(0.28), radius: 12, x: 0, y: 8)
+                }
+
+                Button(action: onLookAround) {
+                    Text("Later — let me look around")
+                        .font(.system(size: 15, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            RoundedRectangle(cornerRadius: 15)
+                                .stroke(Crucible.Color.hairline, lineWidth: 1)
+                        )
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
+            }
+            .padding(.bottom, 28)
         }
         .padding(.horizontal, 26)
         .frame(maxWidth: .infinity)
