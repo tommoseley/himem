@@ -159,7 +159,11 @@ struct MemoryStreamApp: App {
     @ObservedObject private var auth = AuthService.shared
     @State private var splashComplete = false
     @State private var storageReady = false
-    @State private var onboardingComplete = false
+    /// Initialized at App-struct creation from `AuthService.shared
+    /// .hasCompletedOnboarding`. True for returning users (Keychain
+    /// holds their Apple userID), false for fresh installs. The
+    /// PermissionWizardView flips it to true on completion.
+    @State private var onboardingComplete: Bool = AuthService.shared.hasCompletedOnboarding
     @Environment(\.scenePhase) private var scenePhase
     /// User's appearance choice. Drives the root
     /// `.preferredColorScheme(...)` modifier below; default is
@@ -204,6 +208,22 @@ struct MemoryStreamApp: App {
         // fires before WindowGroup body evaluation. Net effect was a
         // 2-3s sync loadPersistentStores on the main thread during
         // every cold launch. See feedback_cold_launch_target memory.
+        // Pre-warm StorageService.shared on a detached userInitiated task
+        // so CloudKit's per-zone setup (~17-21s on Tom's dev container —
+        // see docs/architecture/cloudkit-cold-launch-investigation.md)
+        // starts as early as possible. Without this prewarm the storage
+        // load doesn't begin until LaunchScreenView.onAppear's +0.1s
+        // background dispatch, which is ~1.5s later. Every ms helps
+        // when the wizard's pacing is the cover for CK's setup window.
+        //
+        // Safe in tests: Task.detached doesn't block App.init's return,
+        // so XCTest's host-app-ready handshake completes normally. Tests
+        // use their own StorageService(inMemory:) instance; the lazy
+        // static `.shared` instance loading in the background doesn't
+        // collide with their fixtures.
+        Task.detached(priority: .userInitiated) {
+            _ = StorageService.shared
+        }
         // Pre-warm the en-US SpeechTranscriber model so the first watch
         // clip transcription isn't a blocking download. Best-effort —
         // logs and moves on if the install fails (no network, etc.); the
@@ -227,25 +247,30 @@ struct MemoryStreamApp: App {
                         .environmentObject(QuickActionState.shared)
                 }
 
+                // Splash always runs — does storage warm + post-storage
+                // bootstrap. For returning users it's the visible launch
+                // surface. For fresh installs it runs invisibly under
+                // the wizard, draining storage + bootstrap work while
+                // the user moves through permissions. `onboardingComplete`
+                // is no longer set by the splash callbacks; the wizard
+                // owns that flip exclusively.
                 if !splashComplete {
-                    LaunchScreenView(onStorageReady: {
-                        storageReady = true
-                        // Check if onboarding was already completed
-                        if auth.hasCompletedOnboarding {
-                            onboardingComplete = true
-                        }
-                    }, onComplete: {
-                        splashComplete = true
-                        // Show onboarding if needed, otherwise go to feed
-                        if auth.hasCompletedOnboarding {
-                            onboardingComplete = true
-                        }
-                    })
+                    LaunchScreenView(
+                        onStorageReady: { storageReady = true },
+                        onComplete:     { splashComplete = true }
+                    )
                 }
 
-                // Onboarding — shown after splash if user hasn't signed in
-                if splashComplete && !onboardingComplete {
-                    OnboardingView {
+                // Permission wizard — overlays everything for fresh
+                // installs. Runs immediately (no splash gate) so the
+                // ~17-21s CloudKit setup happens during the user's
+                // natural pace through 7 permission pages. See
+                // docs/architecture/cloudkit-cold-launch-investigation.md
+                // for why the pacing is the cover. Returning users have
+                // onboardingComplete=true at App-struct creation, so
+                // this branch is dead for them.
+                if !onboardingComplete {
+                    PermissionWizardView {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             onboardingComplete = true
                         }

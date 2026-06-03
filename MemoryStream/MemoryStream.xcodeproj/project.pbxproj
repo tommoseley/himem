@@ -59,6 +59,7 @@
 		A100000071 /* EpigraphService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000071 /* EpigraphService.swift */; };
 		A100000072 /* epigraphs.json in Resources */ = {isa = PBXBuildFile; fileRef = B100000072 /* epigraphs.json */; };
 		A100000080 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000080 /* OnboardingView.swift */; };
+		A100000780 /* PermissionWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000780 /* PermissionWizardView.swift */; };
 		A100000081 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000081 /* AuthService.swift */; };
 		A100000090 /* ScopeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000090 /* ScopeParser.swift */; };
 		A100000091 /* VoiceIntentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000091 /* VoiceIntentParser.swift */; };
@@ -288,6 +289,7 @@
 		B100000071 /* EpigraphService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpigraphService.swift; sourceTree = "<group>"; };
 		B100000072 /* epigraphs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = epigraphs.json; sourceTree = "<group>"; };
 		B100000080 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		B100000780 /* PermissionWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionWizardView.swift; sourceTree = "<group>"; };
 		B100000081 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		B100000090 /* ScopeParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopeParser.swift; sourceTree = "<group>"; };
 		B100000091 /* VoiceIntentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceIntentParser.swift; sourceTree = "<group>"; };
@@ -760,6 +762,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000080 /* OnboardingView.swift */,
+				B100000780 /* PermissionWizardView.swift */,
 			);
 			path = Onboarding;
 			sourceTree = "<group>";
@@ -1314,6 +1317,7 @@
 				A100000070 /* LaunchScreenView.swift in Sources */,
 				A100000071 /* EpigraphService.swift in Sources */,
 				A100000080 /* OnboardingView.swift in Sources */,
+				A100000780 /* PermissionWizardView.swift in Sources */,
 				A100000081 /* AuthService.swift in Sources */,
 				A100000090 /* ScopeParser.swift in Sources */,
 				A100000091 /* VoiceIntentParser.swift in Sources */,
