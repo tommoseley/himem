@@ -37,6 +37,9 @@ struct SettingsView: View {
     @State private var showSupporter = false
     #if DEBUG
     @State private var showDebugPricing = false
+    @State private var scaleSeedProgress: (current: Int, total: Int)? = nil
+    @State private var scaleStatusMessage: String? = nil
+    @State private var scaleWorking: Bool = false
     #endif
 
     var body: some View {
@@ -338,6 +341,44 @@ struct SettingsView: View {
                 } footer: {
                     Text("Developer-only. Compiled out of Release builds — App Store users never see this section.")
                 }
+
+                // MARK: - Scaling test
+                Section {
+                    Button("Seed 100 test entries") {
+                        Task { await seedScalingTestData(count: 100) }
+                    }
+                    .disabled(scaleWorking)
+                    Button("Seed 1,000 test entries") {
+                        Task { await seedScalingTestData(count: 1000) }
+                    }
+                    .disabled(scaleWorking)
+                    Button("Seed 10,000 test entries") {
+                        Task { await seedScalingTestData(count: 10000) }
+                    }
+                    .disabled(scaleWorking)
+                    Button(role: .destructive) {
+                        Task { await deleteScalingTestData() }
+                    } label: {
+                        Text("Delete test entries")
+                    }
+                    .disabled(scaleWorking)
+                    if let progress = scaleSeedProgress {
+                        HStack(spacing: 8) {
+                            ProgressView(value: Double(progress.current), total: Double(progress.total))
+                            Text("\(progress.current) / \(progress.total)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if let message = scaleStatusMessage {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Scaling test")
+                } footer: {
+                    Text("Seeds JournalEntry records identified by title prefix 'Scale-test #'. After seeding, allow time for CloudKit to mirror to iCloud before cold-launch measurement. Delete is filtered to the same prefix and won't touch real memories.")
+                }
                 #endif
             }
             .navigationTitle("Settings")
@@ -588,6 +629,90 @@ struct SettingsView: View {
             return "\(base) · override"
         }
         return base
+    }
+
+    // MARK: - Scaling test (DEBUG only)
+
+    /// Seeds N JournalEntry records onto a background context so the cold-
+    /// launch CloudKit-import question — is the post-load gap O(1) or
+    /// O(n) — can be answered empirically. Each entry is minimal (just
+    /// the required fields) so we measure CloudKit sync overhead per
+    /// record, not per-relationship fan-out.
+    @MainActor
+    private func seedScalingTestData(count: Int) async {
+        scaleWorking = true
+        scaleSeedProgress = (0, count)
+        scaleStatusMessage = nil
+        await Self.seed(count: count) { current in
+            Task { @MainActor in
+                scaleSeedProgress = (current, count)
+            }
+        }
+        scaleSeedProgress = nil
+        scaleStatusMessage = "Seeded \(count). Wait for CloudKit sync (could be minutes for 10k) then cold-launch."
+        scaleWorking = false
+    }
+
+    /// Deletes every JournalEntry whose title starts with "Scale-test #".
+    /// Real memories cannot match this predicate unless the user
+    /// deliberately titled one that way, in which case they earned it.
+    @MainActor
+    private func deleteScalingTestData() async {
+        scaleWorking = true
+        scaleStatusMessage = "Deleting test entries…"
+        let deleted = await Self.deleteTestEntries()
+        scaleStatusMessage = "Deleted \(deleted) test entries."
+        scaleWorking = false
+    }
+
+    private static func seed(count: Int, onProgress: @escaping (Int) -> Void) async {
+        let bg = StorageService.shared.backgroundContext()
+        await bg.perform {
+            let chunkSize = 200
+            var created = 0
+            for chunkStart in stride(from: 0, to: count, by: chunkSize) {
+                let chunkEnd = min(chunkStart + chunkSize, count)
+                for i in chunkStart..<chunkEnd {
+                    let entry = JournalEntry(context: bg)
+                    entry.id = UUID()
+                    entry.title = "Scale-test #\(i + 1)"
+                    entry.content = "Auto-generated test data entry \(i + 1)."
+                    entry.inputType = "typed"
+                    entry.createdAt = Date().addingTimeInterval(-TimeInterval(i * 60))
+                    entry.isRecycled = false
+                    entry.titleSourcedFromAI = false
+                    created += 1
+                }
+                do {
+                    try bg.save()
+                } catch {
+                    NSLog("[ScalingTest] Save failed at \(created): \(error.localizedDescription)")
+                    return
+                }
+                bg.reset() // drop materialized objects between batches so we don't balloon memory on 10k runs
+                onProgress(created)
+            }
+        }
+    }
+
+    private static func deleteTestEntries() async -> Int {
+        let bg = StorageService.shared.backgroundContext()
+        return await bg.perform {
+            let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+            req.predicate = NSPredicate(format: "title BEGINSWITH %@", "Scale-test #")
+            do {
+                let entries = try bg.fetch(req)
+                let count = entries.count
+                for entry in entries {
+                    bg.delete(entry)
+                }
+                try bg.save()
+                return count
+            } catch {
+                NSLog("[ScalingTest] Delete failed: \(error.localizedDescription)")
+                return 0
+            }
+        }
     }
     #endif
 }
