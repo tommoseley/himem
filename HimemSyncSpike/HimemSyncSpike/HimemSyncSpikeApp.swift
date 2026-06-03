@@ -14,12 +14,14 @@ struct HimemSyncSpikeApp: App {
     @StateObject private var reader: SyncedReader
 
     init() {
-        let state = SpikeSignposter.signposter.beginInterval(
-            "spike.app.init",
-            id: SpikeSignposter.signposter.makeSignpostID()
-        )
-        defer { SpikeSignposter.signposter.endInterval("spike.app.init", state) }
-        _reader = StateObject(wrappedValue: SyncedReader())
+        // Wrap SyncedReader construction in the spike.app.init signpost.
+        // Using the SpikeSignposter.interval(...) helper instead of the
+        // raw OSSignposter API so this file doesn't need to import `os`
+        // — Swift 6's MemberImportVisibility upcoming feature requires
+        // direct imports for APIs whose types are touched at call sites.
+        _reader = SpikeSignposter.interval("spike.app.init") {
+            StateObject(wrappedValue: SyncedReader())
+        }
     }
 
     var body: some Scene {
