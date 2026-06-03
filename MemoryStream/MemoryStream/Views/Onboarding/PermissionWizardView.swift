@@ -179,7 +179,7 @@ struct PermissionWizardView: View {
             // The KV write is what survives uninstall+reinstall.
             auth.setUserName(trimmed)
         }
-        withWizardAnim { step = .mic }
+        Task { await advance(to: .mic) }
     }
 
     // MARK: - Permission handlers
@@ -187,7 +187,7 @@ struct PermissionWizardView: View {
     private func handleMic() async {
         let granted = await AVAudioApplication.requestRecordPermission()
         if granted {
-            withWizardAnim { step = .speech }
+            await advance(to: .speech)
         } else {
             withWizardAnim { blockedReason = .mic }
         }
@@ -198,7 +198,7 @@ struct PermissionWizardView: View {
             SFSpeechRecognizer.requestAuthorization { status in cont.resume(returning: status) }
         }
         if status == .authorized {
-            withWizardAnim { step = .photos }
+            await advance(to: .photos)
         } else {
             withWizardAnim { blockedReason = .speech }
         }
@@ -207,12 +207,12 @@ struct PermissionWizardView: View {
     private func handlePhotos() async {
         _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         // Optional permission — advance regardless of grant.
-        withWizardAnim { step = .camera }
+        await advance(to: .camera)
     }
 
     private func handleCamera() async {
         _ = await AVCaptureDevice.requestAccess(for: .video)
-        withWizardAnim { step = .location }
+        await advance(to: .location)
     }
 
     private func handleLocation() async {
@@ -222,7 +222,7 @@ struct PermissionWizardView: View {
             CLLocationManager().requestWhenInUseAuthorization()
         }
         try? await Task.sleep(nanoseconds: 200_000_000) // brief beat so the user sees the dialog before the transition
-        withWizardAnim { step = .notifications }
+        await advance(to: .notifications)
     }
 
     private func handleNotifications() async {
@@ -232,7 +232,58 @@ struct PermissionWizardView: View {
         }
         // Persist Channel B preference; Channel A is implicit.
         UserDefaults.standard.set(notifyNudgeOn, forKey: NotificationService.Keys.notifyDailyNudge)
-        withWizardAnim { step = .land }
+        await advance(to: .land)
+    }
+
+    // MARK: - Auto-skip helper
+    //
+    // Forward-only transitions route through `advance(to:)` which
+    // recursively skips any permission step that's already granted —
+    // on reinstall iOS keeps mic/speech/photos/camera/location/
+    // notification grants, so re-asking them is empty friction.
+    // Back navigation and skip-tap navigation should set `step`
+    // directly so the user can still review earlier pages on demand.
+
+    /// Async transition that recursively skips already-granted steps.
+    /// Lands on the first step that genuinely needs user action, or
+    /// `.land` if all permissions on the way are already granted.
+    private func advance(to nextStep: WizardStep) async {
+        var current = nextStep
+        while let skipped = await stepIfShouldSkip(current) {
+            current = skipped
+        }
+        await MainActor.run {
+            withWizardAnim { step = current }
+        }
+    }
+
+    /// Returns the next step if `current` should be skipped (permission
+    /// already granted), or nil if `current` is the right step to land
+    /// on. Notifications is special-cased: skip only when iOS auth is
+    /// granted AND the user previously set the Channel B (inactivity
+    /// nudge) preference, since the page is the only surface that
+    /// captures Channel B opt-in.
+    private func stepIfShouldSkip(_ current: WizardStep) async -> WizardStep? {
+        switch current {
+        case .mic:
+            return AVAudioApplication.shared.recordPermission == .granted ? .speech : nil
+        case .speech:
+            return SFSpeechRecognizer.authorizationStatus() == .authorized ? .photos : nil
+        case .photos:
+            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            return (status == .authorized || status == .limited) ? .camera : nil
+        case .camera:
+            return AVCaptureDevice.authorizationStatus(for: .video) == .authorized ? .location : nil
+        case .location:
+            let status = CLLocationManager().authorizationStatus
+            return (status == .authorizedWhenInUse || status == .authorizedAlways) ? .notifications : nil
+        case .notifications:
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            let hasNudgePref = UserDefaults.standard.object(forKey: NotificationService.Keys.notifyDailyNudge) != nil
+            return (settings.authorizationStatus == .authorized && hasNudgePref) ? .land : nil
+        case .apple, .name, .land:
+            return nil
+        }
     }
 
     /// Wired to the Land screen's primary "Capture your first memory"
