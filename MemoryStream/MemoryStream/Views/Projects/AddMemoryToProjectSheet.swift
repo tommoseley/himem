@@ -28,7 +28,6 @@ struct AddMemoryToProjectSheet: View {
     @State private var pendingAdds: Set<UUID> = []
     @State private var pendingRemoves: Set<UUID> = []
     @State private var projectTopicSlugs: Set<String> = []
-    @State private var otherProjectMemberships: [UUID: [String]] = [:]
 
     private let storage = StorageService.shared
 
@@ -114,76 +113,76 @@ struct AddMemoryToProjectSheet: View {
                 } else {
                     ForEach(filteredEntries) { entry in
                         memoryRow(entry: entry)
-                        Divider().padding(.leading, 16)
                     }
                 }
             }
         }
     }
 
+    // Concise selection row per Memories list spec §2. Selection = ring
+    // with an inner dot (NOT a check — completion vs selection per
+    // Crucible). Serif title, time line, media glyphs on the right.
     private func memoryRow(entry: EntryDisplayModel) -> some View {
         let isMember = effectiveMembership(for: entry.id)
-        let otherProjects = otherProjectMemberships[entry.id]?.filter { $0 != currentProjectName } ?? []
         return Button {
             toggleMembership(entry: entry)
         } label: {
-            HStack(alignment: .top, spacing: 12) {
-                // Crucible: selection = ring; the check appears
-                // *inside* the filled ring to mark "yes, this row
-                // is the answer." Bare `checkmark.circle.fill`
-                // alone is the violation called out in the
-                // Projects MVP spec (Bugs fixed by this design).
-                ZStack {
-                    Circle()
-                        .strokeBorder(
-                            isMember ? Crucible.Color.accent : Crucible.Color.ink4,
-                            lineWidth: 1.5
-                        )
-                        .background(
-                            Circle()
-                                .fill(isMember ? Crucible.Color.accent : Color.clear)
-                        )
-                        .frame(width: 22, height: 22)
-                    if isMember {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 12) {
+                selectionRing(selected: isMember)
+
+                VStack(alignment: .leading, spacing: 2) {
                     Text(entry.displayTitle)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(size: 14.5, weight: .medium, design: .serif))
+                        .tracking(-0.15)
                         .foregroundStyle(Crucible.Color.ink)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    HStack(spacing: 6) {
-                        Text(entry.timeString)
-                            .font(.caption)
-                            .foregroundStyle(Crucible.Color.ink3)
-                        if !otherProjects.isEmpty {
-                            Text("·")
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink4)
-                            Text("In \(otherProjects.count) other project\(otherProjects.count == 1 ? "" : "s")")
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink3)
-                        }
-                    }
-                    if !entry.topicNames.isEmpty {
-                        Text(entry.topicNames.joined(separator: " · "))
-                            .font(.caption2)
-                            .foregroundStyle(Crucible.Color.ink4)
-                            .lineLimit(1)
-                    }
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Text(entry.timeString)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Crucible.Color.ink3)
+                        .monospacedDigit()
                 }
-                Spacer()
+
+                Spacer(minLength: 8)
+
+                if !entry.mediaItems.isEmpty {
+                    MediaGlyphRow(mediaItems: entry.mediaItems)
+                }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Crucible.Color.divider)
+                    .frame(height: 0.5)
+                    .padding(.leading, 16)
+            }
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func selectionRing(selected: Bool) -> some View {
+        ZStack {
+            Circle()
+                .strokeBorder(
+                    selected ? Crucible.Color.accent : Crucible.Color.ink4,
+                    lineWidth: 2
+                )
+                .background(
+                    Circle()
+                        .fill(selected ? Crucible.Color.accent : Color.clear)
+                )
+                .frame(width: 20, height: 20)
+            if selected {
+                Circle()
+                    .fill(Crucible.Color.accentInk)
+                    .frame(width: 7, height: 7)
+            }
+        }
     }
 
     private var emptyState: some View {
@@ -280,24 +279,11 @@ struct AddMemoryToProjectSheet: View {
 
     // MARK: - Data load
 
-    private var currentProjectName: String {
-        let req = NSFetchRequest<Project>(entityName: "Project")
-        req.predicate = NSPredicate(format: "id == %@", projectId as CVarArg)
-        req.fetchLimit = 1
-        return (try? storage.viewContext.fetch(req).first?.name) ?? ""
-    }
-
     private func loadData() {
         // All non-recycled entries for the picker.
         let request = JournalEntry.fetchAllChronological(limit: 500)
         if let journal = try? storage.viewContext.fetch(request) {
             entries = journal.map(EntryMapper.mapToDisplayModel)
-            // Prefetch each entry's project memberships so we can show
-            // "In N other projects" badges below the row.
-            otherProjectMemberships = Dictionary(uniqueKeysWithValues: journal.map { entry in
-                let projects = (entry.value(forKey: "projects") as? Set<Project>) ?? []
-                return (entry.id, projects.map(\.name).sorted())
-            })
         }
 
         // Current project — its members + topic slugs for filtering.

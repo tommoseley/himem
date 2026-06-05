@@ -1,7 +1,5 @@
 import SwiftUI
 
-private let highlightColor = Crucible.Color.highlight
-
 struct SearchView: View {
     @StateObject private var viewModel = SearchViewModel()
     @StateObject private var voiceSpeech = SpeechService()
@@ -628,77 +626,52 @@ private struct TopicPip: View {
     }
 }
 
+// Denser row per Memories list spec §2: search owns needle-finding; the
+// list owns browsing. No card chrome — title, highlighted snippet, time,
+// hairline divider. The match-highlight is the visual focus.
 private struct ResultRow: View {
     let hit: SearchEngine.Hit
     let matchTerm: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: Crucible.Space.sm) {
-                if let topic = hit.entry.topicsArray.first {
-                    TopicPip(name: topic.name, paletteKey: topic.paletteKey)
-                }
-                Text(relativeLabel(for: hit.entry.createdAt))
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink3)
-                Spacer()
-                ForEach(mediaIcons, id: \.self) { icon in
-                    Image(systemName: icon)
-                        .font(.caption)
-                        .foregroundStyle(Crucible.Color.ink3)
-                        .accessibilityLabel(mediaIconLabel(icon))
-                }
-            }
+        VStack(alignment: .leading, spacing: 3) {
             Text(hit.entry.displayTitle)
-                .font(.body.weight(.medium))
+                .font(.system(size: 15, weight: .medium, design: .serif))
+                .tracking(-0.15)
                 .foregroundStyle(Crucible.Color.ink)
                 .lineLimit(1)
-            if let snippet = hit.snippet {
-                Text(highlight(snippet.text, term: snippet.matchTerm))
-                    .font(.callout)
-                    .foregroundStyle(Crucible.Color.ink2)
-                    .lineLimit(3)
-            } else if !matchTerm.isEmpty {
-                Text(highlight(String(hit.entry.content.prefix(140)), term: matchTerm))
-                    .font(.callout)
-                    .foregroundStyle(Crucible.Color.ink2)
-                    .lineLimit(3)
-            } else {
-                Text(hit.entry.content.prefix(140))
-                    .font(.callout)
-                    .foregroundStyle(Crucible.Color.ink2)
-                    .lineLimit(3)
-            }
+
+            snippetText
+                .font(.system(size: 13))
+                .foregroundStyle(Crucible.Color.ink2)
+                .lineSpacing(2)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+
+            Text(relativeLabel(for: hit.entry.createdAt))
+                .font(.system(size: 11.5))
+                .foregroundStyle(Crucible.Color.ink3)
+                .monospacedDigit()
+                .padding(.top, 1)
         }
-        .padding(Crucible.Space.md)
+        .padding(.vertical, 11)
+        .padding(.horizontal, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Crucible.Color.card)
-        .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.md))
-        .modifier(Crucible.shadow1())
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Crucible.Color.divider)
+                .frame(height: 0.5)
+        }
     }
 
-    private var mediaIcons: [String] {
-        let media = hit.entry.mediaReferencesArray
-        var icons: [String] = []
-        if media.contains(where: { $0.mediaTypeEnum == .voice }) {
-            icons.append("waveform")
+    private var snippetText: Text {
+        if let snippet = hit.snippet {
+            return Text(highlight(snippet.text, term: snippet.matchTerm))
         }
-        if media.contains(where: { $0.mediaTypeEnum == .image }) {
-            icons.append("photo")
+        if !matchTerm.isEmpty {
+            return Text(highlight(String(hit.entry.content.prefix(140)), term: matchTerm))
         }
-        if media.contains(where: { $0.mediaTypeEnum == .video }) {
-            icons.append("video")
-        }
-        return icons
-    }
-
-    private func mediaIconLabel(_ icon: String) -> String {
-        switch icon {
-        case "waveform": return "Voice"
-        case "photo": return "Photo"
-        case "video": return "Video"
-        default: return icon
-        }
+        return Text(String(hit.entry.content.prefix(140)))
     }
 }
 
@@ -728,6 +701,10 @@ private func typeIcon(_ type: TypeScope) -> String {
 
 // MARK: - Highlighted text
 
+/// Highlights every case-insensitive occurrence of `term` in `text` with
+/// the spec's match style: accent-tint background + accent-pressed
+/// foreground + semibold. Replaces the legacy yellow wash per Memories
+/// list spec §2 SearchRow.
 private func highlight(_ text: String, term: String) -> AttributedString {
     var attributed = AttributedString(text)
     let lowerTerm = term.lowercased()
@@ -738,7 +715,9 @@ private func highlight(_ text: String, term: String) -> AttributedString {
     while let range = lowerText.range(of: lowerTerm, range: searchStart..<lowerText.endIndex) {
         let nsRange = NSRange(range, in: text)
         if let attrRange = Range(nsRange, in: attributed) {
-            attributed[attrRange].backgroundColor = highlightColor
+            attributed[attrRange].backgroundColor = Crucible.Color.accentTint
+            attributed[attrRange].foregroundColor = Crucible.Color.accentPressed
+            attributed[attrRange].font = .system(size: 13, weight: .semibold)
         }
         searchStart = range.upperBound
     }
