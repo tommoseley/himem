@@ -173,13 +173,7 @@ struct ProjectDetailView: View {
                 } else {
                     let filtered = topicFilter == nil ? entries : entries.filter { $0.topicNames.contains(topicFilter!) }
                     ForEach(filtered) { entry in
-                        EntryCardView(
-                            entry: entry,
-                            density: .standard,
-                            onFeedback: nil,
-                            onEntityTap: nil,
-                            onAppend: nil
-                        )
+                        EntryCardView(entry: entry)
                         .contentShape(Rectangle())
                         .onTapGesture { selectedEntryId = entry.id }
                         .contextMenu {

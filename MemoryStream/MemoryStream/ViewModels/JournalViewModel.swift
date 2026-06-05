@@ -8,10 +8,12 @@ class JournalViewModel: ObservableObject {
     @Published var entries: [EntryDisplayModel] = []
     @Published var topics: [String] = []
     @Published var selectedTopic: String? = nil
-    @Published var entityFilter: String? = nil
     @Published private(set) var filteredEntries: [EntryDisplayModel] = []
     @Published private(set) var groupedEntries: [DayGroup] = []
-    @Published private(set) var recycledCount: Int = 0
+    /// Month-year label for the oldest stored memory (e.g., "March 2024").
+    /// Nil when the library is empty. Drives the "The beginning · Your
+    /// first memory, ‹month year›" tail marker per Memories list spec §8.
+    @Published private(set) var firstMemoryMonthLabel: String? = nil
 
     struct DayGroup: Identifiable {
         let date: Date
@@ -192,10 +194,6 @@ class JournalViewModel: ObservableObject {
         return queries.loadRecycledEntries()
     }
 
-    func recycledCountForTopic(_ topicName: String) -> Int {
-        return queries.recycledCountForTopic(topicName)
-    }
-
     func emptyRecycleBin() {
         lifecycle.emptyRecycleBin()
     }
@@ -225,28 +223,45 @@ class JournalViewModel: ObservableObject {
     // MARK: - Derived State
 
     private func observeFilterInputs() {
-        // Recompute filtered/grouped whenever entries, selectedTopic, or entityFilter change
-        Publishers.CombineLatest3($entries, $selectedTopic, $entityFilter)
+        // Recompute filtered/grouped whenever entries or selectedTopic change.
+        // (Entity-tap filtering was retired with the Memories list redesign —
+        // see docs/design/Memories list · spec.md §3.)
+        Publishers.CombineLatest($entries, $selectedTopic)
             .debounce(for: .milliseconds(16), scheduler: RunLoop.main)
-            .sink { [weak self] entries, topic, filter in
-                self?.recomputeFiltered(entries: entries, topic: topic, filter: filter)
+            .sink { [weak self] entries, topic in
+                self?.recomputeFiltered(entries: entries, topic: topic)
             }
             .store(in: &recomputeCancellables)
     }
 
-    private func recomputeFiltered(entries: [EntryDisplayModel], topic: String?, filter: String?) {
+    private func recomputeFiltered(entries: [EntryDisplayModel], topic: String?) {
         var result = entries
         if let topic {
             result = result.filter { $0.topicNames.contains(topic) }
         }
-        if let filter, !filter.isEmpty {
-            result = result.filter { entry in
-                entry.tags.contains { $0.value.localizedCaseInsensitiveContains(filter) }
-            }
-        }
         filteredEntries = result
         recomputeGrouped(from: result)
-        recomputeRecycledCount(topic: topic)
+        recomputeFirstMemoryLabel(from: entries)
+    }
+
+    /// Computes the month-year label for the oldest memory in the
+    /// unfiltered list. The tail marker is about the Memory Box's
+    /// overall beginning, not the current filter — so we sample from
+    /// `entries` not `filteredEntries`.
+    private func recomputeFirstMemoryLabel(from entries: [EntryDisplayModel]) {
+        // `entries` is sorted descending by createdAt; the last element
+        // is the oldest among loaded (subject to the 500-row cap).
+        guard let oldest = entries.last?.createdAt else {
+            firstMemoryMonthLabel = nil
+            return
+        }
+        firstMemoryMonthLabel = Self.monthYearLabel(for: oldest)
+    }
+
+    private static func monthYearLabel(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter.string(from: date)
     }
 
     private func recomputeGrouped(from entries: [EntryDisplayModel]) {
@@ -256,14 +271,6 @@ class JournalViewModel: ObservableObject {
         }
         groupedEntries = grouped.sorted { $0.key > $1.key }.map { date, entries in
             DayGroup(date: date, label: Self.dateLabel(for: date, calendar: calendar), entries: entries)
-        }
-    }
-
-    private func recomputeRecycledCount(topic: String?) {
-        if let topic {
-            recycledCount = queries.recycledCountForTopic(topic)
-        } else {
-            recycledCount = queries.recycledCount()
         }
     }
 

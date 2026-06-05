@@ -1,223 +1,11 @@
 import SwiftUI
 
-struct EntryCardView: View {
-    let entry: EntryDisplayModel
-    var density: CardDensity = .standard
-    var onFeedback: ((UUID, InferenceSummary.FeedbackState) -> Void)? = nil
-    var onAdjust: ((UUID, String) -> Void)? = nil
-    var onEntityTap: ((String) -> Void)? = nil
-    var onAppend: ((EntryDisplayModel) -> Void)? = nil
-    @State private var showInferenceDetail = false
-    @State private var selectedMedia: MediaDisplayItem? = nil
-    @State private var isContentExpanded = false
+// MARK: - Place name helper
 
-    /// Cached output of `Self.computeSmartTags(_:)` — recomputed only
-    /// when `entry` actually changes. The previous implementation
-    /// re-filtered `entry.tags` with a per-tag substring search on every
-    /// render (audit 2026-05-09: MEDIUM cost, multiplicative across feed
-    /// row count).
-    @State private var smartTagsCache: [TagDisplayModel] = []
-
-    /// Tags that add information beyond what's already in the content text.
-    private func dotColor(for type: MediaReference.MediaType) -> Color {
-        switch type {
-        case .image: return Crucible.Color.Media.photo
-        case .video: return Crucible.Color.Media.video
-        case .voice: return Crucible.Color.Media.audio
-        case .note:  return Crucible.Color.Media.text
-        }
-    }
-
-    /// Pure: tags whose value isn't already in `entry.content`. Static so
-    /// the cache-refresh `.onChange(of:)` doesn't capture `self`.
-    private static func computeSmartTags(_ entry: EntryDisplayModel) -> [TagDisplayModel] {
-        entry.tags.filter { tag in
-            !entry.content.localizedCaseInsensitiveContains(tag.value)
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: density == .compact ? 8 : 12) {
-            // Title + metadata row
-            EntryHeaderRow(entry: entry, density: density, onStatusTap: entry.feedbackState != nil ? {
-                showInferenceDetail = true
-            } : nil)
-
-            // Media dot strip
-            if !entry.mediaItems.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(entry.mediaItems) { item in
-                        Circle()
-                            .fill(dotColor(for: item.mediaType))
-                            .frame(width: 8, height: 8)
-                            .accessibilityHidden(true)
-                    }
-                    if let summary = entry.mediaSummary {
-                        Text(summary)
-                            .font(.caption)
-                            .foregroundStyle(Crucible.Color.ink3)
-                            .padding(.leading, 4)
-                    }
-                    Spacer()
-                }
-            }
-
-            // Topic chips — palette-colored
-            if !entry.topicNames.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(entry.topicNames, id: \.self) { topic in
-                        let hue = Crucible.Color.topicHue(for: topic)
-                        Text(topic)
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(hue.bg)
-                            .foregroundStyle(hue.fg)
-                            .clipShape(Capsule())
-                    }
-                }
-            }
-
-            // Divider
-            Rectangle()
-                .fill(Crucible.Color.hairline)
-                .frame(height: 0.5)
-
-            // Content — prefer the accepted AI summary when present;
-            // otherwise show the raw joined content. Summary is more
-            // useful as a snippet (already curated, fits in fewer
-            // lines) and honors the Honest Label principle via the
-            // small `✦ AI` glyph tag.
-            let snippetText = entry.renderedSummary ?? entry.content
-            VStack(alignment: .leading, spacing: 4) {
-                if entry.renderedSummary != nil {
-                    HStack(spacing: 3) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 8, weight: .semibold))
-                        Text("AI SUMMARY")
-                            .font(.system(size: 9, weight: .bold))
-                            .tracking(0.5)
-                    }
-                    .foregroundStyle(Crucible.Color.aiBlue)
-                }
-                Text(snippetText)
-                    .font(density == .compact ? .subheadline : .body)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .lineSpacing(density == .compact ? 2 : 3)
-                    .lineLimit(isContentExpanded && density != .compact ? nil : density.contentLineLimit)
-            }
-
-            if density.contentLineLimit != nil && snippetText.count > 120 {
-                Button(isContentExpanded ? "Show less" : "Show more") {
-                    withAnimation(.easeInOut(duration: 0.2)) { isContentExpanded.toggle() }
-                }
-                .font(.caption)
-                .foregroundStyle(Crucible.Color.accent)
-            }
-
-            // Per `docs/design/AI Organize · spec.md` § 8.1 (May 31
-            // 2026 retirement): the Memories list shows NO review
-            // chrome — no processing-status card, no inline inference
-            // prompt, no "App is inferring" half-summary. Review
-            // happens only inside Memory Detail via the
-            // `Organized · review` card (`OrganizeMemorySection`).
-            // `ProcessingStatusCard` is deleted; `InferenceCard` struct
-            // remains below because `EntryExpandedView`'s
-            // `LegacyInferenceCardSlot` still uses it for pre-v2
-            // entries without an `OrganizePass`.
-
-            // Entity tags — only visible in Rich mode (search-only in Standard/Compact)
-            if density == .rich && !smartTagsCache.isEmpty {
-                EntityTagsRow(tags: smartTagsCache, onEntityTap: onEntityTap)
-            }
-
-            // Voice playback and append moved to expanded view
-        }
-        .padding(density == .compact ? Crucible.Space.md : Crucible.Space.lg)
-        .background(Crucible.Color.card)
-        .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.xl))
-        .modifier(WarmShadow(level: 1))
-        .sheet(isPresented: $showInferenceDetail) {
-            if let inference = entry.inferenceSummary, let feedbackState = entry.feedbackState {
-                InferenceDetailSheet(
-                    summary: inference,
-                    feedbackState: feedbackState,
-                    userCorrection: entry.userCorrection,
-                    voiceFilename: entry.mediaItems.first(where: { $0.mediaType == .voice })?.localIdentifier
-                )
-            }
-        }
-        .fullScreenCover(item: $selectedMedia) { item in
-            MediaViewerView(item: item)
-        }
-        .onAppear { smartTagsCache = Self.computeSmartTags(entry) }
-        .onChange(of: entry) { _, newEntry in
-            smartTagsCache = Self.computeSmartTags(newEntry)
-        }
-    }
-}
-
-// MARK: - Entry Header
-
-struct EntryHeaderRow: View {
-    let entry: EntryDisplayModel
-    var density: CardDensity = .standard
-    var onStatusTap: (() -> Void)? = nil
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(entry.displayTitle)
-                .font(.headline)
-                .foregroundStyle(Crucible.Color.ink)
-
-            HStack(spacing: 6) {
-                Text(entry.timeString)
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink2)
-
-                Spacer()
-
-                // Belt + suspenders: the inference card itself is the user-
-                // facing signal once an inference has landed; never show a
-                // status pill alongside it. Defends against any case where
-                // displayStatus's own suppression might miss a stale state.
-                if let status = entry.displayStatus, entry.inferenceSummary == nil {
-                    if let onStatusTap {
-                        Button(action: onStatusTap) {
-                            StatusBadge(text: status.text, style: status.style)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        StatusBadge(text: status.text, style: status.style)
-                    }
-                }
-            }
-
-            // Variant B (Himem · Location.html): own row, mappin glyph, place
-            // name. Max density only. Apply the design's truncation ladder —
-            // drop trailing comma-separated segments (locality, then admin)
-            // until the result fits the row, never mid-token "…".
-            if density == .rich,
-               let locationName = entry.locationName,
-               !locationName.isEmpty {
-                HStack(spacing: 4) {
-                    Image(systemName: "mappin")
-                        .font(.caption2)
-                        .foregroundStyle(Crucible.Color.ink3)
-                        .accessibilityHidden(true)
-                    Text(EntryHeaderRow.fitting(locationName))
-                        .font(.caption)
-                        .foregroundStyle(Crucible.Color.ink2)
-                        .lineLimit(1)
-                }
-            }
-        }
-    }
-
-    /// Drops trailing comma-separated segments from a placemark string until
-    /// it fits the target character budget. Lossy but predictable — never
-    /// produces a string that ends in a comma + ellipsis.
+/// Drops trailing comma-separated segments from a placemark string until
+/// it fits the target character budget. Lossy but predictable — never
+/// produces a string ending in "comma, ellipsis".
+enum PlaceName {
     static func fitting(_ name: String, maxChars: Int = 28) -> String {
         if name.count <= maxChars { return name }
         var segments = name.components(separatedBy: ", ")
@@ -226,9 +14,274 @@ struct EntryHeaderRow: View {
             let candidate = segments.joined(separator: ", ")
             if candidate.count <= maxChars { return candidate }
         }
-        // Single segment, still too long. Let SwiftUI truncate as a last
-        // resort — a long single token can't be split without becoming wrong.
         return segments.first ?? name
+    }
+}
+
+// MARK: - Memory card
+//
+// Spec: `docs/design/Memories list · spec.md` (June 4 2026).
+// One card, no density toggle. Recognition, not reading — the whole card
+// taps to Memory Detail; expansion is a destination, never inline.
+// Anatomy (spec §3): title (serif) → meta (time · place) → media glyph
+// row + topic chips → gist with fallback chain (spec §4).
+
+struct EntryCardView: View {
+    let entry: EntryDisplayModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            titleAndMeta
+            mediaAndTopics
+            GistView(kind: Self.gistKind(for: entry))
+        }
+        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .background(Crucible.Color.card)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Crucible.Color.hairline, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var titleAndMeta: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(entry.displayTitle)
+                .font(.system(size: 17.5, weight: .medium, design: .serif))
+                .tracking(-0.2)
+                .foregroundStyle(Crucible.Color.ink)
+                .lineLimit(2)
+
+            Text(metaLine)
+                .font(.system(size: 13))
+                .tracking(-0.05)
+                .foregroundStyle(Crucible.Color.ink3)
+                .monospacedDigit()
+        }
+    }
+
+    @ViewBuilder
+    private var mediaAndTopics: some View {
+        let hasMedia = !entry.mediaItems.isEmpty
+        let hasTopics = !entry.topicNames.isEmpty
+        if hasMedia || hasTopics {
+            HStack(alignment: .center, spacing: 12) {
+                if hasMedia { MediaGlyphRow(mediaItems: entry.mediaItems) }
+                Spacer(minLength: 0)
+                if hasTopics { TopicChipsRow(topicNames: entry.topicNames) }
+            }
+        }
+    }
+
+    private var metaLine: String {
+        let time = entry.timeString
+        if let place = entry.locationName, !place.isEmpty {
+            return "\(time) · \(PlaceName.fitting(place))"
+        }
+        return time
+    }
+
+    // Spec §4 — the gist always says something true. Resolve in order:
+    // AI summary → raw excerpt (italic serif) → media description.
+    static func gistKind(for entry: EntryDisplayModel) -> GistKind {
+        if let summary = entry.renderedSummary,
+           !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .summary(summary)
+        }
+        let excerpt = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !excerpt.isEmpty {
+            return .excerpt(excerpt)
+        }
+        return .media(Self.mediaDescription(for: entry))
+    }
+
+    private static func mediaDescription(for entry: EntryDisplayModel) -> String {
+        let audio = entry.mediaItems.filter { $0.mediaType == .voice }.count
+        let photo = entry.mediaItems.filter { $0.mediaType == .image }.count
+        let video = entry.mediaItems.filter { $0.mediaType == .video }.count
+        var parts: [String] = []
+        if photo > 0 { parts.append("\(photo) photo\(photo == 1 ? "" : "s")") }
+        if video > 0 { parts.append("\(video) video\(video == 1 ? "" : "s")") }
+        if audio > 0 { parts.append("\(audio) audio clip\(audio == 1 ? "" : "s")") }
+        let head = parts.joined(separator: ", ")
+        if head.isEmpty { return "" }
+        if let place = entry.locationName, !place.isEmpty {
+            return "\(head) captured near \(PlaceName.fitting(place))."
+        }
+        return "\(head)."
+    }
+}
+
+// MARK: - Gist kinds & view (spec §4)
+
+enum GistKind {
+    case summary(String)
+    case excerpt(String)
+    case media(String)
+}
+
+struct GistView: View {
+    let kind: GistKind
+
+    var body: some View {
+        switch kind {
+        case .summary(let text):
+            HStack(alignment: .top, spacing: 7) {
+                // The ONLY AI-blue on the card — provenance for an
+                // organized summary, "the only marker of AI authorship."
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.aiBlue)
+                    .accessibilityHidden(true)
+                    .padding(.top, 2)
+                Text(text)
+                    .font(.system(size: 15))
+                    .tracking(-0.05)
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .lineSpacing(4)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+            }
+        case .excerpt(let text):
+            // Italic serif with curly quotes — these are the user's own
+            // words, verbatim.
+            Text("\u{201C}\(text)\u{201D}")
+                .font(.system(size: 15.5, design: .serif).italic())
+                .foregroundStyle(Crucible.Color.ink2)
+                .lineSpacing(4)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+        case .media(let text):
+            Text(text)
+                .font(.system(size: 15))
+                .tracking(-0.05)
+                .foregroundStyle(Crucible.Color.ink3)
+                .lineSpacing(4)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+        }
+    }
+}
+
+// MARK: - Media glyph row (spec §5)
+
+/// Shape-differentiated glyphs (not color). Audio gets the one legitimate
+/// tint: ochre. Photo/video/note are warm ink. Past 3 distinct types,
+/// collapses to "N items" — never a dot-soup row.
+struct MediaGlyphRow: View {
+    let mediaItems: [MediaDisplayItem]
+
+    var body: some View {
+        let counts = MediaTypeCounts(items: mediaItems)
+        if counts.distinctCount > 3 {
+            HStack(spacing: 5) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(Crucible.Color.Media.audio)
+                    .accessibilityHidden(true)
+                Text("\(counts.total) items")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .monospacedDigit()
+            }
+        } else {
+            HStack(spacing: 13) {
+                if counts.audio > 0 {
+                    glyphCell(symbol: "waveform", count: counts.audio, tint: Crucible.Color.Media.audio)
+                }
+                if counts.photo > 0 {
+                    glyphCell(symbol: "camera", count: counts.photo, tint: Crucible.Color.ink3)
+                }
+                if counts.video > 0 {
+                    glyphCell(symbol: "video", count: counts.video, tint: Crucible.Color.ink3)
+                }
+                if counts.note > 0 {
+                    glyphCell(symbol: "text.alignleft", count: counts.note, tint: Crucible.Color.ink3)
+                }
+            }
+        }
+    }
+
+    private func glyphCell(symbol: String, count: Int, tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
+            Text("\(count)")
+                .font(.system(size: 12))
+                .foregroundStyle(Crucible.Color.ink2)
+                .monospacedDigit()
+        }
+    }
+}
+
+private struct MediaTypeCounts {
+    let audio: Int
+    let photo: Int
+    let video: Int
+    let note:  Int
+
+    init(items: [MediaDisplayItem]) {
+        var a = 0, p = 0, v = 0, n = 0
+        for item in items {
+            switch item.mediaType {
+            case .voice: a += 1
+            case .image: p += 1
+            case .video: v += 1
+            case .note:  n += 1
+            }
+        }
+        self.audio = a; self.photo = p; self.video = v; self.note = n
+    }
+
+    var total: Int { audio + photo + video + note }
+    var distinctCount: Int { [audio, photo, video, note].filter { $0 > 0 }.count }
+}
+
+// MARK: - Topic chips row (spec §3 row 4)
+
+/// Max 2 chips, +N overflow pill. Neutral wash background; the only
+/// color is a small topic-palette dot per chip.
+struct TopicChipsRow: View {
+    let topicNames: [String]
+
+    var body: some View {
+        let shown = Array(topicNames.prefix(2))
+        let extra = topicNames.count - shown.count
+        HStack(spacing: 6) {
+            ForEach(shown, id: \.self) { name in
+                TopicChip(name: name)
+            }
+            if extra > 0 {
+                Text("+\(extra)")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .monospacedDigit()
+            }
+        }
+    }
+}
+
+private struct TopicChip: View {
+    let name: String
+
+    var body: some View {
+        let hue = Crucible.Color.topicHue(for: name)
+        HStack(spacing: 5) {
+            Circle()
+                .fill(hue.fg)
+                .frame(width: 6, height: 6)
+            Text(name)
+                .font(.system(size: 11.5, weight: .medium))
+                .tracking(-0.1)
+                .foregroundStyle(Crucible.Color.ink2)
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 22)
+        .background(Crucible.Color.wash1)
+        .clipShape(Capsule())
     }
 }
 
@@ -278,57 +331,6 @@ struct StatusBadge: View {
             .background(style.background)
             .foregroundStyle(style.foreground)
             .clipShape(Capsule())
-    }
-}
-
-// MARK: - Entity Tags Row
-
-struct EntityTagsRow: View {
-    let tags: [TagDisplayModel]
-    var onEntityTap: ((String) -> Void)? = nil
-    @State private var showAll = false
-
-    private var visibleTags: [TagDisplayModel] {
-        showAll ? tags : Array(tags.prefix(3))
-    }
-
-    private var hiddenCount: Int {
-        max(0, tags.count - 3)
-    }
-
-    var body: some View {
-        FlowLayout(spacing: 6) {
-            ForEach(visibleTags) { tag in
-                Button {
-                    onEntityTap?(tag.value)
-                } label: {
-                    Text(tag.value)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Crucible.Color.sunk)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-
-            if !showAll && hiddenCount > 0 {
-                Button {
-                    withAnimation { showAll = true }
-                } label: {
-                    Text("+\(hiddenCount)")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Crucible.Color.sunk)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-        }
     }
 }
 

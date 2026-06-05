@@ -11,7 +11,6 @@ struct JournalView: View {
     @ObservedObject private var errorState = ErrorState.shared
     @EnvironmentObject private var quickAction: QuickActionState
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
-    @AppStorage("cardDensity") private var cardDensityRaw: String = CardDensity.standard.rawValue
     @State private var viewMode: ViewMode = .memories
 
     enum ViewMode: String, CaseIterable {
@@ -39,23 +38,13 @@ struct JournalView: View {
     @State private var activeCaptureModality: CaptureModality? = nil
     @State private var pendingNoteForNewEntry: String? = nil
 
-    private var cardDensity: CardDensity {
-        CardDensity(rawValue: cardDensityRaw) ?? .standard
-    }
-
     var body: some View {
         NavigationStack {
         ZStack(alignment: .bottomTrailing) {
         VStack(spacing: 0) {
             JournalHeaderView(
                 viewMode: $viewMode,
-                density: cardDensity,
                 onSearchTap: { showSearch = true },
-                onDensityTap: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        cardDensityRaw = cardDensity.next.rawValue
-                    }
-                },
                 onSettingsTap: { showSettings = true }
             )
 
@@ -81,8 +70,6 @@ struct JournalView: View {
                 selected: $viewModel.selectedTopic
             )
             .padding(.vertical, 4)
-
-            entityFilterChip
 
             if viewMode == .projects {
                 ProjectListView(
@@ -366,22 +353,7 @@ struct JournalView: View {
                 ForEach(viewModel.groupedEntries) { group in
                     Section {
                         ForEach(group.entries) { entry in
-                            EntryCardView(
-                                entry: entry,
-                                density: cardDensity,
-                                onFeedback: { entryId, state in
-                                    viewModel.submitFeedback(entryId: entryId, state: state)
-                                },
-                                onAdjust: { entryId, correction in
-                                    viewModel.submitFeedback(entryId: entryId, state: .edited, correction: correction)
-                                },
-                                onEntityTap: { value in
-                                    withAnimation { viewModel.entityFilter = value }
-                                },
-                                onAppend: { entry in
-                                    selectedEntryId = entry.id
-                                }
-                            )
+                            EntryCardView(entry: entry)
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -406,15 +378,36 @@ struct JournalView: View {
                             }
                         }
                     } header: {
-                        Text(group.label)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.primary)
-                            .textCase(nil)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+                        // Memories list spec §6 — Source Serif, quiet
+                        // (orientation, not titles); opaque paper bg so
+                        // sticky headers don't bleed card text through
+                        // them mid-scroll.
+                        HStack(spacing: 0) {
+                            Text(group.label)
+                                .font(.system(size: 15, design: .serif))
+                                .foregroundStyle(Crucible.Color.ink2)
+                                .tracking(-0.2)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Crucible.Color.paper)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     }
                 }
 
+                // Spec §8 — "The beginning · Your first memory, ‹month year›"
+                // tail marker. The anti-doomscroll signal: the list is
+                // finite and you've seen all of it. Only renders when
+                // there are memories to anchor against.
+                if let firstMonth = viewModel.firstMemoryMonthLabel,
+                   !viewModel.filteredEntries.isEmpty {
+                    BeginningMarker(firstMemoryMonthLabel: firstMonth)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
             }
         }
         .listStyle(.plain)
@@ -429,69 +422,6 @@ struct JournalView: View {
             viewModel.refresh()
             WatchSessionDelegate.shared.requestWatchPendingFlush()
             WatchSessionDelegate.shared.reconcileWatchAcks()
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            memoriesPinnedFooter
-        }
-    }
-
-    /// Permanent pinned footer at the very bottom of the feed: hairline
-    /// divider + centered "N memories · M in Recently Deleted". The
-    /// background and hairline ignore the home-indicator safe area so
-    /// the footer extends to the actual bottom edge of the screen. The
-    /// text itself uses an explicit small bottom padding so it doesn't
-    /// overlap the home indicator's gesture surface.
-    @ViewBuilder
-    private var memoriesPinnedFooter: some View {
-        if !viewModel.filteredEntries.isEmpty || viewModel.selectedTopic != nil {
-            VStack(spacing: 0) {
-                Divider()
-                HStack(spacing: 4) {
-                    Text("\(viewModel.filteredEntries.count) memor\(viewModel.filteredEntries.count == 1 ? "y" : "ies")")
-                        .font(.caption)
-                        .foregroundStyle(Crucible.Color.ink3)
-                    if viewModel.recycledCount > 0 {
-                        Text("·")
-                            .font(.caption)
-                            .foregroundStyle(Crucible.Color.ink4)
-                        Text("\(viewModel.recycledCount) in Recently Deleted")
-                            .font(.caption)
-                            .foregroundStyle(Crucible.Color.ink4)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 6)
-                .padding(.bottom, 4)
-            }
-            .background(Crucible.Color.paper)
-            .ignoresSafeArea(.container, edges: .bottom)
-        }
-    }
-
-    // MARK: - Entity filter chip
-
-    @ViewBuilder
-    private var entityFilterChip: some View {
-        if let filter = viewModel.entityFilter, viewMode == .memories {
-            HStack(spacing: 8) {
-                Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                    .foregroundStyle(Crucible.Color.accent)
-                    .accessibilityHidden(true)
-                Text(filter)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                Spacer()
-                Button {
-                    withAnimation { viewModel.entityFilter = nil }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear filter")
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
         }
     }
 
@@ -581,9 +511,7 @@ struct JournalView: View {
 
 struct JournalHeaderView: View {
     @Binding var viewMode: JournalView.ViewMode
-    var density: CardDensity = .standard
     let onSearchTap: () -> Void
-    let onDensityTap: () -> Void
     let onSettingsTap: () -> Void
 
     @ObservedObject private var entitlement = EntitlementService.shared
@@ -613,32 +541,26 @@ struct JournalHeaderView: View {
                 Spacer()
             }
 
-            // Right: icons
+            // Right: icons — warm ink per Memories list spec §9
+            // ("Header chrome de-blued"). Density toggle retired with
+            // the single-card model — see spec §2.
             HStack {
                 Spacer()
 
                 Button(action: onSearchTap) {
                     Image(systemName: "magnifyingglass")
                         .font(.body)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Crucible.Color.ink)
                 }
                 .accessibilityLabel("Search")
-
-                Button(action: onDensityTap) {
-                    Image(systemName: density.icon)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                }
-                .accessibilityLabel("Card density: \(density.label)")
-                .padding(.leading, 8)
 
                 Button(action: onSettingsTap) {
                     Image(systemName: "gearshape")
                         .font(.body)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Crucible.Color.ink)
                 }
                 .accessibilityLabel("Settings")
-                .padding(.leading, 8)
+                .padding(.leading, 12)
             }
         }
         .padding(.horizontal)
@@ -707,6 +629,36 @@ struct TopicApprovalSheet: View {
             }
         }
         .presentationDetents([.medium])
+    }
+}
+
+// MARK: - Beginning Marker (Memories list spec §8)
+
+/// "The beginning · Your first memory, ‹month year›" — the anti-doomscroll
+/// tail marker at the bottom of the Memories list. A Memory Box has a
+/// bottom; reaching it should feel like arrival, not a spinner that gave up.
+struct BeginningMarker: View {
+    let firstMemoryMonthLabel: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Crucible.Color.hairline)
+                .frame(width: 30, height: 1)
+                .padding(.bottom, 14)
+            Text("The beginning")
+                .font(.system(size: 15, design: .serif).italic())
+                .foregroundStyle(Crucible.Color.ink2)
+            Text("Your first memory, \(firstMemoryMonthLabel)")
+                .font(.system(size: 12))
+                .foregroundStyle(Crucible.Color.ink3)
+                .monospacedDigit()
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 26)
+        .padding(.bottom, 30)
+        .padding(.horizontal, 14)
     }
 }
 
