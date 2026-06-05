@@ -136,6 +136,22 @@ extension OrganizePass {
         }
     }
 
+    /// Derived "user has reviewed this pass" signal — drives the
+    /// Memory Detail chip between **Draft organized** (dashed AI
+    /// chip, "this is a first draft, give it a glance") and
+    /// **Organized** (solid AI chip, "you've signed off"). True
+    /// when the user has dismissed the review card OR accepted any
+    /// row from it. Per `docs/design/AI Organize · spec.md` §2b/§9
+    /// and `pricing-screens-lifecycle.jsx`: the chip tracks REVIEW
+    /// STATE, not tier — a Plus auto-organize pass also reads as
+    /// "Draft organized" until the user engages with it. No schema
+    /// change: derived from `dismissedAt` and `acceptedRows` so the
+    /// 8c reshape doesn't bundle a CloudKit deploy (those land in
+    /// 8e alongside the AssistBalance + nextStepsMarkdown removal).
+    var isReviewed: Bool {
+        dismissedAt != nil || !acceptedRows.isEmpty
+    }
+
     /// Convenience: parse `nextStepsMarkdown` into bullet items. Same
     /// minimum-viable parser as `OrganizeDoneSections.NextStepsBullets`
     /// — splits on newlines, strips leading "- ", "* ", "• ". Empty

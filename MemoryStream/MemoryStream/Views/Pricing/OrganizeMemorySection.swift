@@ -1,27 +1,32 @@
 import SwiftUI
 import CoreData
 
-/// State router for the Memory Detail AI zone (v5 design).
-/// Picks the right surface for a given entry/pass/assist combo:
+/// State router for the Memory Detail AI zone (post-assist-quota
+/// retirement, PR 8c).
 ///
-///   • **Idle** — never organized AND assists available
-///     → `OrganizeMemoryCard.idle` (cream card, "1 ASSIST" pill)
-///   • **Exhausted** — never organized AND no assists
-///     → `OrganizeMemoryCard.exhausted` (muted card, "See options →")
-///   • **Review** — organized AND `dismissedAt == nil`
-///     → `AISuggestionsCard` always unfolded (no chip — this is the
-///       primary "you should look at this" affordance)
-///   • **Organized** — organized AND `dismissedAt != nil`
-///     → `OrganizedChip` with accordion unfold of `AISuggestionsCard`.
-///       The chip carries variant signal (refresh / next steps / default).
-///       Folding/unfolding here is ephemeral local @State; the
-///       `dismissedAt` data flag is sticky.
+///   • **No pass yet** — render `OrganizeMemoryCard(.idle)`. Free
+///     users tap to run the on-device organize; Plus users normally
+///     see the pass appear automatically because the auto-organize
+///     pipeline fires on capture.
+///   • **Has a draft (unreviewed) pass** — `pass.isReviewed == false`.
+///     The review surface (still `AISuggestionsCard` in 8c, replaced
+///     in 8d with the B1 review sheet) is always visible so the user
+///     can glance at the draft and accept or edit.
+///   • **Has a reviewed pass** — `pass.isReviewed == true`. Show the
+///     `OrganizedChip` with accordion unfold to the same review
+///     surface. The chip's solid border + check icon signal the
+///     user-confirmed state.
 ///
-/// Routing prefers stale > organized > idle when multiple apply —
-/// stale memories surface the refresh chip even after dismiss.
+/// Stale (`entry.hasChangesSinceLastOrganize`) is now an orthogonal
+/// concern surfaced as a warning banner alongside the chip per
+/// `pricing-screens-lifecycle.jsx` Stage 3st — not a chip variant.
 struct OrganizeMemorySection: View {
     let entryID: UUID
     var onOrganize: () -> Void
+    /// Routes upgrade nudges (currently consumed by AISuggestionsCard
+    /// for its "Out of assists · See plans" affordance). Will be
+    /// repointed at the new PricingView in 8f; kept on the API for
+    /// the 8c → 8f transition.
     var onOpenPackSheet: () -> Void
     /// Lifted from local @State so the parent (EntryExpandedView)
     /// can suppress the FAB while the AI Suggestions card is open.
@@ -30,9 +35,7 @@ struct OrganizeMemorySection: View {
     /// `dismissedAt` data flag.
     @Binding var unfolded: Bool
 
-    @ObservedObject var entitlement: EntitlementService = .shared
     @FetchRequest private var entries: FetchedResults<JournalEntry>
-    @State private var showStarterCard = false
 
     init(
         entryID: UUID,
@@ -53,21 +56,11 @@ struct OrganizeMemorySection: View {
 
     private var entry: JournalEntry? { entries.first }
     private var pass: OrganizePass? { entry?.latestOrganizePass }
-
-    private var idleOrExhaustedState: OrganizeCardState {
-        OrganizeCardState.idleOrExhausted(
-            hasAssists: hasAssists,
-            isPlus: entitlement.isPlus,
-            monthlyResetDate: entitlement.monthlyResetDate
-        )
-    }
-    private var hasAssists: Bool { entitlement.totalAssistsRemaining > 0 }
-    private var isPlus: Bool { entitlement.isPlus }
     private var isStale: Bool { entry?.hasChangesSinceLastOrganize ?? false }
     /// True while the entry's latest processing task is in flight.
-    /// Drives the spinner in both the idle-state organize card and
-    /// the AISuggestionsCard ribbon (where the card surfaces it
-    /// itself off the same entry).
+    /// Drives the spinner in both the idle organize card and the
+    /// AISuggestionsCard ribbon (where the card surfaces it itself
+    /// off the same entry).
     private var isProcessing: Bool {
         switch entry?.latestProcessingTask?.statusEnum {
         case .pending, .processing: return true
@@ -78,13 +71,13 @@ struct OrganizeMemorySection: View {
     var body: some View {
         Group {
             if let entry, let pass {
-                if pass.dismissedAt == nil {
-                    // Review state — card always unfolded.
+                if !pass.isReviewed {
+                    // Draft state — review surface always visible.
                     AISuggestionsCard(
                         pass: pass,
                         entry: entry,
                         isStale: isStale,
-                        canRefresh: hasAssists,
+                        canRefresh: true,
                         onRefresh: handleRefresh,
                         onDismiss: handleDismiss,
                         onOpenPackSheet: onOpenPackSheet
@@ -94,23 +87,15 @@ struct OrganizeMemorySection: View {
                     organizedAccordion(pass: pass, entry: entry)
                 }
             } else if entry != nil {
-                // Idle / Exhausted — never organized.
+                // Never organized — show manual Organize button.
                 OrganizeMemoryCard(
-                    state: idleOrExhaustedState,
-                    resetDate: entitlement.monthlyResetDate,
-                    onOrganize: handleOrganizeTap,
-                    onSeeOptions: onOpenPackSheet,
-                    isProcessing: isProcessing,
-                    assistsLeft: entitlement.showsOneLeftFreeCue ? 1 : nil,
-                    fromPack: entitlement.showsFromYourPackCaption
+                    state: .idle,
+                    onOrganize: onOrganize,
+                    isProcessing: isProcessing
                 )
             } else {
                 EmptyView()
             }
-        }
-        .sheet(isPresented: $showStarterCard) {
-            OnboardingStarterCard(onTry: onOrganize)
-                .presentationDetents([.large])
         }
     }
 
@@ -127,7 +112,7 @@ struct OrganizeMemorySection: View {
                 pass: pass,
                 entry: entry,
                 isStale: isStale,
-                canRefresh: hasAssists,
+                canRefresh: true,
                 onRefresh: handleRefresh,
                 onDismiss: { withAnimation(.easeInOut(duration: 0.2)) { unfolded = false } },
                 onOpenPackSheet: onOpenPackSheet
@@ -139,21 +124,13 @@ struct OrganizeMemorySection: View {
                     unfolded = true
                 }
             } label: {
-                OrganizedChip(pass: pass, isStale: isStale, canRefresh: hasAssists)
+                OrganizedChip(pass: pass)
             }
             .buttonStyle(.plain)
         }
     }
 
     // MARK: - Behavior
-
-    private func handleOrganizeTap() {
-        if !entitlement.starterGranted && !isPlus {
-            showStarterCard = true
-            return
-        }
-        onOrganize()
-    }
 
     private func handleDismiss() {
         guard let pass else { return }
@@ -162,16 +139,16 @@ struct OrganizeMemorySection: View {
             pass.dismissedAt = Date()
             try? ctx.save()
         }
-        // Once dismissed, the next render will fall into Organized
-        // state; the chip + folded card is the rest position.
+        // Once dismissed, isReviewed flips true and the next render
+        // falls into the Organized state; the chip + folded card is
+        // the rest position.
         unfolded = false
     }
 
     private func handleRefresh() {
-        // A successful refresh is a new OrganizePass (`dismissedAt == nil`
-        // by default) — the next render will be Review again. The
-        // assist deduct happens inside ProcessingEngine.processEntry
-        // on success.
+        // A successful refresh is a new OrganizePass (dismissedAt nil,
+        // acceptedRows empty by default) — the next render will be
+        // Draft again.
         onOrganize()
     }
 }

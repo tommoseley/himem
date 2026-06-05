@@ -254,32 +254,27 @@ struct AISuggestionsCard: View {
     }
 
     private var headerVariant: OrganizedChip.Variant {
-        OrganizedChip.Variant.resolve(
-            isStale: isStale,
-            canRefresh: canRefresh,
-            nextStepsCount: pass.nextStepsItems.count
-        )
+        OrganizedChip.Variant.resolve(isReviewed: pass.isReviewed)
     }
 
     private var headerLabel: String {
-        headerVariant.labelText(nextStepsCount: pass.nextStepsItems.count)
+        headerVariant.labelText
     }
 
     private var headerTint: Color {
-        switch headerVariant {
-        // Stale variants keep warning amber — that's status
-        // signaling (the memory has changed since last organize),
-        // not AI attribution. The AI moments themselves wear blue.
-        case .refreshStale, .staleNoAssists: return Crucible.Color.warning
-        case .nextStepsCount, .default:      return Crucible.Color.aiBlue
-        }
+        // After the assist-quota retirement (PR 8c), both chip
+        // variants wear AI blue; the dashed-vs-solid border carries
+        // the review-state semantic. This card is slated for deletion
+        // in 8d alongside the new B1 review sheet, so the header
+        // tinting is provisional.
+        Crucible.Color.aiBlue
     }
 
     private var headerTintBackground: Color {
-        switch headerVariant {
-        case .refreshStale, .staleNoAssists: return Crucible.Color.warnTint
-        case .nextStepsCount, .default:      return Crucible.Color.aiBlueTint
-        }
+        // See `headerTint` — both variants share the AI-blue tint
+        // background until 8d replaces this card with the B1 review
+        // sheet.
+        Crucible.Color.aiBlueTint
     }
 
     @ViewBuilder
@@ -585,36 +580,27 @@ struct AISuggestionsCard: View {
     }
 
     /// True when the stale-state should render the full
-    /// `OrganizeMemoryCard.stale(...)` affordance instead of the
-    /// compact in-card buttons. Per Tom's 2026-05-27 ask: the big
-    /// "Reorganize with AI" card matches the idle-state visual
-    /// users already know, vs. the previous tiny pill that read as
-    /// disabled when greyed for the no-assists variant.
+    /// "Reorganize with AI" affordance instead of the compact in-card
+    /// buttons. After the assist-quota retirement (PR 8c), the big
+    /// card is the reorganize callout (no exhausted variants).
     private var usesBigStaleCard: Bool { isStale }
 
-    private var staleVariant: OrganizeCardState.StaleVariant {
-        let entitlement = EntitlementService.shared
-        return OrganizeCardState.staleVariant(
-            canRefresh: canRefresh,
-            isPlus: entitlement.isPlus,
-            monthlyResetDate: entitlement.monthlyResetDate
-        )
+    /// New-clips count drives the `.reorganize` callout copy. Falls
+    /// back to 0 when the count isn't available so the surface still
+    /// renders during the 8c → 8d transition. This card is being
+    /// deleted in 8d.
+    private var newClipsSinceOrganize: Int {
+        max(entry.clipsAddedSinceLastOrganize, 0)
     }
 
     @ViewBuilder
     private var footer: some View {
         if usesBigStaleCard {
-            // Full-width "Reorganize with AI" card per pricing spec
-            // § 16. The variant carries tier-specific pill (1
-            // ASSIST / STARTER USED / MONTHLY USED), body copy, and
-            // CTA route. `onOpenPackSheet` here serves both the
-            // free-→-Upgrade-Hub and Plus-→-pack-modal destinations
-            // — the parent (`OrganizeMemorySection`) routes by tier.
+            // Dashed reorganize callout. Tap fires another organize
+            // pass via `onRefresh`.
             OrganizeMemoryCard(
-                state: .stale(staleVariant),
-                resetDate: nil,
+                state: .reorganize(newClipCount: newClipsSinceOrganize),
                 onOrganize: onRefresh,
-                onSeeOptions: onOpenPackSheet,
                 isProcessing: isProcessing
             )
         } else {

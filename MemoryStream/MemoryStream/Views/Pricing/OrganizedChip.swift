@@ -1,121 +1,89 @@
 import SwiftUI
 
-/// Variant-aware "Organized" chip — the collapsed state of the
-/// AISuggestionsCard. Variants by precedence (highest first):
+/// Review-state label for an `OrganizePass`. Two variants, per
+/// `docs/design/pricing-screens-lifecycle.jsx` and `AI Organize · spec.md`
+/// §2b/§9:
 ///
-///   1. **Stale + has assists** → "✦ Organized · refresh"
-///      (orange tint; tap to unfold reveals the refresh affordance)
-///   2. **Stale + no assists**  → "✦ Organized · stale"
-///      (orange tint; tap to unfold reveals "Resets [date]")
-///   3. **Has next steps**      → "✦ Organized · N next steps"
-///      (default tint; surfaces the unread item count)
-///   4. **Default**             → "✦ Organized · review"
-///      (default tint; just a fold toggle)
+///   1. **Draft organized** — dashed AI-blue chip + sparkle icon.
+///      Pass exists but the user hasn't reviewed it yet.
+///      *"This is a first draft. Give it a glance."*
+///   2. **Organized** — solid AI-blue chip + check icon. The user
+///      has dismissed or accepted the review surface.
 ///
-/// The chip is purely a label — its tap behavior is wired by the
-/// caller (typically toggling local @State for accordion unfold of the
-/// card immediately below).
+/// The chip tracks **review state, not tier** — a Plus auto-organize
+/// pass also reads as "Draft organized" until the user engages with
+/// it. Stale (memory has new clips since last organize) is **not** a
+/// chip variant; it surfaces as a separate warning banner alongside.
+///
+/// Replaces the assist-quota chip variants (refreshStale,
+/// staleNoAssists, nextStepsCount, default) retired in PR 8c.
 struct OrganizedChip: View {
     let pass: OrganizePass
-    let isStale: Bool
-    let canRefresh: Bool
 
-    /// Variant selection — pulled into a pure enum + factory so the
-    /// precedence logic is unit-testable without mounting the view.
-    /// Public-internal so `@testable import` reaches it.
-    enum Variant {
-        case refreshStale     // stale + has assists
-        case staleNoAssists   // stale + no assists
-        case nextStepsCount   // has next steps, not stale
-        case `default`        // post-dismiss with nothing to surface
+    enum Variant: Equatable {
+        case draftOrganized
+        case organized
 
-        /// Resolves the variant for the three input bits. Tested
-        /// directly in `PricingV5DecisionTests.chip_*`.
-        static func resolve(isStale: Bool, canRefresh: Bool, nextStepsCount: Int) -> Variant {
-            if isStale {
-                return canRefresh ? .refreshStale : .staleNoAssists
-            }
-            if nextStepsCount > 0 {
-                return .nextStepsCount
-            }
-            return .default
+        /// Pure factory — tested directly via `pass.isReviewed`.
+        static func resolve(isReviewed: Bool) -> Variant {
+            isReviewed ? .organized : .draftOrganized
         }
 
-        /// Renders the user-facing chip copy for a variant + count.
-        /// `count` is only consulted for `.nextStepsCount`.
-        func labelText(nextStepsCount: Int) -> String {
+        var labelText: String {
             switch self {
-            case .refreshStale:    return "Organized · refresh"
-            case .staleNoAssists:  return "Organized · stale"
-            case .nextStepsCount:
-                let n = nextStepsCount
-                return "Organized · \(n) next step\(n == 1 ? "" : "s")"
-            case .default:         return "Organized · review"
+            case .draftOrganized: return "Draft organized"
+            case .organized:      return "Organized"
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .draftOrganized: return "sparkles"
+            case .organized:      return "checkmark"
+            }
+        }
+
+        /// Dashed border on draft; solid on organized. The dashed
+        /// edge is the design's "this is not yet authoritative"
+        /// signal — paired with the "Draft" label so the visual
+        /// reinforces the copy.
+        var isDashed: Bool { self == .draftOrganized }
+
+        var accessibilityLabel: String {
+            switch self {
+            case .draftOrganized: return "Draft organized, tap to review"
+            case .organized:      return "Organized"
             }
         }
     }
 
     private var variant: Variant {
-        Variant.resolve(
-            isStale: isStale,
-            canRefresh: canRefresh,
-            nextStepsCount: pass.nextStepsItems.count
-        )
-    }
-
-    private var labelText: String {
-        variant.labelText(nextStepsCount: pass.nextStepsItems.count)
-    }
-
-    private var tint: Color {
-        switch variant {
-        // Stale variants keep warning amber — status signaling
-        // (memory has changed since last organize), not AI
-        // attribution. AI moments themselves wear blue (Crucible
-        // 2026-05 sweep).
-        case .refreshStale, .staleNoAssists: return Crucible.Color.warning
-        case .nextStepsCount, .default:      return Crucible.Color.aiBlue
-        }
-    }
-
-    private var tintBackground: Color {
-        switch variant {
-        case .refreshStale, .staleNoAssists: return Crucible.Color.warnTint
-        case .nextStepsCount, .default:      return Crucible.Color.aiBlueTint
-        }
+        Variant.resolve(isReviewed: pass.isReviewed)
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "sparkles")
+        HStack(spacing: 5) {
+            Image(systemName: variant.iconName)
                 .font(.system(size: 10, weight: .semibold))
-            Text(labelText)
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(-0.05)
-            // chevron.down — "expands inline." `chevron.right` reads
-            // as iOS navigation ("pushes to another screen"), which
-            // is the wrong signal: tapping folds down in place. The
-            // expanded chip-header uses `chevron.up`; they're the
-            // same control in two states.
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .bold))
-                .opacity(0.6)
+            Text(variant.labelText)
+                .font(.system(size: 11.5, weight: .semibold))
+                .tracking(0.1)
         }
-        .foregroundStyle(tint)
-        .padding(.leading, 10)
-        .padding(.trailing, 11)
-        .padding(.vertical, 7)
-        .background(tintBackground)
-        .clipShape(Capsule())
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var accessibilityLabel: String {
-        switch variant {
-        case .refreshStale:    return "AI suggestions are stale, refresh available"
-        case .staleNoAssists:  return "AI suggestions are stale, resets next period"
-        case .nextStepsCount:  return "\(pass.nextStepsItems.count) next steps from AI"
-        case .default:         return "AI suggestions, tap to review"
-        }
+        .foregroundStyle(Crucible.Color.aiBlue)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 3)
+        .background(Crucible.Color.aiBlueTint)
+        .overlay(
+            RoundedRectangle(cornerRadius: 13)
+                .strokeBorder(
+                    Crucible.Color.aiBlue,
+                    style: StrokeStyle(
+                        lineWidth: 1,
+                        dash: variant.isDashed ? [3, 2] : []
+                    )
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 13))
+        .accessibilityLabel(variant.accessibilityLabel)
     }
 }
