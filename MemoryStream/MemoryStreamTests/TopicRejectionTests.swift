@@ -3,11 +3,11 @@ import Foundation
 import CoreData
 @testable import HiMem
 
-/// Money tests for the per-topic reject UI added 2026-05-18 — Tom
-/// wanted the line-through-to-reject pattern from the Mentions row
-/// extended to the Topics pills. The visual half is in
-/// `AISuggestionsCard.topicChip`; this test exercises the data half,
-/// `AISuggestionsCard.applyTopicRejections(rejectedTopicNames:to:)`.
+/// Money tests for the per-topic reject pattern — line-through-to-
+/// reject from the Mentions row extended to the Topics pills. The
+/// visual half lived on the assist-quota-era AISuggestionsCard
+/// (deleted in 8d); this test exercises the data half, now
+/// `JournalEntry.applyTopicRejections(_:)`.
 ///
 /// Contract:
 ///   • Rejected topics get their entry relationship removed.
@@ -40,7 +40,7 @@ struct TopicRejectionTests {
         let entry = try makeEntryWithTopics(in: storage, topicNames: ["Cooking", "Garden", "How We Work"])
         #expect(entry.topicsArray.map(\.name).sorted() == ["Cooking", "Garden", "How We Work"])
 
-        AISuggestionsCard.applyTopicRejections(rejectedTopicNames: ["Cooking"], to: entry)
+        entry.applyTopicRejections(["Cooking"])
 
         let remaining = Set(entry.topicsArray.map(\.name))
         #expect(remaining == ["Garden", "How We Work"])
@@ -50,7 +50,7 @@ struct TopicRejectionTests {
         let storage = StorageService(inMemory: true)
         let entry = try makeEntryWithTopics(in: storage, topicNames: ["Cooking", "Garden"])
 
-        AISuggestionsCard.applyTopicRejections(rejectedTopicNames: [], to: entry)
+        entry.applyTopicRejections([])
 
         let remaining = Set(entry.topicsArray.map(\.name))
         #expect(remaining == ["Cooking", "Garden"])
@@ -61,7 +61,7 @@ struct TopicRejectionTests {
         let entry = try makeEntryWithTopics(in: storage, topicNames: ["Cooking"])
 
         // "Garden" isn't attached to this entry; rejection should not crash.
-        AISuggestionsCard.applyTopicRejections(rejectedTopicNames: ["Garden"], to: entry)
+        entry.applyTopicRejections(["Garden"])
 
         let remaining = Set(entry.topicsArray.map(\.name))
         #expect(remaining == ["Cooking"])
@@ -74,7 +74,7 @@ struct TopicRejectionTests {
         let otherEntry = try makeEntryWithTopics(in: storage, topicNames: ["Garden"])
         let entry = try makeEntryWithTopics(in: storage, topicNames: ["Garden", "Cooking"])
 
-        AISuggestionsCard.applyTopicRejections(rejectedTopicNames: ["Garden"], to: entry)
+        entry.applyTopicRejections(["Garden"])
 
         // The other entry still has Garden.
         #expect(otherEntry.topicsArray.map(\.name) == ["Garden"])
@@ -91,7 +91,7 @@ struct TopicRejectionTests {
         let storage = StorageService(inMemory: true)
         let entry = try makeEntryWithTopics(in: storage, topicNames: ["Cooking", "Garden", "How We Work", "Reading"])
 
-        AISuggestionsCard.applyTopicRejections(rejectedTopicNames: ["Cooking", "Reading"], to: entry)
+        entry.applyTopicRejections(["Cooking", "Reading"])
 
         let remaining = Set(entry.topicsArray.map(\.name))
         #expect(remaining == ["Garden", "How We Work"])

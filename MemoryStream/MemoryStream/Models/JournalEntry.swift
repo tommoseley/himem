@@ -263,4 +263,20 @@ extension JournalEntry {
         request.fetchLimit = 1
         return request
     }
+
+    /// Pure: removes the entry's `topics` relationships whose name is
+    /// in `rejectedTopicNames`. The Topic entities themselves stay in
+    /// the store (other entries may still reference them). Extracted
+    /// so the rejection logic can be unit-tested without driving a
+    /// SwiftUI surface.
+    ///
+    /// Moved out of the assist-quota-era `AISuggestionsCard` so the
+    /// logic survives that file's deletion in 8d.
+    func applyTopicRejections(_ rejectedTopicNames: Set<String>) {
+        guard !rejectedTopicNames.isEmpty,
+              let topics = self.topics as? Set<Topic> else { return }
+        for topic in topics where rejectedTopicNames.contains(topic.name) {
+            self.removeFromTopics(topic)
+        }
+    }
 }

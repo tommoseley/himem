@@ -696,18 +696,18 @@ struct EntryExpandedView: View {
 
     /// One standalone-mentions chip. Persons get a `person.fill`
     /// glyph; other types get a colored dot. Tint comes from
-    /// `AISuggestionsCard.mentionTint(for:)` so the two surfaces
-    /// share one palette.
+    /// `ExtractedEntity.EntityType.mentionTint` so any mention
+    /// surface reads from one palette.
     @ViewBuilder
     private func mentionChip(_ tag: TagDisplayModel) -> some View {
         HStack(spacing: 4) {
             if tag.entityType == .person {
                 Image(systemName: "person.fill")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(AISuggestionsCard.mentionTint(for: tag.entityType))
+                    .foregroundStyle(tag.entityType.mentionTint)
             } else {
                 Circle()
-                    .fill(AISuggestionsCard.mentionTint(for: tag.entityType))
+                    .fill(tag.entityType.mentionTint)
                     .frame(width: 5, height: 5)
             }
             Text(tag.value)
