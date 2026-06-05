@@ -21,7 +21,6 @@ struct ProjectDetailView: View {
     @State private var showAddMemorySheet = false
     @State private var shareItems: [Any] = []
     @State private var isPreparingShare = false
-    @State private var showProjectAssistUpsell = false
     @State private var showSuggestionsSheet = false
     @StateObject private var suggestionsVM = ProjectSuggestionsViewModel()
     @StateObject private var assistVM = ProjectAssistViewModel()
@@ -288,10 +287,6 @@ struct ProjectDetailView: View {
         }) {
             AddMemoryToProjectSheet(projectId: projectId, projectVM: projectVM)
         }
-        .sheet(isPresented: $showProjectAssistUpsell) {
-            ProjectAssistUpsellSheet()
-                .presentationDetents([.medium])
-        }
         .sheet(isPresented: $showSuggestionsSheet) {
             // Reload after dismissal so the affordance row's count
             // reflects whatever the user just committed/skipped.
@@ -313,17 +308,13 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// Routes the "Find the thread" tap. Free with starter
-    /// available → run + debit one starter. Free with starter
-    /// spent → upsell. Plus / Founders → run + debit from monthly
-    /// bucket. The view-model owns the call ordering: gate-check
-    /// here, full network round-trip in `assistVM.run`, debit on
-    /// success only.
+    /// Routes the "Find the thread" tap. Gated by
+    /// `entitlement.canConsumeProjectAssist` until the broader
+    /// Job 1 cutover (PR 8e) replaces this with an `isPlus` check.
+    /// The upsell sheet is retired here; the new PricingView (8f)
+    /// will route the gated case.
     private func handleFindTheThreadTap() {
-        guard entitlement.canConsumeProjectAssist else {
-            showProjectAssistUpsell = true
-            return
-        }
+        guard entitlement.canConsumeProjectAssist else { return }
         Task {
             await assistVM.run(projectId: projectId)
             // Reload project state so the new summary renders +

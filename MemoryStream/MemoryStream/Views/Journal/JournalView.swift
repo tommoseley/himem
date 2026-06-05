@@ -48,12 +48,6 @@ struct JournalView: View {
                 onSettingsTap: { showSettings = true }
             )
 
-            // Soft 75% AI-assist banner — once per monthly period for
-            // Plus / Founders. Free users never see this.
-            Soft75Banner()
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-
             // Inbox banner — appears when there are watch clips waiting to
             // be organized. Per the Append-Watch design rule: calm by
             // default, but when the inbox is non-empty surface a single

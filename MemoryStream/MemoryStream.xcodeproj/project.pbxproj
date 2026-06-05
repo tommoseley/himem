@@ -103,19 +103,12 @@
 		A100000603 /* FoundersCounter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000603 /* FoundersCounter.swift */; };
 		A100000604 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = B100000604 /* Products.storekit */; };
 		A100000610 /* PricingPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000610 /* PricingPrimitives.swift */; };
-		A100000611 /* OnboardingStarterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000611 /* OnboardingStarterCard.swift */; };
 		A100000612 /* OrganizeMemoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000612 /* OrganizeMemoryCard.swift */; };
-		A100000613 /* YourAIView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000613 /* YourAIView.swift */; };
 		A100000614 /* UpgradeHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000614 /* UpgradeHubView.swift */; };
 		A100000615 /* AIPackPurchaseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000615 /* AIPackPurchaseSheet.swift */; };
 		A100000616 /* FoundersDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000616 /* FoundersDetailView.swift */; };
-		A100000617 /* ProjectCapSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000617 /* ProjectCapSheet.swift */; };
 		A100000618 /* UpgradePromptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000618 /* UpgradePromptSheet.swift */; };
-		A100000619 /* Soft75Banner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000619 /* Soft75Banner.swift */; };
-		A100000620 /* SupporterDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000620 /* SupporterDetailView.swift */; };
 		A100000621 /* TenureTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000621 /* TenureTracker.swift */; };
-		A100000622 /* DebugPricingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000622 /* DebugPricingPanel.swift */; };
-		A100000623 /* OrganizedSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000623 /* OrganizedSection.swift */; };
 		A100000624 /* OrganizeMemorySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000624 /* OrganizeMemorySection.swift */; };
 		A100000625 /* AISuggestionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000625 /* AISuggestionsCard.swift */; };
 		A100000626 /* OrganizePass.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000626 /* OrganizePass.swift */; };
@@ -128,7 +121,6 @@
 		A100000654 /* ProjectCapPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000654 /* ProjectCapPolicy.swift */; };
 		A100000655 /* ProjectAssistGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000655 /* ProjectAssistGate.swift */; };
 		A100000656 /* OrganizeCardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000656 /* OrganizeCardState.swift */; };
-		A100000657 /* ProjectAssistUpsellSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000657 /* ProjectAssistUpsellSheet.swift */; };
 		A100000660 /* SuggestionPrefilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000660 /* SuggestionPrefilter.swift */; };
 		A100000662 /* SuggestedMemoriesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000662 /* SuggestedMemoriesSheet.swift */; };
 		A100000670 /* MinClipDebouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000670 /* MinClipDebouncer.swift */; };
@@ -334,19 +326,12 @@
 		B100000603 /* FoundersCounter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundersCounter.swift; sourceTree = "<group>"; };
 		B100000604 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = file.storekit; path = Products.storekit; sourceTree = "<group>"; };
 		B100000610 /* PricingPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PricingPrimitives.swift; sourceTree = "<group>"; };
-		B100000611 /* OnboardingStarterCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStarterCard.swift; sourceTree = "<group>"; };
 		B100000612 /* OrganizeMemoryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeMemoryCard.swift; sourceTree = "<group>"; };
-		B100000613 /* YourAIView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YourAIView.swift; sourceTree = "<group>"; };
 		B100000614 /* UpgradeHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeHubView.swift; sourceTree = "<group>"; };
 		B100000615 /* AIPackPurchaseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPackPurchaseSheet.swift; sourceTree = "<group>"; };
 		B100000616 /* FoundersDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundersDetailView.swift; sourceTree = "<group>"; };
-		B100000617 /* ProjectCapSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCapSheet.swift; sourceTree = "<group>"; };
 		B100000618 /* UpgradePromptSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradePromptSheet.swift; sourceTree = "<group>"; };
-		B100000619 /* Soft75Banner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Soft75Banner.swift; sourceTree = "<group>"; };
-		B100000620 /* SupporterDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupporterDetailView.swift; sourceTree = "<group>"; };
 		B100000621 /* TenureTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TenureTracker.swift; sourceTree = "<group>"; };
-		B100000622 /* DebugPricingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugPricingPanel.swift; sourceTree = "<group>"; };
-		B100000623 /* OrganizedSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizedSection.swift; sourceTree = "<group>"; };
 		B100000624 /* OrganizeMemorySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeMemorySection.swift; sourceTree = "<group>"; };
 		B100000625 /* AISuggestionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISuggestionsCard.swift; sourceTree = "<group>"; };
 		B100000626 /* OrganizePass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizePass.swift; sourceTree = "<group>"; };
@@ -359,7 +344,6 @@
 		B100000654 /* ProjectCapPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCapPolicy.swift; sourceTree = "<group>"; };
 		B100000655 /* ProjectAssistGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistGate.swift; sourceTree = "<group>"; };
 		B100000656 /* OrganizeCardState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeCardState.swift; sourceTree = "<group>"; };
-		B100000657 /* ProjectAssistUpsellSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistUpsellSheet.swift; sourceTree = "<group>"; };
 		B100000660 /* SuggestionPrefilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionPrefilter.swift; sourceTree = "<group>"; };
 		B100000662 /* SuggestedMemoriesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestedMemoriesSheet.swift; sourceTree = "<group>"; };
 		B100000670 /* MinClipDebouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MinClipDebouncer.swift; path = Shared/MinClipDebouncer.swift; sourceTree = "<group>"; };
@@ -864,25 +848,17 @@
 			isa = PBXGroup;
 			children = (
 				B100000610 /* PricingPrimitives.swift */,
-				B100000611 /* OnboardingStarterCard.swift */,
 				B100000612 /* OrganizeMemoryCard.swift */,
-				B100000623 /* OrganizedSection.swift */,
 				B100000624 /* OrganizeMemorySection.swift */,
 				B100000625 /* AISuggestionsCard.swift */,
 				B100000627 /* LegacyInferenceCardSlot.swift */,
 				B100000628 /* TierMark.swift */,
 				B100000629 /* OrganizedChip.swift */,
 				B100000632 /* FABWithCardSuppression.swift */,
-				B100000613 /* YourAIView.swift */,
 				B100000614 /* UpgradeHubView.swift */,
 				B100000615 /* AIPackPurchaseSheet.swift */,
 				B100000616 /* FoundersDetailView.swift */,
-				B100000617 /* ProjectCapSheet.swift */,
-				B100000657 /* ProjectAssistUpsellSheet.swift */,
 				B100000618 /* UpgradePromptSheet.swift */,
-				B100000619 /* Soft75Banner.swift */,
-				B100000620 /* SupporterDetailView.swift */,
-				B100000622 /* DebugPricingPanel.swift */,
 			);
 			path = Pricing;
 			sourceTree = "<group>";
@@ -1245,9 +1221,7 @@
 				A100000602 /* StoreKitService.swift in Sources */,
 				A100000603 /* FoundersCounter.swift in Sources */,
 				A100000610 /* PricingPrimitives.swift in Sources */,
-				A100000611 /* OnboardingStarterCard.swift in Sources */,
 				A100000612 /* OrganizeMemoryCard.swift in Sources */,
-				A100000623 /* OrganizedSection.swift in Sources */,
 				A100000624 /* OrganizeMemorySection.swift in Sources */,
 				A100000625 /* AISuggestionsCard.swift in Sources */,
 				A100000626 /* OrganizePass.swift in Sources */,
@@ -1257,17 +1231,11 @@
 				A100000631 /* WakeLock.swift in Sources */,
 				A100000632 /* FABWithCardSuppression.swift in Sources */,
 				A100000633 /* SummaryRenderer.swift in Sources */,
-				A100000613 /* YourAIView.swift in Sources */,
 				A100000614 /* UpgradeHubView.swift in Sources */,
 				A100000615 /* AIPackPurchaseSheet.swift in Sources */,
 				A100000616 /* FoundersDetailView.swift in Sources */,
-				A100000617 /* ProjectCapSheet.swift in Sources */,
-				A100000657 /* ProjectAssistUpsellSheet.swift in Sources */,
 				A100000618 /* UpgradePromptSheet.swift in Sources */,
-				A100000619 /* Soft75Banner.swift in Sources */,
-				A100000620 /* SupporterDetailView.swift in Sources */,
 				A100000621 /* TenureTracker.swift in Sources */,
-				A100000622 /* DebugPricingPanel.swift in Sources */,
 				A100000501 /* StorageService+EntryQueries.swift in Sources */,
 				A100000502 /* TranscriptionService.swift in Sources */,
 				A100000503 /* FragmentMigration.swift in Sources */,

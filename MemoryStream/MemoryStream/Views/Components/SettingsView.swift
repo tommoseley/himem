@@ -32,11 +32,8 @@ struct SettingsView: View {
     @ObservedObject private var entitlement = EntitlementService.shared
     @ObservedObject private var tenure = TenureTracker.shared
     @State private var showInbox = false
-    @State private var showYourAI = false
     @State private var showUpgradeHub = false
-    @State private var showSupporter = false
     #if DEBUG
-    @State private var showDebugPricing = false
     @State private var scaleSeedProgress: (current: Int, total: Int)? = nil
     @State private var scaleStatusMessage: String? = nil
     @State private var scaleWorking: Bool = false
@@ -171,25 +168,6 @@ struct SettingsView: View {
                 // MARK: - HiMem Plus (Pricing)
                 Section {
                     Button {
-                        showYourAI = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(Crucible.Color.accent)
-                            Text("Your AI")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                            Text(aiSummary)
-                                .font(.subheadline)
-                                .foregroundStyle(Crucible.Color.ink2)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink4)
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
                         showUpgradeHub = true
                     } label: {
                         HStack {
@@ -233,31 +211,6 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                 } footer: {
                     Text("Voice clips from Apple Watch land here. Review them, then create a new memory or add them to an existing one.")
-                }
-
-                // MARK: - Supporter (post-trust only)
-                if tenure.isTenured {
-                    Section {
-                        Button {
-                            showSupporter = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "heart.fill")
-                                    .foregroundStyle(Crucible.Color.accent)
-                                Text("Support HiMem")
-                                    .foregroundStyle(Crucible.Color.ink)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(Crucible.Color.ink4)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    } header: {
-                        Text("Behind HiMem")
-                    } footer: {
-                        Text("Voluntary. No feature unlocks. We surface this only after you've stuck around.")
-                    }
                 }
 
                 // MARK: - Voice
@@ -314,25 +267,6 @@ struct SettingsView: View {
                 #if DEBUG
                 // MARK: - Debug (stripped from Release builds)
                 Section {
-                    Button {
-                        showDebugPricing = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "ladybug.fill")
-                                .foregroundStyle(.purple)
-                            Text("Pricing & entitlements")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                            Text(devTierLabel)
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink3)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink4)
-                        }
-                    }
-                    .buttonStyle(.plain)
-
                     Button {
                         AuthService.shared.debugResetOnboardingState()
                         showResetOnboardingAlert = true
@@ -420,20 +354,9 @@ struct SettingsView: View {
                     SessionListView(viewModel: viewModel)
                 }
             }
-            .navigationDestination(isPresented: $showYourAI) {
-                YourAIView()
-            }
             .navigationDestination(isPresented: $showUpgradeHub) {
                 UpgradeHubView()
             }
-            .navigationDestination(isPresented: $showSupporter) {
-                SupporterDetailView()
-            }
-            #if DEBUG
-            .navigationDestination(isPresented: $showDebugPricing) {
-                DebugPricingPanel()
-            }
-            #endif
             .onAppear {
                 loadTopics()
                 tenure.refresh()
@@ -643,13 +566,6 @@ struct SettingsView: View {
 
     // MARK: - Pricing summaries
 
-    private var aiSummary: String {
-        if entitlement.isPlus {
-            return "\(entitlement.monthlyRemaining)/\(entitlement.monthlyAllowance) this month"
-        }
-        return "\(entitlement.totalAssistsRemaining) assists"
-    }
-
     private var planSummary: String {
         switch entitlement.tier {
         case .free: return "Upgrade"
@@ -660,16 +576,6 @@ struct SettingsView: View {
     }
 
     #if DEBUG
-    /// Compact tier label for the debug-section row, with an "(override)"
-    /// suffix when the developer override is in play so it's obvious at
-    /// a glance which path is driving the tier.
-    private var devTierLabel: String {
-        let base = planSummary
-        if entitlement.developerOverrideTier != nil {
-            return "\(base) · override"
-        }
-        return base
-    }
 
     // MARK: - Scaling test (DEBUG only)
 
