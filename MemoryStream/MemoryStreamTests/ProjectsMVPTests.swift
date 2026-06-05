@@ -5,9 +5,9 @@ import CoreData
 
 /// PR 1 of the Projects MVP rebuild. Covers:
 ///
-///   • Project cap policy (Free hard-capped at 1; Plus/Founders
-///     uncapped) — extracted so the gate is testable without
-///     driving the ProjectListView.
+///   • Project cap policy (Free hard-capped at 3; Plus uncapped) —
+///     extracted so the gate is testable without driving the
+///     ProjectListView.
 ///   • ProjectViewModel CRUD — createProject, deleteProject.
 ///   • Memory × Project many-to-many — a memory can belong to
 ///     multiple projects (the m2m schema was already there; this
@@ -21,24 +21,26 @@ struct ProjectsMVPTests {
 
     // MARK: - Cap policy
 
-    @Test func cap_freeWithZeroProjects_canCreate() {
+    @Test func cap_freeBelowCap_canCreate() {
         #expect(ProjectCapPolicy.canCreate(isPlus: false, currentCount: 0) == true)
+        #expect(ProjectCapPolicy.canCreate(isPlus: false, currentCount: 1) == true)
+        #expect(ProjectCapPolicy.canCreate(isPlus: false, currentCount: 2) == true)
     }
 
-    @Test func cap_freeWithOneProject_blocked() {
-        #expect(ProjectCapPolicy.canCreate(isPlus: false, currentCount: 1) == false)
+    @Test func cap_freeAtCap_blocked() {
+        #expect(ProjectCapPolicy.canCreate(isPlus: false, currentCount: 3) == false)
     }
 
-    @Test func cap_freeWithMultipleProjects_stillBlocked() {
-        // Edge case: user was Plus, created 3 projects, then downgraded.
+    @Test func cap_freeAboveCap_stillBlocked() {
+        // Edge case: user was Plus, created 5 projects, then downgraded.
         // The cap policy itself still returns false; the rest is handled
         // by the cancel-Plus regression (deferred per spec).
-        #expect(ProjectCapPolicy.canCreate(isPlus: false, currentCount: 3) == false)
+        #expect(ProjectCapPolicy.canCreate(isPlus: false, currentCount: 5) == false)
     }
 
     @Test func cap_plusUser_uncappedAtAnyCount() {
         #expect(ProjectCapPolicy.canCreate(isPlus: true, currentCount: 0) == true)
-        #expect(ProjectCapPolicy.canCreate(isPlus: true, currentCount: 1) == true)
+        #expect(ProjectCapPolicy.canCreate(isPlus: true, currentCount: 3) == true)
         #expect(ProjectCapPolicy.canCreate(isPlus: true, currentCount: 50) == true)
     }
 

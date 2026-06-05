@@ -116,9 +116,9 @@ struct ProjectListView: View {
         }
     }
 
-    /// Free users get one project. The "New Project" affordance routes
-    /// to the cap sheet instead of opening the creation form when the
-    /// user is already at the limit. Plus/Founders skip the check.
+    /// Free users get three projects. The "New Project" affordance
+    /// routes to the cap sheet instead of opening the creation form
+    /// when the user is already at the limit. Plus skips the check.
     /// The decision is pure — see `ProjectCapPolicy.canCreate`.
     private func attemptCreateProject() {
         let allowed = ProjectCapPolicy.canCreate(
