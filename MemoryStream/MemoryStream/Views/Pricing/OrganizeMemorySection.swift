@@ -1,52 +1,36 @@
 import SwiftUI
 import CoreData
 
-/// State router for the Memory Detail AI zone (post-assist-quota
-/// retirement, PR 8c).
+/// State router for the Memory Detail AI zone after the assist-quota
+/// retirement (PR 8d.2b).
 ///
-///   • **No pass yet** — render `OrganizeMemoryCard(.idle)`. Free
-///     users tap to run the on-device organize; Plus users normally
-///     see the pass appear automatically because the auto-organize
-///     pipeline fires on capture.
-///   • **Has a draft (unreviewed) pass** — `pass.isReviewed == false`.
-///     The review surface (still `AISuggestionsCard` in 8c, replaced
-///     in 8d with the B1 review sheet) is always visible so the user
-///     can glance at the draft and accept or edit.
-///   • **Has a reviewed pass** — `pass.isReviewed == true`. Show the
-///     `OrganizedChip` with accordion unfold to the same review
-///     surface. The chip's solid border + check icon signal the
-///     user-confirmed state.
-///
-/// Stale (`entry.hasChangesSinceLastOrganize`) is now an orthogonal
-/// concern surfaced as a warning banner alongside the chip per
-/// `pricing-screens-lifecycle.jsx` Stage 3st — not a chip variant.
+///   • **No pass yet** — render `OrganizeMemoryCard(.idle)` so the
+///     user can tap to run the on-device organize.
+///   • **Has a draft (unreviewed) pass** — render `OrganizedChip` +
+///     summary + topic chips + a *"Tap to review & keep"* link.
+///     Tapping the chip or the link opens the B1 review sheet
+///     (`DraftReviewSheet`). The user signs off there.
+///   • **Has a reviewed pass** — render `OrganizedChip` + summary +
+///     topic chips. No review CTA. If the entry has new clips since
+///     the pass, surface a stale warning banner below per
+///     `pricing-screens-lifecycle.jsx` Stage 3st — tapping fires a
+///     re-organize.
 struct OrganizeMemorySection: View {
     let entryID: UUID
     var onOrganize: () -> Void
-    /// Routes upgrade nudges (currently consumed by AISuggestionsCard
-    /// for its "Out of assists · See plans" affordance). Will be
-    /// repointed at the new PricingView in 8f; kept on the API for
-    /// the 8c → 8f transition.
-    var onOpenPackSheet: () -> Void
-    /// Lifted from local @State so the parent (EntryExpandedView)
-    /// can suppress the FAB while the AI Suggestions card is open.
-    /// Folded state defaults to true on chip mode; tapping the chip
-    /// unfolds; the card's × refolds. Independent of the sticky
-    /// `dismissedAt` data flag.
-    @Binding var unfolded: Bool
+    @Binding var unfolded: Bool  // Kept for EntryExpandedView API compat; unused after the AISuggestionsCard retirement.
 
     @FetchRequest private var entries: FetchedResults<JournalEntry>
+    @State private var showReviewSheet = false
 
     init(
         entryID: UUID,
         unfolded: Binding<Bool>,
-        onOrganize: @escaping () -> Void,
-        onOpenPackSheet: @escaping () -> Void
+        onOrganize: @escaping () -> Void
     ) {
         self.entryID = entryID
         self._unfolded = unfolded
         self.onOrganize = onOrganize
-        self.onOpenPackSheet = onOpenPackSheet
         let request: NSFetchRequest<JournalEntry> = NSFetchRequest(entityName: "JournalEntry")
         request.predicate = NSPredicate(format: "id == %@", entryID as CVarArg)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \JournalEntry.createdAt, ascending: false)]
@@ -57,10 +41,6 @@ struct OrganizeMemorySection: View {
     private var entry: JournalEntry? { entries.first }
     private var pass: OrganizePass? { entry?.latestOrganizePass }
     private var isStale: Bool { entry?.hasChangesSinceLastOrganize ?? false }
-    /// True while the entry's latest processing task is in flight.
-    /// Drives the spinner in both the idle organize card and the
-    /// AISuggestionsCard ribbon (where the card surfaces it itself
-    /// off the same entry).
     private var isProcessing: Bool {
         switch entry?.latestProcessingTask?.statusEnum {
         case .pending, .processing: return true
@@ -71,23 +51,8 @@ struct OrganizeMemorySection: View {
     var body: some View {
         Group {
             if let entry, let pass {
-                if !pass.isReviewed {
-                    // Draft state — review surface always visible.
-                    AISuggestionsCard(
-                        pass: pass,
-                        entry: entry,
-                        isStale: isStale,
-                        canRefresh: true,
-                        onRefresh: handleRefresh,
-                        onDismiss: handleDismiss,
-                        onOpenPackSheet: onOpenPackSheet
-                    )
-                } else {
-                    // Organized state — chip with accordion unfold.
-                    organizedAccordion(pass: pass, entry: entry)
-                }
+                organizedView(pass: pass, entry: entry)
             } else if entry != nil {
-                // Never organized — show manual Organize button.
                 OrganizeMemoryCard(
                     state: .idle,
                     onOrganize: onOrganize,
@@ -97,58 +62,118 @@ struct OrganizeMemorySection: View {
                 EmptyView()
             }
         }
+        .sheet(isPresented: $showReviewSheet) {
+            if let entry, let pass {
+                DraftReviewSheet(
+                    pass: pass,
+                    entry: entry,
+                    onDismiss: { showReviewSheet = false }
+                )
+                .presentationDetents([.large])
+            }
+        }
     }
 
-    // MARK: - Organized accordion
+    // MARK: - Organized view
 
     @ViewBuilder
-    private func organizedAccordion(pass: OrganizePass, entry: JournalEntry) -> some View {
-        // One affordance visible at a time. Folded: chip only —
-        // tap to open. Unfolded: card only — × to close. The chip
-        // doesn't lie about its function because it's not visible
-        // when the card is already open.
-        if unfolded {
-            AISuggestionsCard(
-                pass: pass,
-                entry: entry,
-                isStale: isStale,
-                canRefresh: true,
-                onRefresh: handleRefresh,
-                onDismiss: { withAnimation(.easeInOut(duration: 0.2)) { unfolded = false } },
-                onOpenPackSheet: onOpenPackSheet
-            )
-            .transition(.opacity.combined(with: .move(edge: .top)))
-        } else {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    unfolded = true
+    private func organizedView(pass: OrganizePass, entry: JournalEntry) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 9) {
+                Button {
+                    if !pass.isReviewed { showReviewSheet = true }
+                } label: {
+                    OrganizedChip(pass: pass)
                 }
-            } label: {
-                OrganizedChip(pass: pass)
+                .buttonStyle(.plain)
+                .disabled(pass.isReviewed)
+
+                if !pass.isReviewed {
+                    Circle()
+                        .stroke(Crucible.Color.aiBlue, lineWidth: 1.5)
+                        .frame(width: 7, height: 7)
+                    Text("unreviewed")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.plain)
+
+            if let summary = pass.summaryText, !summary.isEmpty {
+                Text(SummaryRenderer.renderForOwner(summary))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .lineSpacing(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            let topics = entry.topicsArray.map(\.name)
+            if !topics.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(topics, id: \.self) { name in
+                        Text(name)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Crucible.Color.ink2)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 3)
+                            .background(Crucible.Color.wash1)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Crucible.Color.hairline, lineWidth: 1)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+
+            if !pass.isReviewed {
+                Button {
+                    showReviewSheet = true
+                } label: {
+                    Text("Tap to review & keep →")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.aiBlue)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if pass.isReviewed && isStale {
+                staleBanner(newClips: entry.clipsAddedSinceLastOrganize)
+            }
         }
     }
 
-    // MARK: - Behavior
-
-    private func handleDismiss() {
-        guard let pass else { return }
-        let ctx = pass.managedObjectContext ?? StorageService.shared.viewContext
-        ctx.performAndWait {
-            pass.dismissedAt = Date()
-            try? ctx.save()
+    @ViewBuilder
+    private func staleBanner(newClips: Int) -> some View {
+        Button(action: handleRefresh) {
+            HStack(spacing: 10) {
+                Text(staleText(newClips: newClips))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Crucible.Color.warnInk)
+                Spacer(minLength: 0)
+                Text("Refresh")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.warnInk)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Crucible.Color.warnTint)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Crucible.Color.warning.opacity(0.4), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-        // Once dismissed, isReviewed flips true and the next render
-        // falls into the Organized state; the chip + folded card is
-        // the rest position.
-        unfolded = false
+        .buttonStyle(.plain)
+    }
+
+    private func staleText(newClips: Int) -> String {
+        if newClips == 1 { return "1 new clip since this was organized" }
+        return "\(newClips) new clips since this was organized"
     }
 
     private func handleRefresh() {
-        // A successful refresh is a new OrganizePass (dismissedAt nil,
-        // acceptedRows empty by default) — the next render will be
-        // Draft again.
         onOrganize()
     }
 }

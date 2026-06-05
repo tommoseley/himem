@@ -32,7 +32,6 @@ struct SettingsView: View {
     @ObservedObject private var entitlement = EntitlementService.shared
     @ObservedObject private var tenure = TenureTracker.shared
     @State private var showInbox = false
-    @State private var showUpgradeHub = false
     #if DEBUG
     @State private var scaleSeedProgress: (current: Int, total: Int)? = nil
     @State private var scaleStatusMessage: String? = nil
@@ -163,30 +162,6 @@ struct SettingsView: View {
                     } footer: {
                         Text("Deleted memories are kept for 30 days before permanent removal.")
                     }
-                }
-
-                // MARK: - HiMem Plus (Pricing)
-                Section {
-                    Button {
-                        showUpgradeHub = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "star.fill")
-                                .foregroundStyle(Crucible.Color.accent)
-                            Text("HiMem Plus")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                            Text(planSummary)
-                                .font(.subheadline)
-                                .foregroundStyle(Crucible.Color.ink2)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink4)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                } footer: {
-                    Text("HiMem AI is the helper, not the product. Free works forever; Plus adds AI organization and unlimited projects.")
                 }
 
                 // MARK: - Captured Clips (Inbox)
@@ -353,9 +328,6 @@ struct SettingsView: View {
                 if let viewModel {
                     SessionListView(viewModel: viewModel)
                 }
-            }
-            .navigationDestination(isPresented: $showUpgradeHub) {
-                UpgradeHubView()
             }
             .onAppear {
                 loadTopics()
@@ -564,16 +536,6 @@ struct SettingsView: View {
         notificationAuthStatus = await NotificationService.shared.authorizationStatus()
     }
 
-    // MARK: - Pricing summaries
-
-    private var planSummary: String {
-        switch entitlement.tier {
-        case .free: return "Upgrade"
-        case .plusMonthly: return "Plus · Monthly"
-        case .plusYearly: return "Plus · Yearly"
-        case .founders: return "Founders"
-        }
-    }
 
     #if DEBUG
 

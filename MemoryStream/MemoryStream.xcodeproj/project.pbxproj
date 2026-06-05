@@ -102,20 +102,15 @@
 		A100000602 /* StoreKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000602 /* StoreKitService.swift */; };
 		A100000603 /* FoundersCounter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000603 /* FoundersCounter.swift */; };
 		A100000604 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = B100000604 /* Products.storekit */; };
-		A100000610 /* PricingPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000610 /* PricingPrimitives.swift */; };
 		A100000612 /* OrganizeMemoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000612 /* OrganizeMemoryCard.swift */; };
-		A100000614 /* UpgradeHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000614 /* UpgradeHubView.swift */; };
-		A100000615 /* AIPackPurchaseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000615 /* AIPackPurchaseSheet.swift */; };
-		A100000616 /* FoundersDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000616 /* FoundersDetailView.swift */; };
 		A100000621 /* TenureTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000621 /* TenureTracker.swift */; };
 		A100000624 /* OrganizeMemorySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000624 /* OrganizeMemorySection.swift */; };
-		A100000625 /* AISuggestionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000625 /* AISuggestionsCard.swift */; };
 		A100000626 /* OrganizePass.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000626 /* OrganizePass.swift */; };
 		A100000627 /* LegacyInferenceCardSlot.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000627 /* LegacyInferenceCardSlot.swift */; };
 		A100000628 /* TierMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000628 /* TierMark.swift */; };
 		A100000629 /* OrganizedChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000629 /* OrganizedChip.swift */; };
+		A900000004 /* DraftReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000004 /* DraftReviewSheet.swift */; };
 		A100000631 /* WakeLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000631 /* WakeLock.swift */; };
-		A100000632 /* FABWithCardSuppression.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000632 /* FABWithCardSuppression.swift */; };
 		A100000633 /* SummaryRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000633 /* SummaryRenderer.swift */; };
 		A100000654 /* ProjectCapPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000654 /* ProjectCapPolicy.swift */; };
 		A100000655 /* ProjectAssistGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000655 /* ProjectAssistGate.swift */; };
@@ -324,20 +319,15 @@
 		B100000602 /* StoreKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitService.swift; sourceTree = "<group>"; };
 		B100000603 /* FoundersCounter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundersCounter.swift; sourceTree = "<group>"; };
 		B100000604 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = file.storekit; path = Products.storekit; sourceTree = "<group>"; };
-		B100000610 /* PricingPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PricingPrimitives.swift; sourceTree = "<group>"; };
 		B100000612 /* OrganizeMemoryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeMemoryCard.swift; sourceTree = "<group>"; };
-		B100000614 /* UpgradeHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeHubView.swift; sourceTree = "<group>"; };
-		B100000615 /* AIPackPurchaseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPackPurchaseSheet.swift; sourceTree = "<group>"; };
-		B100000616 /* FoundersDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundersDetailView.swift; sourceTree = "<group>"; };
 		B100000621 /* TenureTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TenureTracker.swift; sourceTree = "<group>"; };
 		B100000624 /* OrganizeMemorySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeMemorySection.swift; sourceTree = "<group>"; };
-		B100000625 /* AISuggestionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISuggestionsCard.swift; sourceTree = "<group>"; };
 		B100000626 /* OrganizePass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizePass.swift; sourceTree = "<group>"; };
 		B100000627 /* LegacyInferenceCardSlot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyInferenceCardSlot.swift; sourceTree = "<group>"; };
 		B100000628 /* TierMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TierMark.swift; sourceTree = "<group>"; };
 		B100000629 /* OrganizedChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizedChip.swift; sourceTree = "<group>"; };
+		B900000004 /* DraftReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftReviewSheet.swift; sourceTree = "<group>"; };
 		B100000631 /* WakeLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeLock.swift; sourceTree = "<group>"; };
-		B100000632 /* FABWithCardSuppression.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FABWithCardSuppression.swift; sourceTree = "<group>"; };
 		B100000633 /* SummaryRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryRenderer.swift; sourceTree = "<group>"; };
 		B100000654 /* ProjectCapPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCapPolicy.swift; sourceTree = "<group>"; };
 		B100000655 /* ProjectAssistGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistGate.swift; sourceTree = "<group>"; };
@@ -845,17 +835,12 @@
 		G100000610 /* Pricing */ = {
 			isa = PBXGroup;
 			children = (
-				B100000610 /* PricingPrimitives.swift */,
 				B100000612 /* OrganizeMemoryCard.swift */,
 				B100000624 /* OrganizeMemorySection.swift */,
-				B100000625 /* AISuggestionsCard.swift */,
 				B100000627 /* LegacyInferenceCardSlot.swift */,
 				B100000628 /* TierMark.swift */,
 				B100000629 /* OrganizedChip.swift */,
-				B100000632 /* FABWithCardSuppression.swift */,
-				B100000614 /* UpgradeHubView.swift */,
-				B100000615 /* AIPackPurchaseSheet.swift */,
-				B100000616 /* FoundersDetailView.swift */,
+				B900000004 /* DraftReviewSheet.swift */,
 			);
 			path = Pricing;
 			sourceTree = "<group>";
@@ -1217,20 +1202,15 @@
 				A100000671 /* NextClipController.swift in Sources */,
 				A100000602 /* StoreKitService.swift in Sources */,
 				A100000603 /* FoundersCounter.swift in Sources */,
-				A100000610 /* PricingPrimitives.swift in Sources */,
 				A100000612 /* OrganizeMemoryCard.swift in Sources */,
 				A100000624 /* OrganizeMemorySection.swift in Sources */,
-				A100000625 /* AISuggestionsCard.swift in Sources */,
 				A100000626 /* OrganizePass.swift in Sources */,
 				A100000627 /* LegacyInferenceCardSlot.swift in Sources */,
 				A100000628 /* TierMark.swift in Sources */,
 				A100000629 /* OrganizedChip.swift in Sources */,
+				A900000004 /* DraftReviewSheet.swift in Sources */,
 				A100000631 /* WakeLock.swift in Sources */,
-				A100000632 /* FABWithCardSuppression.swift in Sources */,
 				A100000633 /* SummaryRenderer.swift in Sources */,
-				A100000614 /* UpgradeHubView.swift in Sources */,
-				A100000615 /* AIPackPurchaseSheet.swift in Sources */,
-				A100000616 /* FoundersDetailView.swift in Sources */,
 				A100000621 /* TenureTracker.swift in Sources */,
 				A100000501 /* StorageService+EntryQueries.swift in Sources */,
 				A100000502 /* TranscriptionService.swift in Sources */,

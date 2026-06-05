@@ -39,7 +39,6 @@ struct CreateMemoryFromClipsSheet: View {
     @State private var newProjectName: String = ""
     /// Routes the "Get AI title · 1 assist →" tap (free + 0 assists)
     /// to the Upgrade Hub per pricing spec § 14 side branch.
-    @State private var showUpgradeHub: Bool = false
     @ObservedObject private var entitlement = EntitlementService.shared
     @Environment(\.dismiss) private var dismiss
 
@@ -112,17 +111,6 @@ struct CreateMemoryFromClipsSheet: View {
                 if title.isEmpty, let suggestion = aiSuggestedTitle {
                     title = suggestion
                 }
-                // Pricing spec § 14 side branch: free user out of
-                // starter assists doesn't burn one silently on a
-                // bundle. Pre-fill the title with a timestamp; the
-                // user can rename or upgrade for an AI title.
-                if title.isEmpty, isFreeNoAssists {
-                    title = Self.timestampFallbackTitle(for: clips)
-                }
-            }
-            .sheet(isPresented: $showUpgradeHub) {
-                UpgradeHubView()
-                    .presentationDetents([.large])
             }
         }
         // 68% per JSX — half-height with the session card still
@@ -248,64 +236,8 @@ struct CreateMemoryFromClipsSheet: View {
                 Text("Suggested from your transcripts. Tap to rewrite.")
                     .font(.caption)
                     .foregroundStyle(Crucible.Color.ink3)
-            } else if isFreeNoAssists {
-                Text("Placeholder · edit any time.")
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink3)
-                getAITitleAffordance
             }
         }
-    }
-
-    /// "Get AI title · 1 assist →" affordance shown to free users
-    /// at zero assists per pricing spec § 14 side branch. Tap
-    /// routes to the Upgrade Hub so the user can pick a path (pack
-    /// or Plus) without ever having an assist silently burned by
-    /// the bundle sheet.
-    private var getAITitleAffordance: some View {
-        Button {
-            showUpgradeHub = true
-        } label: {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Crucible.Color.aiBlueTint)
-                        .frame(width: 24, height: 24)
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.aiBlue)
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Get AI title")
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.ink)
-                    Text("Summarizes the session in a few words.")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(Crucible.Color.ink3)
-                }
-                Spacer(minLength: 8)
-                Text("1 assist →")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Crucible.Color.accent)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Crucible.Color.sunk)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var isFreeNoAssists: Bool { entitlement.isFreeNoAssists }
-
-    /// Timestamp fallback for the bundle title when free + 0 assists.
-    /// Pattern: "Voice clips · MMM d, h:mm a" from the earliest clip
-    /// in the session — the user can rename any time.
-    static func timestampFallbackTitle(for clips: [InboxClip]) -> String {
-        let earliest = clips.map(\.capturedAt).min() ?? Date()
-        let f = DateFormatter()
-        f.dateFormat = "MMM d, h:mm a"
-        return "Voice clips · \(f.string(from: earliest))"
     }
 
     private var hasAISuggestion: Bool {

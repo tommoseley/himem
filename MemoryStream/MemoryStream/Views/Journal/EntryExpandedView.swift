@@ -78,8 +78,6 @@ struct EntryExpandedView: View {
     @State private var showShareSheet = false
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
-    @State private var showAIPackPurchase = false
-    @State private var showUpgradeHub = false
     @State private var aiCardUnfolded = false
     @ObservedObject private var entitlement = EntitlementService.shared
 
@@ -157,25 +155,13 @@ struct EntryExpandedView: View {
             // card. Spec: `docs/Memory Detail/screens-memory-detail.jsx`.
             sectionRow { mentionsSection }
             sectionRow {
-                // Replaces v2's inline OrganizeDoneSections. Section
-                // routes through Idle / Review / Organized / Exhausted
-                // states; the AISuggestionsCard renders inline here in
-                // Review and as the accordion unfold in Organized.
+                // Memory Detail AI zone — routes to Idle (no pass yet)
+                // / Draft (unreviewed pass, B1 review sheet on tap) /
+                // Organized (chip + body, optional stale banner).
                 OrganizeMemorySection(
                     entryID: entry.id,
                     unfolded: $aiCardUnfolded,
-                    onOrganize: { triggerManualAIOrganize() },
-                    onOpenPackSheet: {
-                        // Pricing spec § 16: free users out of starter
-                        // assists → Upgrade Hub (subscription paths);
-                        // Plus users out of monthly allowance → pack
-                        // purchase modal (additive, no resub).
-                        if EntitlementService.shared.isPlus {
-                            showAIPackPurchase = true
-                        } else {
-                            showUpgradeHub = true
-                        }
-                    }
+                    onOrganize: { triggerManualAIOrganize() }
                 )
             }
             sectionRow { inferenceCardSection }
@@ -260,13 +246,6 @@ struct EntryExpandedView: View {
         } message: {
             Text("All content has been removed. This will permanently delete the memory — it won't go to Recently Deleted.")
         }
-        .sheet(isPresented: $showAIPackPurchase) {
-            AIPackPurchaseSheet()
-                .presentationDetents([.large])
-        }
-        .sheet(isPresented: $showUpgradeHub) {
-            UpgradeHubView()
-        }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .newTopic:
@@ -282,22 +261,17 @@ struct EntryExpandedView: View {
         }
 
             // Append-spec FAB — pick a modality, capture, append to
-            // this memory. Hidden while the AI Suggestions card is
-            // open (Review state OR chip unfolded) so the FAB and
-            // "Accept all" don't fight for the same bottom-right
-            // slot. The wrapper observes the live entry to decide.
+            // this memory. After the assist-quota retirement (PR 8d.2b)
+            // there's no inline always-visible review card to suppress
+            // the FAB against; the B1 review sheet is modal and
+            // doesn't share screen real estate with the FAB.
             if mode == .reading {
-                FABWithCardSuppression(
-                    entryID: entry.id,
-                    cardUnfolded: aiCardUnfolded
-                ) {
-                    AppendFAB(
-                        onSelect: { modality in
-                            appendCoordinator.activeCaptureModality = modality
-                        },
-                        accessibilityLabel: "Add to memory"
-                    )
-                }
+                AppendFAB(
+                    onSelect: { modality in
+                        appendCoordinator.activeCaptureModality = modality
+                    },
+                    accessibilityLabel: "Add to memory"
+                )
             }
         }
         .captureFlowHost(

@@ -48,7 +48,9 @@ struct OrganizeMemoryCard: View {
                                 .controlSize(.regular)
                                 .tint(.white)
                         } else {
-                            AISparkleGlyph(size: 18, color: .white)
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white)
                         }
                     }
                     VStack(alignment: .leading, spacing: 4) {
