@@ -127,15 +127,16 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 - **Project** is an owner-created container of memories with a name and a goal field ("What are you building toward?"). See `Projects · MVP spec.md` for the full ruleset.
 
 ### Projects (locked, see `Projects · MVP spec.md`)
+
+> **Pricing:** Project Assist is the **Connect capability — a Plus feature** (the layer that makes projects *grow themselves*). Free builds up to **3 projects by hand**; the growing-itself intelligence is Plus. Full model: `Pricing model · Capture-Connect-Create.md`. The retired assist-quota canvas is in `archive/assist-model/`. The non-pricing rules here (derived topics, Honest-Label, what Project Assist reads, thresholds) remain binding.
 - **Topic ⟷ Project is many-to-many.** Topics and projects are orthogonal axes — no nesting. A memory has one topic and belongs to **0–N projects** (Memory × Project is also many-to-many; matches what `JournalEntry.projects: NSSet?` already supports). A project's topic chips are *derived* from its members.
 - **Shape:** name + goal + memories. No cover, no date range, no archive state in MVP.
-- **Project Assist** is the single AI action on a project. Button label: **Find the thread**. One assist per pass produces **two outputs**: (1) a project summary — one Honest-Label paragraph in second-person voice; (2) a short list of **suggested memories** from elsewhere in the library that may belong here. Suggestions are proposals — nothing auto-adds. ("Coalesce" was the working internal name; dropped — one vocabulary.)
+- **Project Assist** is the single AI action on a project. Button label: **Find the thread**. One pass produces **two outputs**: (1) a project summary — one Honest-Label paragraph in second-person voice; (2) a short list of **suggested memories** from elsewhere in the library that may belong here. Suggestions are proposals — nothing auto-adds. ("Coalesce" was the working internal name; dropped — one vocabulary.)
 - **Deliberately not in scope:** "currents," "open loops," "important memories," "what's becoming." All violate Honest Label (interpretive, value-laden, surveillant). The paragraph captures the thread; we don't fragment it. Studio (post-MVP) can structure further.
-- **What it reads:** for in-project memories — title, topic, date, AI summary. For candidate memories (prefiltered top 20–30 from local match: topics + mentions + dates + similar phrases) — same fields plus one-line excerpt. *Never raw transcripts.* Keeps cost flat; Studio is the raw-fragment tier.
-- **Cost:** 1 assist per pass for both outputs combined, regardless of project size. Refresh = 1 assist. Accept / edit / dismiss = 0.
-- **Trigger:** manual only, even on Plus. No auto-run — new memories arrive often and rewriting the paragraph every time wastes assists.
+- **What it reads:** for in-project memories — title, topic, date, AI summary. For candidate memories (prefiltered top 20–30 from local match: topics + mentions + dates + similar phrases) — same fields plus one-line excerpt. *Never raw transcripts.* Keeps the payload bounded; Studio is the raw-fragment tier.
+- **Trigger:** manual only, even on Plus. The owner decides when to pull the thread — auto-rewriting the paragraph on every new memory would be noise, not help.
 - **Threshold:** ≥ 1 memory before Project Assist activates. With one memory the "summary" is closer to a paraphrase than a synthesis — fine; the user gets back what they asked for. Zero memories has nothing to summarize. One is the only structurally defensible threshold; any higher number is arbitrary.
-- **Tier:** Plus or Founders required *beyond the first run*. Free gets **1 active project + 1 starter Project Assist run** (separate from the 3 starter memory assists). The starter run is **loud, not silent** — the user knows they're spending their one free pass. A small adjacent *"Starter · free"* label sits on the Find the thread button on first use, replaced by *"1 assist"* on subsequent passes (which fire the upsell for free users). *Decision reversed from the original silent-starter design (May 27 2026): silent led to "I wouldn't have used it on that!" regret — see `Open work · pricing flow.md` §1.* Studio (post-MVP) reads raw fragments + cross-project + structured output + export.
+- **Tier:** Project Assist is a **Plus capability** — the Connect layer. Free gets **3 active projects**, built and managed by hand; Plus gets unlimited projects plus the growing-itself intelligence (related memories, suggested membership, find-the-thread synthesis, cross-project). A one-time Free *taste* of Find the thread, if offered, is a trial flag decided in the pricing doc — not a metered starter. Studio (post-launch) reads raw fragments + cross-project + structured output + export.
 - **AI blue, always.** AI Summary, the "Organized · review" card, sparkle glyph, confidence chips, suggestion "why" lines — all `#1E5C8E`, never ochre or amber. Shipping iOS code uses ochre/amber across multiple AI surfaces; this is a **uniform sweep, separate PR before TestFlight**, not a footnote on the Projects spec. Half-applied color rules are worse than uniformly-wrong ones. *(The old list-level "App is inferring" prompt is retired — see `AI Organize · spec.md §8.1`. Review is Memory-Detail-only.)*
 
 ### Notifications (locked, May 2026 — revised)
@@ -152,27 +153,26 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 - **No arbitrary caps.** No daily limit, no per-clip fire count, no automatic cooldown. Passive + one-pending + in-place-updates is the entire noise budget; everything that would normally need a cap is solved by never buzzing.
 - **Stale (>24h) is obsolete as a separate trigger** — the existing pending passive notification already represents the unreviewed inbox.
 
-#### Channel B · Daily nudge (user opt-in)
-- **Trigger:** a user-chosen time-of-day, picked in Settings (`Settings → Notifications → Nudge time`). No default time imposed — the user enables the toggle AND picks a time.
-- **Suppression:** fires only if the user hasn't captured anything in the 24h window ending at the chosen time. A capture inside the window cancels the next nudge. The window anchor is the user-chosen time, not midnight — picking 8 PM gives 8 PM-to-8 PM semantics; picking midnight gives the legacy calendar-day semantics for users who want them. One mechanism, user-controlled rollover.
-- **Cancel-and-reschedule on every capture.** A watch clip arrival OR a phone memory creation cancels the pending nudge and re-schedules the next one at the next chosen-time tick (today if it hasn't passed yet, tomorrow if it has). Always a concrete fire date — no "wait for the next refresh to handle tomorrow" reliance.
-- **Sound + banner on fire** (not passive — this is an active reminder). One `UNCalendarNotificationTrigger` per scheduled fire. Tap routes to Today.
-- **Copy is honest-label.** *"Anything to remember from today?"* (shipped). Never *"Come back!"* or *"We miss you!"*
-- **User opt-in.** Disabled by default. Surfaced in onboarding (see below) and in Settings.
+#### Channel B · Inactivity (user opt-in)
+- Fires when **24h has elapsed since the last successful capture** (watch clip received OR memory created on phone).
+- **Cadence:** first nudge at 24h (sound + banner). Then silent for the rest of the first week — the pending notification stays visible but doesn't re-buzz. From 7d onward, re-buzzes weekly (at 7d, 14d, 21d, … since last capture). Each re-buzz updates the body text to current duration ("3 quiet days" → "1 quiet week" → "2 quiet weeks") via the same `UNNotificationRequest` identifier with `sound: .default`.
+- One pending notification at a time. Body re-renders silently as days tick by between re-buzz milestones.
+- **User opt-in.** Presented during onboarding (see below) alongside Channel A. No default value imposed — the user decides per-channel.
+- **A successful capture** clears Channel B's pending notification and resets the 24h timer.
+- **Copy is honest-label, not pushy.** "It's been a quiet day." / "Three days since you captured anything." / "Two quiet weeks." Never "Come back!" or "We miss you!"
 - **No badge.** Channel A owns the app icon badge.
 
-*(The earlier spec described a 24h-baseline + 7d weekly re-buzz cadence with body re-rendering between milestones. That model never shipped; the daily-nudge-at-user-chosen-time model documented above is what's in `NotificationService.refreshDailyNudge` + `DailyNudgePolicy.nextFireDate` and matches the Settings UI Tom is shipping. Spec revised 2026-06-01 to match reality.)*
-
 #### Onboarding · notification setup
-- A single "Notifications" permission prompt during onboarding asks for system-level authorization. Channel A (Captured Clips arrivals) is implicitly active once permission is granted — it's a first-class event the user opted in to by installing HiMem with a watch.
-- Channel B (Daily nudge) stays off by default and is enabled in `Settings → Notifications` post-onboarding, where the user also picks the chosen time. No need to surface it during the initial prompt — most users don't decide on a quiet-day reminder during install, and the Settings location keeps the onboarding flow lean.
-- The Settings toggle + time picker is the single source of truth for Channel B's enrollment.
+- One of the first onboarding screens asks the user which notifications they want — both channels presented with a one-line description and a toggle.
+- This is the in-app opt-in. The iOS system permission dialog fires immediately after, only if at least one toggle is on.
+- Defaults shown: Channel A toggled on, Channel B toggled off — but the user sees and confirms both, no silent enrollment.
+- Settings → Notifications surfaces the same two toggles for later changes.
 
 #### Cross-cutting (both channels)
-- **Quiet hours 10pm–7am local.** Channel A: first-of-stretch push defers to 7am; arrivals/updates during quiet hours update the deferred payload silently and fire once at 7am with current state. Channel B: the user picks a time, so the responsibility for not scheduling inside quiet hours is theirs; the scheduler honors whatever they pick. (A daily nudge at 2 AM is the user's call.)
-- *Snooze 4h* and *Mute for today* are inline `UNNotificationAction` controls on Channel A. Snooze suppresses Channel A for 4 hours; Mute suppresses through local midnight. Channel B fires at the user's chosen time and is suppressed naturally by capturing; explicit inline actions aren't shipped for it.
+- **Quiet hours 10pm–7am local.** First-of-stretch push defers to 7am. Arrivals/updates during quiet hours update the deferred payload silently; it fires once at 7am with current state.
+- *Snooze 4h* and *Mute for today* are inline `UNNotificationAction` controls. Snooze suppresses **that channel** for 4 hours; Mute suppresses it through local midnight. Both clear that channel's pending notification.
 - Swipe-to-dismiss-silences is **NOT implementable** on iOS; don't spec it.
-- Foreground app: no push for Channel A (badge only). Channel B's chosen-time fire is allowed in foreground — the user picked the time and expects the reminder.
+- Foreground app: no push, badge only (Channel A keeps the badge live; Channel B doesn't badge).
 - Tap notification → opens the relevant surface (A → Captured Clips; B → Today).
 - Long-press → Manage → jumps to iOS Settings for that channel.
 - Focus modes respected via each channel — user can mute one without the other.
@@ -180,11 +180,12 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 - **AI Organize (locked, see `AI Organize · spec.md` for full rules)**
 - **AI is an organizational helper, not the product.** The summary's job is to give a memory a name its author will recognize six months later.
 - **The Honest Label principle.** Summary contains nothing the clips don't contain. Length matches substance. Voice is descriptive, not interpretive. *Describe, don't interpret.*
-- **Voice:** stored with "you" baked in (e.g. *"You're exploring…"*). Owner sees this verbatim. On share/export, a simple `replacingOccurrences` swaps "you/You" for the user's first name. **No third-person personal pronouns anywhere** (no he/she/they/her/his/them) — other people always referenced by name. Present for thinking, past for events.
-- **One assist = one whole-memory pass.** Accept / edit / skip / manual edit / failed pass all cost 0 assists. Refresh after new clips = 1 assist.
-- **Exhausted state splits by tier.** Plus users who run out of assists for the month can purchase an assist pack without changing their subscription — the pack is additive, never expires. Free users hitting exhaustion are routed to the subscription paywall (Upgrade Hub). Two destinations from one shared exhausted-state surface. See `Open work · pricing flow.md` §2 for the modal spec — design-complete, ship-blocked on IAP setup (Paid Apps Agreement / tax / banking).
-- **v1 sees text + audio only.** Photos and videos referenced by metadata. v1.5+: optional 3-assist tier adds visual analysis.
-- **Provenance** lives in the Organized chip, never on the field.
+- **Voice:** stored with "you" baked in (e.g. *"You're exploring…"*). Owner sees this verbatim. On share/export, a simple `replacingOccurrences` swaps "you/You" for the user's first name. **Pronouns are allowed** — owner is *you*, other people are named with pronouns as appropriate; default to singular *they* when a person's pronoun isn't established (never guess from a name). Present for thinking, past for events.
+- **Organize is manual on Free, automatic on Plus.** Free: a deliberate **Organize** tap, run on-device (iPhone 15 Pro+/iOS 26, 1.2–1.7s, fully offline) or server-fallback on older devices — no counter, re-run freely. Plus: the same pass happens automatically on capture, on a frontier model, plus `nextSteps` and the connective work. Editing, re-running, and failed passes never penalize — nothing is counted. **On-device validated June 5** (`uploads/foundation-models-spike-findings.md`): ships as an *editable first draft*, not a guarantee — three documented failure classes are hand-editable, so the Free draft is never presented as authoritative.
+- **`nextSteps` is Plus-only.** The on-device model fabricates forward actions; proactive "what's next" is the automatic/Plus side. Free describes what's there.
+- **Plus organize is offline-graceful, not offline-blocked.** A Plus user capturing offline gets the on-device draft immediately; frontier polish lands silently on reconnect. One pipeline, two backends.
+- **v1 sees text + audio only.** Photos and videos referenced by metadata. v1.5+: optional visual-analysis pass (heavier; opt-in per pass, candidate for a higher tier).
+- **Provenance** lives in the Organized chip, never on the field. The chip is a **review-state label, not a tier badge**: an unreviewed pass reads *"Draft organized"* (*"Give this a glance"*) on both tiers, becoming plain *"Organized"* only on accept/edit — so the on-device draft is never presented as authoritative, and "Organized" is never claimed before a human confirms. (Full rule: `AI Organize · spec.md` §2b/§9.)
 
 ### Power and wake lock (locked)
 - **HiMem only prevents sleep during intentional capture.** Recording in progress, photo composer open, video composer active → wake lock on. Browsing, viewing, listening back, editing → wake lock off. The system idle timer is a trust contract we don't override casually.
@@ -216,6 +217,8 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 - `Captured Clips · session-first · spec.md` — Captured Clips v2 (one surface, cards expand in place, no drill-in).
 - `AI Organize · spec.md` — Honest Label, prompt rules, QA rubric.
 - This file (`CLAUDE.md`) — universal jig + Himem architecture locks.
+- `Pricing model · Capture-Connect-Create.md` — **current pricing direction** (proposal pending on-device Honest-Label prototype). Supersedes the assist-quota model now in `archive/assist-model/`.
+- `Memories list · spec.md` — the Memories list surface (one card, contextual density, fallback chain).
 
 ### Surface canvases (each is a `Himem · X.html` + accompanying `screens-*.jsx`)
 
@@ -228,7 +231,8 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 | `Himem · Captured Clips.html` — v0, original clip-first design (superseded; kept as reference) | inline |
 | `Himem · Captured Clips (session-first).html` — **v1 canonical**, per session-first spec | `screens-captured-clips-sessions.jsx` |
 | `Himem · Projects.html` — projects MVP canvas | `screens-projects.jsx` (shared bits), `screens-projects-cards.jsx` (cards), `screens-projects-views.jsx` (5 screen views), `screens-projects-spec.jsx` (annotated dev row spec) |
-| `Himem · Pricing.html` — 15 pricing surfaces, tier-aware tweaks | `pricing-screens-settings.jsx`, `pricing-screens-modals.jsx`, `pricing-screens-tier-states.jsx`, `pricing-screens-memory-detail.jsx` |
+| `HiMem · Pricing.html` — Capture · Connect · Create pricing canvas (3 sections: pricing page · organize lifecycle · upgrade moment). Per locked `Pricing model · Capture-Connect-Create.md`. | `pricing-screens.jsx`, `pricing-screens-lifecycle.jsx`, `pricing-screens-upgrade.jsx` |
+| ~~`Himem · Pricing.html`~~ (old) — assist-quota model, retired June 5 2026 → `archive/assist-model/` | *(archived)* |
 | `Himem · Launch.html` / `Onboarding.html` / `Search.html` / `Location.html` / `Append.html` — supporting phone flows | inline |
 | `Himem Studio · iPad Wireframes.html` — iPad Studio (lo-fi only) | `studio/wireframes.jsx` |
 | `Himem · App Store.html` — App Store marketing frames (6 portrait frames) | `frames/appstore-frames.jsx` |
@@ -244,9 +248,11 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 - **Design-canvas wrapper:** root `design-canvas.jsx` is the canonical canvas every surface canvas loads.
 - **No `tokens.js` at root.** It existed pre-Crucible with the wrong accent (`#F26A1F`) and is gone. The `crucible/tokens.js` mentioned inside the design-system bundle is a different file.
 
-## Open todos (May 2026 handoff)
+## Open todos (June 2026 handoff)
 
-**Pricing flow + free tier state map** — handoff doc at `Open work · pricing flow.md`. Builds a decision tree of paywall moments and a state map of free-tier surfaces. Two locked decisions (May 27): starter Project Assist is loud not silent; Plus users out of assists can buy packs without changing subscription. Several specced gaps to close. Read the handoff doc first.
+**Pricing model — Capture · Connect · Create** (`Pricing model · Capture-Connect-Create.md`). The assist-quota model is retired (`archive/assist-model/`). **The hard dependency is RESOLVED (June 5):** Apple's on-device organize was validated against the Honest-Label rubric (`uploads/foundation-models-spike-findings.md`) — ships as an editable first draft for Free, 12/15 clean, hand-editable misses. §2/§4/§5 of the pricing doc are now ratifiable. Locked: Free = 3 projects + manual/on-device organize (editable draft, no `nextSteps`); Plus = automatic/frontier + `nextSteps` + offline-grace; Studio = post-launch; prices Plus $4.99–$7.99, Studio $7.99–$14.99. Still open (non-blocking): fallback fair-use cap, Plus "unlimited" ceiling, **Free-draft honesty affordance** (the on-device draft must never read as authoritative — resolve during the Pricing-canvas design pass), offline-grace UX.
+
+**Next:** build the new Pricing canvas against this model — most of it *simplifies* (no exhausted/pack/counter surfaces). The old assist canvas is in `archive/assist-model/`.
 
 Phone-audit work that hasn't shipped yet:
 - Audit shipped iOS screens against current Crucible spec.
