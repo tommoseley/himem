@@ -107,7 +107,6 @@
 		A100000614 /* UpgradeHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000614 /* UpgradeHubView.swift */; };
 		A100000615 /* AIPackPurchaseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000615 /* AIPackPurchaseSheet.swift */; };
 		A100000616 /* FoundersDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000616 /* FoundersDetailView.swift */; };
-		A100000618 /* UpgradePromptSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000618 /* UpgradePromptSheet.swift */; };
 		A100000621 /* TenureTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000621 /* TenureTracker.swift */; };
 		A100000624 /* OrganizeMemorySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000624 /* OrganizeMemorySection.swift */; };
 		A100000625 /* AISuggestionsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000625 /* AISuggestionsCard.swift */; };
@@ -330,7 +329,6 @@
 		B100000614 /* UpgradeHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeHubView.swift; sourceTree = "<group>"; };
 		B100000615 /* AIPackPurchaseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPackPurchaseSheet.swift; sourceTree = "<group>"; };
 		B100000616 /* FoundersDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundersDetailView.swift; sourceTree = "<group>"; };
-		B100000618 /* UpgradePromptSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradePromptSheet.swift; sourceTree = "<group>"; };
 		B100000621 /* TenureTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TenureTracker.swift; sourceTree = "<group>"; };
 		B100000624 /* OrganizeMemorySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeMemorySection.swift; sourceTree = "<group>"; };
 		B100000625 /* AISuggestionsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISuggestionsCard.swift; sourceTree = "<group>"; };
@@ -858,7 +856,6 @@
 				B100000614 /* UpgradeHubView.swift */,
 				B100000615 /* AIPackPurchaseSheet.swift */,
 				B100000616 /* FoundersDetailView.swift */,
-				B100000618 /* UpgradePromptSheet.swift */,
 			);
 			path = Pricing;
 			sourceTree = "<group>";
@@ -1234,7 +1231,6 @@
 				A100000614 /* UpgradeHubView.swift in Sources */,
 				A100000615 /* AIPackPurchaseSheet.swift in Sources */,
 				A100000616 /* FoundersDetailView.swift in Sources */,
-				A100000618 /* UpgradePromptSheet.swift in Sources */,
 				A100000621 /* TenureTracker.swift in Sources */,
 				A100000501 /* StorageService+EntryQueries.swift in Sources */,
 				A100000502 /* TranscriptionService.swift in Sources */,

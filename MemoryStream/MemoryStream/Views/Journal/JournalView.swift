@@ -25,7 +25,6 @@ struct JournalView: View {
     /// (and prevents in-session arrivals from triggering it — those go
     /// through notifications instead).
     @ObservedObject private var inbox = InboxManifest.shared
-    @ObservedObject private var upgradePromptCoord = UpgradePromptCoordinator.shared
     /// Set by `StartVoiceRecordingIntent` when Siri ("Record in
     /// HiMem") fires. Observed below to present the voice composer
     /// automatically. The composer auto-starts recording on appear,
@@ -115,12 +114,6 @@ struct JournalView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
-        }
-        .sheet(isPresented: $upgradePromptCoord.shouldShow, onDismiss: {
-            upgradePromptCoord.markShown()
-        }) {
-            UpgradePromptSheet()
-                .presentationDetents([.large])
         }
         .navigationDestination(isPresented: $showInbox) {
             SessionListView(viewModel: viewModel)
@@ -231,7 +224,6 @@ struct JournalView: View {
             // (cached auth status returns instantly with no prompt), so
             // this change is a pure win for the fresh-install experience
             // and a no-op for everyone else.
-            upgradePromptCoord.evaluate()
             handlePendingVoiceRecordRequest()
         }
         // Cold-launch fix 2026-06-02: both view-model initial loads
