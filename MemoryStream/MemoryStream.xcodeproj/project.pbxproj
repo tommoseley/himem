@@ -21,6 +21,9 @@
 		A100000012 /* SpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000012 /* SpeechService.swift */; };
 		A100000013 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000013 /* ConnectivityMonitor.swift */; };
 		A100000014 /* ProcessingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000014 /* ProcessingEngine.swift */; };
+		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
+		A900000002 /* OnDeviceOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000002 /* OnDeviceOrganizer.swift */; };
+		A900000003 /* ServerOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000003 /* ServerOrganizer.swift */; };
 		A100000015 /* DisplayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000015 /* DisplayModels.swift */; };
 		A100000016 /* JournalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000016 /* JournalViewModel.swift */; };
 		A100000017 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000017 /* SearchViewModel.swift */; };
@@ -249,6 +252,9 @@
 		B100000012 /* SpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechService.swift; sourceTree = "<group>"; };
 		B100000013 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
 		B100000014 /* ProcessingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingEngine.swift; sourceTree = "<group>"; };
+		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
+		B900000002 /* OnDeviceOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceOrganizer.swift; sourceTree = "<group>"; };
+		B900000003 /* ServerOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOrganizer.swift; sourceTree = "<group>"; };
 		B100000015 /* DisplayModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayModels.swift; sourceTree = "<group>"; };
 		B100000016 /* JournalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalViewModel.swift; sourceTree = "<group>"; };
 		B100000017 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
@@ -687,6 +693,9 @@
 			isa = PBXGroup;
 			children = (
 				B100000014 /* ProcessingEngine.swift */,
+				B900000001 /* Organizer.swift */,
+				B900000002 /* OnDeviceOrganizer.swift */,
+				B900000003 /* ServerOrganizer.swift */,
 				B100000029 /* TopicApprovalService.swift */,
 				B100000041 /* AlbumSyncService.swift */,
 			);
@@ -1270,6 +1279,9 @@
 				A100000681 /* VoiceCaptureOrchestrator.swift in Sources */,
 				A100000013 /* ConnectivityMonitor.swift in Sources */,
 				A100000014 /* ProcessingEngine.swift in Sources */,
+				A900000001 /* Organizer.swift in Sources */,
+				A900000002 /* OnDeviceOrganizer.swift in Sources */,
+				A900000003 /* ServerOrganizer.swift in Sources */,
 				A100000015 /* DisplayModels.swift in Sources */,
 				A100000016 /* JournalViewModel.swift in Sources */,
 				A100000017 /* SearchViewModel.swift in Sources */,

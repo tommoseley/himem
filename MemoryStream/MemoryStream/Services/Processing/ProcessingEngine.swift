@@ -28,8 +28,17 @@ extension ClaudeAPIService: EntryAnalyzer {}
 final class ProcessingEngine {
     static let shared = ProcessingEngine()
 
+    /// Debug-only routing flag. When set, `processEntry` tries the
+    /// `OnDeviceOrganizer` (Apple Foundation Models) before the
+    /// existing cloud + assist-debit path. Default false — production
+    /// behavior unchanged until PR 8e flips this in the retirement.
+    /// Toggle in a debug menu or by hand:
+    ///   `defaults write com.himem.app himem.organize.useOnDevice -bool YES`
+    static let useOnDeviceFlagKey = "himem.organize.useOnDevice"
+
     private let storage: StorageService
     private let analyzer: EntryAnalyzer
+    private let onDeviceOrganizer: Organizer
     private let localExtractor: LocalEntityExtractor
     private let connectivity: ConnectivityMonitor
     /// Injectable assist-debit closure. Default routes to
@@ -49,6 +58,7 @@ final class ProcessingEngine {
     init(
         storage: StorageService = .shared,
         analyzer: EntryAnalyzer = ClaudeAPIService.shared,
+        onDeviceOrganizer: Organizer = OnDeviceOrganizer(),
         localExtractor: LocalEntityExtractor = .shared,
         connectivity: ConnectivityMonitor = .shared,
         consumeAssist: @escaping @MainActor () throws -> Void = { try EntitlementService.shared.tryConsumeAssist() },
@@ -56,6 +66,7 @@ final class ProcessingEngine {
     ) {
         self.storage = storage
         self.analyzer = analyzer
+        self.onDeviceOrganizer = onDeviceOrganizer
         self.localExtractor = localExtractor
         self.connectivity = connectivity
         self.consumeAssist = consumeAssist
@@ -90,6 +101,19 @@ final class ProcessingEngine {
             }
         }
 
+        // PR 8a: debug-gated on-device organize routing. When the
+        // `himem.organize.useOnDevice` flag is set and Apple Foundation
+        // Models is available on the device, try the on-device pass
+        // first. Success short-circuits the cloud path entirely
+        // (no assist debit — on-device is unmetered per the new
+        // Capture · Connect · Create pricing model). Failure or
+        // model-unavailable falls through to the existing flow.
+        if UserDefaults.standard.bool(forKey: Self.useOnDeviceFlagKey),
+           OnDeviceOrganizer.availabilityError() == nil {
+            let succeeded = await processWithOnDevice(objectID: objectID, content: content, context: context)
+            if succeeded { return }
+        }
+
         if connectivity.isConnected {
             await processWithCloud(objectID: objectID, content: content, context: context)
         } else {
@@ -97,36 +121,35 @@ final class ProcessingEngine {
         }
     }
 
+    // MARK: - On-device Processing (PR 8a, debug-gated)
+
+    /// Runs the entry through `OnDeviceOrganizer` and, on success,
+    /// commits the result via the same storage helpers as the cloud
+    /// path. Returns true if the AI call + Core Data save committed
+    /// cleanly. Returns false on any failure so the caller can fall
+    /// through to the existing connectivity-based routing.
+    ///
+    /// Skips the assist debit — on-device organize is unmetered.
+    private func processWithOnDevice(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async -> Bool {
+        let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
+        do {
+            let result = try await onDeviceOrganizer.organize(
+                content: content,
+                existingTopics: existingTopics,
+                existingMentions: existingMentions
+            )
+            return await applyAnalysisResult(result, to: objectID, in: context)
+        } catch {
+            NSLog("[HiMem][Organize] on-device pass failed, falling through: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     // MARK: - Cloud Processing
 
     private func processWithCloud(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async {
         do {
-            // Fetch existing topic names so the AI prefers them over inventing new ones
-            let existingTopics: [String] = await context.perform {
-                let request = NSFetchRequest<Topic>(entityName: "Topic")
-                let topics = (try? context.fetch(request)) ?? []
-                return topics.map(\.name)
-            }
-
-            // Existing mentions on THIS entry only — case-folded
-            // dedupe so duplicates already in the store don't
-            // pollute the payload. Re-organize passes ship this set
-            // so the model refines instead of paraphrasing.
-            let existingMentions: [String] = await context.perform {
-                guard let entry = try? context.existingObject(with: objectID) as? JournalEntry,
-                      let entities = entry.extractedEntities as? Set<ExtractedEntity> else { return [] }
-                var seen: Set<String> = []
-                var out: [String] = []
-                for e in entities {
-                    let trimmed = e.value.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty else { continue }
-                    let key = trimmed.lowercased()
-                    if seen.insert(key).inserted {
-                        out.append(trimmed)
-                    }
-                }
-                return out
-            }
+            let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
 
             // Capture the tier at the moment of the call — if the user
             // upgrades / downgrades mid-pass, the COGS log attributes
@@ -141,23 +164,7 @@ final class ProcessingEngine {
                 action: "memory_organize"
             )
 
-            let saveSucceeded: Bool = await context.perform { [self] in
-                do {
-                    let entry = try context.existingObject(with: objectID) as! JournalEntry
-                    storeEntities(from: result, for: entry, in: context)
-                    let newTopics = assignTopics(from: result, for: entry, in: context)
-                    queueNewTopics(newTopics, entryObjectID: objectID)
-                    checkAlbumSync(for: entry, topics: result.topics, context: context)
-                    storeInference(from: result, for: entry, in: context)
-                    storeOrganizePass(from: result, for: entry, in: context)
-                    markCompleted(entry)
-                    try context.save()
-                    return true
-                } catch {
-                    self.markFailed(objectID: objectID, error: error, context: context)
-                    return false
-                }
-            }
+            let saveSucceeded = await applyAnalysisResult(result, to: objectID, in: context)
             // Pricing rule (v2): 1 assist per successful organize pass.
             // Failures cost zero. We deduct ONLY when the Core Data
             // save committed cleanly — a Core Data error, parser blow-
@@ -313,6 +320,61 @@ final class ProcessingEngine {
             }
         } catch {
             Task { @MainActor in ErrorState.shared.report(.processingFailed(error.localizedDescription)) }
+        }
+    }
+
+    // MARK: - Shared Organize Helpers
+
+    /// Reads existing topic names + this-entry mentions used to seed an
+    /// organize pass. Cloud and on-device paths both consume this so
+    /// the model refines vs. paraphrases on re-organize.
+    private func readExistingOrganizeContext(objectID: NSManagedObjectID, context: NSManagedObjectContext) async -> (topics: [String], mentions: [String]) {
+        let existingTopics: [String] = await context.perform {
+            let request = NSFetchRequest<Topic>(entityName: "Topic")
+            let topics = (try? context.fetch(request)) ?? []
+            return topics.map(\.name)
+        }
+        let existingMentions: [String] = await context.perform {
+            guard let entry = try? context.existingObject(with: objectID) as? JournalEntry,
+                  let entities = entry.extractedEntities as? Set<ExtractedEntity> else { return [] }
+            var seen: Set<String> = []
+            var out: [String] = []
+            for e in entities {
+                let trimmed = e.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                let key = trimmed.lowercased()
+                if seen.insert(key).inserted {
+                    out.append(trimmed)
+                }
+            }
+            return out
+        }
+        return (existingTopics, existingMentions)
+    }
+
+    /// Applies a successful `AnalysisResult` to the entry — stores
+    /// entities, assigns topics (queueing unknowns for approval),
+    /// triggers album sync, writes the inference summary and
+    /// `OrganizePass`, marks the task complete, saves. Returns true
+    /// if the save committed cleanly; false if `markFailed` was
+    /// invoked. Shared by the on-device and cloud paths.
+    private func applyAnalysisResult(_ result: ClaudeAPIService.AnalysisResult, to objectID: NSManagedObjectID, in context: NSManagedObjectContext) async -> Bool {
+        await context.perform { [self] in
+            do {
+                let entry = try context.existingObject(with: objectID) as! JournalEntry
+                storeEntities(from: result, for: entry, in: context)
+                let newTopics = assignTopics(from: result, for: entry, in: context)
+                queueNewTopics(newTopics, entryObjectID: objectID)
+                checkAlbumSync(for: entry, topics: result.topics, context: context)
+                storeInference(from: result, for: entry, in: context)
+                storeOrganizePass(from: result, for: entry, in: context)
+                markCompleted(entry)
+                try context.save()
+                return true
+            } catch {
+                self.markFailed(objectID: objectID, error: error, context: context)
+                return false
+            }
         }
     }
 
