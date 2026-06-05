@@ -106,7 +106,6 @@
         <attribute name="summaryText" optional="YES" attributeType="String"/>
         <attribute name="suggestedTitle" optional="YES" attributeType="String"/>
         <attribute name="suggestedTopicsJSON" optional="YES" attributeType="String"/>
-        <attribute name="nextStepsMarkdown" optional="YES" attributeType="String"/>
         <attribute name="relatedEntryIDsJSON" optional="YES" attributeType="String"/>
         <attribute name="dismissedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="acceptedRowsJSON" optional="YES" attributeType="String"/>
@@ -114,19 +113,5 @@
         <attribute name="feedbackAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="userCorrection" optional="YES" attributeType="String"/>
         <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="organizePasses" inverseEntity="JournalEntry"/>
-    </entity>
-    <entity name="AssistBalance" representedClassName="AssistBalance" syncable="YES">
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="tier" optional="YES" attributeType="String" defaultValueString="free"/>
-        <attribute name="monthlyUsed" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="packBalance" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="starterUsed" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="starterGranted" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="starterProjectAssistGranted" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="starterProjectAssistUsed" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="monthlyResetDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="foundersBonusGranted" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
-        <attribute name="autoOrganizeThreshold" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="lastUpdated" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
     </entity>
 </model>

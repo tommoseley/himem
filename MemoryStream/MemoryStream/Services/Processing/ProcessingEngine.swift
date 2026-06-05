@@ -458,18 +458,6 @@ final class ProcessingEngine {
         pass.summaryText = result.summary
         pass.suggestedTitle = result.title
         pass.setSuggestedTopics(result.topics)
-        // Next steps — formatted as markdown bullets so the existing
-        // `OrganizePass.nextStepsItems` parser handles them and the
-        // AISuggestionsCard renders them in its Next steps row.
-        // Skips writes when the server returned an empty / nil array
-        // so the column stays nil (Next steps row hides cleanly).
-        if let steps = result.nextSteps, !steps.isEmpty {
-            pass.nextStepsMarkdown = steps
-                .map { "- " + $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .joined(separator: "\n")
-        } else {
-            pass.nextStepsMarkdown = nil
-        }
         // Related memories isn't yet returned by the server prompt
         // and was deliberately cut from the v5 Review card (the
         // Review card is the contract for "this memory"; other-memory

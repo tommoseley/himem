@@ -33,7 +33,6 @@ public class OrganizePass: NSManagedObject, Identifiable {
     /// time, this column just lets the Topics row show what the AI
     /// would have picked if rerun.
     @NSManaged public var suggestedTopicsJSON: String?
-    @NSManaged public var nextStepsMarkdown: String?
     @NSManaged public var relatedEntryIDsJSON: String?
     /// Set when the user dismisses the AISuggestionsCard (Accept all
     /// OR ×). The card defaults to its collapsed chip on subsequent
@@ -144,31 +143,8 @@ extension OrganizePass {
     /// row from it. Per `docs/design/AI Organize · spec.md` §2b/§9
     /// and `pricing-screens-lifecycle.jsx`: the chip tracks REVIEW
     /// STATE, not tier — a Plus auto-organize pass also reads as
-    /// "Draft organized" until the user engages with it. No schema
-    /// change: derived from `dismissedAt` and `acceptedRows` so the
-    /// 8c reshape doesn't bundle a CloudKit deploy (those land in
-    /// 8e alongside the AssistBalance + nextStepsMarkdown removal).
+    /// "Draft organized" until the user engages with it.
     var isReviewed: Bool {
         dismissedAt != nil || !acceptedRows.isEmpty
-    }
-
-    /// Convenience: parse `nextStepsMarkdown` into bullet items. Same
-    /// minimum-viable parser as `OrganizeDoneSections.NextStepsBullets`
-    /// — splits on newlines, strips leading "- ", "* ", "• ". Empty
-    /// when the column is nil or blank. Used by the chip variant
-    /// ("N next steps") to count items, and by the AISuggestionsCard
-    /// Next steps row to render bullets.
-    var nextStepsItems: [String] {
-        guard let md = nextStepsMarkdown else { return [] }
-        return md
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .map { line -> String in
-                var s = line.trimmingCharacters(in: .whitespaces)
-                for prefix in ["- ", "* ", "• "] {
-                    if s.hasPrefix(prefix) { s.removeFirst(prefix.count); break }
-                }
-                return s
-            }
-            .filter { !$0.isEmpty }
     }
 }
