@@ -18,13 +18,13 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// idempotent.
     func start() {
         guard WCSession.isSupported() else {
-            NSLog("[Himem][WC] WCSession not supported on this device")
+            NSLog("[HiMem][WC] WCSession not supported on this device")
             return
         }
         let session = WCSession.default
         session.delegate = self
         session.activate()
-        NSLog("[Himem][WC] iPhone session activate() called — paired=\(session.isPaired) watchAppInstalled=\(session.isWatchAppInstalled)")
+        NSLog("[HiMem][WC] iPhone session activate() called — paired=\(session.isPaired) watchAppInstalled=\(session.isWatchAppInstalled)")
     }
 
     // MARK: - WCSessionDelegate
@@ -38,7 +38,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             @unknown default: return "unknown"
             }
         }()
-        NSLog("[Himem][WC] iPhone session activated — state=\(stateStr) err=\(error?.localizedDescription ?? "nil") paired=\(session.isPaired) watchAppInstalled=\(session.isWatchAppInstalled) reachable=\(session.isReachable)")
+        NSLog("[HiMem][WC] iPhone session activated — state=\(stateStr) err=\(error?.localizedDescription ?? "nil") paired=\(session.isPaired) watchAppInstalled=\(session.isWatchAppInstalled) reachable=\(session.isReachable)")
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}
@@ -60,7 +60,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// open, transfer stalled mid-flight) the signal is correct.
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         let reachable = session.isReachable
-        NSLog("[Himem][WC] iPhone — sessionReachabilityDidChange reachable=\(reachable)")
+        NSLog("[HiMem][WC] iPhone — sessionReachabilityDidChange reachable=\(reachable)")
         Task { @MainActor in
             if reachable {
                 InboxArrivalTracker.shared.recordReachabilityRestored()
@@ -79,10 +79,10 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// in `WatchPreAnnounceParser`.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         guard let parsed = WatchPreAnnounceParser.parse(message) else {
-            NSLog("[Himem][WC] iPhone — didReceiveMessage ignored, keys=\(Array(message.keys))")
+            NSLog("[HiMem][WC] iPhone — didReceiveMessage ignored, keys=\(Array(message.keys))")
             return
         }
-        NSLog("[Himem][WC] iPhone — pre-announce received for clipId=\(parsed.clipId) duration=\(parsed.durationSeconds)s")
+        NSLog("[HiMem][WC] iPhone — pre-announce received for clipId=\(parsed.clipId) duration=\(parsed.durationSeconds)s")
         Task { @MainActor in
             // Gate against the late pre-announce race: if sendMessage
             // was delayed by a hop through the WC layer while
@@ -92,11 +92,11 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             // transcribe sweep already ran). Same for clips the user
             // already disposed of — pre-announce shouldn't resurrect.
             if InboxManifest.shared.clips.contains(where: { $0.clipId == parsed.clipId }) {
-                NSLog("[Himem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already in manifest")
+                NSLog("[HiMem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already in manifest")
                 return
             }
             if InboxManifest.shared.status(for: parsed.clipId) == .disposed {
-                NSLog("[Himem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already disposed (manifest tombstone)")
+                NSLog("[HiMem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already disposed (manifest tombstone)")
                 return
             }
             InboxArrivalTracker.shared.recordPreAnnounce(
@@ -113,7 +113,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     // MARK: - File transfer
 
     func session(_ session: WCSession, didReceive file: WCSessionFile) {
-        NSLog("[Himem][WC] iPhone received file at \(file.fileURL.path), metadata keys: \(file.metadata?.keys.map { String(describing: $0) } ?? [])")
+        NSLog("[HiMem][WC] iPhone received file at \(file.fileURL.path), metadata keys: \(file.metadata?.keys.map { String(describing: $0) } ?? [])")
 
         // Decode metadata first — without it we don't know what to call the
         // file or what to write to the manifest. Drop the transfer if the
@@ -122,12 +122,12 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         guard let metadataDict = file.metadata,
               let clipMetadata = ClipMetadata.fromWireDict(metadataDict)
         else {
-            NSLog("[Himem][WC] dropping file — metadata missing or malformed")
+            NSLog("[HiMem][WC] dropping file — metadata missing or malformed")
             return
         }
 
         let clipId = clipMetadata.clipId
-        NSLog("[Himem][WC] decoded clipId=\(clipId), duration=\(clipMetadata.duration)")
+        NSLog("[HiMem][WC] decoded clipId=\(clipId), duration=\(clipMetadata.duration)")
 
         // B5 dedup: if this clipId is a tombstone in the manifest
         // (status == .disposed), iOS is ghost-redelivering it from
@@ -143,7 +143,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             InboxManifest.shared.status(for: clipId) == .disposed
         }
         if isDisposed {
-            NSLog("[Himem][WC] dropping clipId=\(clipId) — manifest tombstone (B5 dedup); sending ack")
+            NSLog("[HiMem][WC] dropping clipId=\(clipId) — manifest tombstone (B5 dedup); sending ack")
             self.sendConfirmation(clipId: clipId)
             return
         }
@@ -160,13 +160,13 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         if !FileManager.default.fileExists(atPath: dest.path) {
             do {
                 try FileManager.default.copyItem(at: source, to: dest)
-                NSLog("[Himem][WC] copied audio to \(dest.path)")
+                NSLog("[HiMem][WC] copied audio to \(dest.path)")
             } catch {
-                NSLog("[Himem][WC] FAILED to copy audio from \(source.path) to \(dest.path): \(error.localizedDescription)")
+                NSLog("[HiMem][WC] FAILED to copy audio from \(source.path) to \(dest.path): \(error.localizedDescription)")
                 return
             }
         } else {
-            NSLog("[Himem][WC] audio already at \(dest.path), skipping copy")
+            NSLog("[HiMem][WC] audio already at \(dest.path), skipping copy")
         }
 
         // Confirm receipt to the watch IMMEDIATELY, before any of the
@@ -180,13 +180,13 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         // this exact symptom right after AAC compression landed. Don't
         // re-introduce the gate.
         self.sendConfirmation(clipId: clipId)
-        NSLog("[Himem][WC] confirmation sent for clipId=\(clipId)")
+        NSLog("[HiMem][WC] confirmation sent for clipId=\(clipId)")
 
         Task { @MainActor in
-            NSLog("[Himem][WC] entering MainActor task for clipId=\(clipId)")
+            NSLog("[HiMem][WC] entering MainActor task for clipId=\(clipId)")
 
             if InboxManifest.shared.clips.contains(where: { $0.clipId == clipId }) {
-                NSLog("[Himem][WC] clipId already in manifest, skipping accept")
+                NSLog("[HiMem][WC] clipId already in manifest, skipping accept")
                 return
             }
 
@@ -237,7 +237,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             $0.transcript.isEmpty && !$0.transcriptionAttempted
         }
         guard !pending.isEmpty else { return }
-        NSLog("[Himem][Inbox] transcribing \(pending.count) pending clip(s)")
+        NSLog("[HiMem][Inbox] transcribing \(pending.count) pending clip(s)")
         if #available(iOS 26.0, *) {
             for clip in pending {
                 let url = InboxManifest.audioURL(for: clip.audioFilename)
@@ -278,7 +278,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                         transcript: InboxTranscriptionDispatcher.transcriptForMark(from: outcome)
                     )
                 } else {
-                    NSLog("[Himem][Inbox] transcribe deferred clip=\(clip.clipId.uuidString.prefix(8)) outcome=\(outcome)")
+                    NSLog("[HiMem][Inbox] transcribe deferred clip=\(clip.clipId.uuidString.prefix(8)) outcome=\(outcome)")
                 }
                 // Whether the attempt landed (marked) or was deferred
                 // for retry, the transcribing phase is over — the
@@ -330,7 +330,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
 
     @MainActor
     static func acceptArrivedClip(metadata: ClipMetadata, masterFilename: String) async {
-        NSLog("[Himem][WC] phone — acceptArrivedClip clipId=\(metadata.clipId) rollGroupId=\(metadata.rollGroupId?.uuidString ?? "nil") offsets=\(metadata.nextTapOffsets.count)")
+        NSLog("[HiMem][WC] phone — acceptArrivedClip clipId=\(metadata.clipId) rollGroupId=\(metadata.rollGroupId?.uuidString ?? "nil") offsets=\(metadata.nextTapOffsets.count)")
         let masterURL = InboxManifest.audioURL(for: masterFilename)
 
         // Per-clipId critical section against the double-delivery
@@ -342,7 +342,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         // and each spawn N children. See
         // `AcceptanceCriticalSection` for the full story.
         guard AcceptanceCriticalSection.tryEnter(clipId: metadata.clipId) else {
-            NSLog("[Himem][WC] phone — acceptArrivedClip race avoided clipId=\(metadata.clipId) (already in flight); dropping redelivered master")
+            NSLog("[HiMem][WC] phone — acceptArrivedClip race avoided clipId=\(metadata.clipId) (already in flight); dropping redelivered master")
             try? FileManager.default.removeItem(at: masterURL)
             WatchSessionDelegate.shared.sendConfirmation(clipId: metadata.clipId)
             return
@@ -359,7 +359,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             rollGroupIdAlreadyInUse: manifest.isRollGroupKnown(dedupRollGroupId)
         )
         if shouldDrop {
-            NSLog("[Himem][WC] phone — duplicate master ignored, clipId=\(metadata.clipId) already processed")
+            NSLog("[HiMem][WC] phone — duplicate master ignored, clipId=\(metadata.clipId) already processed")
             try? FileManager.default.removeItem(at: masterURL)
             // Still ack so the watch can drop the pending row.
             // `sendConfirmation` is the path the live + durable acks
@@ -386,7 +386,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 rollGroupId: metadata.rollGroupId
             )
             InboxManifest.shared.acceptClip(clip)
-            NSLog("[Himem][WC] manifest now contains \(InboxManifest.shared.count) clip(s)")
+            NSLog("[HiMem][WC] manifest now contains \(InboxManifest.shared.count) clip(s)")
             return
         }
 
@@ -439,7 +439,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             }
             // The master file's contents now live in the N fragments.
             try? FileManager.default.removeItem(at: masterURL)
-            NSLog("[Himem][WC] split master into \(fragments.count) clips (rollGroupId=\(rollGroupId))")
+            NSLog("[HiMem][WC] split master into \(fragments.count) clips (rollGroupId=\(rollGroupId))")
             // Clear the master clipId from the arrival tracker.
             // The pre-announce was keyed on master.clipId, but the
             // manifest now holds N children with fresh UUIDs.
@@ -454,7 +454,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             // the master, so we don't lose audio. User sees the
             // unsplit recording; rollGroupId still attached. Still
             // compress so the fallback file isn't bloated either.
-            NSLog("[Himem][WC] split failed (\(error.localizedDescription)), surfacing master as one clip")
+            NSLog("[HiMem][WC] split failed (\(error.localizedDescription)), surfacing master as one clip")
             await compressIfPossible(at: masterURL, label: "fallback master")
             let clip = InboxClip(
                 clipId: metadata.clipId,
@@ -480,9 +480,9 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             try await AudioCompressor.compressInPlace(at: url)
             let after = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
             let ratio = before > 0 && after > 0 ? Double(before) / Double(after) : 0
-            NSLog("[Himem][WC] compressed \(label): \(before)→\(after) bytes (\(String(format: "%.1fx", ratio)))")
+            NSLog("[HiMem][WC] compressed \(label): \(before)→\(after) bytes (\(String(format: "%.1fx", ratio)))")
         } catch {
-            NSLog("[Himem][WC] compress failed for \(label): \(error.localizedDescription) — keeping raw PCM")
+            NSLog("[HiMem][WC] compress failed for \(label): \(error.localizedDescription) — keeping raw PCM")
         }
     }
 
@@ -528,18 +528,18 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     func requestWatchPendingFlush() {
         let session = WCSession.default
         guard session.activationState == .activated else {
-            NSLog("[Himem][WC] iPhone — flush request skipped: session not activated")
+            NSLog("[HiMem][WC] iPhone — flush request skipped: session not activated")
             return
         }
         guard session.isReachable else {
-            NSLog("[Himem][WC] iPhone — flush request skipped: watch not reachable")
+            NSLog("[HiMem][WC] iPhone — flush request skipped: watch not reachable")
             return
         }
         let payload: [String: Any] = ["command": "flushPending"]
         session.sendMessage(payload, replyHandler: nil) { error in
-            NSLog("[Himem][WC] iPhone — flush request failed: \(error.localizedDescription)")
+            NSLog("[HiMem][WC] iPhone — flush request failed: \(error.localizedDescription)")
         }
-        NSLog("[Himem][WC] iPhone — flush request sent")
+        NSLog("[HiMem][WC] iPhone — flush request sent")
     }
 
     /// Pure construction of the ack wire payload. Extracted so unit
@@ -589,14 +589,14 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         // the errorHandler (no exception, no side effect) — the
         // durable transferUserInfo below covers either way.
         session.sendMessage(payload, replyHandler: nil) { error in
-            NSLog("[Himem][WC] iPhone — sendMessage confirmation failed for \(label): \(error.localizedDescription) (transferUserInfo backup will deliver)")
+            NSLog("[HiMem][WC] iPhone — sendMessage confirmation failed for \(label): \(error.localizedDescription) (transferUserInfo backup will deliver)")
         }
-        NSLog("[Himem][WC] iPhone — sendMessage confirmation attempted for \(label)")
+        NSLog("[HiMem][WC] iPhone — sendMessage confirmation attempted for \(label)")
 
         // Durable backup — always queued. System delivers when watch
         // next activates / both apps next become reachable.
         let transfer = session.transferUserInfo(payload)
-        NSLog("[Himem][WC] iPhone — transferUserInfo queued for \(label), transferring=\(transfer.isTransferring)")
+        NSLog("[HiMem][WC] iPhone — transferUserInfo queued for \(label), transferring=\(transfer.isTransferring)")
     }
 
     /// Re-asserts every clip the iPhone already holds in its inbox to the
@@ -612,10 +612,10 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     func reconcileWatchAcks() {
         let clipIds = InboxManifest.shared.clips.map(\.clipId)
         guard !clipIds.isEmpty else {
-            NSLog("[Himem][WC] iPhone — reconcileWatchAcks: inbox empty, nothing to assert")
+            NSLog("[HiMem][WC] iPhone — reconcileWatchAcks: inbox empty, nothing to assert")
             return
         }
-        NSLog("[Himem][WC] iPhone — reconcileWatchAcks: re-asserting \(clipIds.count) clip(s) to watch")
+        NSLog("[HiMem][WC] iPhone — reconcileWatchAcks: re-asserting \(clipIds.count) clip(s) to watch")
         for clipId in clipIds {
             sendConfirmation(clipId: clipId)
         }

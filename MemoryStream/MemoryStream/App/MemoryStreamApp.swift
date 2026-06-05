@@ -242,7 +242,7 @@ struct MemoryStreamApp: App {
             do {
                 try await TranscriptionService.shared.ensureModelReady(for: Locale(identifier: "en-US"))
             } catch {
-                NSLog("[Himem][Transcribe] pre-warm failed: \(error.localizedDescription)")
+                NSLog("[HiMem][Transcribe] pre-warm failed: \(error.localizedDescription)")
             }
         }
     }

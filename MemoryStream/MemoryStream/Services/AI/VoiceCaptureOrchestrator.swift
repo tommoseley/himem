@@ -201,9 +201,9 @@ enum VoiceCaptureOrchestrator {
             try await AudioCompressor.compressInPlace(at: url)
             let after = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
             let ratio = before > 0 && after > 0 ? Double(before) / Double(after) : 0
-            NSLog("[Himem][Compress] \(label): \(before)→\(after) bytes (\(String(format: "%.1fx", ratio)))")
+            NSLog("[HiMem][Compress] \(label): \(before)→\(after) bytes (\(String(format: "%.1fx", ratio)))")
         } catch {
-            NSLog("[Himem][Compress] failed for \(label): \(error.localizedDescription) — keeping raw PCM")
+            NSLog("[HiMem][Compress] failed for \(label): \(error.localizedDescription) — keeping raw PCM")
         }
     }
 

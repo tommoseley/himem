@@ -32,13 +32,13 @@ final class WatchAppCoordinator: ObservableObject {
     private var bag = Set<AnyCancellable>()
 
     init() {
-        NSLog("[Himem][WC] watch — WatchAppCoordinator.init")
+        NSLog("[HiMem][WC] watch — WatchAppCoordinator.init")
         // Forward acks from the iPhone into the pending manifest so rows
         // get removed from the watch list as the iPhone confirms each clip.
         transfer.$lastAckedClipId
             .compactMap { $0 }
             .sink { [weak self] clipId in
-                NSLog("[Himem][WC] watch — coordinator removing clipId=\(clipId) from manifest")
+                NSLog("[HiMem][WC] watch — coordinator removing clipId=\(clipId) from manifest")
                 self?.pending.remove(clipId: clipId)
             }
             .store(in: &bag)
@@ -48,7 +48,7 @@ final class WatchAppCoordinator: ObservableObject {
         transfer.$lastAckedRollGroupId
             .compactMap { $0 }
             .sink { [weak self] rollGroupId in
-                NSLog("[Himem][WC] watch — coordinator removing rollGroupId=\(rollGroupId) from manifest")
+                NSLog("[HiMem][WC] watch — coordinator removing rollGroupId=\(rollGroupId) from manifest")
                 self?.pending.removeByRollGroup(rollGroupId: rollGroupId)
             }
             .store(in: &bag)
@@ -74,7 +74,7 @@ final class WatchAppCoordinator: ObservableObject {
     /// system de-dupes, so retrying a clip that's already queued is a
     /// no-op.
     func retryPendingTransfers() async {
-        NSLog("[Himem][WC] watch — retryPendingTransfers running, manifest has \(pending.count) clip(s)")
+        NSLog("[HiMem][WC] watch — retryPendingTransfers running, manifest has \(pending.count) clip(s)")
         for clip in pending.clips {
             transfer.send(clip: clip)
         }

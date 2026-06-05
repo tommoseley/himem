@@ -117,7 +117,7 @@ final class StoreKitService: ObservableObject {
                     await self.applyTransaction(transaction)
                     await transaction.finish()
                 } catch {
-                    NSLog("[Himem][StoreKit] Transaction verification failed: \(error.localizedDescription)")
+                    NSLog("[HiMem][StoreKit] Transaction verification failed: \(error.localizedDescription)")
                 }
             }
         }

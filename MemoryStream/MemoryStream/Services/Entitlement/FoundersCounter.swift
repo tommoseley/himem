@@ -57,7 +57,7 @@ final class FoundersCounter: ObservableObject {
             lastError = nil
         } catch {
             lastError = error.localizedDescription
-            NSLog("[Himem][Founders] refresh failed: \(error.localizedDescription)")
+            NSLog("[HiMem][Founders] refresh failed: \(error.localizedDescription)")
         }
     }
 
@@ -78,7 +78,7 @@ final class FoundersCounter: ObservableObject {
             await incrementClaimed(retries: retries - 1)
         } catch {
             lastError = error.localizedDescription
-            NSLog("[Himem][Founders] increment failed: \(error.localizedDescription)")
+            NSLog("[HiMem][Founders] increment failed: \(error.localizedDescription)")
         }
     }
 

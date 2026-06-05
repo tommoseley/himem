@@ -48,13 +48,13 @@ struct ProjectsMVPTests {
         let storage = StorageService(inMemory: true)
         let vm = ProjectViewModel(storage: storage)
 
-        vm.createProject(name: "Building Himem", purpose: "Ship the iOS app")
+        vm.createProject(name: "Building HiMem", purpose: "Ship the iOS app")
         // ProjectViewModel observes Core Data via debounced notification;
         // call loadProjects directly to avoid the 250ms debounce.
         vm.loadProjects()
 
         #expect(vm.projects.count == 1)
-        #expect(vm.projects.first?.name == "Building Himem")
+        #expect(vm.projects.first?.name == "Building HiMem")
         #expect(vm.projects.first?.purpose == "Ship the iOS app")
     }
 
@@ -87,10 +87,10 @@ struct ProjectsMVPTests {
         let storage = StorageService(inMemory: true)
         let vm = ProjectViewModel(storage: storage)
         // Two projects.
-        vm.createProject(name: "Building Himem", purpose: nil)
+        vm.createProject(name: "Building HiMem", purpose: nil)
         vm.createProject(name: "AI essay — second draft", purpose: nil)
         vm.loadProjects()
-        let projectA = try #require(vm.projects.first { $0.name == "Building Himem" }?.id)
+        let projectA = try #require(vm.projects.first { $0.name == "Building HiMem" }?.id)
         let projectB = try #require(vm.projects.first { $0.name == "AI essay — second draft" }?.id)
         // One memory.
         let entry = try storage.createEntry(content: "Watch-first capture is the key", inputType: .typed)
@@ -101,7 +101,7 @@ struct ProjectsMVPTests {
         vm.loadProjects()
 
         let projectsContainingMemory = (entry.projects as? Set<Project>)?.map(\.name).sorted() ?? []
-        #expect(projectsContainingMemory == ["AI essay — second draft", "Building Himem"])
+        #expect(projectsContainingMemory == ["AI essay — second draft", "Building HiMem"])
     }
 
     @Test func removeMemory_fromOneProject_keepsItInOthers() throws {

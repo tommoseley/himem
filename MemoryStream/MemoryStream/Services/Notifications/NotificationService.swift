@@ -141,7 +141,7 @@ final class NotificationService {
         do {
             try await center.add(request)
         } catch {
-            NSLog("[Himem][Notify] daily-nudge schedule failed: \(error.localizedDescription)")
+            NSLog("[HiMem][Notify] daily-nudge schedule failed: \(error.localizedDescription)")
         }
     }
 

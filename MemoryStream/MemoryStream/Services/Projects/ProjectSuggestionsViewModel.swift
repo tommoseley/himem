@@ -74,7 +74,7 @@ final class ProjectSuggestionsViewModel: ObservableObject {
             do {
                 try ctx.save()
             } catch {
-                NSLog("[Himem][Projects] commit suggestions save failed: \(error.localizedDescription)")
+                NSLog("[HiMem][Projects] commit suggestions save failed: \(error.localizedDescription)")
             }
         }
 

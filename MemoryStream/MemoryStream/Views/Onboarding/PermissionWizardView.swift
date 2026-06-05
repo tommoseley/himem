@@ -126,7 +126,7 @@ struct PermissionWizardView: View {
         WizardPage(
             step: 2, glyph: G.mic, tint: .accent, required: true,
             title: "The fastest way in is to just say it.",
-            why: "Himem captures by voice — on your phone and your Watch.",
+            why: "HiMem captures by voice — on your phone and your Watch.",
             example: "\u{201C}Don\u{2019}t let me forget the pear tree fruited.\u{201D} Tap, talk, done.",
             cta: "Allow microphone",
             showBack: true,
@@ -169,7 +169,7 @@ struct PermissionWizardView: View {
             step: 5, glyph: G.camera, tint: .accent, required: false,
             title: "Catch the moment, not just the words for it.",
             why: "Take a photo or video straight into a memory.",
-            example: "Snap the whiteboard before it\u{2019}s erased — it lands in Himem.",
+            example: "Snap the whiteboard before it\u{2019}s erased — it lands in HiMem.",
             cta: "Allow camera",
             showBack: true,
             onBack: { withWizardAnim { step = .photos } },
@@ -182,7 +182,7 @@ struct PermissionWizardView: View {
         WizardPage(
             step: 6, glyph: G.location, tint: .accent, required: false,
             title: "Let a memory remember where you were.",
-            why: "Himem tags captures with a place — only while you\u{2019}re using it.",
+            why: "HiMem tags captures with a place — only while you\u{2019}re using it.",
             example: "Months later, a note still says \u{201C}Marsh Walk, Murrells Inlet.\u{201D}",
             cta: "Allow location while using",
             showBack: true,
@@ -744,7 +744,7 @@ struct WizardPage: View {
                     .frame(maxWidth: 280, alignment: .leading)
 
                 if required {
-                    Text("Required to use Himem")
+                    Text("Required to use HiMem")
                         .font(.system(size: 10.5, weight: .bold))
                         .tracking(0.6)
                         .foregroundStyle(Crucible.Color.accent)
@@ -881,7 +881,7 @@ struct ScrW1Apple: View {
                     bullet(headline: "Capture anything.",
                            body: "Voice, photo, video — on your phone or your Watch.")
                     bullet(headline: "Organized quietly.",
-                           body: "Himem listens for the thread. You stay in control.")
+                           body: "HiMem listens for the thread. You stay in control.")
                     bullet(headline: "Yours, end to end.",
                            body: "Synced privately through your own iCloud.")
                 }
@@ -1131,7 +1131,7 @@ struct ScrWLand: View {
             .lineSpacing(2)
             .padding(.top, 58)
 
-            Text("Himem works best when capture is easy. Start with the thought closest to your tongue — or look around first.")
+            Text("HiMem works best when capture is easy. Start with the thought closest to your tongue — or look around first.")
                 .font(.system(size: 14.5))
                 .foregroundStyle(Crucible.Color.ink2)
                 .lineSpacing(4)
@@ -1215,7 +1215,7 @@ struct ScrRequiredBlock: View {
             return BlockedCopy(
                 step: 1, glyph: AnyView(Image(systemName: "applelogo").font(.system(size: 28, weight: .semibold))),
                 title: "Let\u{2019}s finish signing in.",
-                why: "Himem keeps your memories private and synced through your Apple account. Without it, there\u{2019}s nowhere safe to put them.",
+                why: "HiMem keeps your memories private and synced through your Apple account. Without it, there\u{2019}s nowhere safe to put them.",
                 cta: "Try again with Apple",
                 foot: "Cancelled by mistake? One tap and you\u{2019}re back.",
                 fix: .retry
@@ -1223,8 +1223,8 @@ struct ScrRequiredBlock: View {
         case .mic:
             return BlockedCopy(
                 step: 2, glyph: G.mic.image,
-                title: "Himem can\u{2019}t hear you yet.",
-                why: "The microphone is how every memory gets captured. There\u{2019}s no version of Himem without it.",
+                title: "HiMem can\u{2019}t hear you yet.",
+                why: "The microphone is how every memory gets captured. There\u{2019}s no version of HiMem without it.",
                 cta: "Open Settings",
                 foot: "Switch it on, come back, and we\u{2019}ll pick up right where you left off.",
                 fix: .settings(label: "Microphone")
@@ -1233,7 +1233,7 @@ struct ScrRequiredBlock: View {
             return BlockedCopy(
                 step: 3, glyph: G.speech.image,
                 title: "Your words need transcription.",
-                why: "Speech recognition turns what you say into text you can read and search. It\u{2019}s core to how Himem works.",
+                why: "Speech recognition turns what you say into text you can read and search. It\u{2019}s core to how HiMem works.",
                 cta: "Open Settings",
                 foot: "Switch it on, come back, and we\u{2019}ll pick up right where you left off.",
                 fix: .settings(label: "Speech Recognition")
@@ -1327,7 +1327,7 @@ struct ScrRequiredBlock: View {
                 .font(.system(size: 10, weight: .bold))
                 .tracking(1.3)
                 .foregroundStyle(Crucible.Color.ink3)
-            settingsRow(index: 1, leading: "Settings", trailing: "Himem")
+            settingsRow(index: 1, leading: "Settings", trailing: "HiMem")
             settingsRow(index: 2, leading: label, trailing: "On")
         }
         .padding(.vertical, 14)
@@ -1513,7 +1513,7 @@ struct ScrReinstallRestore: View {
 
 /// Settled state — restore quieted (no remote-change events for 5s).
 /// Parent auto-advances to Today via `.task { runRestoreDoneAutoAdvance }`
-/// after a brief confirmation beat. The "Go to Himem" button is the
+/// after a brief confirmation beat. The "Go to HiMem" button is the
 /// user's manual shortcut for the same advance.
 struct ScrReinstallRestoreDone: View {
     let finalCount: Int
@@ -1561,7 +1561,7 @@ struct ScrReinstallRestoreDone: View {
 
             VStack(spacing: 10) {
                 Button(action: onGo) {
-                    Text("Go to Himem")
+                    Text("Go to HiMem")
                         .font(.system(size: 16, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)

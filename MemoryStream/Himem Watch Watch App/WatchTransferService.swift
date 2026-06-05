@@ -18,13 +18,13 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
 
     func start() {
         guard WCSession.isSupported() else {
-            NSLog("[Himem][WC] watch — WCSession not supported")
+            NSLog("[HiMem][WC] watch — WCSession not supported")
             return
         }
         let session = WCSession.default
         session.delegate = self
         session.activate()
-        NSLog("[Himem][WC] watch — session.activate() called, reachable=\(session.isReachable)")
+        NSLog("[HiMem][WC] watch — session.activate() called, reachable=\(session.isReachable)")
     }
 
     /// Queues a transferFile for the given clip. WatchConnectivity persists
@@ -32,13 +32,13 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// the system holds the file and ships it when reachability returns.
     func send(clip: WatchPendingClip) {
         guard WCSession.isSupported() else {
-            NSLog("[Himem][WC] watch — cannot send, WCSession not supported")
+            NSLog("[HiMem][WC] watch — cannot send, WCSession not supported")
             return
         }
         let session = WCSession.default
         let url = WatchPendingManifest.audioURL(for: clip.audioFilename)
         guard FileManager.default.fileExists(atPath: url.path) else {
-            NSLog("[Himem][WC] watch — file missing at \(url.path), skipping send")
+            NSLog("[HiMem][WC] watch — file missing at \(url.path), skipping send")
             return
         }
 
@@ -57,7 +57,7 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
             return metaClipId == clip.clipId
         }
         if alreadyQueued {
-            NSLog("[Himem][WC] watch — send(clip:) refused; clipId=\(clip.clipId) already in outstandingFileTransfers")
+            NSLog("[HiMem][WC] watch — send(clip:) refused; clipId=\(clip.clipId) already in outstandingFileTransfers")
             return
         }
 
@@ -82,15 +82,15 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         ]
         if session.isReachable {
             session.sendMessage(announcePayload, replyHandler: nil) { error in
-                NSLog("[Himem][WC] watch — pre-announce sendMessage failed for clipId=\(clip.clipId): \(error.localizedDescription) (transferFile will still deliver)")
+                NSLog("[HiMem][WC] watch — pre-announce sendMessage failed for clipId=\(clip.clipId): \(error.localizedDescription) (transferFile will still deliver)")
             }
         } else {
-            NSLog("[Himem][WC] watch — pre-announce skipped, not reachable; file delivery is durable")
+            NSLog("[HiMem][WC] watch — pre-announce skipped, not reachable; file delivery is durable")
         }
 
         let metadata = clip.metadata.asWireDict()
         let transfer = session.transferFile(url, metadata: metadata)
-        NSLog("[Himem][WC] watch — transferFile queued for clipId=\(clip.clipId), reachable=\(session.isReachable), transferring=\(transfer.isTransferring)")
+        NSLog("[HiMem][WC] watch — transferFile queued for clipId=\(clip.clipId), reachable=\(session.isReachable), transferring=\(transfer.isTransferring)")
     }
 
     // MARK: - WCSessionDelegate
@@ -104,7 +104,7 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
             @unknown default: return "unknown"
             }
         }()
-        NSLog("[Himem][WC] watch — activated state=\(stateStr) err=\(error?.localizedDescription ?? "nil") reachable=\(session.isReachable)")
+        NSLog("[HiMem][WC] watch — activated state=\(stateStr) err=\(error?.localizedDescription ?? "nil") reachable=\(session.isReachable)")
     }
 
     /// Pure parsing for an ack payload from the iPhone. Extracted from the
@@ -126,29 +126,29 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
            let kind = payload["kind"] as? String {
             switch kind {
             case "rollGroup":
-                NSLog("[Himem][WC] watch — handleAckPayload accepted rollGroupId=\(id)")
+                NSLog("[HiMem][WC] watch — handleAckPayload accepted rollGroupId=\(id)")
                 Task { @MainActor in self.lastAckedRollGroupId = id }
             case "clip":
-                NSLog("[Himem][WC] watch — handleAckPayload accepted clipId=\(id)")
+                NSLog("[HiMem][WC] watch — handleAckPayload accepted clipId=\(id)")
                 Task { @MainActor in self.lastAckedClipId = id }
             default:
-                NSLog("[Himem][WC] watch — handleAckPayload unknown kind=\(kind), id=\(id)")
+                NSLog("[HiMem][WC] watch — handleAckPayload unknown kind=\(kind), id=\(id)")
             }
             return
         }
         if let str = payload["confirmedClipId"] as? String,
            let clipId = UUID(uuidString: str) {
-            NSLog("[Himem][WC] watch — handleAckPayload accepted legacy clipId=\(clipId)")
+            NSLog("[HiMem][WC] watch — handleAckPayload accepted legacy clipId=\(clipId)")
             Task { @MainActor in self.lastAckedClipId = clipId }
             return
         }
-        NSLog("[Himem][WC] watch — handleAckPayload IGNORED, keys=\(Array(payload.keys))")
+        NSLog("[HiMem][WC] watch — handleAckPayload IGNORED, keys=\(Array(payload.keys))")
     }
 
     /// Ack via `sendMessage` — used when both apps are reachable. Kept for
     /// the fast-path case (e.g., user actively interacting with both).
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
-        NSLog("[Himem][WC] watch — didReceiveMessage keys=\(Array(message.keys))")
+        NSLog("[HiMem][WC] watch — didReceiveMessage keys=\(Array(message.keys))")
         if message["command"] as? String == "flushPending" {
             Task { @MainActor in self.flushPendingManifest() }
             return
@@ -165,7 +165,7 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     @MainActor
     func flushPendingManifest() {
         let clips = WatchPendingManifest.shared.clips
-        NSLog("[Himem][WC] watch — flushPendingManifest (phone-requested), \(clips.count) clip(s)")
+        NSLog("[HiMem][WC] watch — flushPendingManifest (phone-requested), \(clips.count) clip(s)")
         for clip in clips {
             send(clip: clip)
         }
@@ -176,7 +176,7 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// golf cart" scenario where reachability is false but the iPhone has
     /// queued an ack for the next time the watch app activates.
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
-        NSLog("[Himem][WC] watch — didReceiveUserInfo keys=\(Array(userInfo.keys))")
+        NSLog("[HiMem][WC] watch — didReceiveUserInfo keys=\(Array(userInfo.keys))")
         handleAckPayload(userInfo)
     }
 
@@ -186,9 +186,9 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// this is purely observational.
     nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
         if let error {
-            NSLog("[Himem][WC] watch — transferFile FAILED: \(error.localizedDescription)")
+            NSLog("[HiMem][WC] watch — transferFile FAILED: \(error.localizedDescription)")
         } else {
-            NSLog("[Himem][WC] watch — transferFile delivered to iPhone")
+            NSLog("[HiMem][WC] watch — transferFile delivered to iPhone")
         }
     }
 
@@ -205,7 +205,7 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// transfers, so this is safe to fire on any reachability change.
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         let reachable = session.isReachable
-        NSLog("[Himem][WC] watch — sessionReachabilityDidChange reachable=\(reachable)")
+        NSLog("[HiMem][WC] watch — sessionReachabilityDidChange reachable=\(reachable)")
         guard reachable else { return }
         Task { @MainActor in
             self.flushPendingManifest()

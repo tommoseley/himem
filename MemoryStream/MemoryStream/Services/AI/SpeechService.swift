@@ -185,7 +185,7 @@ final class SpeechService: ObservableObject {
             // `transcribedText` (finalized + current volatile chunk).
             resultsTask = Task { [weak self] in
                 guard let self else { return }
-                NSLog("[Himem][Speech] persistent results consumer started")
+                NSLog("[HiMem][Speech] persistent results consumer started")
                 do {
                     for try await result in transcriber.results {
                         let chunk = String(result.text.characters)
@@ -213,11 +213,11 @@ final class SpeechService: ObservableObject {
                             }
                         }
                     }
-                    NSLog("[Himem][Speech] persistent results consumer ended")
+                    NSLog("[HiMem][Speech] persistent results consumer ended")
                 } catch is CancellationError {
                     // Service deinit. Expected.
                 } catch {
-                    NSLog("[Himem][Speech] persistent consumer failed: \(error.localizedDescription)")
+                    NSLog("[HiMem][Speech] persistent consumer failed: \(error.localizedDescription)")
                     await MainActor.run {
                         self.error = .recognitionFailed(error.localizedDescription)
                     }
@@ -225,23 +225,23 @@ final class SpeechService: ObservableObject {
             }
 
             isModelReady = true
-            NSLog("[Himem][Speech] analyzer prepared, bestFormat=\(bestFormat?.description ?? "nil")")
+            NSLog("[HiMem][Speech] analyzer prepared, bestFormat=\(bestFormat?.description ?? "nil")")
         } catch {
-            NSLog("[Himem][Speech] prepareAnalyzer failed: \(error.localizedDescription)")
+            NSLog("[HiMem][Speech] prepareAnalyzer failed: \(error.localizedDescription)")
         }
     }
 
     // MARK: - Recording
 
     func startRecording() {
-        NSLog("[Himem][Speech] startRecording entered authorized=\(isAuthorized) modelReady=\(isModelReady)")
+        NSLog("[HiMem][Speech] startRecording entered authorized=\(isAuthorized) modelReady=\(isModelReady)")
         guard isAuthorized else {
-            NSLog("[Himem][Speech] aborted: not authorized")
+            NSLog("[HiMem][Speech] aborted: not authorized")
             error = .notAuthorized
             return
         }
         guard let analyzer, let transcriber, let bestFormat else {
-            NSLog("[Himem][Speech] aborted: analyzer not prepared")
+            NSLog("[HiMem][Speech] aborted: analyzer not prepared")
             error = .modelNotReady
             Task { await self.prepareAnalyzerIfNeeded() }
             return
@@ -258,7 +258,7 @@ final class SpeechService: ObservableObject {
             try session.setCategory(.record, mode: .measurement, options: .duckOthers)
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
-            NSLog("[Himem][Speech] audio session failed: \(error.localizedDescription)")
+            NSLog("[HiMem][Speech] audio session failed: \(error.localizedDescription)")
             self.error = .audioSessionFailed(error.localizedDescription)
             return
         }
@@ -277,13 +277,13 @@ final class SpeechService: ObservableObject {
         audioEngine = engine
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        NSLog("[Himem][Speech] engine input format: \(recordingFormat)")
+        NSLog("[HiMem][Speech] engine input format: \(recordingFormat)")
 
         do {
             audioFile = try AVAudioFile(forWriting: fileURL, settings: recordingFormat.settings)
-            NSLog("[Himem][Speech] audio file ready: \(filename)")
+            NSLog("[HiMem][Speech] audio file ready: \(filename)")
         } catch {
-            NSLog("[Himem][Speech] failed to create audio file: \(error.localizedDescription)")
+            NSLog("[HiMem][Speech] failed to create audio file: \(error.localizedDescription)")
             audioFile = nil
         }
 
@@ -307,7 +307,7 @@ final class SpeechService: ObservableObject {
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             let n = bufferCounter.increment()
             if n <= 3 {
-                NSLog("[Himem][Speech] tap buffer #\(n) frames=\(buffer.frameLength)")
+                NSLog("[HiMem][Speech] tap buffer #\(n) frames=\(buffer.frameLength)")
             }
             self?.streamBuffer(buffer)
             try? self?.audioFile?.write(from: buffer)
@@ -320,12 +320,12 @@ final class SpeechService: ObservableObject {
         // The persistent `transcriber.results` consumer (set up in
         // prepareAnalyzerIfNeeded) yields partials/finals as they arrive.
         analyzerStartTask = Task { [analyzer, inputStream] in
-            NSLog("[Himem][Speech] analyzer.start(inputSequence:) called")
+            NSLog("[HiMem][Speech] analyzer.start(inputSequence:) called")
             do {
                 try await analyzer.start(inputSequence: inputStream)
-                NSLog("[Himem][Speech] analyzer.start returned cleanly")
+                NSLog("[HiMem][Speech] analyzer.start returned cleanly")
             } catch {
-                NSLog("[Himem][Speech] analyzer.start failed: \(error.localizedDescription)")
+                NSLog("[HiMem][Speech] analyzer.start failed: \(error.localizedDescription)")
                 throw error
             }
         }
@@ -334,9 +334,9 @@ final class SpeechService: ObservableObject {
             engine.prepare()
             try engine.start()
             isRecording = true
-            NSLog("[Himem][Speech] engine started, isRecording=true")
+            NSLog("[HiMem][Speech] engine started, isRecording=true")
         } catch {
-            NSLog("[Himem][Speech] engine.start() failed: \(error.localizedDescription)")
+            NSLog("[HiMem][Speech] engine.start() failed: \(error.localizedDescription)")
             self.error = .audioSessionFailed(error.localizedDescription)
             stopRecording()
         }

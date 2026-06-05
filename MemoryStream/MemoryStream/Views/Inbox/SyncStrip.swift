@@ -79,6 +79,6 @@ struct SyncStrip: View {
     private var subtitleText: String {
         allPaused
             ? "Your Watch went out of range. Sync picks up where it left off when it's near."
-            : "Keep Himem open to finish faster — it also syncs in the background."
+            : "Keep HiMem open to finish faster — it also syncs in the background."
     }
 }

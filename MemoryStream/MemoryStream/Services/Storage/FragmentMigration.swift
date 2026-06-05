@@ -72,7 +72,7 @@ enum FragmentMigration {
         }
         defer { runQueue.sync { inFlight = false } }
 
-        NSLog("[Himem][Migration] starting fragment migration v5")
+        NSLog("[HiMem][Migration] starting fragment migration v5")
         let stats = MigrationStats()
         context.performAndWait {
             do {
@@ -90,13 +90,13 @@ enum FragmentMigration {
                 // leave the flag unset so the next launch retries the walk.
                 if stats.entriesFetched > 0 {
                     defaults.set(true, forKey: completionFlagKey)
-                    NSLog("[Himem][Migration] flag set after walk of \(stats.entriesFetched) entries")
+                    NSLog("[HiMem][Migration] flag set after walk of \(stats.entriesFetched) entries")
                 }
                 NSLog(
-                    "[Himem][Migration] completed: fetched=\(stats.entriesFetched) voice=\(stats.voiceCreated) note=\(stats.noteCreated) entriesTouched=\(stats.entriesTouched) skipped=\(stats.entriesSkipped) duplicatesRemoved=\(stats.duplicatesRemoved)"
+                    "[HiMem][Migration] completed: fetched=\(stats.entriesFetched) voice=\(stats.voiceCreated) note=\(stats.noteCreated) entriesTouched=\(stats.entriesTouched) skipped=\(stats.entriesSkipped) duplicatesRemoved=\(stats.duplicatesRemoved)"
                 )
             } catch {
-                NSLog("[Himem][Migration] fetch failed: \(error.localizedDescription)")
+                NSLog("[HiMem][Migration] fetch failed: \(error.localizedDescription)")
             }
         }
     }
@@ -162,7 +162,7 @@ enum FragmentMigration {
                 if touched { stats.entriesTouched += 1 }
             } catch {
                 NSLog(
-                    "[Himem][Migration] skipped entry \(entry.id): \(error.localizedDescription)"
+                    "[HiMem][Migration] skipped entry \(entry.id): \(error.localizedDescription)"
                 )
                 context.rollback()
                 stats.entriesSkipped += 1

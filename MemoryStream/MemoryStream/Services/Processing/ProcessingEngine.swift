@@ -183,7 +183,7 @@ final class ProcessingEngine {
                     }
                 }
                 if let debitFailure {
-                    NSLog("[Himem][Pricing] tryConsumeAssist failed after successful pass: \(debitFailure.localizedDescription)")
+                    NSLog("[HiMem][Pricing] tryConsumeAssist failed after successful pass: \(debitFailure.localizedDescription)")
                     await MainActor.run {
                         ErrorState.shared.report(.processingFailed("Couldn't record assist usage: \(debitFailure.localizedDescription). Please retry."))
                     }

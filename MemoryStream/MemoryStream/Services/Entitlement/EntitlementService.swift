@@ -325,7 +325,7 @@ final class EntitlementService: ObservableObject {
             // existing one would compound the corruption. Crash
             // loudly so the failure is visible in launch logs
             // rather than invisible debit-loss in production.
-            fatalError("[Himem][Pricing] AssistBalance fetch failed — Core Data store is corrupt: \(error)")
+            fatalError("[HiMem][Pricing] AssistBalance fetch failed — Core Data store is corrupt: \(error)")
         }
         if let existing {
             balanceRecord = existing
@@ -346,7 +346,7 @@ final class EntitlementService: ObservableObject {
             do {
                 try ctx.save()
             } catch {
-                NSLog("[Himem][Pricing] AssistBalance initial save failed: \(error.localizedDescription) — in-memory record published but not persisted; next mutation will retry the save")
+                NSLog("[HiMem][Pricing] AssistBalance initial save failed: \(error.localizedDescription) — in-memory record published but not persisted; next mutation will retry the save")
             }
             balanceRecord = new
         }
@@ -372,7 +372,7 @@ final class EntitlementService: ObservableObject {
             // flight — is itself a mutation that needs to persist,
             // and would require undoing the `block` we can't
             // introspect. Logging loudly is the honest middle path.
-            NSLog("[Himem][Pricing] AssistBalance mutate save failed: \(error.localizedDescription) — in-memory record advanced; next save will retry")
+            NSLog("[HiMem][Pricing] AssistBalance mutate save failed: \(error.localizedDescription) — in-memory record advanced; next save will retry")
         }
         recomputePublished()
     }

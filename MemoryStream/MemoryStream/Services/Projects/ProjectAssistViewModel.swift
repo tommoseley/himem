@@ -98,7 +98,7 @@ final class ProjectAssistViewModel: ObservableObject {
             do {
                 try entitlement.tryConsumeProjectAssist()
             } catch {
-                NSLog("[Himem][Pricing] tryConsumeProjectAssist failed after successful run: \(error.localizedDescription)")
+                NSLog("[HiMem][Pricing] tryConsumeProjectAssist failed after successful run: \(error.localizedDescription)")
                 reportError(.processingFailed("Couldn't record assist usage. Please retry."))
             }
         } catch {

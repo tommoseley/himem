@@ -175,7 +175,7 @@ final class WatchPendingManifest: ObservableObject {
             // received an ack for a clip it never had. Log so the
             // "coordinator removing clipId=X" trace in the
             // coordinator doesn't dangle with no follow-up.
-            NSLog("[Himem][WC] watch — performRemoval no-op clipId=\(clipId) (not in manifest; remaining=\(clips.count))")
+            NSLog("[HiMem][WC] watch — performRemoval no-op clipId=\(clipId) (not in manifest; remaining=\(clips.count))")
             return
         }
         try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
@@ -186,7 +186,7 @@ final class WatchPendingManifest: ObservableObject {
         let nowReceipt = Date()
         lastConfirmedReceiptAt = nowReceipt
         persistLastConfirmedReceipt()
-        NSLog("[Himem][WC] watch — performRemoval done clipId=\(clipId) remaining=\(next.count) lastConfirmedReceiptAt=\(nowReceipt)")
+        NSLog("[HiMem][WC] watch — performRemoval done clipId=\(clipId) remaining=\(next.count) lastConfirmedReceiptAt=\(nowReceipt)")
     }
 
     /// Persistence for `lastConfirmedReceiptAt` — small enough to stash
@@ -221,10 +221,10 @@ final class WatchPendingManifest: ObservableObject {
     func removeByRollGroup(rollGroupId: UUID) {
         let matching = clips.filter { $0.rollGroupId == rollGroupId }
         guard !matching.isEmpty else {
-            NSLog("[Himem][WC] watch — removeByRollGroup no-op rollGroupId=\(rollGroupId) (no matches)")
+            NSLog("[HiMem][WC] watch — removeByRollGroup no-op rollGroupId=\(rollGroupId) (no matches)")
             return
         }
-        NSLog("[Himem][WC] watch — removeByRollGroup matched \(matching.count) row(s) for rollGroupId=\(rollGroupId)")
+        NSLog("[HiMem][WC] watch — removeByRollGroup matched \(matching.count) row(s) for rollGroupId=\(rollGroupId)")
         for clip in matching {
             remove(clipId: clip.clipId, viaSync: true)
         }

@@ -113,9 +113,9 @@ final class WatchRecordingService: NSObject, ObservableObject {
             )
             try session.setActive(true, options: [])
             try session.setActive(false, options: [])
-            NSLog("[Himem][REC] warmAudioSession completed in \(Int(Date().timeIntervalSince(warmStart) * 1000))ms")
+            NSLog("[HiMem][REC] warmAudioSession completed in \(Int(Date().timeIntervalSince(warmStart) * 1000))ms")
         } catch {
-            NSLog("[Himem][REC] warmAudioSession failed: \(error.localizedDescription)")
+            NSLog("[HiMem][REC] warmAudioSession failed: \(error.localizedDescription)")
         }
     }
 
@@ -162,7 +162,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
             // warm HAL.
             try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetooth])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
-            NSLog("[Himem][REC] start: AVAudioSession active in \(Int(Date().timeIntervalSince(sessionStart) * 1000))ms")
+            NSLog("[HiMem][REC] start: AVAudioSession active in \(Int(Date().timeIntervalSince(sessionStart) * 1000))ms")
 
             // AVAudioEngine + tap. The input node's native format drives
             // both the file we write and the buffers we peek at for the
@@ -212,7 +212,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
 
             engine.prepare()
             try engine.start()
-            NSLog("[Himem][REC] start: engine prepared+started in \(Int(Date().timeIntervalSince(engineStart) * 1000))ms")
+            NSLog("[HiMem][REC] start: engine prepared+started in \(Int(Date().timeIntervalSince(engineStart) * 1000))ms")
 
             startedAt = Date()
             elapsed = 0
@@ -238,7 +238,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
             WKInterfaceDevice.current().play(.click)
 
             startTimer()
-            NSLog("[Himem][REC] start: total \(Int(Date().timeIntervalSince(startBegin) * 1000))ms")
+            NSLog("[HiMem][REC] start: total \(Int(Date().timeIntervalSince(startBegin) * 1000))ms")
         } catch {
             cleanupAfterError()
         }
@@ -305,7 +305,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
 
         let rollId = currentRollGroupId
         currentRollGroupId = nil
-        NSLog("[Himem][WC] watch — stop(save:true) clipId=\(clipId) rollGroupId=\(rollId?.uuidString ?? "nil") duration=\(duration)")
+        NSLog("[HiMem][WC] watch — stop(save:true) clipId=\(clipId) rollGroupId=\(rollId?.uuidString ?? "nil") duration=\(duration)")
         let clip = WatchPendingClip(
             clipId: clipId,
             capturedAt: captured,

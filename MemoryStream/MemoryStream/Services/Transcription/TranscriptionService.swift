@@ -7,7 +7,7 @@ import Speech
 /// 60-second ceiling, no `isFinal`-arbitration bug class. Replaces the
 /// legacy `SFSpeechRecognizer` path.
 ///
-/// Designed as a swappable component (Jig-candidate seam): Himem-specific
+/// Designed as a swappable component (Jig-candidate seam): HiMem-specific
 /// orchestration code calls only the public `transcribe(...)` and
 /// `ensureModelReady(...)` methods. If the engine ever needs to swap (a
 /// future Whisper-based pipeline, etc.), the public surface stays
@@ -115,13 +115,13 @@ final class TranscriptionService {
         case .installed:
             return
         case .unsupported:
-            NSLog("[Himem][Transcribe] locale unsupported: \(locale.identifier)")
+            NSLog("[HiMem][Transcribe] locale unsupported: \(locale.identifier)")
             return
         case .supported, .downloading:
-            NSLog("[Himem][Transcribe] requesting model install for \(locale.identifier)")
+            NSLog("[HiMem][Transcribe] requesting model install for \(locale.identifier)")
             if let req = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
                 try await req.downloadAndInstall()
-                NSLog("[Himem][Transcribe] model installed for \(locale.identifier)")
+                NSLog("[HiMem][Transcribe] model installed for \(locale.identifier)")
             }
         @unknown default:
             return
@@ -142,7 +142,7 @@ final class TranscriptionService {
 
         // Surface the request before doing any work so a hang shows up in
         // logs at the right place.
-        NSLog("[Himem][Transcribe] start url=\(audioURL.lastPathComponent) duration=\(fileDuration)s locale=\(locale.identifier)")
+        NSLog("[HiMem][Transcribe] start url=\(audioURL.lastPathComponent) duration=\(fileDuration)s locale=\(locale.identifier)")
 
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
 
@@ -154,7 +154,7 @@ final class TranscriptionService {
         // install path.
         let assetStatus = await AssetInventory.status(forModules: [transcriber])
         guard assetStatus == .installed else {
-            NSLog("[Himem][Transcribe] model not installed (\(assetStatus)), deferring")
+            NSLog("[HiMem][Transcribe] model not installed (\(assetStatus)), deferring")
             return .modelNotInstalled
         }
 
@@ -162,7 +162,7 @@ final class TranscriptionService {
         do {
             audioFile = try AVAudioFile(forReading: audioURL)
         } catch {
-            NSLog("[Himem][Transcribe] file unreadable: \(error.localizedDescription)")
+            NSLog("[HiMem][Transcribe] file unreadable: \(error.localizedDescription)")
             return .fileUnreadable(error)
         }
 
@@ -176,7 +176,7 @@ final class TranscriptionService {
         let fileFmt = audioFile.fileFormat
         let procFmt = audioFile.processingFormat
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? Int) ?? -1
-        NSLog("[Himem][Transcribe] file open ok bytes=\(fileSize) frames=\(audioFile.length) fileFmt=\(fileFmt) procFmt=\(procFmt)")
+        NSLog("[HiMem][Transcribe] file open ok bytes=\(fileSize) frames=\(audioFile.length) fileFmt=\(fileFmt) procFmt=\(procFmt)")
 
         // Init with modules only — no input. `start(inputAudioFile:)`
         // provides the input. Passing the file to BOTH init and start
@@ -201,7 +201,7 @@ final class TranscriptionService {
                     count += 1
                 }
             } catch {
-                NSLog("[Himem][Transcribe] result stream error: \(error.localizedDescription)")
+                NSLog("[HiMem][Transcribe] result stream error: \(error.localizedDescription)")
             }
             return (pieces.joined(separator: " "), coverage, count)
         }()
@@ -209,7 +209,7 @@ final class TranscriptionService {
         do {
             try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
         } catch {
-            NSLog("[Himem][Transcribe] analyzer.start failed: \(error.localizedDescription)")
+            NSLog("[HiMem][Transcribe] analyzer.start failed: \(error.localizedDescription)")
             // Cancel the collector so we don't leak. The collector
             // only stops cleanly when the results stream finishes,
             // which it won't if start() never produced input.
@@ -238,7 +238,7 @@ final class TranscriptionService {
             diagnosticTag = ""
         }
         NSLog(
-            "[Himem][Transcribe] done segments=\(count) coverage=\(String(format: "%.2f", coverage))s file=\(String(format: "%.2f", fileDuration))s textLen=\(trimmed.count)\(diagnosticTag)"
+            "[HiMem][Transcribe] done segments=\(count) coverage=\(String(format: "%.2f", coverage))s file=\(String(format: "%.2f", fileDuration))s textLen=\(trimmed.count)\(diagnosticTag)"
         )
         return .transcribed(Result(text: trimmed, coverageSeconds: coverage, fileDurationSeconds: fileDuration, segmentCount: count))
     }

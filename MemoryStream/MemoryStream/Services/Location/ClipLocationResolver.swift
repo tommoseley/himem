@@ -77,32 +77,32 @@ enum ClipLocationResolver {
         lookup: () -> MediaReference?
     ) {
         guard let latitude, let longitude else {
-            NSLog("[Himem][ClipLoc] stamp skipped — nil lat/lon on this clip")
+            NSLog("[HiMem][ClipLoc] stamp skipped — nil lat/lon on this clip")
             return
         }
         guard let ref = lookup() else {
-            NSLog("[Himem][ClipLoc] stamp skipped — MediaReference not found in store for stamp lookup")
+            NSLog("[HiMem][ClipLoc] stamp skipped — MediaReference not found in store for stamp lookup")
             return
         }
         let refId = ref.id
         ref.latitude = NSNumber(value: latitude)
         ref.longitude = NSNumber(value: longitude)
         try? storage.save(context: viewContext)
-        NSLog("[Himem][ClipLoc] stamped lat=\(latitude) lon=\(longitude) on ref=\(refId.uuidString)")
+        NSLog("[HiMem][ClipLoc] stamped lat=\(latitude) lon=\(longitude) on ref=\(refId.uuidString)")
 
         Task { @MainActor in
             let location = CLLocation(latitude: latitude, longitude: longitude)
             guard let name = await LocationService.shared.reverseGeocode(location) else {
-                NSLog("[Himem][ClipLoc] reverseGeocode returned nil for ref=\(refId.uuidString)")
+                NSLog("[HiMem][ClipLoc] reverseGeocode returned nil for ref=\(refId.uuidString)")
                 return
             }
             guard let refreshed = fetchClip(id: refId, in: viewContext) else {
-                NSLog("[Himem][ClipLoc] post-geocode fetch failed for ref=\(refId.uuidString)")
+                NSLog("[HiMem][ClipLoc] post-geocode fetch failed for ref=\(refId.uuidString)")
                 return
             }
             refreshed.placeName = name
             try? storage.save(context: viewContext)
-            NSLog("[Himem][ClipLoc] wrote placeName=\(name) for ref=\(refId.uuidString)")
+            NSLog("[HiMem][ClipLoc] wrote placeName=\(name) for ref=\(refId.uuidString)")
         }
     }
 

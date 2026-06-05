@@ -393,7 +393,7 @@ final class InboxManifest: ObservableObject {
         replace(with: next)
         WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: clipId)
         emitAcks(actions)
-        NSLog("[Himem][Inbox] remove(clipId:) emitted \(actions.count) ack(s) for clipId=\(clipId), tombstones=\(disposedClips.count)")
+        NSLog("[HiMem][Inbox] remove(clipId:) emitted \(actions.count) ack(s) for clipId=\(clipId), tombstones=\(disposedClips.count)")
     }
 
     /// Removes a batch — used when the user creates a memory from N clips
@@ -415,7 +415,7 @@ final class InboxManifest: ObservableObject {
             WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: id)
         }
         emitAcks(actions)
-        NSLog("[Himem][Inbox] removeBatch emitted \(actions.count) ack(s) for \(clipIds.count) clipId(s), tombstones=\(disposedClips.count)")
+        NSLog("[HiMem][Inbox] removeBatch emitted \(actions.count) ack(s) for \(clipIds.count) clipId(s), tombstones=\(disposedClips.count)")
     }
 
     /// Status of a clipId across both active and disposed rows. nil
@@ -601,7 +601,7 @@ final class InboxManifest: ObservableObject {
             now: Date()
         )
         guard !migrated.isEmpty else { return }
-        NSLog("[Himem][Inbox] migrated \(migrated.count) legacy disposed clipId(s) to tombstones")
+        NSLog("[HiMem][Inbox] migrated \(migrated.count) legacy disposed clipId(s) to tombstones")
         let merged = mergeDisposed(existing: disposedClips, migrated: migrated)
         let aged = Self.pruned(merged, olderThan: Self.defaultPruneDays, now: Date())
         disposedClips = aged
@@ -644,9 +644,9 @@ final class InboxManifest: ObservableObject {
         let dest = root.appendingPathComponent("manifest.backup.\(stamp).json")
         do {
             try fm.copyItem(at: url, to: dest)
-            NSLog("[Himem][Inbox] wrote one-shot backup at \(dest.lastPathComponent)")
+            NSLog("[HiMem][Inbox] wrote one-shot backup at \(dest.lastPathComponent)")
         } catch {
-            NSLog("[Himem][Inbox] backup copy failed: \(error.localizedDescription)")
+            NSLog("[HiMem][Inbox] backup copy failed: \(error.localizedDescription)")
         }
     }
 

@@ -390,9 +390,9 @@ For each clip where `transcript.isEmpty && !transcriptionAttempted`:
 Diagnostic logging on every transcribe call:
 
 ```
-[Himem][Transcribe] start url=… duration=…s locale=…
-[Himem][Transcribe] file open ok bytes=… frames=… fileFmt=… procFmt=…
-[Himem][Transcribe] done segments=N coverage=Xs file=Ys textLen=Z [DIAG=…]
+[HiMem][Transcribe] start url=… duration=…s locale=…
+[HiMem][Transcribe] file open ok bytes=… frames=… fileFmt=… procFmt=…
+[HiMem][Transcribe] done segments=N coverage=Xs file=Ys textLen=Z [DIAG=…]
 ```
 
 The `[DIAG=…]` tag explicitly tags the empty-result subcase:
@@ -436,7 +436,7 @@ The watch side parses `confirmedClipId` payloads in
 removes the row, deletes the local audio, and updates
 `lastConfirmedReceiptAt` so the "Hasn't reached in a day" chip
 clears (logged as
-`[Himem][WC] watch — performRemoval done clipId=… remaining=…
+`[HiMem][WC] watch — performRemoval done clipId=… remaining=…
 lastConfirmedReceiptAt=…`).
 
 ---
@@ -710,7 +710,7 @@ format mismatch with `SpeechTranscriber`'s expectations
 ## 10 · Where to look first when something breaks
 
 - **Clip didn't arrive on phone.** Console log filter
-  `[Himem][WC]`. Look for `phone — acceptArrivedClip` matching
+  `[HiMem][WC]`. Look for `phone — acceptArrivedClip` matching
   the watch-side `watch — transferFile queued`. If missing, the
   WC layer didn't deliver — check `session activated` reachability
   state and any `transferFile FAILED` lines.
@@ -722,7 +722,7 @@ format mismatch with `SpeechTranscriber`'s expectations
   predicate is buggy.
 - **Clip marked "auto-excluded · no speech" on clear audio.**
   Look at the `[DIAG=…]` tag on the matching
-  `[Himem][Transcribe] done` line. § 8.5.
+  `[HiMem][Transcribe] done` line. § 8.5.
 - **Watch shows "Hasn't reached your phone in a day" even though
   phone has the clips.** Look for `performRemoval done` /
   `performRemoval no-op` on the watch side — those tell you

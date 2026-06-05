@@ -183,11 +183,11 @@ final class WatchInboxNotificationCoordinator {
         case Self.actionSnooze4hIdentifier:
             let until = Date().addingTimeInterval(4 * 3600)
             snoozedUntil = until
-            NSLog("[Himem][Notify] snoozed for 4h until \(until)")
+            NSLog("[HiMem][Notify] snoozed for 4h until \(until)")
         case Self.actionMuteTodayIdentifier:
             let until = endOfTodayLocal(from: Date())
             mutedUntil = until
-            NSLog("[Himem][Notify] muted until midnight local \(until)")
+            NSLog("[HiMem][Notify] muted until midnight local \(until)")
         default:
             break
         }
@@ -264,7 +264,7 @@ final class WatchInboxNotificationCoordinator {
             now: now
         )
         guard case .fire = gate else {
-            NSLog("[Himem][Notify] single-clip passive suppressed: \(gate)")
+            NSLog("[HiMem][Notify] single-clip passive suppressed: \(gate)")
             return
         }
 
@@ -293,9 +293,9 @@ final class WatchInboxNotificationCoordinator {
         )
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
-                NSLog("[Himem][Notify] single-clip passive fire failed: \(error.localizedDescription)")
+                NSLog("[HiMem][Notify] single-clip passive fire failed: \(error.localizedDescription)")
             } else {
-                NSLog("[Himem][Notify] single-clip passive fired (count=\(inboxCount))")
+                NSLog("[HiMem][Notify] single-clip passive fired (count=\(inboxCount))")
             }
         }
         // Deliberately do NOT update lastPushAt — passive notifications
@@ -336,7 +336,7 @@ final class WatchInboxNotificationCoordinator {
         )
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
-                NSLog("[Himem][Notify] stale schedule failed for \(clipId): \(error.localizedDescription)")
+                NSLog("[HiMem][Notify] stale schedule failed for \(clipId): \(error.localizedDescription)")
             }
         }
     }
@@ -436,9 +436,9 @@ final class WatchInboxNotificationCoordinator {
         )
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
-                NSLog("[Himem][Notify] \(reason) fire failed: \(error.localizedDescription)")
+                NSLog("[HiMem][Notify] \(reason) fire failed: \(error.localizedDescription)")
             } else {
-                NSLog("[Himem][Notify] \(reason) fired: \(body)")
+                NSLog("[HiMem][Notify] \(reason) fired: \(body)")
             }
         }
         lastPushAt = now
