@@ -8,7 +8,7 @@ struct ProjectListView: View {
     @State private var newProjectName = ""
     @State private var newProjectPurpose = ""
     @State private var selectedProjectId: UUID? = nil
-    @ObservedObject private var entitlement = EntitlementService.shared
+    @ObservedObject private var entitlement = Entitlement.shared
 
     private var filteredProjects: [ProjectDisplayModel] {
         guard let topic = selectedTopic else { return projectVM.projects }

@@ -208,15 +208,10 @@ struct MemoryStreamApp: App {
         // Seed UserDefaults with notification setting defaults (toggles off,
         // 8pm nudge time) before any @AppStorage in SettingsView reads them.
         NotificationService.registerDefaults()
-        // EntitlementService / StoreKitService / FoundersCounter /
-        // TenureTracker / WatchInboxNotificationCoordinator bootstrap
-        // moved to LaunchScreenView.onStorageLoaded — they require
-        // viewContext (EntitlementService.init's loadOrCreate fetches
-        // the AssistBalance record), and running them here pre-empted
-        // LaunchScreenView's off-main storage warm because main.async
-        // fires before WindowGroup body evaluation. Net effect was a
-        // 2-3s sync loadPersistentStores on the main thread during
-        // every cold launch. See feedback_cold_launch_target memory.
+        // Entitlement / StoreKitService / WatchInboxNotificationCoordinator
+        // bootstrap moved to LaunchScreenView.onStorageLoaded so cold
+        // launches don't block on a sync loadPersistentStores. See
+        // feedback_cold_launch_target memory.
         // Pre-warm StorageService.shared on a detached userInitiated task
         // so CloudKit's per-zone setup (~17-21s on Tom's dev container —
         // see docs/architecture/cloudkit-cold-launch-investigation.md)
@@ -316,9 +311,6 @@ struct MemoryStreamApp: App {
                 // when the user opens the app. Watch's `pending.remove`
                 // is idempotent — already-removed clips are no-ops.
                 WatchSessionDelegate.shared.reconcileWatchAcks()
-                // Roll the monthly assist counter if the user crossed
-                // a calendar-month boundary while the app was backgrounded.
-                EntitlementService.shared.resetMonthlyIfDue()
                 // Reset the home-screen icon badge to the live inbox
                 // count. Defensive against state drift — push payloads
                 // set the badge when they fire, but if the user

@@ -644,21 +644,10 @@ final class EntryLifecycleService {
         guard let processingEngine else { return }
         let entryID = entry.objectID
         Task.detached { [storage] in
-            let shouldProcess: Bool = await MainActor.run {
-                let entitlement = EntitlementService.shared
-                switch entitlement.tier {
-                case .free:
-                    // Manual-only for Free; auto-org would burn the
-                    // 3 starter assists silently.
-                    return false
-                case .plusMonthly, .plusYearly, .founders:
-                    // Respect the user's auto-organize threshold —
-                    // they can carve out a manual-only reserve from
-                    // their monthly + pack pool. At default 0 this
-                    // is equivalent to `canConsumeAssist`.
-                    return entitlement.canAutoOrganize
-                }
-            }
+            // Plus auto-organizes on capture; Free runs manually from
+            // Memory Detail. The mint-and-leave-pending case below
+            // handles Free so the task doesn't sit "Queued" forever.
+            let shouldProcess: Bool = await MainActor.run { Entitlement.shared.isPlus }
             if !shouldProcess {
                 // The save path already minted a `.pending` task on
                 // the assumption auto-org would pick it up. For

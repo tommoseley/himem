@@ -24,7 +24,7 @@ struct ProjectDetailView: View {
     @State private var showSuggestionsSheet = false
     @StateObject private var suggestionsVM = ProjectSuggestionsViewModel()
     @StateObject private var assistVM = ProjectAssistViewModel()
-    @ObservedObject private var entitlement = EntitlementService.shared
+    @ObservedObject private var entitlement = Entitlement.shared
 
     /// Coordinates the trailing-edge swipe across memory rows so only
     /// one row's Remove affordance is open at a time.
@@ -308,13 +308,11 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// Routes the "Find the thread" tap. Gated by
-    /// `entitlement.canConsumeProjectAssist` until the broader
-    /// Job 1 cutover (PR 8e) replaces this with an `isPlus` check.
-    /// The upsell sheet is retired here; the new PricingView (8f)
-    /// will route the gated case.
+    /// Routes the "Find the thread" tap. Plus-only after the
+    /// assist-quota retirement; the new PricingView (8f) will route
+    /// Free users tapping it to the upgrade flow.
     private func handleFindTheThreadTap() {
-        guard entitlement.canConsumeProjectAssist else { return }
+        guard entitlement.isPlus else { return }
         Task {
             await assistVM.run(projectId: projectId)
             // Reload project state so the new summary renders +
@@ -379,15 +377,8 @@ struct ProjectDetailView: View {
     @ViewBuilder
     private var findTheThreadButton: some View {
         let enabled = ProjectAssistGate.isEnabled(memoryCount: entries.count)
-        // Cost label per pricing spec § Open work locked decision 1
-        // (2026-05-27): free users on first use see "Starter · free"
-        // so they know they're tasting their one freebie. Subsequent
-        // taps fall to "1 assist" — same as Plus — and the tap fires
-        // the upsell because `canConsumeProjectAssist` is now false.
-        let isStarterRun = !entitlement.isPlus && !entitlement.starterProjectAssistUsed
-        let costLabel = isStarterRun ? "Starter · free" : "1 assist"
         let subline = enabled
-            ? "A short summary across these memories. \(costLabel)."
+            ? "A short summary across these memories."
             : (ProjectAssistGate.allowSingleMemoryThreshold
                ? "Add a memory first."
                : "Add a few more memories first.")

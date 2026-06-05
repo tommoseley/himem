@@ -193,35 +193,6 @@ struct ProjectsMVPTests {
         #expect(ProjectAssistGate.minimumMemories == 1)
     }
 
-    // MARK: - Project Assist entitlement bucket (PR 3)
-    //
-    // These tests use a fresh `EntitlementService` backed by an
-    // in-memory `StorageService` so the singleton can't race with
-    // other suites that mutate `EntitlementService.shared.tier`
-    // (notably `ProcessingEngineFallbackTests`, which sets
-    // `.plusMonthly` and would flip these tests' `isPlus` branch
-    // under cross-suite parallelism).
-
-    @Test func projectAssist_freeUser_firstTapConsumesStarter() throws {
-        let svc = EntitlementService(storage: StorageService(inMemory: true))
-        svc.debugSetStarterProjectAssistUsed(false)
-
-        #expect(svc.canConsumeProjectAssist == true)
-        try svc.tryConsumeProjectAssist()
-        #expect(svc.starterProjectAssistUsed == true)
-        #expect(svc.canConsumeProjectAssist == false)
-    }
-
-    @Test func projectAssist_freeUser_secondTapThrows() throws {
-        let svc = EntitlementService(storage: StorageService(inMemory: true))
-        svc.debugSetStarterProjectAssistUsed(true)
-
-        #expect(svc.canConsumeProjectAssist == false)
-        #expect(throws: EntitlementService.ConsumeError.self) {
-            try svc.tryConsumeProjectAssist()
-        }
-    }
-
     // MARK: - Suggestion prefilter (PR 4)
 
     private func candidate(
@@ -328,25 +299,4 @@ struct ProjectsMVPTests {
         #expect(ranked.count == 2)
     }
 
-    @Test func projectAssist_plusUser_doesntTouchStarter() throws {
-        let svc = EntitlementService.shared
-        let originalUsed = svc.starterProjectAssistUsed
-        let originalTier = svc.tier
-        let originalMonthly = svc.monthlyUsed
-        defer {
-            svc.debugSetStarterProjectAssistUsed(originalUsed)
-            svc.setTier(originalTier)
-            svc.debugSetMonthlyUsed(originalMonthly)
-        }
-        svc.setTier(.plusMonthly)
-        svc.debugSetStarterProjectAssistUsed(false)
-        svc.debugSetMonthlyUsed(0)
-
-        try svc.tryConsumeProjectAssist()
-
-        // Plus paths consume from the monthly bucket; the starter
-        // flag stays untouched.
-        #expect(svc.starterProjectAssistUsed == false)
-        #expect(svc.monthlyUsed == 1)
-    }
 }

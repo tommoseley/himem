@@ -28,31 +28,32 @@ extension ClaudeAPIService: EntryAnalyzer {}
 final class ProcessingEngine {
     static let shared = ProcessingEngine()
 
-    /// Debug-only routing flag. When set, `processEntry` tries the
-    /// `OnDeviceOrganizer` (Apple Foundation Models) before the
-    /// existing cloud + assist-debit path. Default false — production
-    /// behavior unchanged until PR 8e flips this in the retirement.
-    /// Toggle in a debug menu or by hand:
-    ///   `defaults write com.himem.app himem.organize.useOnDevice -bool YES`
+    /// Routes between the on-device and cloud organize paths. Defaults
+    /// to true after the assist-quota retirement (PR 8e): Free runs on
+    /// Apple Foundation Models, Plus also runs on-device today and gets
+    /// the frontier polish in Job 4. Setting the flag false forces the
+    /// cloud path for debugging.
+    ///   `defaults write com.himem.app himem.organize.useOnDevice -bool NO`
     static let useOnDeviceFlagKey = "himem.organize.useOnDevice"
+
+    static var defaultUseOnDevice: Bool {
+        // UserDefaults returns false for an unset bool, so a missing
+        // value means "use default" → true.
+        let store = UserDefaults.standard
+        if store.object(forKey: useOnDeviceFlagKey) == nil { return true }
+        return store.bool(forKey: useOnDeviceFlagKey)
+    }
 
     private let storage: StorageService
     private let analyzer: EntryAnalyzer
     private let onDeviceOrganizer: Organizer
     private let localExtractor: LocalEntityExtractor
     private let connectivity: ConnectivityMonitor
-    /// Injectable assist-debit closure. Default routes to
-    /// `EntitlementService.shared.tryConsumeAssist()`; tests swap
-    /// for a throwing closure to exercise the failure-surface path.
-    /// Money path — see `ProcessingEngineAssistDebitTests`.
-    private let consumeAssist: @MainActor () throws -> Void
-
-    /// Injectable tier-read closure. Default reads the live
-    /// `EntitlementService.shared.tier.rawValue` so the COGS log
-    /// attributes spend to the tier that authorized the assist
-    /// (`docs/api/himem-cost-logging.md`). Tests inject a fixed
-    /// string so the call site is exercised without racing on the
-    /// shared singleton across parallel suites.
+    private let useOnDevice: Bool
+    /// Injectable tier-read closure. Returns the COGS-log label
+    /// (`docs/api/himem-cost-logging.md`) captured at call time so
+    /// the report attributes spend to the tier in force. Tests inject
+    /// a fixed string for determinism.
     private let readTier: @MainActor () -> String
 
     init(
@@ -61,15 +62,15 @@ final class ProcessingEngine {
         onDeviceOrganizer: Organizer = OnDeviceOrganizer(),
         localExtractor: LocalEntityExtractor = .shared,
         connectivity: ConnectivityMonitor = .shared,
-        consumeAssist: @escaping @MainActor () throws -> Void = { try EntitlementService.shared.tryConsumeAssist() },
-        readTier: @escaping @MainActor () -> String = { EntitlementService.shared.tier.rawValue }
+        useOnDevice: Bool = ProcessingEngine.defaultUseOnDevice,
+        readTier: @escaping @MainActor () -> String = { Entitlement.shared.tierLabel }
     ) {
         self.storage = storage
         self.analyzer = analyzer
         self.onDeviceOrganizer = onDeviceOrganizer
         self.localExtractor = localExtractor
         self.connectivity = connectivity
-        self.consumeAssist = consumeAssist
+        self.useOnDevice = useOnDevice
         self.readTier = readTier
     }
 
@@ -101,14 +102,11 @@ final class ProcessingEngine {
             }
         }
 
-        // PR 8a: debug-gated on-device organize routing. When the
-        // `himem.organize.useOnDevice` flag is set and Apple Foundation
-        // Models is available on the device, try the on-device pass
-        // first. Success short-circuits the cloud path entirely
-        // (no assist debit — on-device is unmetered per the new
-        // Capture · Connect · Create pricing model). Failure or
-        // model-unavailable falls through to the existing flow.
-        if UserDefaults.standard.bool(forKey: Self.useOnDeviceFlagKey),
+        // Default-on after the assist-quota retirement: Foundation
+        // Models runs on-device when available; failure falls through
+        // to the cloud path. The flag exists for debug/forced-cloud
+        // testing only — see `defaultUseOnDevice`.
+        if useOnDevice,
            OnDeviceOrganizer.availabilityError() == nil {
             let succeeded = await processWithOnDevice(objectID: objectID, content: content, context: context)
             if succeeded { return }
@@ -164,38 +162,7 @@ final class ProcessingEngine {
                 action: "memory_organize"
             )
 
-            let saveSucceeded = await applyAnalysisResult(result, to: objectID, in: context)
-            // Pricing rule (v2): 1 assist per successful organize pass.
-            // Failures cost zero. We deduct ONLY when the Core Data
-            // save committed cleanly — a Core Data error, parser blow-
-            // up, or anything else in the inner closure that fell into
-            // `markFailed` leaves the counter untouched. (The cloud-
-            // network failure path doesn't even reach here — it's
-            // handled by the outer catch that falls back to local.)
-            //
-            // Debit failure handling: surface to `ErrorState` (user
-            // sees something went wrong) but do NOT mark the pass
-            // failed — the analyzer ran, Core Data committed, the
-            // entry is in a good state. Rolling back would lose real
-            // work; quietly swallowing the debit (the pre-2026-06-01
-            // `try?` behavior) loses real money state. The middle
-            // path is "log it, tell the user, don't undo the win."
-            if saveSucceeded {
-                let debitFailure: Error? = await MainActor.run { () -> Error? in
-                    do {
-                        try self.consumeAssist()
-                        return nil
-                    } catch {
-                        return error
-                    }
-                }
-                if let debitFailure {
-                    NSLog("[HiMem][Pricing] tryConsumeAssist failed after successful pass: \(debitFailure.localizedDescription)")
-                    await MainActor.run {
-                        ErrorState.shared.report(.processingFailed("Couldn't record assist usage: \(debitFailure.localizedDescription). Please retry."))
-                    }
-                }
-            }
+            _ = await applyAnalysisResult(result, to: objectID, in: context)
         } catch {
             // Cloud unreachable or timed out (weak connection, server error,
             // auth failure). Don't mark .failed and leave the user stuck —
@@ -254,14 +221,10 @@ final class ProcessingEngine {
     /// transitions so memories captured offline get upgraded once the user
     /// is back online.
     func reprocessLocallyHandledEntries() async {
-        // Free tier never had AI run on entries, so nothing to reprocess.
-        // Plus/Founders may have local-fallback entries from offline
-        // creation that should be re-processed when connectivity returns.
-        // Each one consumes one assist; bail when the user runs out
-        // rather than silently exceed the monthly allowance.
-        let entitled: Bool = await MainActor.run {
-            EntitlementService.shared.tier != .free
-        }
+        // Auto-reprocess only runs for Plus users — Free uses
+        // on-device organize, which already ran inline and doesn't
+        // need a cloud upgrade on reconnect.
+        let entitled: Bool = await MainActor.run { Entitlement.shared.isPlus }
         guard entitled else { return }
 
         let viewContext = storage.viewContext
@@ -276,15 +239,6 @@ final class ProcessingEngine {
         guard !entryIDs.isEmpty else { return }
 
         for entryID in entryIDs {
-            // Precheck — this is auto-org (no user tap), so respect
-            // the user's auto-organize threshold. Bail at the first
-            // entry where the threshold gate fires rather than firing
-            // doomed API calls or eating the user's manual reserve.
-            let mayConsume: Bool = await MainActor.run {
-                EntitlementService.shared.canAutoOrganize
-            }
-            guard mayConsume else { break }
-
             let entry: JournalEntry? = await viewContext.perform {
                 guard let entry = try? viewContext.existingObject(with: entryID) as? JournalEntry else { return nil }
                 let entities = entry.extractedEntities as? Set<ExtractedEntity> ?? []

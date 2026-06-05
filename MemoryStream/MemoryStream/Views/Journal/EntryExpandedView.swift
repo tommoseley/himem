@@ -79,7 +79,7 @@ struct EntryExpandedView: View {
     @State private var newTopicName = ""
     @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
     @State private var aiCardUnfolded = false
-    @ObservedObject private var entitlement = EntitlementService.shared
+    @ObservedObject private var entitlement = Entitlement.shared
 
     /// Direct lifecycle reference for per-panel edit/delete operations on the
     /// chronological capture stream and for the Append spec's per-modality

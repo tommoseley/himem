@@ -500,7 +500,7 @@ struct JournalHeaderView: View {
     let onSearchTap: () -> Void
     let onSettingsTap: () -> Void
 
-    @ObservedObject private var entitlement = EntitlementService.shared
+    @ObservedObject private var entitlement = Entitlement.shared
 
     var body: some View {
         ZStack {
@@ -520,8 +520,7 @@ struct JournalHeaderView: View {
                     .tracking(2.0)
                     .foregroundStyle(Crucible.Color.ink3)
                 TierMark(
-                    tier: entitlement.tier,
-                    supporter: entitlement.isSupporter,
+                    isPlus: entitlement.isPlus,
                     size: 10
                 )
                 Spacer()

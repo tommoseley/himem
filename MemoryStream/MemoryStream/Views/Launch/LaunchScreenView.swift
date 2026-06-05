@@ -75,37 +75,16 @@ struct LaunchScreenView: View {
                     }
                     .animation(.easeInOut(duration: 0.6), value: wordmarkExpanded)
 
-                    // TierMark and Founder line are gated on storageLoaded
-                    // so EntitlementService.shared isn't accessed during
-                    // the splash's initial body evaluation — that access
-                    // would force loadPersistentStores synchronously on
-                    // the main thread (loadOrCreate fetches AssistBalance
-                    // from viewContext). After storage loads (and the
-                    // bootstrap inside onStorageLoaded runs), the tier
-                    // mark fades in on the splash's last re-render before
-                    // dismissal. For Free/anonymous users this changes
+                    // TierMark fades in once storage has loaded so the
+                    // splash's initial body evaluation doesn't trigger
+                    // any heavy bootstrap. For Free users this changes
                     // nothing visible.
                     if storageLoaded {
-                        TierMark(
-                            tier: EntitlementService.shared.tier,
-                            supporter: EntitlementService.shared.isSupporter,
-                            size: 18
-                        )
-                        .offset(y: -10) // align baseline with wordmark cap
+                        TierMark(isPlus: Entitlement.shared.isPlus, size: 18)
+                            .offset(y: -10) // align baseline with wordmark cap
                     }
                 }
                 .padding(.top, 18)
-
-                // Founder line — unbounded acknowledgment under the
-                // wordmark. Plus / Supporter / Free see nothing here;
-                // the TierMark above is their identity. Same
-                // storageLoaded gating as the TierMark above.
-                if storageLoaded && EntitlementService.shared.tier == .founders {
-                    Text("Thanks for being a founder.")
-                        .font(.custom("Georgia-Italic", size: 13))
-                        .foregroundStyle(ink.opacity(0.6))
-                        .padding(.top, 6)
-                }
 
                 // Moment (epigraph) — 220ms start
                 VStack(alignment: .leading, spacing: 10) {
@@ -228,19 +207,12 @@ struct LaunchScreenView: View {
             TopicPaletteStore.shared.loadFromCoreData()
         }
         // Bootstrap entitlement + StoreKit AFTER storage is ready.
-        // Previously these ran inside MemoryStreamApp.init's
-        // DispatchQueue.main.async block, which pre-empted the
-        // off-main storage warm (EntitlementService.init fetches
-        // AssistBalance from viewContext, forcing a sync
-        // loadPersistentStores on the main thread). Running them
-        // here means viewContext is already live, so the fetch is
-        // cheap and doesn't block first paint. See
-        // feedback_cold_launch_target memory.
+        // Cold-launch target preserved per feedback_cold_launch_target
+        // memory — StoreKitService.start() spawns the transaction
+        // listener which writes back into Entitlement.shared.
         LaunchSignposter.interval("launchScreen.entitlementBootstrap") {
-            _ = EntitlementService.shared
+            _ = Entitlement.shared
             StoreKitService.shared.start()
-            Task { await FoundersCounter.shared.refresh() }
-            TenureTracker.shared.start()
             WatchInboxNotificationCoordinator.shared.registerCategories()
         }
         storageLoaded = true

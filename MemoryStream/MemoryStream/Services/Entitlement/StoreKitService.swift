@@ -1,10 +1,11 @@
 import Foundation
 import StoreKit
 
-/// StoreKit 2 wrapper. Loads HiMem's products on startup, listens for
-/// transactions, and routes purchases through `EntitlementService`.
+/// StoreKit 2 wrapper. Loads HiMem's Plus subscription products on
+/// startup, listens for transactions, and pushes the resulting Plus
+/// state to `Entitlement.shared`.
 ///
-/// Product IDs are intentionally string-stable — they match what we'll
+/// Product IDs are intentionally string-stable — they match what we
 /// register in App Store Connect. Local testing uses the bundled
 /// `Products.storekit` configuration.
 ///
@@ -24,14 +25,9 @@ final class StoreKitService: ObservableObject {
     enum ProductID {
         static let plusMonthly = "com.himem.plus.monthly"
         static let plusYearly = "com.himem.plus.yearly"
-        static let foundersLifetime = "com.himem.founders.lifetime"
-        static let assistPack20 = "com.himem.assists.pack20"
-        static let assistPack100 = "com.himem.assists.pack100"
 
         static let allSubscriptions: [String] = [plusMonthly, plusYearly]
-        static let allOneTime: [String] = [foundersLifetime]
-        static let allConsumables: [String] = [assistPack20, assistPack100]
-        static let everything: [String] = allSubscriptions + allOneTime + allConsumables
+        static let everything: [String] = allSubscriptions
     }
 
     // MARK: - Published state
@@ -123,62 +119,31 @@ final class StoreKitService: ObservableObject {
         }
     }
 
-    /// Walks `Transaction.currentEntitlements` at startup to compute the
-    /// active subscription tier and confirm any non-consumable grants
-    /// (Founders bonus). Idempotent — running it after sign-in or
-    /// reinstall rebuilds the entitlement state.
+    /// Walks `Transaction.currentEntitlements` at startup to compute
+    /// active Plus state. Idempotent — running after sign-in or
+    /// reinstall rebuilds the entitlement.
     func reconcileCurrentEntitlements() async {
-        var subscriptionProductId: String?
+        var hasActiveSubscription = false
         for await result in Transaction.currentEntitlements {
             do {
                 let transaction = try checkVerified(result)
-                switch transaction.productID {
-                case ProductID.plusMonthly, ProductID.plusYearly:
-                    subscriptionProductId = transaction.productID
-                case ProductID.foundersLifetime:
-                    EntitlementService.shared.setTier(.founders)
-                    EntitlementService.shared.grantFoundersBonusIfNeeded()
-                default:
-                    break
+                if ProductID.allSubscriptions.contains(transaction.productID) {
+                    hasActiveSubscription = true
                 }
             } catch {
                 continue
             }
         }
-
-        // If the user has a subscription AND Founders, Founders wins (it
-        // includes Plus features for life). If only a subscription is
-        // active, set that as tier.
-        if EntitlementService.shared.tier != .founders {
-            switch subscriptionProductId {
-            case ProductID.plusMonthly: EntitlementService.shared.setTier(.plusMonthly)
-            case ProductID.plusYearly: EntitlementService.shared.setTier(.plusYearly)
-            default: EntitlementService.shared.setTier(.free)
-            }
-        }
+        Entitlement.shared.setStoreKitIsPlus(hasActiveSubscription)
     }
 
-    /// Routes a verified transaction into entitlement state.
+    /// Routes a verified transaction into the Plus signal.
     private func applyTransaction(_ transaction: Transaction) async {
-        switch transaction.productID {
-        case ProductID.plusMonthly:
-            EntitlementService.shared.setTier(.plusMonthly)
-        case ProductID.plusYearly:
-            EntitlementService.shared.setTier(.plusYearly)
-        case ProductID.foundersLifetime:
-            EntitlementService.shared.setTier(.founders)
-            EntitlementService.shared.grantFoundersBonusIfNeeded()
-            // Atomically increment the public CloudKit counter so the
-            // Founders tile honestly shows remaining seats. Best-effort —
-            // a network failure here doesn't refund the purchase.
-            await FoundersCounter.shared.incrementClaimed()
-        case ProductID.assistPack20:
-            EntitlementService.shared.grantPack(size: 20)
-        case ProductID.assistPack100:
-            EntitlementService.shared.grantPack(size: 100)
-        default:
-            break
-        }
+        guard ProductID.allSubscriptions.contains(transaction.productID) else { return }
+        // Subscription state may have changed (purchase, renewal,
+        // refund, expiration). Rebuild from currentEntitlements so the
+        // refund/expiration case demotes the user correctly.
+        await reconcileCurrentEntitlements()
     }
 
     enum StoreKitError: Error { case unverified }

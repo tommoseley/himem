@@ -39,7 +39,7 @@ struct CreateMemoryFromClipsSheet: View {
     @State private var newProjectName: String = ""
     /// Routes the "Get AI title · 1 assist →" tap (free + 0 assists)
     /// to the Upgrade Hub per pricing spec § 14 side branch.
-    @ObservedObject private var entitlement = EntitlementService.shared
+    @ObservedObject private var entitlement = Entitlement.shared
     @Environment(\.dismiss) private var dismiss
 
     /// Fresh per-sheet view-model. Read-only here — we list projects and

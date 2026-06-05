@@ -29,8 +29,6 @@ struct SettingsView: View {
 
     @State private var displayName: String = AuthService.shared.userName
     @ObservedObject private var inbox = InboxManifest.shared
-    @ObservedObject private var entitlement = EntitlementService.shared
-    @ObservedObject private var tenure = TenureTracker.shared
     @State private var showInbox = false
     #if DEBUG
     @State private var scaleSeedProgress: (current: Int, total: Int)? = nil
@@ -331,7 +329,6 @@ struct SettingsView: View {
             }
             .onAppear {
                 loadTopics()
-                tenure.refresh()
                 Task {
                     notificationAuthStatus = await NotificationService.shared.authorizationStatus()
                 }

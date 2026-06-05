@@ -42,8 +42,7 @@ struct ExistingMentionsRefinementTests {
         let analyzer = RecordingAnalyzer()
         let engine = ProcessingEngine(
             storage: storage,
-            analyzer: analyzer,
-            consumeAssist: { /* test doesn't exercise the debit path */ }
+            analyzer: analyzer, useOnDevice: false
         )
         let entry = try storage.createEntry(content: "We discussed sausage with Bob.", inputType: .typed)
         _ = try storage.createEntity(entryId: entry.id, type: .person, value: "Bob", confidence: 0.9, method: "cloud", entry: entry)
@@ -63,8 +62,7 @@ struct ExistingMentionsRefinementTests {
         let analyzer = RecordingAnalyzer()
         let engine = ProcessingEngine(
             storage: storage,
-            analyzer: analyzer,
-            consumeAssist: { /* test doesn't exercise the debit path */ }
+            analyzer: analyzer, useOnDevice: false
         )
         let entry = try storage.createEntry(content: "Garden notes", inputType: .typed)
         _ = try storage.createProcessingTask(for: entry)
@@ -84,8 +82,7 @@ struct ExistingMentionsRefinementTests {
         let analyzer = RecordingAnalyzer()
         let engine = ProcessingEngine(
             storage: storage,
-            analyzer: analyzer,
-            consumeAssist: { /* test doesn't exercise the debit path */ }
+            analyzer: analyzer, useOnDevice: false
         )
         let entry = try storage.createEntry(content: "x", inputType: .typed)
         _ = try storage.createEntity(entryId: entry.id, type: .person, value: "Bob", confidence: 0.9, method: "cloud", entry: entry)

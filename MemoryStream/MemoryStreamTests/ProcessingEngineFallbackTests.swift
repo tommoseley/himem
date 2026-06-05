@@ -44,7 +44,7 @@ struct ProcessingEngineFallbackTests {
         let engine = ProcessingEngine(
             storage: storage,
             analyzer: ThrowingAnalyzer(),
-            localExtractor: LocalEntityExtractor()
+            localExtractor: LocalEntityExtractor(), useOnDevice: false
         )
 
         let entry = try storage.createEntry(
@@ -82,8 +82,7 @@ struct ProcessingEngineFallbackTests {
         let engine = ProcessingEngine(
             storage: storage,
             analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
-            localExtractor: LocalEntityExtractor(),
-            consumeAssist: { /* test doesn't exercise the debit path */ }
+            localExtractor: LocalEntityExtractor(), useOnDevice: false,
         )
 
         let entry = try storage.createEntry(
@@ -142,8 +141,7 @@ struct ProcessingEngineFallbackTests {
         let engine = ProcessingEngine(
             storage: storage,
             analyzer: SuccessfulAnalyzer(title: "Note", entityValue: "Bob", topic: "Work"),
-            localExtractor: LocalEntityExtractor(),
-            consumeAssist: { /* test doesn't exercise the debit path */ }
+            localExtractor: LocalEntityExtractor(), useOnDevice: false,
         )
 
         let entry = try storage.createEntry(content: "Coffee with Bob.", inputType: .typed)
@@ -168,7 +166,6 @@ struct ProcessingEngineFallbackTests {
         let engine = ProcessingEngine(
             storage: storage,
             analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
-            consumeAssist: { /* test doesn't exercise the debit path */ }
         )
 
         let entry = try storage.createEntry(content: "Met with Sarah", inputType: .typed)
@@ -213,25 +210,15 @@ struct ProcessingEngineFallbackTests {
     }
 
     @Test func reprocess_upgradesLocalEntriesToCloud() async throws {
-        // `reprocessLocallyHandledEntries` gates on the user's tier
-        // and assist balance — Free skips it (auto-org never ran in
-        // the first place), Plus/Founders runs it consuming one
-        // assist per entry. Grant Plus + a generous pack balance so
-        // the gate passes for the test entry.
-        let priorTier = EntitlementService.shared.tier
-        let priorPack = EntitlementService.shared.packBalance
-        let priorThreshold = EntitlementService.shared.autoOrganizeThreshold
-        EntitlementService.shared.setTier(.plusMonthly)
-        EntitlementService.shared.debugSetPackBalance(100)
-        EntitlementService.shared.debugSetAutoOrganizeThreshold(0)
-        defer {
-            EntitlementService.shared.setTier(priorTier)
-            EntitlementService.shared.debugSetPackBalance(priorPack)
-            EntitlementService.shared.debugSetAutoOrganizeThreshold(priorThreshold)
-        }
+        // `reprocessLocallyHandledEntries` only runs for Plus users —
+        // Free uses on-device organize and doesn't need the cloud
+        // upgrade. Flip Plus on for the test.
+        let prior = Entitlement.shared.developerOverridePlus
+        Entitlement.shared.developerOverridePlus = true
+        defer { Entitlement.shared.developerOverridePlus = prior }
 
         let storage = StorageService(inMemory: true)
-        let offlineEngine = ProcessingEngine(storage: storage, analyzer: ThrowingAnalyzer())
+        let offlineEngine = ProcessingEngine(storage: storage, analyzer: ThrowingAnalyzer(), useOnDevice: false)
 
         let entry = try storage.createEntry(
             content: "Met with Sarah at Stanford about the new garden project.",
@@ -250,8 +237,7 @@ struct ProcessingEngineFallbackTests {
         // online transition.
         let onlineEngine = ProcessingEngine(
             storage: storage,
-            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
-            consumeAssist: { /* test doesn't exercise the debit path */ }
+            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"), useOnDevice: false
         )
         await onlineEngine.reprocessLocallyHandledEntries()
         storage.viewContext.refreshAllObjects()

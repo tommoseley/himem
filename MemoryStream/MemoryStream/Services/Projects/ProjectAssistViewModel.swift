@@ -6,22 +6,16 @@ import CoreData
 /// `/himem/project-assist`, and persists the result so the
 /// "Summarized" state survives app launches.
 ///
-/// **Debit-on-success only.** Pre-2026-06-01 the call site debited
-/// before invoking (it had to — the invocation was a stub). With a
-/// real server call, debiting up-front means a network failure
-/// burns an assist. The fix: gate-check via
-/// `EntitlementService.canConsumeProjectAssist`, do the call, only
-/// then `tryConsumeProjectAssist`. If the post-call debit fails
-/// after a successful synthesis — the summary already ran, the
-/// user got value — surface to ErrorState (don't roll back) per the
-/// same pattern as ProcessingEngine's assist-debit handling.
+/// After the assist-quota retirement (PR 8e): Find the thread is a
+/// **Plus-only** capability. Free users see the affordance disabled
+/// in the surface that calls this; the gate here is defense in depth.
 @MainActor
 final class ProjectAssistViewModel: ObservableObject {
 
     @Published private(set) var isRunning: Bool = false
 
     private let storage: StorageService
-    private let entitlement: EntitlementService
+    private let isPlus: @MainActor () -> Bool
     private let api: ProjectAssistAPI
     private let readTier: @MainActor () -> String
     private let reportError: @MainActor (AppError) -> Void
@@ -29,20 +23,15 @@ final class ProjectAssistViewModel: ObservableObject {
     /// Protocol for the network call — same `EntryAnalyzer`-style
     /// injection so tests can drive the success / failure branches
     /// without hitting Anthropic.
-    ///
-    /// `reportError` defaults to the process-wide `ErrorState`
-    /// singleton; tests inject a capture closure so cross-suite
-    /// state on `ErrorState.shared` doesn't race with other test
-    /// suites that also read/write it.
     init(
         storage: StorageService = .shared,
-        entitlement: EntitlementService = .shared,
+        isPlus: @escaping @MainActor () -> Bool = { Entitlement.shared.isPlus },
         api: ProjectAssistAPI = ClaudeAPIService.shared,
-        readTier: @escaping @MainActor () -> String = { EntitlementService.shared.tier.rawValue },
+        readTier: @escaping @MainActor () -> String = { Entitlement.shared.tierLabel },
         reportError: @escaping @MainActor (AppError) -> Void = { ErrorState.shared.report($0) }
     ) {
         self.storage = storage
-        self.entitlement = entitlement
+        self.isPlus = isPlus
         self.api = api
         self.readTier = readTier
         self.reportError = reportError
@@ -53,7 +42,7 @@ final class ProjectAssistViewModel: ObservableObject {
     /// suspenders).
     func run(projectId: UUID) async {
         guard !isRunning else { return }
-        guard entitlement.canConsumeProjectAssist else { return }
+        guard isPlus() else { return }
 
         isRunning = true
         defer { isRunning = false }
@@ -82,25 +71,10 @@ final class ProjectAssistViewModel: ObservableObject {
                 tier: tier
             )
 
-            // Persist BEFORE debiting — if the save itself fails,
-            // we don't want a successful debit logged against a
-            // result the user can't see.
             project.lastThreadSummary = result.summary
             project.lastThreadGeneratedAt = Date()
             project.updatedAt = Date()
             try ctx.save()
-
-            // Debit. A failure here means the user got their
-            // summary but the assist counter didn't tick — surface
-            // to the user (so they know something's off) but do
-            // not roll back the persisted summary. Mirrors the
-            // ProcessingEngine debit-after-success pattern.
-            do {
-                try entitlement.tryConsumeProjectAssist()
-            } catch {
-                NSLog("[HiMem][Pricing] tryConsumeProjectAssist failed after successful run: \(error.localizedDescription)")
-                reportError(.processingFailed("Couldn't record assist usage. Please retry."))
-            }
         } catch {
             reportError(.processingFailed("Find the thread failed: \(error.localizedDescription)"))
         }

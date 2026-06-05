@@ -59,18 +59,11 @@ struct CreateEntryIntent: AppIntent {
         )
         let _ = try storage.createProcessingTask(for: entry)
 
-        // Same gate as EntryLifecycleService.processEntry — Free
-        // skips auto-org; Plus/Founders precheck assists vs. the
-        // user's auto-organize threshold. Engine deducts on success.
+        // Auto-organize the captured note for Plus subscribers; Free
+        // users keep manual control via the Memory Detail Organize
+        // button.
         Task.detached {
-            let shouldProcess: Bool = await MainActor.run {
-                let entitlement = EntitlementService.shared
-                switch entitlement.tier {
-                case .free: return false
-                case .plusMonthly, .plusYearly, .founders:
-                    return entitlement.canAutoOrganize
-                }
-            }
+            let shouldProcess: Bool = await MainActor.run { Entitlement.shared.isPlus }
             guard shouldProcess else { return }
             await ProcessingEngine.shared.processEntry(entry)
         }
