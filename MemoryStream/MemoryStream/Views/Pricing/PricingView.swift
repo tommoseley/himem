@@ -98,7 +98,7 @@ struct PricingView: View {
         (Text("HiMem keeps and organizes everything ")
             .foregroundColor(Crucible.Color.ink2)
          + Text("privately, on your device").fontWeight(.semibold).foregroundColor(Crucible.Color.ink)
-         + Text(" — no account needed to hold a thought. Plus extends how far it can reach.")
+         + Text(" — no account needed to hold a thought. Plus helps your memories find each other.")
             .foregroundColor(Crucible.Color.ink2))
             .font(.system(size: 13.5))
             .lineSpacing(2)
@@ -135,7 +135,7 @@ struct PricingView: View {
                 .foregroundStyle(Crucible.Color.ink3)
         }
         .padding(.top, 18)
-        Text("Your memories organize themselves and start finding each other.")
+        Text("The library starts working for you — surfacing and connecting what belongs together.")
             .font(.system(size: 13))
             .foregroundStyle(Crucible.Color.ink2)
             .lineSpacing(2)
@@ -143,9 +143,9 @@ struct PricingView: View {
             .padding(.bottom, 11)
         MagicTile()
         VStack(alignment: .leading, spacing: 5) {
-            bulletRow(symbolColor: Crucible.Color.aiBlue, marker: "+", text: "Organizes automatically as you capture")
             bulletRow(symbolColor: Crucible.Color.aiBlue, marker: "+", text: "Surfaces what you've already said")
-            bulletRow(symbolColor: Crucible.Color.aiBlue, marker: "+", text: "Unlimited projects")
+            bulletRow(symbolColor: Crucible.Color.aiBlue, marker: "+", text: "Connects the memories that belong together")
+            bulletRow(symbolColor: Crucible.Color.aiBlue, marker: "+", text: "Organizes automatically · unlimited projects")
         }
         .padding(.top, 11)
     }
