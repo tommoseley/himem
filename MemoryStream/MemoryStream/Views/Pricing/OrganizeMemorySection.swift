@@ -107,6 +107,13 @@ struct OrganizeMemorySection: View {
 
     @ViewBuilder
     private func organizedView(pass: OrganizePass, entry: JournalEntry) -> some View {
+        // The summary and topic chips are rendered at the *top* of the
+        // page by `EntryExpandedView.summarySection` / `topicChipsRow`
+        // per `AI Organize · spec.md` §7.A. This section is just the
+        // chip, the Reorganize affordance, and the review/stale/C1
+        // hooks — no body content. Rendering body content here too
+        // produced the duplicate summary + topic chip Tom flagged
+        // 2026-06-06.
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 9) {
                 Button {
@@ -128,34 +135,6 @@ struct OrganizeMemorySection: View {
                 Spacer(minLength: 0)
                 if pass.isReviewed {
                     reorganizeButton(entry: entry)
-                }
-            }
-
-            if let summary = pass.summaryText, !summary.isEmpty {
-                Text(SummaryRenderer.renderForOwner(summary))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Crucible.Color.ink2)
-                    .lineSpacing(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            let topics = entry.topicsArray.map(\.name)
-            if !topics.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(topics, id: \.self) { name in
-                        Text(name)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Crucible.Color.ink2)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 3)
-                            .background(Crucible.Color.wash1)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Crucible.Color.hairline, lineWidth: 1)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    Spacer(minLength: 0)
                 }
             }
 
