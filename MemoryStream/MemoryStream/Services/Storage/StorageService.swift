@@ -136,7 +136,23 @@ final class StorageService {
         // schema version per device. The flag is debug-only so a
         // production user never gets here even if they install a
         // debug build by accident.
-        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV1"
+        //
+        // **When you change the Cloud schema, bump the version
+        // suffix.** That tells already-installed Debug builds to
+        // re-run `initializeCloudKitSchema`, which publishes the new
+        // schema to the **Development** CloudKit environment so the
+        // dashboard's "Schema Changes" view actually shows a diff to
+        // deploy to Production. Without the bump, the dashboard sees
+        // Development matching Production — no diff — even though the
+        // model file has changed.
+        //
+        // Version log:
+        //   V1 — initial.
+        //   V2 — assist-quota retirement (8e.2: remove AssistBalance
+        //         entity + OrganizePass.nextStepsMarkdown) and the
+        //         transient-entity split (#19: ProcessingTask moved
+        //         to the Local store, removed from Cloud).
+        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV2"
         if !UserDefaults.standard.bool(forKey: schemaInitKey) {
             LaunchSignposter.interval("storage.initializeCloudKitSchema") {
                 try? cloudKitContainer.initializeCloudKitSchema(options: [])
