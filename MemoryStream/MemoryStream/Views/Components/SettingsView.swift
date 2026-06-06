@@ -41,9 +41,6 @@ struct SettingsView: View {
         sortDescriptors: []
     ) private var allProjects: FetchedResults<Project>
     #if DEBUG
-    @State private var scaleSeedProgress: (current: Int, total: Int)? = nil
-    @State private var scaleStatusMessage: String? = nil
-    @State private var scaleWorking: Bool = false
     @State private var showResetOnboardingAlert = false
     #endif
 
@@ -180,30 +177,22 @@ struct SettingsView: View {
                         .listRowSeparator(.hidden)
                 }
 
-                // MARK: - AI & Organizing (status mirror of Plus / Free)
+                // MARK: - AI & Organizing
+                // Reads as ambient state for Plus users; for Free users
+                // the rows are tappable upgrade-routes — both fields are
+                // tier-gated so reaching for either is a "yes, this is
+                // how to change it" signal.
                 Section {
-                    HStack(spacing: 10) {
-                        Image(systemName: "sparkles")
-                            .foregroundStyle(Crucible.Color.accent)
-                            .frame(width: 22)
-                        Text("Organizing")
-                            .foregroundStyle(Crucible.Color.ink)
-                        Spacer()
-                        Text(entitlement.isPlus ? "Automatic" : "Manual")
-                            .font(.subheadline)
-                            .foregroundStyle(Crucible.Color.ink2)
-                    }
-                    HStack(spacing: 10) {
-                        Image(systemName: "folder")
-                            .foregroundStyle(Crucible.Color.accent)
-                            .frame(width: 22)
-                        Text("Projects")
-                            .foregroundStyle(Crucible.Color.ink)
-                        Spacer()
-                        Text(projectsRowValue)
-                            .font(.subheadline)
-                            .foregroundStyle(Crucible.Color.ink2)
-                    }
+                    aiOrganizingRow(
+                        icon: "sparkles",
+                        title: "Organizing",
+                        value: entitlement.isPlus ? "Automatic" : "Manual"
+                    )
+                    aiOrganizingRow(
+                        icon: "folder",
+                        title: "Projects",
+                        value: projectsRowValue
+                    )
                 } header: {
                     Text("AI & Organizing")
                 }
@@ -310,42 +299,26 @@ struct SettingsView: View {
                     Text("Cleared Keychain (userID, userName) and the iCloud KV sidecar. Force-quit HiMem from the app switcher and re-launch to see the permission wizard. iOS permission grants (mic, camera, etc.) are NOT reset — those live in Settings → HiMem.")
                 }
 
-                // MARK: - Scaling test
+                // MARK: - Plus override (DEBUG)
                 Section {
-                    Button("Seed 100 test entries") {
-                        Task { await seedScalingTestData(count: 100) }
-                    }
-                    .disabled(scaleWorking)
-                    Button("Seed 1,000 test entries") {
-                        Task { await seedScalingTestData(count: 1000) }
-                    }
-                    .disabled(scaleWorking)
-                    Button("Seed 10,000 test entries") {
-                        Task { await seedScalingTestData(count: 10000) }
-                    }
-                    .disabled(scaleWorking)
-                    Button(role: .destructive) {
-                        Task { await deleteScalingTestData() }
-                    } label: {
-                        Text("Delete test entries")
-                    }
-                    .disabled(scaleWorking)
-                    if let progress = scaleSeedProgress {
-                        HStack(spacing: 8) {
-                            ProgressView(value: Double(progress.current), total: Double(progress.total))
-                            Text("\(progress.current) / \(progress.total)")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                    Picker("Plus tier", selection: plusOverrideBinding) {
+                        ForEach(PlusOverrideOption.allCases, id: \.self) { option in
+                            Text(option.label).tag(option)
                         }
-                    } else if let message = scaleStatusMessage {
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    }
+                    .pickerStyle(.segmented)
+                    HStack {
+                        Text("Effective")
+                            .foregroundStyle(Crucible.Color.ink2)
+                        Spacer()
+                        Text(entitlement.isPlus ? "Plus" : "Free")
+                            .font(.subheadline.monospaced())
+                            .foregroundStyle(entitlement.isPlus ? Crucible.Color.accent : Crucible.Color.ink3)
                     }
                 } header: {
-                    Text("Scaling test")
+                    Text("Plus override")
                 } footer: {
-                    Text("Seeds JournalEntry records identified by title prefix 'Scale-test #'. After seeding, allow time for CloudKit to mirror to iCloud before cold-launch measurement. Delete is filtered to the same prefix and won't touch real memories.")
+                    Text("Forces the isPlus signal so you can exercise the Plus path without an active subscription. Persists across launches. Setting back to Real reads StoreKit's current entitlement state.")
                 }
                 #endif
             }
@@ -582,6 +555,47 @@ struct SettingsView: View {
             .displayPrice ?? "$6.99"
     }
 
+    /// One AI & Organizing list row. Free users see a tappable row
+    /// (chevron + label "See plans" → opens PricingView) so the
+    /// natural reach for "change this" lands on the upgrade flow.
+    /// Plus users see a read-only ambient state row.
+    @ViewBuilder
+    private func aiOrganizingRow(icon: String, title: String, value: String) -> some View {
+        if entitlement.isPlus {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .foregroundStyle(Crucible.Color.accent)
+                    .frame(width: 22)
+                Text(title)
+                    .foregroundStyle(Crucible.Color.ink)
+                Spacer()
+                Text(value)
+                    .font(.subheadline)
+                    .foregroundStyle(Crucible.Color.ink2)
+            }
+        } else {
+            Button {
+                showPricing = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: icon)
+                        .foregroundStyle(Crucible.Color.accent)
+                        .frame(width: 22)
+                    Text(title)
+                        .foregroundStyle(Crucible.Color.ink)
+                    Spacer()
+                    Text(value)
+                        .font(.subheadline)
+                        .foregroundStyle(Crucible.Color.ink2)
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(Crucible.Color.ink4)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     /// "N of 3" for Free, "N" for Plus (unlimited).
     private var projectsRowValue: String {
         let count = allProjects.count
@@ -656,90 +670,44 @@ struct SettingsView: View {
     }
 
 
+    // MARK: - Plus override binding (DEBUG)
+
     #if DEBUG
+    enum PlusOverrideOption: Hashable, CaseIterable {
+        case real
+        case forcePlus
+        case forceFree
 
-    // MARK: - Scaling test (DEBUG only)
-
-    /// Seeds N JournalEntry records onto a background context so the cold-
-    /// launch CloudKit-import question — is the post-load gap O(1) or
-    /// O(n) — can be answered empirically. Each entry is minimal (just
-    /// the required fields) so we measure CloudKit sync overhead per
-    /// record, not per-relationship fan-out.
-    @MainActor
-    private func seedScalingTestData(count: Int) async {
-        scaleWorking = true
-        scaleSeedProgress = (0, count)
-        scaleStatusMessage = nil
-        await Self.seed(count: count) { current in
-            Task { @MainActor in
-                scaleSeedProgress = (current, count)
+        var label: String {
+            switch self {
+            case .real:      return "Real"
+            case .forcePlus: return "Plus"
+            case .forceFree: return "Free"
             }
         }
-        scaleSeedProgress = nil
-        scaleStatusMessage = "Seeded \(count). Wait for CloudKit sync (could be minutes for 10k) then cold-launch."
-        scaleWorking = false
-    }
 
-    /// Deletes every JournalEntry whose title starts with "Scale-test #".
-    /// Real memories cannot match this predicate unless the user
-    /// deliberately titled one that way, in which case they earned it.
-    @MainActor
-    private func deleteScalingTestData() async {
-        scaleWorking = true
-        scaleStatusMessage = "Deleting test entries…"
-        let deleted = await Self.deleteTestEntries()
-        scaleStatusMessage = "Deleted \(deleted) test entries."
-        scaleWorking = false
-    }
+        var booleanValue: Bool? {
+            switch self {
+            case .real:      return nil
+            case .forcePlus: return true
+            case .forceFree: return false
+            }
+        }
 
-    private static func seed(count: Int, onProgress: @escaping (Int) -> Void) async {
-        let bg = StorageService.shared.backgroundContext()
-        await bg.perform {
-            let chunkSize = 200
-            var created = 0
-            for chunkStart in stride(from: 0, to: count, by: chunkSize) {
-                let chunkEnd = min(chunkStart + chunkSize, count)
-                for i in chunkStart..<chunkEnd {
-                    let entry = JournalEntry(context: bg)
-                    entry.id = UUID()
-                    entry.title = "Scale-test #\(i + 1)"
-                    entry.content = "Auto-generated test data entry \(i + 1)."
-                    entry.inputType = "typed"
-                    entry.createdAt = Date().addingTimeInterval(-TimeInterval(i * 60))
-                    entry.isRecycled = false
-                    entry.titleSourcedFromAI = false
-                    created += 1
-                }
-                do {
-                    try bg.save()
-                } catch {
-                    NSLog("[ScalingTest] Save failed at \(created): \(error.localizedDescription)")
-                    return
-                }
-                bg.reset() // drop materialized objects between batches so we don't balloon memory on 10k runs
-                onProgress(created)
+        static func from(_ value: Bool?) -> PlusOverrideOption {
+            switch value {
+            case nil:          return .real
+            case .some(true):  return .forcePlus
+            case .some(false): return .forceFree
             }
         }
     }
 
-    private static func deleteTestEntries() async -> Int {
-        let bg = StorageService.shared.backgroundContext()
-        return await bg.perform {
-            let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
-            req.predicate = NSPredicate(format: "title BEGINSWITH %@", "Scale-test #")
-            do {
-                let entries = try bg.fetch(req)
-                let count = entries.count
-                for entry in entries {
-                    bg.delete(entry)
-                }
-                try bg.save()
-                return count
-            } catch {
-                NSLog("[ScalingTest] Delete failed: \(error.localizedDescription)")
-                return 0
-            }
-        }
+    private var plusOverrideBinding: Binding<PlusOverrideOption> {
+        Binding(
+            get: { PlusOverrideOption.from(entitlement.developerOverridePlus) },
+            set: { entitlement.developerOverridePlus = $0.booleanValue }
+        )
     }
     #endif
 }

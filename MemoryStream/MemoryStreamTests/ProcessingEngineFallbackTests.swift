@@ -218,7 +218,15 @@ struct ProcessingEngineFallbackTests {
         defer { Entitlement.shared.developerOverridePlus = prior }
 
         let storage = StorageService(inMemory: true)
-        let offlineEngine = ProcessingEngine(storage: storage, analyzer: ThrowingAnalyzer(), useOnDevice: false)
+        // Dedicated LocalEntityExtractor — see CLAUDE.md § Test Concurrency:
+        // NLTagger isn't thread-safe; cross-suite parallelism can poison
+        // `.shared` even though this suite is .serialized.
+        let offlineEngine = ProcessingEngine(
+            storage: storage,
+            analyzer: ThrowingAnalyzer(),
+            localExtractor: LocalEntityExtractor(),
+            useOnDevice: false
+        )
 
         let entry = try storage.createEntry(
             content: "Met with Sarah at Stanford about the new garden project.",

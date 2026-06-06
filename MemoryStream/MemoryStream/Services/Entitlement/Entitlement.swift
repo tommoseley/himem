@@ -22,13 +22,37 @@ final class Entitlement: ObservableObject {
     @Published private(set) var isPlus: Bool = false
 
     #if DEBUG
+    private static let overrideKey = "himem.debug.developerOverridePlus"
+
     /// Developer override — flips `isPlus` for testing the Plus path
-    /// locally without an active subscription. Persists across launches
-    /// via UserDefaults so a debug toggle survives the relaunch loop.
-    @Published var developerOverridePlus: Bool? = nil {
-        didSet { recomputeIsPlus() }
+    /// locally without an active subscription. Persists to UserDefaults
+    /// so the choice survives relaunches; clear back to nil to resume
+    /// reading the real StoreKit signal.
+    ///
+    /// Encoding: missing key → nil (use real signal); 1 → force Plus;
+    /// 0 → force Free.
+    @Published var developerOverridePlus: Bool? = Entitlement.loadPersistedOverride() {
+        didSet {
+            if let override = developerOverridePlus {
+                UserDefaults.standard.set(override ? 1 : 0, forKey: Self.overrideKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.overrideKey)
+            }
+            recomputeIsPlus()
+        }
+    }
+
+    private static func loadPersistedOverride() -> Bool? {
+        guard let raw = UserDefaults.standard.object(forKey: overrideKey) as? Int else { return nil }
+        return raw != 0
     }
     #endif
+
+    private init() {
+        #if DEBUG
+        recomputeIsPlus()
+        #endif
+    }
 
     /// Raw signal from StoreKit — stored separately from `isPlus` so
     /// the developer override can compose on top without losing the
