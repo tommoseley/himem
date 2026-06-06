@@ -22,6 +22,7 @@ struct ProjectDetailView: View {
     @State private var shareItems: [Any] = []
     @State private var isPreparingShare = false
     @State private var showSuggestionsSheet = false
+    @State private var showPricing = false
     @StateObject private var suggestionsVM = ProjectSuggestionsViewModel()
     @StateObject private var assistVM = ProjectAssistViewModel()
     @ObservedObject private var entitlement = Entitlement.shared
@@ -287,6 +288,9 @@ struct ProjectDetailView: View {
         }) {
             AddMemoryToProjectSheet(projectId: projectId, projectVM: projectVM)
         }
+        .sheet(isPresented: $showPricing) {
+            PricingView()
+        }
         .sheet(isPresented: $showSuggestionsSheet) {
             // Reload after dismissal so the affordance row's count
             // reflects whatever the user just committed/skipped.
@@ -309,10 +313,12 @@ struct ProjectDetailView: View {
     }
 
     /// Routes the "Find the thread" tap. Plus-only after the
-    /// assist-quota retirement; the new PricingView (8f) will route
-    /// Free users tapping it to the upgrade flow.
+    /// assist-quota retirement; Free taps route to PricingView.
     private func handleFindTheThreadTap() {
-        guard entitlement.isPlus else { return }
+        guard entitlement.isPlus else {
+            showPricing = true
+            return
+        }
         Task {
             await assistVM.run(projectId: projectId)
             // Reload project state so the new summary renders +

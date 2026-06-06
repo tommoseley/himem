@@ -5,6 +5,7 @@ struct ProjectListView: View {
     @ObservedObject var projectVM: ProjectViewModel
     var selectedTopic: String?
     @State private var showNewProject = false
+    @State private var showPricing = false
     @State private var newProjectName = ""
     @State private var newProjectPurpose = ""
     @State private var selectedProjectId: UUID? = nil
@@ -104,6 +105,9 @@ struct ProjectListView: View {
                 }
             )
         }
+        .sheet(isPresented: $showPricing) {
+            PricingView()
+        }
         .navigationDestination(item: $selectedProjectId) { projectId in
             if let project = projectVM.projects.first(where: { $0.id == projectId }) {
                 ProjectDetailView(projectId: project.id, projectVM: projectVM)
@@ -111,16 +115,18 @@ struct ProjectListView: View {
         }
     }
 
-    /// Free users get three projects. The "New Project" affordance
-    /// no-ops when the user is at the cap; the new PricingView
-    /// (Job 3, PR 8f) will route the at-cap case to an upgrade
-    /// surface. The decision is pure — see `ProjectCapPolicy.canCreate`.
+    /// Free users get three projects. At-cap taps route to the
+    /// `PricingView` upgrade flow (Plus is uncapped). The cap
+    /// decision is pure — see `ProjectCapPolicy.canCreate`.
     private func attemptCreateProject() {
         let allowed = ProjectCapPolicy.canCreate(
             isPlus: entitlement.isPlus,
             currentCount: projectVM.projects.count
         )
-        guard allowed else { return }
+        guard allowed else {
+            showPricing = true
+            return
+        }
         newProjectName = ""
         newProjectPurpose = ""
         showNewProject = true

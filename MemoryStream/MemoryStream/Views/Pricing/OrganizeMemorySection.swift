@@ -20,8 +20,11 @@ struct OrganizeMemorySection: View {
     var onOrganize: () -> Void
     @Binding var unfolded: Bool  // Kept for EntryExpandedView API compat; unused after the AISuggestionsCard retirement.
 
+    @ObservedObject private var entitlement = Entitlement.shared
     @FetchRequest private var entries: FetchedResults<JournalEntry>
     @State private var showReviewSheet = false
+    @State private var showPricing = false
+    @State private var c1HasShown = UpgradeNudgeFlags.c1HasShown
 
     init(
         entryID: UUID,
@@ -71,6 +74,9 @@ struct OrganizeMemorySection: View {
                 )
                 .presentationDetents([.large])
             }
+        }
+        .sheet(isPresented: $showPricing) {
+            PricingView()
         }
     }
 
@@ -141,7 +147,37 @@ struct OrganizeMemorySection: View {
             if pass.isReviewed && isStale {
                 staleBanner(newClips: entry.clipsAddedSinceLastOrganize)
             }
+
+            // C1 · After-a-glance nudge. Shown once-ever to Free
+            // users right after they review their first draft —
+            // never again inline. Per pricing-screens-upgrade.jsx.
+            if pass.isReviewed && !entitlement.isPlus && !c1HasShown {
+                AfterAGlanceNudge(
+                    onSeePlus: handleSeePlus,
+                    onNotNow: handleNudgeDismiss
+                )
+                .onAppear {
+                    // Reading the nudge counts as "shown"; the flag
+                    // sticks across launches via UserDefaults.
+                    UpgradeNudgeFlags.markC1Shown()
+                }
+                Text("Shown once. Never again inline.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .frame(maxWidth: .infinity)
+            }
         }
+    }
+
+    private func handleSeePlus() {
+        c1HasShown = true
+        UpgradeNudgeFlags.markC1Shown()
+        showPricing = true
+    }
+
+    private func handleNudgeDismiss() {
+        c1HasShown = true
+        UpgradeNudgeFlags.markC1Shown()
     }
 
     @ViewBuilder
