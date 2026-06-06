@@ -147,4 +147,52 @@ extension OrganizePass {
     var isReviewed: Bool {
         dismissedAt != nil || !acceptedRows.isEmpty
     }
+
+    /// Commits the user's per-field choices from the Reorganize
+    /// review sheet to this pass and the underlying `JournalEntry`.
+    /// Pure value-shuffling — no Core Data save (caller wraps in
+    /// `context.performAndWait` and saves). Mirrors the contract
+    /// from `AI Organize · spec.md` §8.0 (June 6 2026):
+    ///
+    /// - **Title kept current** → `suggestedTitle` is overwritten with
+    ///   the entry's existing title. The latest pass always reflects
+    ///   what's actually shown; no stored v1-vs-v2 branching.
+    /// - **Title accepted new** → `entry.title` is updated with
+    ///   `suggestedTitle`; `titleSourcedFromAI = true`. Same path as
+    ///   the first-organize DraftReviewSheet's "Looks good."
+    /// - **Summary kept current** → `summaryText` is overwritten with
+    ///   `previousSummary` (the prior pass's summary, captured before
+    ///   the reorganize fired).
+    /// - **Summary accepted new** → no write; the pass already holds
+    ///   the new summary text.
+    ///
+    /// In all cases: `acceptedRows` gains `.title` and `.summary`,
+    /// `dismissedAt` becomes now, and `isReviewed` flips true → chip
+    /// returns to plain "Organized" on the next render.
+    func commitReorganize(
+        on entry: JournalEntry,
+        titleChoice: ReorgFieldChoice,
+        summaryChoice: ReorgFieldChoice,
+        previousSummary: String
+    ) {
+        switch titleChoice {
+        case .new:
+            if let newTitle = suggestedTitle, !newTitle.isEmpty {
+                entry.title = newTitle
+                entry.titleSourcedFromAI = true
+            }
+        case .current:
+            suggestedTitle = entry.title
+        }
+
+        switch summaryChoice {
+        case .new:
+            break
+        case .current:
+            summaryText = previousSummary
+        }
+
+        markRowsAccepted([.title, .summary])
+        dismissedAt = Date()
+    }
 }

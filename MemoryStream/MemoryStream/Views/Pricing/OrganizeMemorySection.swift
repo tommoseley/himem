@@ -235,36 +235,19 @@ struct OrganizeMemorySection: View {
         }
     }
 
-    /// Commits the user's per-field choices from the Reorganize sheet.
-    /// For each field where the user kept current, overwrite the new
-    /// pass's value so the latest `OrganizePass` always represents the
-    /// memory's *current* state (no stored v1 vs v2). For each field
-    /// where the user opted into the new wording, the new pass already
-    /// holds it — for the title, also write through to `entry.title`.
+    /// Commits the user's per-field choices via
+    /// `OrganizePass.commitReorganize` (the pure value-shuffle) then
+    /// saves. See that method's docstring for the per-field contract.
     private func handleReorganizeKeep(titleChoice: ReorgFieldChoice, summaryChoice: ReorgFieldChoice) {
         guard let entry, let pass else { return }
         let ctx = pass.managedObjectContext ?? StorageService.shared.viewContext
         ctx.performAndWait {
-            switch titleChoice {
-            case .new:
-                if let newTitle = pass.suggestedTitle, !newTitle.isEmpty {
-                    entry.title = newTitle
-                    entry.titleSourcedFromAI = true
-                }
-            case .current:
-                // User kept current — overwrite pass.suggestedTitle so
-                // the latest pass reflects what's actually shown.
-                pass.suggestedTitle = entry.title
-            }
-            switch summaryChoice {
-            case .new:
-                // Already on the new pass.
-                break
-            case .current:
-                pass.summaryText = capturedCurrentSummary
-            }
-            pass.markRowsAccepted([.title, .summary])
-            pass.dismissedAt = Date()
+            pass.commitReorganize(
+                on: entry,
+                titleChoice: titleChoice,
+                summaryChoice: summaryChoice,
+                previousSummary: capturedCurrentSummary
+            )
             try? ctx.save()
         }
         showReorganizeSheet = false
