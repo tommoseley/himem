@@ -84,7 +84,7 @@ struct OrganizeMemorySection: View {
                 .presentationDetents([.large])
             }
         }
-        .sheet(isPresented: $showReorganizeSheet) {
+        .sheet(isPresented: $showReorganizeSheet, onDismiss: handleReorganizeSheetDismissed) {
             if let entry, let pass {
                 ReorganizeReviewSheet(
                     currentTitle: entry.title ?? "",
@@ -254,18 +254,53 @@ struct OrganizeMemorySection: View {
     }
 
     /// "Reorganize again" — fires another reorganize pass. The previous
-    /// "new" pass becomes the new "current" (its values are what the
-    /// sheet just showed). Sheet stays presented; FetchRequest will
-    /// re-render with the fresh new pass once it writes.
+    /// "new" pass (the one the user just rejected by tapping again) is
+    /// discarded after the next pass lands, per `AI Organize · spec.md`
+    /// §8.0: *"Reorganize replaces the draft; it never branches. There
+    /// is never a stored v1 vs v2."*
+    ///
+    /// Discard order matters: we let the new pass write *first*, then
+    /// delete the old, so `latestOrganizePass` never falls back to the
+    /// previous committed pass during the transition (which would
+    /// briefly mis-render the sheet's "new" half).
     private func handleReorganizeAgain() {
         guard let entry, let pass else { return }
         // The pass shown as "new" in this round becomes the "current"
         // for the next round.
         capturedCurrentSummary = pass.summaryText ?? ""
+        let supersededID = pass.objectID
         isReorganizing = true
         Task { @MainActor in
             await ProcessingEngine.shared.processReorganize(entry)
+            await discardPass(objectID: supersededID)
             isReorganizing = false
+        }
+    }
+
+    /// Called when the Reorganize sheet finishes presenting. If the
+    /// user committed (Keep this version), `handleReorganizeKeep` will
+    /// have marked the latest pass reviewed before this fires — that
+    /// pass is kept. If the user dismissed without committing (X, swipe
+    /// down, or any other cancel path), the latest pass is an orphan
+    /// draft and gets discarded so the memory returns cleanly to its
+    /// prior Organized state.
+    private func handleReorganizeSheetDismissed() {
+        guard let pass, !pass.isReviewed else { return }
+        let id = pass.objectID
+        Task { @MainActor in
+            await discardPass(objectID: id)
+        }
+    }
+
+    /// Pure discard helper. No-op if the object can't be resolved
+    /// (already deleted, or merged out from under us).
+    private func discardPass(objectID: NSManagedObjectID) async {
+        let ctx = StorageService.shared.viewContext
+        await ctx.perform {
+            if let toDelete = try? ctx.existingObject(with: objectID) {
+                ctx.delete(toDelete)
+                try? ctx.save()
+            }
         }
     }
 
