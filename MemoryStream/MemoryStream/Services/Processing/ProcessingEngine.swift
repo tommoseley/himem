@@ -90,10 +90,10 @@ final class ProcessingEngine {
         await context.perform {
             do {
                 let bgEntry = try context.existingObject(with: objectID) as! JournalEntry
-                if bgEntry.latestProcessingTask == nil {
+                if bgEntry.latestProcessingTask() == nil {
                     _ = try self.storage.createProcessingTask(for: bgEntry, context: context)
                 }
-                guard let task = bgEntry.latestProcessingTask else { return }
+                guard let task = bgEntry.latestProcessingTask() else { return }
                 task.status = ProcessingTask.Status.processing.rawValue
                 task.progressDescription = "Raw note saved. The app is extracting entities and content intent."
                 try context.save()
@@ -200,7 +200,7 @@ final class ProcessingEngine {
                 }
 
                 // Mark completed
-                if let task = entryInContext.latestProcessingTask {
+                if let task = entryInContext.latestProcessingTask() {
                     task.status = ProcessingTask.Status.completed.rawValue
                     task.progressDescription = "Processed locally. Connect to the internet for richer analysis."
                     task.processedAt = Date()
@@ -321,7 +321,7 @@ final class ProcessingEngine {
                 let entities = entry.extractedEntities as? Set<ExtractedEntity> ?? []
                 for entity in entities { viewContext.delete(entity) }
                 if let summary = entry.inferenceSummary { viewContext.delete(summary) }
-                if let task = entry.latestProcessingTask {
+                if let task = entry.latestProcessingTask() {
                     task.status = ProcessingTask.Status.pending.rawValue
                     task.processedAt = nil
                     task.errorMessage = nil
@@ -346,7 +346,17 @@ final class ProcessingEngine {
         do {
             let tasks = try context.performAndWait { try context.fetch(request) }
             for task in tasks {
-                guard let entry = task.entry else { continue }
+                // ProcessingTask no longer has a relationship to
+                // JournalEntry (stores split, see task #19). Fetch the
+                // entry by entryId on the same context — the Cloud
+                // store is loaded on the same coordinator.
+                let entry: JournalEntry? = context.performAndWait {
+                    let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+                    req.predicate = NSPredicate(format: "id == %@", task.entryId as CVarArg)
+                    req.fetchLimit = 1
+                    return try? context.fetch(req).first
+                }
+                guard let entry else { continue }
                 await processEntry(entry)
             }
         } catch {
@@ -550,7 +560,7 @@ final class ProcessingEngine {
     }
 
     private func markCompleted(_ entry: JournalEntry) {
-        if let task = entry.latestProcessingTask {
+        if let task = entry.latestProcessingTask() {
             task.status = ProcessingTask.Status.completed.rawValue
             task.progressDescription = nil
             task.processedAt = Date()
@@ -560,7 +570,7 @@ final class ProcessingEngine {
     private func markFailed(objectID: NSManagedObjectID, error: Error, context: NSManagedObjectContext) {
         do {
             let entryInContext = try context.existingObject(with: objectID) as! JournalEntry
-            if let task = entryInContext.latestProcessingTask {
+            if let task = entryInContext.latestProcessingTask() {
                 task.status = ProcessingTask.Status.failed.rawValue
                 task.errorMessage = error.localizedDescription
                 task.progressDescription = error.localizedDescription

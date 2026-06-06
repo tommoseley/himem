@@ -44,28 +44,66 @@ final class StorageService {
         // with the CloudKit public database"). Setting them after the load
         // contributes to the spurious "different NSManagedObjectModel"
         // warnings that Tom's launch console showed on 2026-05-09.
-        let description = container.persistentStoreDescriptions.first!
-        description.shouldMigrateStoreAutomatically = true
-        description.shouldInferMappingModelAutomatically = true
-        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-        description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
+        //
+        // Two-store split (task #19, 2026-06-06):
+        // - **Cloud store** holds the user's memories — JournalEntry,
+        //   ExtractedEntity, OrganizePass, Topic, Project, MediaReference,
+        //   TextSegment, InferenceSummary. Synced via CloudKit.
+        // - **Local store** holds per-device runtime state — currently
+        //   just ProcessingTask. Not synced. Both stores live on the
+        //   same coordinator so contexts can fetch across them; only
+        //   relationships can't cross. See ProcessingTask's docstring
+        //   for the rationale.
+        let cloudDescription = container.persistentStoreDescriptions.first!
+        cloudDescription.configuration = "Cloud"
+        cloudDescription.shouldMigrateStoreAutomatically = true
+        cloudDescription.shouldInferMappingModelAutomatically = true
+        cloudDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        cloudDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        cloudDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
             containerIdentifier: "iCloud.com.himem.app"
         )
 
-        var loadError: Error?
+        // Local store sits next to the Cloud store on disk; same
+        // application support folder, different filename. No CloudKit
+        // options — this store stays on-device.
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let localURL = appSupport.appendingPathComponent("MemoryStream-Local.sqlite")
+        let localDescription = NSPersistentStoreDescription(url: localURL)
+        localDescription.configuration = "Local"
+        localDescription.shouldMigrateStoreAutomatically = true
+        localDescription.shouldInferMappingModelAutomatically = true
+        localDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+
+        container.persistentStoreDescriptions = [cloudDescription, localDescription]
+
+        var cloudLoadError: Error?
+        var localLoadError: Error?
         LaunchSignposter.interval("storage.loadPersistentStores") {
-            container.loadPersistentStores { _, error in
-                if let error { loadError = error }
+            container.loadPersistentStores { description, error in
+                if let error {
+                    if description.configuration == "Cloud" {
+                        cloudLoadError = error
+                    } else {
+                        localLoadError = error
+                    }
+                }
             }
         }
 
-        // CloudKit-backed load failed (rare — typically a transient setup
-        // issue). Strip CloudKit options and try once more so the user
-        // gets a working local store; sync just won't happen this session.
-        if loadError != nil {
-            description.cloudKitContainerOptions = nil
-            container.persistentStoreDescriptions = [description]
+        // Local store load failure is fatal — we can't run without
+        // somewhere to track ProcessingTask state.
+        if let localLoadError {
+            fatalError("Local Core Data store failed to load: \(localLoadError.localizedDescription)")
+        }
+
+        // CloudKit-backed cloud-store load failed (rare — typically a
+        // transient setup issue). Strip CloudKit options and try once
+        // more so the user gets a working local Cloud store; sync just
+        // won't happen this session. Local store already loaded above.
+        if cloudLoadError != nil {
+            cloudDescription.cloudKitContainerOptions = nil
+            container.persistentStoreDescriptions = [cloudDescription]
             LaunchSignposter.interval("storage.loadPersistentStores.fallback") {
                 container.loadPersistentStores { _, error in
                     if let error {
@@ -176,7 +214,10 @@ final class StorageService {
         task.taskType = "entity_extraction"
         task.status = ProcessingTask.Status.pending.rawValue
         task.createdAt = Date()
-        task.entry = entry
+        // No `task.entry = entry` — the relationship was removed when
+        // ProcessingTask moved to the Local store (Core Data can't cross
+        // stores). `entryId` is the link; `JournalEntry.latestProcessingTask()`
+        // queries by it.
         try save(context: ctx)
         return task
     }

@@ -64,7 +64,7 @@ struct EntryLifecycleServiceTests {
         // Entities cleared (will be re-extracted by processing engine on cloud round-trip).
         #expect(refreshed.entitiesArray.isEmpty)
         // A fresh ProcessingTask should be queued — the new task is the latest.
-        #expect(refreshed.latestProcessingTask?.statusEnum == .pending)
+        #expect(refreshed.latestProcessingTask()?.statusEnum == .pending)
     }
 
     @Test func edit_unchangedContent_doesNotClearEntities() throws {

@@ -19,7 +19,6 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var locationName: String?
     @NSManaged public var extractedEntities: NSSet?
     @NSManaged public var mediaReferences: NSSet?
-    @NSManaged public var processingTasks: NSSet?
     @NSManaged public var inferenceSummary: InferenceSummary?
     @NSManaged public var organizePasses: NSSet?
     @NSManaged public var textSegments: NSSet?
@@ -167,9 +166,21 @@ extension JournalEntry {
         return set.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
     }
 
-    var latestProcessingTask: ProcessingTask? {
-        let set = processingTasks as? Set<ProcessingTask> ?? []
-        return set.sorted { $0.createdAt > $1.createdAt }.first
+    /// Looks up the most recent `ProcessingTask` for this entry by
+    /// querying the (Local-store) ProcessingTask table by `entryId`.
+    /// Replaces the prior `processingTasks` relationship — see the
+    /// `ProcessingTask` docstring for why the relationship had to go.
+    ///
+    /// Uses the entry's own managed-object context by default (or the
+    /// shared viewContext if the entry isn't attached), since the
+    /// Local store is on the same coordinator as the Cloud store.
+    func latestProcessingTask(in ctx: NSManagedObjectContext? = nil) -> ProcessingTask? {
+        let context = ctx ?? managedObjectContext ?? StorageService.shared.viewContext
+        let request = NSFetchRequest<ProcessingTask>(entityName: "ProcessingTask")
+        request.predicate = NSPredicate(format: "entryId == %@", id as CVarArg)
+        request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+        request.fetchLimit = 1
+        return (try? context.fetch(request))?.first
     }
 
     var organizePassesArray: [OrganizePass] {

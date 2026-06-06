@@ -54,7 +54,7 @@ struct OrganizeMemorySection: View {
     private var pass: OrganizePass? { entry?.latestOrganizePass }
     private var isStale: Bool { entry?.hasChangesSinceLastOrganize ?? false }
     private var isProcessing: Bool {
-        switch entry?.latestProcessingTask?.statusEnum {
+        switch entry?.latestProcessingTask()?.statusEnum {
         case .pending, .processing: return true
         default: return false
         }

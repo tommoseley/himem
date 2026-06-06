@@ -12,7 +12,7 @@ enum EntryMapper {
     }
 
     static func mapToDisplayModel(_ entry: JournalEntry) -> EntryDisplayModel {
-        let task = entry.latestProcessingTask
+        let task = entry.latestProcessingTask()
         let inference = entry.inferenceSummary
 
         return EntryDisplayModel(

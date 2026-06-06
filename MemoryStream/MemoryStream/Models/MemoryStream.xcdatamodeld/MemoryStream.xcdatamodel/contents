@@ -18,7 +18,6 @@
         <attribute name="titleSourcedFromAI" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <relationship name="extractedEntities" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExtractedEntity" inverseName="entry" inverseEntity="ExtractedEntity"/>
         <relationship name="mediaReferences" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MediaReference" inverseName="entry" inverseEntity="MediaReference"/>
-        <relationship name="processingTasks" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ProcessingTask" inverseName="entry" inverseEntity="ProcessingTask"/>
         <relationship name="inferenceSummary" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="InferenceSummary" inverseName="entry" inverseEntity="InferenceSummary"/>
         <relationship name="organizePasses" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="OrganizePass" inverseName="entry" inverseEntity="OrganizePass"/>
         <relationship name="textSegments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="TextSegment" inverseName="entry" inverseEntity="TextSegment"/>
@@ -46,7 +45,9 @@
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="processedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="errorMessage" optional="YES" attributeType="String"/>
-        <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="processingTasks" inverseEntity="JournalEntry"/>
+        <fetchIndex name="byEntryId">
+            <fetchIndexElement property="entryId" type="Binary" order="ascending"/>
+        </fetchIndex>
     </entity>
     <entity name="InferenceSummary" representedClassName="InferenceSummary" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
@@ -114,4 +115,17 @@
         <attribute name="userCorrection" optional="YES" attributeType="String"/>
         <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="organizePasses" inverseEntity="JournalEntry"/>
     </entity>
+    <configuration name="Cloud">
+        <memberEntity name="JournalEntry"/>
+        <memberEntity name="ExtractedEntity"/>
+        <memberEntity name="InferenceSummary"/>
+        <memberEntity name="Topic"/>
+        <memberEntity name="Project"/>
+        <memberEntity name="MediaReference"/>
+        <memberEntity name="TextSegment"/>
+        <memberEntity name="OrganizePass"/>
+    </configuration>
+    <configuration name="Local">
+        <memberEntity name="ProcessingTask"/>
+    </configuration>
 </model>

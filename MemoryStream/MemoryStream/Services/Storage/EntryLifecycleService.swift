@@ -670,7 +670,7 @@ final class EntryLifecycleService {
         await MainActor.run {
             let ctx = storage.viewContext
             guard let entry = try? ctx.existingObject(with: entryID) as? JournalEntry,
-                  let task = entry.latestProcessingTask,
+                  let task = entry.latestProcessingTask(),
                   task.statusEnum == .pending else { return }
             ctx.delete(task)
             try? storage.save(context: ctx)
@@ -720,7 +720,12 @@ final class EntryLifecycleService {
         if let topics = entry.topics as? Set<Topic> {
             for topic in topics { entry.removeFromTopics(topic) }
         }
-        if let tasks = entry.processingTasks as? Set<ProcessingTask> {
+        // ProcessingTask lives in the Local store (not the Cloud
+        // store) per CloudKit cleanup investigation. Query by entryId
+        // and delete each one — no relationship to walk.
+        let taskRequest = NSFetchRequest<ProcessingTask>(entityName: "ProcessingTask")
+        taskRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        if let tasks = try? storage.viewContext.fetch(taskRequest) {
             for task in tasks { storage.viewContext.delete(task) }
         }
     }
