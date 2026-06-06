@@ -54,6 +54,21 @@ final class StorageService {
         //   same coordinator so contexts can fetch across them; only
         //   relationships can't cross. See ProcessingTask's docstring
         //   for the rationale.
+        //
+        // TODO (deferred, 2026-06-06): the two-store split produces a
+        // recurring non-fatal Core Data fault after each CloudKit import:
+        //   "Delete propagation prefetching failed … 'NSCKImportOperation'
+        //    appears to be from a different NSManagedObjectModel than
+        //    this context's"
+        // `NSPersistentCloudKitContainer` injects its own metadata
+        // entities (NSCKImportOperation et al.) into the model at
+        // runtime; they aren't listed in our explicit "Cloud" / "Local"
+        // configurations, so Core Data's internal delete-propagation
+        // fetch can't resolve them against either store's context.
+        // The fault is caught internally — sync still imports/exports
+        // successfully — but it's noise we should silence. Defer until
+        // post-launch; revisit if it starts surfacing real sync issues
+        // or if Apple ships a cleaner multi-config pattern.
         let cloudDescription = container.persistentStoreDescriptions.first!
         cloudDescription.configuration = "Cloud"
         cloudDescription.shouldMigrateStoreAutomatically = true
