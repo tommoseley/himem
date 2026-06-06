@@ -1,7 +1,19 @@
 import Foundation
 import NaturalLanguage
 
-final class LocalEntityExtractor {
+/// Abstraction over the local NLTagger pass so `ProcessingEngine`
+/// can be unit-tested with a deterministic stub. Production code
+/// uses `LocalEntityExtractor`; tests can inject anything that
+/// returns a fixed `LocalEntityExtractor.LocalResult` — see
+/// `ProcessingEngineFallbackTests.StubEntityExtractor`.
+///
+/// The protocol lives next to the concrete type so the nested
+/// `LocalResult` / `LocalEntity` value types stay in one place.
+protocol EntityExtractor {
+    func extractEntities(from text: String) -> LocalEntityExtractor.LocalResult
+}
+
+final class LocalEntityExtractor: EntityExtractor {
     static let shared = LocalEntityExtractor()
 
     private let tagger = NLTagger(tagSchemes: [.nameType, .lexicalClass])

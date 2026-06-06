@@ -3,8 +3,13 @@ import Foundation
 import CoreData
 @testable import HiMem
 
-// Serialized because LocalEntityExtractor.shared.tagger (NLTagger) isn't
-// thread-safe. Concurrent tests crash inside the local-fallback path.
+// Serialized so the in-suite tests don't trample each other's
+// fixture state. The NLTagger thread-safety concern that originally
+// drove this is no longer a factor for these tests — they now
+// inject `StubEntityExtractor` instead of touching the real
+// `LocalEntityExtractor` (and its cold-start fragility on the iOS 26
+// simulator). Other suites that still use `LocalEntityExtractor.shared`
+// remain serialized on their own merits.
 @MainActor
 @Suite(.serialized)
 struct ProcessingEngineFallbackTests {
@@ -34,6 +39,35 @@ struct ProcessingEngineFallbackTests {
         }
     }
 
+    /// Deterministic `EntityExtractor` — returns a fixed list of
+    /// entities regardless of input text. Lets the local-fallback
+    /// path be exercised without depending on `NLTagger` warming up
+    /// in the iOS 26 simulator (which doesn't, on cold boot, tag
+    /// `"Met with Sarah at Stanford about the new garden project."`).
+    private struct StubEntityExtractor: EntityExtractor {
+        let entities: [LocalEntityExtractor.LocalEntity]
+
+        func extractEntities(from text: String) -> LocalEntityExtractor.LocalResult {
+            LocalEntityExtractor.LocalResult(entities: entities)
+        }
+
+        /// Helper: a single-person stub with value `name`.
+        static func person(_ name: String) -> StubEntityExtractor {
+            // Range is required by the model but never consumed by
+            // `ProcessingEngine.processLocally` outside of an attempt
+            // to compute a textRange. Empty string gives a safe range.
+            let dummy = ""
+            return StubEntityExtractor(entities: [
+                LocalEntityExtractor.LocalEntity(
+                    type: .person,
+                    value: name,
+                    confidence: 0.80,
+                    range: dummy.startIndex..<dummy.endIndex
+                )
+            ])
+        }
+    }
+
     /// Money test for the "stuck on Queued / Processing" report. When the
     /// cloud call fails (weak connection, server unreachable), the engine
     /// MUST fall back to local extraction so the entry isn't left in a
@@ -44,7 +78,8 @@ struct ProcessingEngineFallbackTests {
         let engine = ProcessingEngine(
             storage: storage,
             analyzer: ThrowingAnalyzer(),
-            localExtractor: LocalEntityExtractor(), useOnDevice: false
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: false
         )
 
         let entry = try storage.createEntry(
@@ -218,13 +253,15 @@ struct ProcessingEngineFallbackTests {
         defer { Entitlement.shared.developerOverridePlus = prior }
 
         let storage = StorageService(inMemory: true)
-        // Dedicated LocalEntityExtractor — see CLAUDE.md § Test Concurrency:
-        // NLTagger isn't thread-safe; cross-suite parallelism can poison
-        // `.shared` even though this suite is .serialized.
+        // Deterministic stub instead of `LocalEntityExtractor.shared` —
+        // the iOS 26 simulator's NLTagger doesn't reliably tag the
+        // fixture text on a cold boot, and the test isn't about
+        // tagger quality. The stub gives us a single "Sarah" person
+        // so reprocess has something to upgrade.
         let offlineEngine = ProcessingEngine(
             storage: storage,
             analyzer: ThrowingAnalyzer(),
-            localExtractor: LocalEntityExtractor(),
+            localExtractor: StubEntityExtractor.person("Sarah"),
             useOnDevice: false
         )
 

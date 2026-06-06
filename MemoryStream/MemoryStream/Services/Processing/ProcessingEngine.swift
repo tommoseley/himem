@@ -47,7 +47,7 @@ final class ProcessingEngine {
     private let storage: StorageService
     private let analyzer: EntryAnalyzer
     private let onDeviceOrganizer: Organizer
-    private let localExtractor: LocalEntityExtractor
+    private let localExtractor: EntityExtractor
     private let connectivity: ConnectivityMonitor
     private let useOnDevice: Bool
     /// Injectable tier-read closure. Returns the COGS-log label
@@ -60,7 +60,7 @@ final class ProcessingEngine {
         storage: StorageService = .shared,
         analyzer: EntryAnalyzer = ClaudeAPIService.shared,
         onDeviceOrganizer: Organizer = OnDeviceOrganizer(),
-        localExtractor: LocalEntityExtractor = .shared,
+        localExtractor: EntityExtractor = LocalEntityExtractor.shared,
         connectivity: ConnectivityMonitor = .shared,
         useOnDevice: Bool = ProcessingEngine.defaultUseOnDevice,
         readTier: @escaping @MainActor () -> String = { Entitlement.shared.tierLabel }
