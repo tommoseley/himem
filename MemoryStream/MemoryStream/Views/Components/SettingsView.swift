@@ -29,7 +29,9 @@ struct SettingsView: View {
 
     @State private var displayName: String = AuthService.shared.userName
     @ObservedObject private var inbox = InboxManifest.shared
+    @ObservedObject private var entitlement = Entitlement.shared
     @State private var showInbox = false
+    @State private var showPricing = false
     #if DEBUG
     @State private var scaleSeedProgress: (current: Int, total: Int)? = nil
     @State private var scaleStatusMessage: String? = nil
@@ -160,6 +162,33 @@ struct SettingsView: View {
                     } footer: {
                         Text("Deleted memories are kept for 30 days before permanent removal.")
                     }
+                }
+
+                // MARK: - HiMem Plus
+                Section {
+                    Button {
+                        showPricing = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: entitlement.isPlus ? "star.fill" : "star")
+                                .foregroundStyle(Crucible.Color.accent)
+                                .frame(width: 22)
+                            Text("HiMem Plus")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                            Text(entitlement.isPlus ? "Subscribed" : "See plans")
+                                .font(.subheadline)
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(Crucible.Color.ink4)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } footer: {
+                    Text(entitlement.isPlus
+                        ? "Manage your subscription in iOS Settings → Apple ID → Subscriptions."
+                        : "Free works forever. Plus auto-organizes every memory and connects them across your library.")
                 }
 
                 // MARK: - Captured Clips (Inbox)
@@ -326,6 +355,9 @@ struct SettingsView: View {
                 if let viewModel {
                     SessionListView(viewModel: viewModel)
                 }
+            }
+            .sheet(isPresented: $showPricing) {
+                PricingView()
             }
             .onAppear {
                 loadTopics()

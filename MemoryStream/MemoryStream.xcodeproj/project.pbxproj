@@ -106,6 +106,7 @@
 		A100000628 /* TierMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000628 /* TierMark.swift */; };
 		A100000629 /* OrganizedChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000629 /* OrganizedChip.swift */; };
 		A900000004 /* DraftReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000004 /* DraftReviewSheet.swift */; };
+		A900000006 /* PricingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000006 /* PricingView.swift */; };
 		A100000631 /* WakeLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000631 /* WakeLock.swift */; };
 		A100000633 /* SummaryRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000633 /* SummaryRenderer.swift */; };
 		A100000654 /* ProjectCapPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000654 /* ProjectCapPolicy.swift */; };
@@ -320,6 +321,7 @@
 		B100000628 /* TierMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TierMark.swift; sourceTree = "<group>"; };
 		B100000629 /* OrganizedChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizedChip.swift; sourceTree = "<group>"; };
 		B900000004 /* DraftReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftReviewSheet.swift; sourceTree = "<group>"; };
+		B900000006 /* PricingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PricingView.swift; sourceTree = "<group>"; };
 		B100000631 /* WakeLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeLock.swift; sourceTree = "<group>"; };
 		B100000633 /* SummaryRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryRenderer.swift; sourceTree = "<group>"; };
 		B100000654 /* ProjectCapPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCapPolicy.swift; sourceTree = "<group>"; };
@@ -832,6 +834,7 @@
 				B100000628 /* TierMark.swift */,
 				B100000629 /* OrganizedChip.swift */,
 				B900000004 /* DraftReviewSheet.swift */,
+				B900000006 /* PricingView.swift */,
 			);
 			path = Pricing;
 			sourceTree = "<group>";
@@ -1198,6 +1201,7 @@
 				A100000628 /* TierMark.swift in Sources */,
 				A100000629 /* OrganizedChip.swift in Sources */,
 				A900000004 /* DraftReviewSheet.swift in Sources */,
+				A900000006 /* PricingView.swift in Sources */,
 				A100000631 /* WakeLock.swift in Sources */,
 				A100000633 /* SummaryRenderer.swift in Sources */,
 				A100000501 /* StorageService+EntryQueries.swift in Sources */,
