@@ -23,8 +23,17 @@ struct OrganizeMemorySection: View {
     @ObservedObject private var entitlement = Entitlement.shared
     @FetchRequest private var entries: FetchedResults<JournalEntry>
     @State private var showReviewSheet = false
+    @State private var showReorganizeSheet = false
     @State private var showPricing = false
     @State private var c1HasShown = UpgradeNudgeFlags.c1HasShown
+    /// Reorganize in flight — disables the affordance and surfaces a
+    /// spinner alongside the chip.
+    @State private var isReorganizing = false
+    /// Captured before firing a reorganize pass — the *previous* pass's
+    /// summary, shown as "Current · kept" on the Reorganize sheet
+    /// (since `entry.latestOrganizePass` becomes the *new* pass once
+    /// processReorganize commits).
+    @State private var capturedCurrentSummary: String = ""
 
     init(
         entryID: UUID,
@@ -75,6 +84,20 @@ struct OrganizeMemorySection: View {
                 .presentationDetents([.large])
             }
         }
+        .sheet(isPresented: $showReorganizeSheet) {
+            if let entry, let pass {
+                ReorganizeReviewSheet(
+                    currentTitle: entry.title ?? "",
+                    newTitle: pass.suggestedTitle ?? "",
+                    currentSummary: capturedCurrentSummary,
+                    newSummary: pass.summaryText ?? "",
+                    onKeep: handleReorganizeKeep,
+                    onReorganizeAgain: handleReorganizeAgain,
+                    onDismiss: { showReorganizeSheet = false }
+                )
+                .presentationDetents([.large])
+            }
+        }
         .sheet(isPresented: $showPricing) {
             PricingView()
         }
@@ -103,6 +126,9 @@ struct OrganizeMemorySection: View {
                         .foregroundStyle(Crucible.Color.ink3)
                 }
                 Spacer(minLength: 0)
+                if pass.isReviewed {
+                    reorganizeButton(entry: entry)
+                }
             }
 
             if let summary = pass.summaryText, !summary.isEmpty {
@@ -166,6 +192,97 @@ struct OrganizeMemorySection: View {
                     .foregroundStyle(Crucible.Color.ink3)
                     .frame(maxWidth: .infinity)
             }
+        }
+    }
+
+    // MARK: - Reorganize affordance
+
+    @ViewBuilder
+    private func reorganizeButton(entry: JournalEntry) -> some View {
+        Button {
+            handleReorganizeTap(entry: entry)
+        } label: {
+            HStack(spacing: 4) {
+                if isReorganizing {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(Crucible.Color.aiBlue)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                Text(isReorganizing ? "Working…" : "Reorganize")
+                    .font(.system(size: 12.5, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.aiBlue)
+        }
+        .buttonStyle(.plain)
+        .disabled(isReorganizing)
+        .accessibilityLabel(isReorganizing ? "Reorganizing" : "Reorganize this memory")
+    }
+
+    private func handleReorganizeTap(entry: JournalEntry) {
+        guard let currentPass = pass else { return }
+        // Capture the visible summary BEFORE the new pass overwrites
+        // `latestOrganizePass`. The Reorganize sheet shows this as
+        // "Current · kept" alongside the new pass's summary.
+        capturedCurrentSummary = currentPass.summaryText ?? ""
+        isReorganizing = true
+        Task { @MainActor in
+            await ProcessingEngine.shared.processReorganize(entry)
+            isReorganizing = false
+            showReorganizeSheet = true
+        }
+    }
+
+    /// Commits the user's per-field choices from the Reorganize sheet.
+    /// For each field where the user kept current, overwrite the new
+    /// pass's value so the latest `OrganizePass` always represents the
+    /// memory's *current* state (no stored v1 vs v2). For each field
+    /// where the user opted into the new wording, the new pass already
+    /// holds it — for the title, also write through to `entry.title`.
+    private func handleReorganizeKeep(titleChoice: ReorgFieldChoice, summaryChoice: ReorgFieldChoice) {
+        guard let entry, let pass else { return }
+        let ctx = pass.managedObjectContext ?? StorageService.shared.viewContext
+        ctx.performAndWait {
+            switch titleChoice {
+            case .new:
+                if let newTitle = pass.suggestedTitle, !newTitle.isEmpty {
+                    entry.title = newTitle
+                    entry.titleSourcedFromAI = true
+                }
+            case .current:
+                // User kept current — overwrite pass.suggestedTitle so
+                // the latest pass reflects what's actually shown.
+                pass.suggestedTitle = entry.title
+            }
+            switch summaryChoice {
+            case .new:
+                // Already on the new pass.
+                break
+            case .current:
+                pass.summaryText = capturedCurrentSummary
+            }
+            pass.markRowsAccepted([.title, .summary])
+            pass.dismissedAt = Date()
+            try? ctx.save()
+        }
+        showReorganizeSheet = false
+    }
+
+    /// "Reorganize again" — fires another reorganize pass. The previous
+    /// "new" pass becomes the new "current" (its values are what the
+    /// sheet just showed). Sheet stays presented; FetchRequest will
+    /// re-render with the fresh new pass once it writes.
+    private func handleReorganizeAgain() {
+        guard let entry, let pass else { return }
+        // The pass shown as "new" in this round becomes the "current"
+        // for the next round.
+        capturedCurrentSummary = pass.summaryText ?? ""
+        isReorganizing = true
+        Task { @MainActor in
+            await ProcessingEngine.shared.processReorganize(entry)
+            isReorganizing = false
         }
     }
 
