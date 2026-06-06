@@ -154,10 +154,20 @@ final class StorageService {
         //         to the Local store, removed from Cloud).
         let schemaInitKey = "com.himem.cloudkit.schemaInitializedV2"
         if !UserDefaults.standard.bool(forKey: schemaInitKey) {
+            // Only mark the version flag set on actual success. If we
+            // failed silently (e.g. account daemon temporarily refused
+            // the call), we want the next launch to retry — otherwise
+            // we burn the version flag, the schema never publishes to
+            // Development, and the dashboard sees no diff to deploy.
             LaunchSignposter.interval("storage.initializeCloudKitSchema") {
-                try? cloudKitContainer.initializeCloudKitSchema(options: [])
+                do {
+                    try cloudKitContainer.initializeCloudKitSchema(options: [])
+                    UserDefaults.standard.set(true, forKey: schemaInitKey)
+                    NSLog("[HiMem][CloudKit] initializeCloudKitSchema succeeded — V2 schema published to Development")
+                } catch {
+                    NSLog("[HiMem][CloudKit] initializeCloudKitSchema FAILED: \(error.localizedDescription) — will retry next launch")
+                }
             }
-            UserDefaults.standard.set(true, forKey: schemaInitKey)
         }
         #endif
 
