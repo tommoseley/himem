@@ -32,6 +32,14 @@ struct SettingsView: View {
     @ObservedObject private var entitlement = Entitlement.shared
     @State private var showInbox = false
     @State private var showPricing = false
+    /// Live project count for the C3 "AI & Organizing" row. Backed
+    /// by a Core Data fetch so the displayed "N of 3" stays honest
+    /// when the user creates or deletes a project from elsewhere
+    /// while Settings is open.
+    @FetchRequest(
+        entity: Project.entity(),
+        sortDescriptors: []
+    ) private var allProjects: FetchedResults<Project>
     #if DEBUG
     @State private var scaleSeedProgress: (current: Int, total: Int)? = nil
     @State private var scaleStatusMessage: String? = nil
@@ -164,31 +172,40 @@ struct SettingsView: View {
                     }
                 }
 
-                // MARK: - HiMem Plus
+                // MARK: - HiMem Plus (C3 card)
                 Section {
-                    Button {
-                        showPricing = true
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: entitlement.isPlus ? "star.fill" : "star")
-                                .foregroundStyle(Crucible.Color.accent)
-                                .frame(width: 22)
-                            Text("HiMem Plus")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                            Text(entitlement.isPlus ? "Subscribed" : "See plans")
-                                .font(.subheadline)
-                                .foregroundStyle(Crucible.Color.ink2)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink4)
-                        }
+                    plusCard
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 4, trailing: 14))
+                        .listRowSeparator(.hidden)
+                }
+
+                // MARK: - AI & Organizing (status mirror of Plus / Free)
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(Crucible.Color.accent)
+                            .frame(width: 22)
+                        Text("Organizing")
+                            .foregroundStyle(Crucible.Color.ink)
+                        Spacer()
+                        Text(entitlement.isPlus ? "Automatic" : "Manual")
+                            .font(.subheadline)
+                            .foregroundStyle(Crucible.Color.ink2)
                     }
-                    .buttonStyle(.plain)
-                } footer: {
-                    Text(entitlement.isPlus
-                        ? "Manage your subscription in iOS Settings → Apple ID → Subscriptions."
-                        : "Free works forever. Plus auto-organizes every memory and connects them across your library.")
+                    HStack(spacing: 10) {
+                        Image(systemName: "folder")
+                            .foregroundStyle(Crucible.Color.accent)
+                            .frame(width: 22)
+                        Text("Projects")
+                            .foregroundStyle(Crucible.Color.ink)
+                        Spacer()
+                        Text(projectsRowValue)
+                            .font(.subheadline)
+                            .foregroundStyle(Crucible.Color.ink2)
+                    }
+                } header: {
+                    Text("AI & Organizing")
                 }
 
                 // MARK: - Captured Clips (Inbox)
@@ -497,6 +514,79 @@ struct SettingsView: View {
                                  + cal.component(.minute, from: newDate)
             }
         )
+    }
+
+    // MARK: - C3 Plus card
+
+    /// The C3 hero card per `docs/design/pricing-screens-upgrade.jsx`.
+    /// Sits inside a Section row but renders its own card chrome
+    /// (cream paper, accent stroke, 16pt corner) so it reads as a
+    /// hero element above the AI & Organizing list rows.
+    @ViewBuilder
+    private var plusCard: some View {
+        Button {
+            showPricing = true
+        } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("HiMem Plus")
+                        .font(.system(size: 20, weight: .semibold, design: .serif))
+                        .foregroundStyle(Crucible.Color.accent)
+                    Spacer()
+                    Text(plusCardPriceLine)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
+                .padding(.bottom, 4)
+
+                Text(entitlement.isPlus
+                    ? "Manage your subscription in iOS Settings → Apple ID → Subscriptions."
+                    : "Automatic organizing, memories that connect themselves, and unlimited projects.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .lineSpacing(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, entitlement.isPlus ? 4 : 12)
+
+                if !entitlement.isPlus {
+                    Text("See plans")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(Crucible.Color.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+            .padding(15)
+            .frame(maxWidth: .infinity)
+            .background(Crucible.Color.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Crucible.Color.accent, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Trailing label on the Plus card header. For Plus users this
+    /// shows their state instead of a price.
+    private var plusCardPriceLine: String {
+        entitlement.isPlus ? "Subscribed" : "from \(monthlyPriceFallback)/mo"
+    }
+
+    private var monthlyPriceFallback: String {
+        StoreKitService.shared
+            .product(for: StoreKitService.ProductID.plusMonthly)?
+            .displayPrice ?? "$6.99"
+    }
+
+    /// "N of 3" for Free, "N" for Plus (unlimited).
+    private var projectsRowValue: String {
+        let count = allProjects.count
+        if entitlement.isPlus { return "\(count)" }
+        return "\(count) of \(ProjectCapPolicy.freeProjectCap)"
     }
 
     private var notificationsFooter: String {
