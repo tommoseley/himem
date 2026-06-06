@@ -213,6 +213,83 @@ final class ProcessingEngine {
         }
     }
 
+    // MARK: - Reorganize (PR 8g)
+
+    /// Runs a reorganize pass — **title and summary only**. Topics,
+    /// mentions, album sync, and the inference graph are deliberately
+    /// not touched per `AI Organize · spec.md` §8.0 (June 6 2026):
+    /// reorganize rethinks the *interpretation* fields; the *fact*
+    /// fields (topics, mentions) are user-managed and stable.
+    ///
+    /// Routing matches `processEntry` — on-device first when available,
+    /// cloud fallback otherwise. Any topics or mentions the analyzer
+    /// returns are discarded silently. The resulting `OrganizePass`
+    /// enters the standard draft lifecycle (`dismissedAt = nil` →
+    /// `isReviewed = false` → chip flips to *"Draft organized"*); the
+    /// ReorganizeReviewSheet handles per-field accept-or-keep.
+    ///
+    /// A failed pass leaves prior state intact — no partial write, no
+    /// pass record — per the spec's "failed passes change nothing."
+    func processReorganize(_ entry: JournalEntry) async {
+        let objectID = entry.objectID
+        let content = entry.content
+        let context = storage.backgroundContext()
+        let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
+
+        // On-device first when available.
+        var result: ClaudeAPIService.AnalysisResult?
+        if useOnDevice, OnDeviceOrganizer.availabilityError() == nil {
+            result = try? await onDeviceOrganizer.organize(
+                content: content,
+                existingTopics: existingTopics,
+                existingMentions: existingMentions
+            )
+        }
+
+        // Cloud fallback. Skipped if on-device already produced a
+        // result, or if we're offline.
+        if result == nil, connectivity.isConnected {
+            let tier = await MainActor.run { self.readTier() }
+            result = try? await analyzer.analyzeEntry(
+                content,
+                existingTopics: existingTopics,
+                existingMentions: existingMentions,
+                tier: tier,
+                action: "memory_organize"
+            )
+        }
+
+        guard let result else { return }
+
+        await context.perform { [self] in
+            do {
+                let entry = try context.existingObject(with: objectID) as! JournalEntry
+                storeReorganizePass(title: result.title, summaryText: result.summary, for: entry, in: context)
+                try context.save()
+            } catch {
+                // Swallow — spec §8: failed passes change nothing.
+                NSLog("[HiMem][Organize] reorganize storeReorganizePass failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Writes a new `OrganizePass` for a reorganize call. Mirrors
+    /// `storeOrganizePass` but skips topics, related entries, and
+    /// next-steps — only title and summary are recorded.
+    private func storeReorganizePass(title: String?, summaryText: String, for entry: JournalEntry, in context: NSManagedObjectContext) {
+        let pass = OrganizePass(context: context)
+        pass.id = UUID()
+        pass.entryId = entry.id
+        pass.createdAt = Date()
+        pass.summaryText = summaryText
+        pass.suggestedTitle = title
+        pass.suggestedTopicsJSON = nil
+        pass.relatedEntryIDsJSON = nil
+        pass.dismissedAt = nil
+        pass.entry = entry
+        entry.lastOrganizedAt = pass.createdAt
+    }
+
     // MARK: - Queue Processing
 
     /// Finds entries that were processed via the local fallback (extracted

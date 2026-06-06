@@ -292,4 +292,138 @@ struct ProcessingEngineFallbackTests {
         #expect(postEntities.allSatisfy { $0.processingMethod == "cloud" })
         #expect(postEntities.contains { $0.value == "Sarah" })
     }
+
+    // MARK: - Reorganize (PR 8g.1)
+
+    /// Money test for the scope contract from `AI Organize · spec.md`
+    /// §8.0: reorganize writes a new `OrganizePass` with title + summary
+    /// only. Topics and mentions from the new analyzer pass are
+    /// discarded; the entity and topic graphs are left untouched.
+    @Test func reorganize_writesNewPass_titleAndSummaryOnly() async throws {
+        let storage = StorageService(inMemory: true)
+
+        // Pre-create both topics so `assignTopics` attaches them
+        // directly. ProcessingEngine routes unknown topic names through
+        // `TopicApprovalService` (user approval gate) rather than
+        // minting Topic rows itself, so the test seeds the rows up
+        // front to exercise the attach path.
+        _ = try storage.findOrCreateTopic(name: "Garden")
+        _ = try storage.findOrCreateTopic(name: "Kitchen")
+
+        // First pass: classic organize via SuccessfulAnalyzer. Writes
+        // pass #1, plus mentions, and attaches the Garden topic.
+        let firstAnalyzer = SuccessfulAnalyzer(
+            title: "Garden meeting",
+            entityValue: "Sarah",
+            topic: "Garden"
+        )
+        let firstEngine = ProcessingEngine(
+            storage: storage,
+            analyzer: firstAnalyzer,
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: false
+        )
+        let entry = try storage.createEntry(
+            content: "Garden notes from today.",
+            inputType: .typed
+        )
+        _ = try storage.createProcessingTask(for: entry)
+        await firstEngine.processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+
+        // Sanity: pass #1 wrote the title/summary, attached Sarah, and
+        // attached the Garden topic to the entry.
+        #expect(entry.latestOrganizePass?.suggestedTitle == "Garden meeting")
+        #expect(entry.latestOrganizePass?.summaryText == "cloud summary")
+        let firstEntities = try storage.viewContext.fetch(NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity"))
+        #expect(firstEntities.contains { $0.value == "Sarah" })
+        #expect((entry.topics as? Set<Topic>)?.contains(where: { $0.name == "Garden" }) == true)
+        let firstPassCount: Int = {
+            let req = NSFetchRequest<OrganizePass>(entityName: "OrganizePass")
+            return (try? storage.viewContext.count(for: req)) ?? -1
+        }()
+        #expect(firstPassCount == 1)
+
+        // Reorganize with an analyzer that proposes a DIFFERENT title,
+        // summary, entity ("Maria"), and topic ("Kitchen"). The contract
+        // says only title + summary cross over to the new pass.
+        let secondAnalyzer = SuccessfulAnalyzer(
+            title: "A fresh take on the garden",
+            entityValue: "Maria",
+            topic: "Kitchen"
+        )
+        let secondEngine = ProcessingEngine(
+            storage: storage,
+            analyzer: secondAnalyzer,
+            localExtractor: StubEntityExtractor.person("Maria"),
+            useOnDevice: false
+        )
+        await secondEngine.processReorganize(entry)
+        storage.viewContext.refreshAllObjects()
+
+        // A new OrganizePass exists with the reorganize title/summary.
+        let allPassesReq = NSFetchRequest<OrganizePass>(entityName: "OrganizePass")
+        allPassesReq.sortDescriptors = [NSSortDescriptor(keyPath: \OrganizePass.createdAt, ascending: true)]
+        let allPasses = try storage.viewContext.fetch(allPassesReq)
+        #expect(allPasses.count == 2)
+        #expect(allPasses.last?.suggestedTitle == "A fresh take on the garden")
+        #expect(allPasses.last?.summaryText == "cloud summary")
+        // Draft state: unreviewed by default — chip will read "Draft organized".
+        #expect(allPasses.last?.dismissedAt == nil)
+        #expect(allPasses.last?.acceptedRows.isEmpty == true)
+
+        // Spec contract: topics and mentions are not touched.
+        let postEntities = try storage.viewContext.fetch(NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity"))
+        #expect(postEntities.contains { $0.value == "Sarah" })
+        #expect(!postEntities.contains { $0.value == "Maria" })
+
+        // The Garden topic stays attached; Kitchen is never attached.
+        let entryTopics = (entry.topics as? Set<Topic>) ?? []
+        #expect(entryTopics.contains { $0.name == "Garden" })
+        #expect(!entryTopics.contains { $0.name == "Kitchen" })
+    }
+
+    /// Failed reorganize must leave prior state intact — no partial
+    /// write, no pass record. Spec §8: "failed passes change nothing."
+    @Test func reorganize_failure_leavesPriorStateIntact() async throws {
+        let storage = StorageService(inMemory: true)
+
+        // Seed with one successful organize.
+        let firstEngine = ProcessingEngine(
+            storage: storage,
+            analyzer: SuccessfulAnalyzer(title: "Original", entityValue: "Sarah", topic: "Garden"),
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: false
+        )
+        let entry = try storage.createEntry(content: "Garden notes from today.", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+        await firstEngine.processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+
+        let priorPassCount: Int = {
+            let req = NSFetchRequest<OrganizePass>(entityName: "OrganizePass")
+            return (try? storage.viewContext.count(for: req)) ?? -1
+        }()
+        #expect(priorPassCount == 1)
+        let priorTitle = entry.latestOrganizePass?.suggestedTitle
+
+        // Reorganize with a throwing analyzer — both on-device and
+        // cloud fail (on-device is unavailable in simulator anyway).
+        let throwingEngine = ProcessingEngine(
+            storage: storage,
+            analyzer: ThrowingAnalyzer(),
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: false
+        )
+        await throwingEngine.processReorganize(entry)
+        storage.viewContext.refreshAllObjects()
+
+        // No new pass written; the prior pass is still the latest.
+        let postPassCount: Int = {
+            let req = NSFetchRequest<OrganizePass>(entityName: "OrganizePass")
+            return (try? storage.viewContext.count(for: req)) ?? -1
+        }()
+        #expect(postPassCount == 1)
+        #expect(entry.latestOrganizePass?.suggestedTitle == priorTitle)
+    }
 }
