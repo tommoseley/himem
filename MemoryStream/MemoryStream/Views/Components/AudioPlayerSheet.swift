@@ -1,25 +1,27 @@
 import SwiftUI
 import AVFoundation
 
-/// Sheet-presented audio player + transcript editor. Tap a voice tile in
-/// an entry's media grid to open this sheet; play the clip via
-/// AudioPlayerService.shared (existing inline waveforms update too) and
-/// edit the transcript inline.
+/// Sheet-presented audio player + transcript editor for a voice clip.
+/// Built on top of the shared `EditTextSheet` template so the chrome
+/// (grabber, Cancel · title · Done bar, metadata line, ochre-ring
+/// field) matches the photo description editor exactly — per
+/// `docs/design/HiMem · Edit Sheet.html` June 2026. The two editors do
+/// the same job (edit the words on a media item) and read as siblings.
 ///
-/// The transcript area is the edit control. Cancel discards changes;
-/// Done saves the (trimmed) text via `onSaveTranscript` if it differs
-/// from the initial value.
+/// The hero block houses the audio player (scrubber + play / pause).
+/// The footer slot houses *Retry transcription*. Everything else is
+/// shared chrome.
 ///
 /// **Three media states** (per `docs/design/Storage architecture · CLAUDE.md`
-/// Rule 4 — be honest in UX):
+/// Rule 4 — be honest in UX) drive what the hero shows:
 /// - `.ready`: file is downloaded, normal player UI.
 /// - `.downloading`: file is in iCloud but not yet local. Spinner +
 ///   "Downloading from iCloud" label replaces the play button. Polls
-///   every 1s until ready or missing.
+///   every 1s until ready, missing, or the poll ceiling.
 /// - `.missing`: file is neither local nor in iCloud (deleted by the
-///   user via Files.app, or never made it to iCloud). Honest
-///   "Original audio is not available" label; transcript editor still
-///   surfaces the memory itself.
+///   user via Files.app, never made it to iCloud, or download
+///   timed out). Honest "Original audio is not available" label; the
+///   transcript editor still surfaces the memory itself.
 struct AudioPlayerSheet: View {
     let filename: String
     let recordedAt: Date?
@@ -41,11 +43,8 @@ struct AudioPlayerSheet: View {
     @State private var downloadPollTimer: Timer?
     /// Number of `.downloading` polls without a state change. Once this
     /// exceeds `downloadPollCeiling` we give up and treat the file as
-    /// `.missing`. Catches the case where iCloud Drive has metadata
-    /// for a path but the bytes were never uploaded — e.g. clips
-    /// destroyed by the pre-2026-06-07 line-774 bug, which left
-    /// `MediaReference` rows pointing at filenames whose audio is gone
-    /// from both local cache and iCloud.
+    /// `.missing` — catches the case where iCloud Drive has metadata
+    /// for a path but the bytes were never uploaded.
     @State private var downloadPollCount = 0
     @State private var draftTranscript: String = ""
     @State private var isRetryingTranscription = false
@@ -60,32 +59,19 @@ struct AudioPlayerSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 24) {
-                header
-                playerControls
-                Divider()
-                transcriptEditor
-            }
-            .padding(20)
-            .background(Crucible.Color.paper)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(Crucible.Color.ink2)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        commitIfChanged()
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Crucible.Color.accent)
-                }
-            }
-            .navigationTitle("Voice clip")
-            .navigationBarTitleDisplayMode(.inline)
-        }
+        EditTextSheet(
+            title: "Voice clip",
+            metadata: metadataLine,
+            fieldLabel: "Transcript",
+            text: $draftTranscript,
+            onCancel: { dismiss() },
+            onDone: {
+                commitIfChanged()
+                dismiss()
+            },
+            hero: { hero },
+            footer: { footer }
+        )
         .task {
             draftTranscript = initialTranscript
             await resolveMediaState()
@@ -104,62 +90,64 @@ struct AudioPlayerSheet: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Metadata line
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let recordedAt {
-                Text(Self.timestampFormatter.string(from: recordedAt))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Crucible.Color.ink2)
-            }
-            Text(durationLabel)
-                .font(.system(size: 28, weight: .semibold).monospacedDigit())
-                .foregroundStyle(Crucible.Color.ink)
+    private var metadataLine: String {
+        var parts: [String] = []
+        if let recordedAt {
+            parts.append(Self.timestampFormatter.string(from: recordedAt))
         }
+        switch mediaState {
+        case .ready where totalDuration > 0:
+            parts.append(formatTime(totalDuration))
+        case .downloading, .checking:
+            parts.append("…")
+        case .missing:
+            parts.append("—")
+        case .ready:
+            break
+        }
+        return parts.joined(separator: " · ")
     }
 
-    // MARK: - Player controls
+    // MARK: - Hero (state-driven)
 
     @ViewBuilder
-    private var playerControls: some View {
+    private var hero: some View {
         switch mediaState {
         case .checking:
-            checkingControls
+            heroChecking
         case .downloading:
-            downloadingControls
+            heroDownloading
         case .ready:
-            readyControls
+            heroReady
         case .missing:
-            missingControls
+            heroMissing
         }
     }
 
-    private var checkingControls: some View {
+    private var heroChecking: some View {
         HStack {
             Spacer()
-            ProgressView()
-                .controlSize(.small)
+            ProgressView().controlSize(.small)
             Spacer()
         }
-        .frame(height: 80)
+        .frame(height: 92)
     }
 
-    private var downloadingControls: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                Text("Downloading from iCloud")
-                    .font(.subheadline)
-                    .foregroundStyle(Crucible.Color.ink2)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 80)
+    private var heroDownloading: some View {
+        HStack(spacing: 10) {
+            ProgressView().controlSize(.small)
+            Text("Downloading from iCloud")
+                .font(.subheadline)
+                .foregroundStyle(Crucible.Color.ink2)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 92)
         .accessibilityLabel("Downloading audio from iCloud")
     }
 
-    private var missingControls: some View {
+    private var heroMissing: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "icloud.slash")
@@ -178,20 +166,24 @@ struct AudioPlayerSheet: View {
         .accessibilityLabel("Original audio is not available; transcript is the saved memory")
     }
 
-    private var readyControls: some View {
+    /// Scrubber + current time | play button | total time. Matches the
+    /// design's hero for the transcript editor.
+    private var heroReady: some View {
         VStack(spacing: 12) {
             ProgressView(value: progress)
                 .tint(Crucible.Color.Media.audio)
-
             HStack {
                 Text(formatTime(currentTime))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(Crucible.Color.ink3)
                 Spacer()
                 Button { togglePlay() } label: {
-                    Image(systemName: isPlayingThisClip ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 56))
-                        .foregroundStyle(Crucible.Color.Media.audio)
+                    Image(systemName: isPlayingThisClip ? "pause.fill" : "play.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                        .background(Crucible.Color.accent)
+                        .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isPlayingThisClip ? "Pause" : "Play")
@@ -201,46 +193,33 @@ struct AudioPlayerSheet: View {
                     .foregroundStyle(Crucible.Color.ink3)
             }
         }
+        .padding(.top, 6)
     }
 
-    // MARK: - Transcript editor
+    // MARK: - Footer
 
-    private var transcriptEditor: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("TRANSCRIPT")
-                .font(.caption2.weight(.bold))
-                .tracking(0.5)
-                .foregroundStyle(Crucible.Color.ink3)
-
-            TextEditor(text: $draftTranscript)
-                .font(.callout)
-                .foregroundStyle(Crucible.Color.ink)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 120)
-                .scrollContentBackground(.hidden)
-                .background(Crucible.Color.paper)
-
-            Button {
-                retryTranscription()
-            } label: {
-                if isRetryingTranscription {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("Retrying…")
-                    }
-                } else {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.clockwise")
-                        Text("Retry transcription")
-                    }
+    @ViewBuilder
+    private var footer: some View {
+        Button(action: retryTranscription) {
+            if isRetryingTranscription {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Retrying…")
+                        .font(.system(size: 12.5, weight: .semibold))
+                }
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Retry transcription")
+                        .font(.system(size: 12.5, weight: .semibold))
                 }
             }
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(Crucible.Color.accent)
-            .buttonStyle(.plain)
-            .disabled(isRetryingTranscription || mediaState != .ready)
-            .padding(.top, 2)
         }
+        .foregroundStyle(Crucible.Color.accent)
+        .buttonStyle(.plain)
+        .disabled(isRetryingTranscription || mediaState != .ready)
+        .opacity(mediaState == .ready ? 1.0 : 0.4)
     }
 
     /// Re-runs `TranscriptionService` against this clip's audio file and
@@ -253,9 +232,7 @@ struct AudioPlayerSheet: View {
             let url = SpeechService.audioURL(for: filename)
             // `.textOrEmpty` preserves the pre-2026-05-29 behavior
             // here: manual retry that hits a transient failure
-            // (model not ready) silently clears the draft. Known
-            // follow-up: show an inline error so the user knows
-            // it didn't actually run. Out of scope for hero fix.
+            // (model not ready) silently clears the draft.
             let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
             await MainActor.run {
                 draftTranscript = outcome.textOrEmpty
@@ -282,17 +259,6 @@ struct AudioPlayerSheet: View {
     private var progress: Double {
         guard totalDuration > 0 else { return 0 }
         return min(1.0, max(0.0, currentTime / totalDuration))
-    }
-
-    private var durationLabel: String {
-        switch mediaState {
-        case .ready:
-            return formatTime(totalDuration)
-        case .downloading, .checking:
-            return "…"
-        case .missing:
-            return "—"
-        }
     }
 
     private func togglePlay() {
@@ -338,10 +304,7 @@ struct AudioPlayerSheet: View {
     /// Polls the download status every 1s. Cancels itself when the
     /// state resolves to `.ready`, `.missing`, or the poll counter
     /// exceeds `downloadPollCeiling` — the latter catches paths that
-    /// iCloud knows about but never received bytes for (the pre-fix
-    /// line-774 clip-destruction case). The view's `.onDisappear`
-    /// invalidates the timer if the user closes the sheet during
-    /// download.
+    /// iCloud knows about but never received bytes for.
     private func startDownloadPolling(url: URL) {
         downloadPollTimer?.invalidate()
         downloadPollCount = 0
@@ -380,7 +343,6 @@ struct AudioPlayerSheet: View {
                    let avPlayer = AudioPlayerService.shared.currentAVPlayer {
                     currentTime = avPlayer.currentTime
                 } else if !player.isPlaying {
-                    // Reset to 0 when not playing this clip.
                     currentTime = 0
                 }
             }

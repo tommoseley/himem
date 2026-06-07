@@ -2,48 +2,30 @@ import SwiftUI
 import AVKit
 import Photos
 
-/// Full-frame viewer for a photo or video plus the human-written
-/// description below it. Per
-/// `docs/design/HiMem · Photo Descriptions.html` part 3 (Viewer ·
-/// editing):
-/// - Image / video is the hero on top.
-/// - In edit mode the image collapses to 150 height to make room for
-///   the keyboard.
-/// - Description panel sits below — read or edit modes share the same
-///   surface (no separate edit screen).
-/// - Top bar holds Cancel + ochre Done in edit mode; the keyboard has
-///   clearance because Save isn't placed above it (Proofread / Rewrite
-///   QuickType strip fight).
-/// - **Background follows the system theme** via `Crucible.Color.paper`
-///   — the design tool's dark canvas was the artboard backdrop, not
-///   the intended runtime look.
-/// - **Editor occupies only the free space between image and keyboard**
-///   and scrolls internally. The TextEditor's frame is bounded by the
-///   description panel's allocated space, which shrinks as the keyboard
-///   raises.
+/// Full-frame viewer for a photo or video. Editing the description
+/// is delegated to `PhotoDescriptionEditSheet` (presented as a child
+/// sheet), so the viewer itself is read-only — per
+/// `docs/design/HiMem · Edit Sheet.html` June 2026.
+///
+/// **Background follows the system theme** via `Crucible.Color.paper`.
 struct MediaViewerView: View {
     let item: MediaDisplayItem
-    /// Persists the edited description. Called on Done if the trimmed
-    /// text differs from the initial value. Skipped on Cancel.
+    /// Persists the edited description. Forwarded to
+    /// `PhotoDescriptionEditSheet`. Called on Done with a changed
+    /// trimmed value.
     let onSaveDescription: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
     @State private var fullImage: UIImage? = nil
     @State private var player: AVPlayer? = nil
     @State private var isLoading = true
-    /// Tracks whether `load()` activated the AVAudioSession (video
-    /// path only). Used by `onDisappear` to deactivate symmetrically.
     @State private var activatedAudioSession = false
-    @State private var draftDescription: String = ""
-    /// The committed-and-currently-displayed description. The viewer's
-    /// `item` is a struct snapshot from the parent — it doesn't update
-    /// when the user saves a new description, so the reader has to
-    /// track its own committed state. Initialized from
-    /// `item.mediaDescription` in `.task`; updated by
-    /// `commitAndReturnToReading`.
+    /// Tracks the committed description so the read mode updates
+    /// immediately after the user saves in `PhotoDescriptionEditSheet`.
+    /// `item` is a parent-side struct snapshot that won't refresh
+    /// while the viewer stays presented.
     @State private var savedDescription: String?
-    @State private var isEditing: Bool = false
-    @FocusState private var editorFocused: Bool
+    @State private var presentingEditor = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -51,7 +33,6 @@ struct MediaViewerView: View {
             VStack(spacing: 0) {
                 header
                 mediaStage
-                    .frame(height: isEditing ? 150 : nil)
                     .padding(.horizontal, 14)
                     .padding(.bottom, 12)
                 descriptionPanel
@@ -60,7 +41,6 @@ struct MediaViewerView: View {
         }
         .task {
             savedDescription = item.mediaDescription
-            draftDescription = item.mediaDescription ?? ""
             await load()
         }
         .onDisappear {
@@ -70,60 +50,43 @@ struct MediaViewerView: View {
                 activatedAudioSession = false
             }
         }
+        .sheet(isPresented: $presentingEditor) {
+            // Pass a refreshed item so the editor's initial state
+            // reflects what's currently committed in this viewer.
+            var refreshed = item
+            refreshed.mediaDescription = savedDescription
+            return PhotoDescriptionEditSheet(item: refreshed) { newDescription in
+                onSaveDescription(newDescription)
+                let trimmed = newDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                savedDescription = trimmed.isEmpty ? nil : trimmed
+                NSLog("[HiMem][MediaDesc] viewer committed description for item \(item.id): \(trimmed.count) chars")
+            }
+            .presentationDetents([.large])
+        }
     }
 
     // MARK: - Header
 
-    /// Top bar in two modes:
-    /// - Reading: close `×` left, timestamp center, empty spacer right.
-    /// - Editing: "Cancel" left, timestamp center, ochre "Done" right.
-    ///
-    /// **Save lives in the top bar, not above the keyboard.** iOS's
-    /// Proofread / Rewrite QuickType strip occupies the row directly
-    /// above the keyboard; any Save control placed there fights the
-    /// system surface. The top bar is always free.
     private var header: some View {
         HStack {
-            if isEditing {
-                Button {
-                    cancelEditing()
-                } label: {
-                    Text("Cancel")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Crucible.Color.ink2)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button {
-                    player?.pause()
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.ink)
-                        .frame(width: 30, height: 30)
-                        .background(Crucible.Color.sunk)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
+            Button {
+                player?.pause()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink)
+                    .frame(width: 30, height: 30)
+                    .background(Crucible.Color.sunk)
+                    .clipShape(Circle())
             }
+            .buttonStyle(.plain)
             Spacer()
             Text(Self.timestampFormatter.string(from: item.createdAt))
                 .font(.system(size: 12.5))
                 .foregroundStyle(Crucible.Color.ink2)
             Spacer()
-            if isEditing {
-                Button {
-                    commitAndReturnToReading()
-                } label: {
-                    Text("Done")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Crucible.Color.accent)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Color.clear.frame(width: 30, height: 30)
-            }
+            Color.clear.frame(width: 30, height: 30)
         }
         .padding(.horizontal, 18)
         .padding(.top, 16)
@@ -159,13 +122,12 @@ struct MediaViewerView: View {
         }
     }
 
-    // MARK: - Description panel
+    // MARK: - Description panel (read-only)
 
-    /// VStack laid out as: eyebrow (fixed) → editor/reader (flexible)
-    /// → footer (fixed). The flexible middle child consumes whatever
-    /// vertical space remains after the keyboard takes its bite —
-    /// that's how the TextEditor stays bounded to the visible region
-    /// and scrolls internally rather than growing under the keyboard.
+    /// Read-only summary of the saved description below the photo.
+    /// Tap any part of it to launch `PhotoDescriptionEditSheet`. No
+    /// inline editor lives here — editing is a sheet, per the unified
+    /// edit-sheet design.
     private var descriptionPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("DESCRIPTION")
@@ -175,107 +137,38 @@ struct MediaViewerView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 9)
             Group {
-                if isEditing {
-                    editor
+                if let desc = savedDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+                    ScrollView {
+                        Text(desc)
+                            .font(.system(size: 14.5))
+                            .foregroundStyle(Crucible.Color.ink)
+                            .lineSpacing(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { presentingEditor = true }
                 } else {
-                    reader
+                    MediaDescriptionEmpty()
+                        .onTapGesture { presentingEditor = true }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            footer
-                .padding(.bottom, 14)
+            HStack {
+                Text("Tap to edit")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Crucible.Color.ink3)
+                Spacer()
+            }
+            .padding(.top, 12)
+            .padding(.bottom, 14)
         }
         .padding(.horizontal, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    @ViewBuilder
-    private var reader: some View {
-        // Reads `savedDescription` (local @State) not `item.mediaDescription`
-        // — `item` is a parent-side snapshot that doesn't update when
-        // the user commits a new description from inside the viewer.
-        if let desc = savedDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
-            ScrollView {
-                Text(desc)
-                    .font(.system(size: 14.5))
-                    .foregroundStyle(Crucible.Color.ink)
-                    .lineSpacing(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { beginEditing() }
-        } else {
-            MediaDescriptionEmpty()
-                .onTapGesture { beginEditing() }
-        }
-    }
-
-    /// The TextEditor lives inside the flexible Group above. Its frame
-    /// is therefore bounded by the description panel's allocated
-    /// space, which shrinks as the keyboard raises — so the editor
-    /// scrolls internally rather than extending under the keyboard.
-    @ViewBuilder
-    private var editor: some View {
-        TextEditor(text: $draftDescription)
-            .focused($editorFocused)
-            .font(.system(size: 14.5))
-            .foregroundStyle(Crucible.Color.ink)
-            .scrollContentBackground(.hidden)
-            .background(Crucible.Color.paper)
-            .overlay(
-                RoundedRectangle(cornerRadius: 11)
-                    .stroke(Crucible.Color.accent, lineWidth: 2)
-            )
-    }
-
-    @ViewBuilder
-    private var footer: some View {
-        HStack {
-            Text(isEditing ? "Part of this memory · searchable" : "Tap to edit")
-                .font(.system(size: 11))
-                .foregroundStyle(Crucible.Color.ink3)
-            Spacer()
-        }
-        .padding(.top, 12)
-    }
-
-    // MARK: - Actions
-
-    private func beginEditing() {
-        draftDescription = savedDescription ?? ""
-        isEditing = true
-        editorFocused = true
-    }
-
-    private func cancelEditing() {
-        // Discard the draft and drop back to reading. Editor closes;
-        // viewer itself stays open. The user can hit `×` from there
-        // to dismiss the whole sheet.
-        draftDescription = savedDescription ?? ""
-        isEditing = false
-        editorFocused = false
-    }
-
-    private func commitAndReturnToReading() {
-        let trimmed = draftDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        let original = (savedDescription ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed != original {
-            onSaveDescription(trimmed)
-            // Update the local committed state so the reader renders
-            // the new description immediately. The Core Data write
-            // propagates back through the parent's @FetchRequest on
-            // the next render cycle.
-            savedDescription = trimmed.isEmpty ? nil : trimmed
-            NSLog("[HiMem][MediaDesc] committed description for item \(item.id): \(trimmed.count) chars")
-        }
-        isEditing = false
-        editorFocused = false
-    }
-
     // MARK: - Media load
 
     private func load() async {
-        // Stop any audio playback that might conflict
         AudioPlayerService.shared.stop()
         if item.mediaType == .video {
             await loadVideo()
@@ -286,10 +179,6 @@ struct MediaViewerView: View {
     }
 
     private func loadVideo() async {
-        // Configure audio session for video playback. The matching
-        // `setActive(false)` lives in `onDisappear`, gated on
-        // `activatedAudioSession` so an image-only viewing (which
-        // never activates) doesn't churn the HAL.
         let audioSession = AVAudioSession.sharedInstance()
         try? audioSession.setCategory(.playback, mode: .moviePlayback)
         try? audioSession.setActive(true)
