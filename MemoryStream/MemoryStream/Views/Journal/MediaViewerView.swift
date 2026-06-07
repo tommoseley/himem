@@ -4,18 +4,27 @@ import Photos
 
 /// Full-frame viewer for a photo or video plus the human-written
 /// description below it. Per
-/// `docs/design/HiMem · Photo Descriptions.html`:
-/// - Image / video is the hero on top, dark background.
-/// - Description panel slides in from the bottom in cream — read or
-///   edit modes share the same surface (no separate edit screen).
-/// - Empty description shows the same prompt as the inline card; tap
-///   to begin editing.
-/// - Save commits via `onSaveDescription` and closes the viewer.
+/// `docs/design/HiMem · Photo Descriptions.html` part 3 (Viewer ·
+/// editing):
+/// - Image / video is the hero on top.
+/// - In edit mode the image collapses to 150 height to make room for
+///   the keyboard.
+/// - Description panel sits below — read or edit modes share the same
+///   surface (no separate edit screen).
+/// - Top bar holds Cancel + ochre Done in edit mode; the keyboard has
+///   clearance because Save isn't placed above it (Proofread / Rewrite
+///   QuickType strip fight).
+/// - **Background follows the system theme** via `Crucible.Color.paper`
+///   — the design tool's dark canvas was the artboard backdrop, not
+///   the intended runtime look.
+/// - **Editor occupies only the free space between image and keyboard**
+///   and scrolls internally. The TextEditor's frame is bounded by the
+///   description panel's allocated space, which shrinks as the keyboard
+///   raises.
 struct MediaViewerView: View {
     let item: MediaDisplayItem
-    /// Persists the edited description. Called on Save if the trimmed
-    /// text differs from the initial value. Skipped on plain Done or
-    /// on Save with no change.
+    /// Persists the edited description. Called on Done if the trimmed
+    /// text differs from the initial value. Skipped on Cancel.
     let onSaveDescription: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -30,17 +39,18 @@ struct MediaViewerView: View {
     @FocusState private var editorFocused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            mediaStage
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 14)
-                .padding(.top, 0)
-                .frame(height: isEditing ? 150 : nil, alignment: .center)
-            descriptionPanel
+        ZStack(alignment: .top) {
+            Crucible.Color.paper.ignoresSafeArea()
+            VStack(spacing: 0) {
+                header
+                mediaStage
+                    .frame(height: isEditing ? 150 : nil)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
+                descriptionPanel
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
-        .background(Color(red: 26/255, green: 22/255, blue: 18/255))
-        .ignoresSafeArea(.keyboard, edges: .bottom)
         .task {
             draftDescription = item.mediaDescription ?? ""
             await load()
@@ -63,8 +73,7 @@ struct MediaViewerView: View {
     /// **Save lives in the top bar, not above the keyboard.** iOS's
     /// Proofread / Rewrite QuickType strip occupies the row directly
     /// above the keyboard; any Save control placed there fights the
-    /// system surface. The top bar is always free. (Locked in
-    /// `screens-photo-description.jsx` June 2026.)
+    /// system surface. The top bar is always free.
     private var header: some View {
         HStack {
             if isEditing {
@@ -73,7 +82,7 @@ struct MediaViewerView: View {
                 } label: {
                     Text("Cancel")
                         .font(.system(size: 15))
-                        .foregroundStyle(Color.white.opacity(0.7))
+                        .foregroundStyle(Crucible.Color.ink2)
                 }
                 .buttonStyle(.plain)
             } else {
@@ -83,9 +92,9 @@ struct MediaViewerView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Crucible.Color.ink)
                         .frame(width: 30, height: 30)
-                        .background(Color.white.opacity(0.14))
+                        .background(Crucible.Color.sunk)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -93,7 +102,7 @@ struct MediaViewerView: View {
             Spacer()
             Text(Self.timestampFormatter.string(from: item.createdAt))
                 .font(.system(size: 12.5))
-                .foregroundStyle(Color.white.opacity(0.7))
+                .foregroundStyle(Crucible.Color.ink2)
             Spacer()
             if isEditing {
                 Button {
@@ -118,9 +127,9 @@ struct MediaViewerView: View {
     private var mediaStage: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(red: 42/255, green: 37/255, blue: 32/255))
+                .fill(Crucible.Color.sunk)
             if isLoading {
-                ProgressView().tint(.white)
+                ProgressView().tint(Crucible.Color.ink3)
             } else if item.mediaType == .video, let player {
                 VideoPlayer(player: player)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -133,10 +142,10 @@ struct MediaViewerView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "photo.slash")
                         .font(.system(size: 32))
-                        .foregroundStyle(Color.white.opacity(0.32))
+                        .foregroundStyle(Crucible.Color.ink3)
                     Text("Media no longer available")
                         .font(.subheadline)
-                        .foregroundStyle(Color.white.opacity(0.55))
+                        .foregroundStyle(Crucible.Color.ink3)
                 }
             }
         }
@@ -144,6 +153,11 @@ struct MediaViewerView: View {
 
     // MARK: - Description panel
 
+    /// VStack laid out as: eyebrow (fixed) → editor/reader (flexible)
+    /// → footer (fixed). The flexible middle child consumes whatever
+    /// vertical space remains after the keyboard takes its bite —
+    /// that's how the TextEditor stays bounded to the visible region
+    /// and scrolls internally rather than growing under the keyboard.
     private var descriptionPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("DESCRIPTION")
@@ -152,45 +166,43 @@ struct MediaViewerView: View {
                 .foregroundStyle(Crucible.Color.ink3)
                 .padding(.top, 16)
                 .padding(.bottom, 9)
-            if isEditing {
-                editor
-            } else {
-                reader
+            Group {
+                if isEditing {
+                    editor
+                } else {
+                    reader
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             footer
                 .padding(.bottom, 14)
         }
         .padding(.horizontal, 18)
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            UnevenRoundedRectangle(
-                topLeadingRadius: 18,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 18
-            )
-            .fill(Crucible.Color.paper)
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
     private var reader: some View {
         if let desc = item.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
-            Text(desc)
-                .font(.system(size: 14.5))
-                .foregroundStyle(Crucible.Color.ink)
-                .lineSpacing(3)
-                .frame(minHeight: 78, alignment: .topLeading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture { beginEditing() }
+            ScrollView {
+                Text(desc)
+                    .font(.system(size: 14.5))
+                    .foregroundStyle(Crucible.Color.ink)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { beginEditing() }
         } else {
             MediaDescriptionEmpty()
                 .onTapGesture { beginEditing() }
         }
     }
 
+    /// The TextEditor lives inside the flexible Group above. Its frame
+    /// is therefore bounded by the description panel's allocated
+    /// space, which shrinks as the keyboard raises — so the editor
+    /// scrolls internally rather than extending under the keyboard.
     @ViewBuilder
     private var editor: some View {
         TextEditor(text: $draftDescription)
@@ -198,8 +210,6 @@ struct MediaViewerView: View {
             .font(.system(size: 14.5))
             .foregroundStyle(Crucible.Color.ink)
             .scrollContentBackground(.hidden)
-            .padding(8)
-            .frame(minHeight: 78)
             .background(Crucible.Color.paper)
             .overlay(
                 RoundedRectangle(cornerRadius: 11)
