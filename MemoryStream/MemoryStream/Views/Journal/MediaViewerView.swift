@@ -56,25 +56,57 @@ struct MediaViewerView: View {
 
     // MARK: - Header
 
+    /// Top bar in two modes:
+    /// - Reading: close `×` left, timestamp center, empty spacer right.
+    /// - Editing: "Cancel" left, timestamp center, ochre "Done" right.
+    ///
+    /// **Save lives in the top bar, not above the keyboard.** iOS's
+    /// Proofread / Rewrite QuickType strip occupies the row directly
+    /// above the keyboard; any Save control placed there fights the
+    /// system surface. The top bar is always free. (Locked in
+    /// `screens-photo-description.jsx` June 2026.)
     private var header: some View {
         HStack {
-            Button {
-                player?.pause()
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 30, height: 30)
-                    .background(Color.white.opacity(0.14))
-                    .clipShape(Circle())
+            if isEditing {
+                Button {
+                    cancelEditing()
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color.white.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    player?.pause()
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.14))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
             }
             Spacer()
             Text(Self.timestampFormatter.string(from: item.createdAt))
                 .font(.system(size: 12.5))
                 .foregroundStyle(Color.white.opacity(0.7))
             Spacer()
-            Color.clear.frame(width: 30, height: 30)
+            if isEditing {
+                Button {
+                    commitAndReturnToReading()
+                } label: {
+                    Text("Done")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Crucible.Color.accent)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Color.clear.frame(width: 30, height: 30)
+            }
         }
         .padding(.horizontal, 18)
         .padding(.top, 16)
@@ -182,20 +214,6 @@ struct MediaViewerView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(Crucible.Color.ink3)
             Spacer()
-            if isEditing {
-                Button {
-                    commitAndClose()
-                } label: {
-                    Text("Save")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 7)
-                        .background(Crucible.Color.accent)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
         }
         .padding(.top, 12)
     }
@@ -203,18 +221,28 @@ struct MediaViewerView: View {
     // MARK: - Actions
 
     private func beginEditing() {
+        draftDescription = item.mediaDescription ?? ""
         isEditing = true
         editorFocused = true
     }
 
-    private func commitAndClose() {
+    private func cancelEditing() {
+        // Discard the draft and drop back to reading. Editor closes;
+        // viewer itself stays open. The user can hit `×` from there
+        // to dismiss the whole sheet.
+        draftDescription = item.mediaDescription ?? ""
+        isEditing = false
+        editorFocused = false
+    }
+
+    private func commitAndReturnToReading() {
         let trimmed = draftDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let original = (item.mediaDescription ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed != original {
             onSaveDescription(trimmed)
         }
-        player?.pause()
-        dismiss()
+        isEditing = false
+        editorFocused = false
     }
 
     // MARK: - Media load
