@@ -170,14 +170,23 @@ struct MediaTile: View {
             }
         }
         .task(id: localIdentifier) {
-            // Load audio duration for the footer label. AVURLAsset.load is
-            // async; the tile renders without a duration until this resolves.
-            // No `fileExists` pre-check — `try? asset.load(.duration)`
-            // returns nil for missing/unreadable files without throwing,
-            // and avoiding the synchronous disk hit keeps the per-tile
-            // `.task` off the main thread.
+            // Load audio duration for the footer label. AVURLAsset.load
+            // is async; the tile renders without a duration until this
+            // resolves. When the file lives in iCloud but isn't on
+            // device yet, kick off a download in the background so a
+            // subsequent open from the sheet finds it already local.
+            // The tile itself stays calm — no spinner, no error
+            // visible — that's intentional; the honest UX surfaces in
+            // the AudioPlayerSheet when the user opens the clip
+            // (Rule 4, `docs/design/Storage architecture · CLAUDE.md`).
             guard mediaType == .voice, createdAt != nil else { return }
             let url = SpeechService.audioURL(for: localIdentifier)
+            let status = UbiquityStore.shared.downloadStatus(at: url)
+            if status == .notDownloaded {
+                UbiquityStore.shared.startDownload(at: url)
+                return
+            }
+            guard status == .downloaded else { return }
             let asset = AVURLAsset(url: url)
             if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
                 audioDuration = cm.seconds

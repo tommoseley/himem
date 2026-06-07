@@ -9,6 +9,17 @@ import AVFoundation
 /// The transcript area is the edit control. Cancel discards changes;
 /// Done saves the (trimmed) text via `onSaveTranscript` if it differs
 /// from the initial value.
+///
+/// **Three media states** (per `docs/design/Storage architecture · CLAUDE.md`
+/// Rule 4 — be honest in UX):
+/// - `.ready`: file is downloaded, normal player UI.
+/// - `.downloading`: file is in iCloud but not yet local. Spinner +
+///   "Downloading from iCloud" label replaces the play button. Polls
+///   every 1s until ready or missing.
+/// - `.missing`: file is neither local nor in iCloud (deleted by the
+///   user via Files.app, or never made it to iCloud). Honest
+///   "Original audio is not available" label; transcript editor still
+///   surfaces the memory itself.
 struct AudioPlayerSheet: View {
     let filename: String
     let recordedAt: Date?
@@ -23,11 +34,20 @@ struct AudioPlayerSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var player = AudioPlayerService.shared
+    @State private var mediaState: MediaState = .checking
     @State private var totalDuration: TimeInterval = 0
     @State private var currentTime: TimeInterval = 0
     @State private var tickTimer: Timer?
+    @State private var downloadPollTimer: Timer?
     @State private var draftTranscript: String = ""
     @State private var isRetryingTranscription = false
+
+    enum MediaState: Equatable {
+        case checking
+        case downloading
+        case ready
+        case missing
+    }
 
     var body: some View {
         NavigationStack {
@@ -58,12 +78,14 @@ struct AudioPlayerSheet: View {
         }
         .task {
             draftTranscript = initialTranscript
-            await loadDuration()
+            await resolveMediaState()
             startTicking()
         }
         .onDisappear {
             tickTimer?.invalidate()
             tickTimer = nil
+            downloadPollTimer?.invalidate()
+            downloadPollTimer = nil
             // If this clip is what's playing, stop it on dismiss so the
             // user isn't surprised by audio continuing without a UI.
             if player.currentFile == filename {
@@ -89,7 +111,64 @@ struct AudioPlayerSheet: View {
 
     // MARK: - Player controls
 
+    @ViewBuilder
     private var playerControls: some View {
+        switch mediaState {
+        case .checking:
+            checkingControls
+        case .downloading:
+            downloadingControls
+        case .ready:
+            readyControls
+        case .missing:
+            missingControls
+        }
+    }
+
+    private var checkingControls: some View {
+        HStack {
+            Spacer()
+            ProgressView()
+                .controlSize(.small)
+            Spacer()
+        }
+        .frame(height: 80)
+    }
+
+    private var downloadingControls: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text("Downloading from iCloud")
+                    .font(.subheadline)
+                    .foregroundStyle(Crucible.Color.ink2)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 80)
+        }
+        .accessibilityLabel("Downloading audio from iCloud")
+    }
+
+    private var missingControls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "icloud.slash")
+                    .foregroundStyle(Crucible.Color.ink3)
+                Text("Original audio is not available")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Crucible.Color.ink2)
+            }
+            Text("The transcript below is the saved memory. The original recording isn't on this device or in your iCloud.")
+                .font(.caption)
+                .foregroundStyle(Crucible.Color.ink3)
+                .lineSpacing(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .accessibilityLabel("Original audio is not available; transcript is the saved memory")
+    }
+
+    private var readyControls: some View {
         VStack(spacing: 12) {
             ProgressView(value: progress)
                 .tint(Crucible.Color.Media.audio)
@@ -149,7 +228,7 @@ struct AudioPlayerSheet: View {
             .font(.footnote.weight(.semibold))
             .foregroundStyle(Crucible.Color.accent)
             .buttonStyle(.plain)
-            .disabled(isRetryingTranscription)
+            .disabled(isRetryingTranscription || mediaState != .ready)
             .padding(.top, 2)
         }
     }
@@ -196,10 +275,18 @@ struct AudioPlayerSheet: View {
     }
 
     private var durationLabel: String {
-        formatTime(totalDuration)
+        switch mediaState {
+        case .ready:
+            return formatTime(totalDuration)
+        case .downloading, .checking:
+            return "…"
+        case .missing:
+            return "—"
+        }
     }
 
     private func togglePlay() {
+        guard mediaState == .ready else { return }
         if isPlayingThisClip {
             player.stop()
         } else {
@@ -207,18 +294,62 @@ struct AudioPlayerSheet: View {
         }
     }
 
-    // MARK: - Time tracking
+    // MARK: - Media-state resolution
 
-    private func loadDuration() async {
-        // No `fileExists` pre-check — `try? asset.load(.duration)`
-        // returns nil for missing files; the synchronous disk hit was
-        // a needless main-thread block on sheet present.
+    /// Reads the ubiquity download status and either kicks off a
+    /// download (and starts polling) or loads the duration directly.
+    /// Called from `.task` on appear.
+    private func resolveMediaState() async {
         let url = SpeechService.audioURL(for: filename)
+        let status = UbiquityStore.shared.downloadStatus(at: url)
+        switch status {
+        case .downloaded:
+            await loadReady(url: url)
+        case .notDownloaded:
+            UbiquityStore.shared.startDownload(at: url)
+            mediaState = .downloading
+            startDownloadPolling(url: url)
+        case .downloading:
+            mediaState = .downloading
+            startDownloadPolling(url: url)
+        case .missing:
+            mediaState = .missing
+        }
+    }
+
+    private func loadReady(url: URL) async {
         let asset = AVURLAsset(url: url)
         if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
             totalDuration = cm.seconds
         }
+        mediaState = .ready
     }
+
+    /// Polls the download status every 1s. Cancels itself when the
+    /// state resolves to `.ready` or `.missing`. The view's
+    /// `.onDisappear` invalidates the timer if the user closes the
+    /// sheet during download.
+    private func startDownloadPolling(url: URL) {
+        downloadPollTimer?.invalidate()
+        downloadPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
+            Task { @MainActor in
+                let status = UbiquityStore.shared.downloadStatus(at: url)
+                switch status {
+                case .downloaded:
+                    timer.invalidate()
+                    await loadReady(url: url)
+                case .missing:
+                    timer.invalidate()
+                    mediaState = .missing
+                case .downloading, .notDownloaded:
+                    // Keep polling.
+                    break
+                }
+            }
+        }
+    }
+
+    // MARK: - Time tracking
 
     /// AudioPlayerService doesn't expose a currentTime stream, so we tick a
     /// timer at 4Hz and ask the underlying player. Cheap; this view is on
