@@ -100,7 +100,7 @@ struct EntryAppendCoordinatorTests {
     @Test func attach_emptyIds_doesNotAppend() {
         let (storage, lifecycle, entry, coord) = makeContext()
         let before = fragmentCount(for: entry, in: storage)
-        coord.apply(.attach(localIdentifiers: []),
+        coord.apply(.attach(items: []),
                     to: entry.id,
                     using: lifecycle,
                     context: storage.viewContext)

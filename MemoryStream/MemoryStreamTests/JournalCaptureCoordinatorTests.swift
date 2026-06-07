@@ -119,7 +119,7 @@ struct JournalCaptureCoordinatorTests {
         let (storage, vm, coord) = makeContext()
         let before = memoryCount(in: storage)
         let id = coord.createNewMemory(
-            from: .attach(localIdentifiers: []),
+            from: .attach(items: []),
             viewModel: vm,
             seedNote: nil
         )

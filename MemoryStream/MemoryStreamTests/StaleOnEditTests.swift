@@ -72,6 +72,69 @@ struct StaleOnEditTests {
         #expect(bumped >= before)
     }
 
+    /// Money test 2b: editing a photo's `mediaDescription` bumps
+    /// `lastEditedAt` AND flows into the joined-content stream so
+    /// AI Organize + search see the description like a transcript.
+    /// Locks the data contract from
+    /// `docs/design/HiMem · Photo Descriptions.html`.
+    @Test func updateMediaDescription_writesAndFeedsContent() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        let photo = try storage.createMediaReference(
+            for: entry,
+            localIdentifier: "photo.jpg",
+            mediaType: .image
+        )
+        photo.createdAt = Date(timeIntervalSinceReferenceDate: 0)
+        try storage.viewContext.save()
+        #expect(photo.mediaDescription == nil)
+        #expect(photo.lastEditedAt == nil)
+        // Sanity: with no description, joinedContent emits nothing for
+        // the photo (parallel to a no-transcript voice ref).
+        #expect(EntryLifecycleService.joinedContent(from: entry).isEmpty)
+
+        let before = Date()
+        service.updateMediaDescription(
+            mediaId: photo.id,
+            description: "Cedar raised bed after the soil went in.",
+            entryId: entry.id
+        )
+
+        let refreshed = try #require(fetchMediaRef(photo.id, in: storage))
+        #expect(refreshed.mediaDescription == "Cedar raised bed after the soil went in.")
+        let bumped = try #require(refreshed.lastEditedAt)
+        #expect(bumped >= before)
+        // Money assertion: the description now flows into joined
+        // content, which is what AI Organize and search read.
+        let refreshedEntry = try #require(fetchEntry(entry.id, in: storage))
+        let joined = EntryLifecycleService.joinedContent(from: refreshedEntry)
+        #expect(joined.contains("Cedar raised bed"))
+    }
+
+    /// Empty-string update clears the description and removes it from
+    /// joined content. Mirrors the "user deletes their note" path.
+    @Test func updateMediaDescription_emptyClearsField() throws {
+        let (storage, service) = makeService()
+        let entry = try service.createEmptyEntry(inputType: .composed)
+        let photo = try storage.createMediaReference(
+            for: entry,
+            localIdentifier: "photo.jpg",
+            mediaType: .image
+        )
+        photo.mediaDescription = "first draft"
+        photo.createdAt = Date(timeIntervalSinceReferenceDate: 0)
+        try storage.viewContext.save()
+        let joinedBefore = EntryLifecycleService.joinedContent(from: entry)
+        #expect(joinedBefore.contains("first draft"))
+
+        service.updateMediaDescription(mediaId: photo.id, description: "   ", entryId: entry.id)
+
+        let refreshed = try #require(fetchMediaRef(photo.id, in: storage))
+        #expect(refreshed.mediaDescription == nil)
+        let refreshedEntry = try #require(fetchEntry(entry.id, in: storage))
+        #expect(EntryLifecycleService.joinedContent(from: refreshedEntry) == "")
+    }
+
     /// Money test 2: editing a voice fragment's transcript bumps
     /// `lastEditedAt`. Transcript edits are the other clip-content
     /// mutation path the user can drive from the detail view.

@@ -29,6 +29,10 @@ struct ChronologicalCaptureStream: View {
     let onOpenVoice: (MediaDisplayItem) -> Void
     /// Opens the NoteEditorSheet for a note fragment — fires on leading swipe.
     let onOpenNote: (MediaDisplayItem) -> Void
+    /// Opens the full-frame photo / video viewer for a photo or video
+    /// item. The viewer hosts read + edit of the
+    /// `MediaDisplayItem.mediaDescription` per
+    /// `docs/design/HiMem · Photo Descriptions.html`.
     let onTapPhoto: (MediaDisplayItem) -> Void
 
     var body: some View {
@@ -66,15 +70,22 @@ struct ChronologicalCaptureStream: View {
                             Label("Delete", systemImage: "trash")
                         }
                     }
-            case .photoStrip(let items):
-                PhotoFilmstripPanel(
-                    items: items,
-                    onDelete: onDeleteMedia,
-                    onTap: onTapPhoto
-                )
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            case .media(let item):
+                MediaCard(item: item, onTap: { onTapPhoto(item) })
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button { onTapPhoto(item) } label: {
+                            Label("Describe", systemImage: "pencil")
+                        }
+                        .tint(Crucible.Color.accent)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) { onDeleteMedia(item.id) } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
             }
         }
     }
@@ -85,46 +96,15 @@ struct ChronologicalCaptureStream: View {
     /// `MediaDisplayItem`; the legacy `TextSegment`-flavored note path is
     /// gone.
     private var panels: [Panel] {
-        struct Item { let createdAt: Date; let kind: ItemKind }
-        enum ItemKind {
-            case voice(MediaDisplayItem)
-            case note(MediaDisplayItem)
-            case photoOrVideo(MediaDisplayItem)
-        }
-
-        var items: [Item] = []
-        for media in entry.mediaItems {
-            switch media.mediaType {
-            case .voice: items.append(Item(createdAt: media.createdAt, kind: .voice(media)))
-            case .note:  items.append(Item(createdAt: media.createdAt, kind: .note(media)))
-            case .image, .video: items.append(Item(createdAt: media.createdAt, kind: .photoOrVideo(media)))
-            }
-        }
-        items.sort { $0.createdAt < $1.createdAt }
-
         var result: [Panel] = []
-        var currentStrip: [MediaDisplayItem] = []
-
-        func flushStrip() {
-            if !currentStrip.isEmpty {
-                result.append(Panel(kind: .photoStrip(currentStrip)))
-                currentStrip = []
+        let sorted = entry.mediaItems.sorted { $0.createdAt < $1.createdAt }
+        for media in sorted {
+            switch media.mediaType {
+            case .voice: result.append(Panel(kind: .voice(media)))
+            case .note:  result.append(Panel(kind: .note(media)))
+            case .image, .video: result.append(Panel(kind: .media(media)))
             }
         }
-
-        for item in items {
-            switch item.kind {
-            case .voice(let media):
-                flushStrip()
-                result.append(Panel(kind: .voice(media)))
-            case .note(let media):
-                flushStrip()
-                result.append(Panel(kind: .note(media)))
-            case .photoOrVideo(let media):
-                currentStrip.append(media)
-            }
-        }
-        flushStrip()
         return result
     }
 
@@ -132,14 +112,20 @@ struct ChronologicalCaptureStream: View {
         enum Kind {
             case voice(MediaDisplayItem)
             case note(MediaDisplayItem)
-            case photoStrip([MediaDisplayItem])
+            /// Photo or video as a full-width per-item card with a
+            /// description. Replaces the prior `photoStrip` grouping
+            /// — per `docs/design/HiMem · Photo Descriptions.html`,
+            /// each photo/video is its own card so the empty-state
+            /// description prompt or filled description has room to
+            /// render alongside the media.
+            case media(MediaDisplayItem)
         }
         let kind: Kind
         var id: String {
             switch kind {
             case .voice(let item): return "voice-\(item.id.uuidString)"
             case .note(let item): return "note-\(item.id.uuidString)"
-            case .photoStrip(let items): return "strip-" + items.map(\.id.uuidString).joined(separator: ",")
+            case .media(let item): return "media-\(item.id.uuidString)"
             }
         }
     }
@@ -196,6 +182,171 @@ private struct NotePanel: View {
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
+    }
+}
+
+// MARK: - Media card (photo / video with description)
+
+/// Full-width per-item card for a photo or video in the chronological
+/// stream. Per `docs/design/HiMem · Photo Descriptions.html`: the
+/// description sits below the thumbnail as derived content; the photo
+/// or video stays first-class. Tap the card to open the full-frame
+/// viewer where the user can read or edit the description.
+struct MediaCard: View {
+    let item: MediaDisplayItem
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 10) {
+                CaptureTimestampLabel(date: item.createdAt, placeName: item.placeName)
+                MediaCardThumbnail(item: item)
+                if let desc = item.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+                    MediaDescriptionFilled(text: desc)
+                } else {
+                    MediaDescriptionEmpty()
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Crucible.Color.card)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Crucible.Color.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Thumbnail tile that drives the visual presence inside `MediaCard`.
+/// Loads the photo via `ThumbnailService` and overlays a small
+/// type/duration chip plus a play badge for video. Mirrors the design's
+/// `MediaThumb` component.
+private struct MediaCardThumbnail: View {
+    let item: MediaDisplayItem
+    @State private var thumbnail: UIImage?
+
+    private let height: CGFloat = 168
+
+    var body: some View {
+        ZStack(alignment: .center) {
+            if let thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Crucible.Color.sunk)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+                    .overlay {
+                        Image(systemName: item.mediaType == .video ? "video" : "photo")
+                            .font(.system(size: 28))
+                            .foregroundStyle(Crucible.Color.ink4)
+                    }
+            }
+            if item.mediaType == .video {
+                Circle()
+                    .fill(Color.black.opacity(0.5))
+                    .frame(width: 46, height: 46)
+                    .overlay {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.white)
+                    }
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            typeChip
+                .padding(9)
+        }
+        .frame(height: height)
+        .task(id: item.id) {
+            guard thumbnail == nil else { return }
+            if let cached = await ThumbnailService.shared.cacheThumbnail(for: item.localIdentifier) {
+                thumbnail = ThumbnailService.shared.cachedThumbnail(filename: cached)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var typeChip: some View {
+        HStack(spacing: 4) {
+            if item.mediaType == .video {
+                Image(systemName: "play.fill").font(.system(size: 9))
+            }
+            Text(item.mediaType == .video ? "Video" : "Photo")
+        }
+        .font(.system(size: 10.5, weight: .semibold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color.black.opacity(0.62))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .textCase(.uppercase)
+    }
+}
+
+/// Empty-state description prompt. Ochre invitation card — per the
+/// design's color discipline, descriptions are HUMAN-written so the
+/// affordance is the user-action color, never AI blue.
+struct MediaDescriptionEmpty: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(Crucible.Color.accent)
+                    .frame(width: 26, height: 26)
+                Image(systemName: "pencil")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.white)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Add a description")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.accent)
+                Text("A few words make this searchable and help HiMem organize the memory.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .lineSpacing(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(Crucible.Color.accentTint)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// Filled-state description. The description becomes the card's body
+/// text — parallel to a voice clip's transcript. Small Edit affordance
+/// underneath, in ochre.
+struct MediaDescriptionFilled: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("DESCRIPTION")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(1.4)
+                .foregroundStyle(Crucible.Color.ink3)
+            Text(text)
+                .font(.system(size: 14.5))
+                .foregroundStyle(Crucible.Color.ink)
+                .lineSpacing(3)
+            HStack(spacing: 5) {
+                Image(systemName: "pencil")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Edit")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.accent)
+        }
     }
 }
 

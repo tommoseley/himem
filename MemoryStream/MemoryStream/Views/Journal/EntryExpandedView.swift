@@ -222,7 +222,9 @@ struct EntryExpandedView: View {
             .presentationDetents([.large])
         }
         .fullScreenCover(item: $selectedMedia) { item in
-            MediaViewerView(item: item)
+            MediaViewerView(item: item) { newDescription in
+                updateMediaDescription(id: item.id, text: newDescription)
+            }
         }
         .sheet(isPresented: $showShareSheet) {
             let composed = "\(entry.displayTitle)\n\n\(entry.content)"
@@ -927,6 +929,10 @@ struct EntryExpandedView: View {
 
     private func updateNoteFragment(id: UUID, text: String) {
         lifecycle.updateNoteFragment(id: id, text: text, entryId: entry.id)
+    }
+
+    private func updateMediaDescription(id: UUID, text: String) {
+        lifecycle.updateMediaDescription(mediaId: id, description: text, entryId: entry.id)
     }
 
     private func updateMediaTranscript(id: UUID, text: String) {
