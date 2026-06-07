@@ -1,6 +1,5 @@
 import SwiftUI
 import AppIntents
-import Combine
 import UserNotifications
 
 @MainActor
@@ -136,22 +135,6 @@ class SceneDelegate: NSObject, UIWindowSceneDelegate {
     }
 }
 
-@MainActor
-private final class ConnectivityReprocessor {
-    static let shared = ConnectivityReprocessor()
-    private var cancellable: AnyCancellable?
-
-    func start() {
-        guard cancellable == nil else { return }
-        cancellable = ConnectivityMonitor.shared.$isConnected
-            .removeDuplicates()
-            .dropFirst() // skip the initial value; only act on real transitions
-            .filter { $0 } // only when connectivity returns
-            .sink { _ in
-                Task { await ProcessingEngine.shared.reprocessLocallyHandledEntries() }
-            }
-    }
-}
 
 @main
 struct MemoryStreamApp: App {
@@ -290,7 +273,6 @@ struct MemoryStreamApp: App {
             .preferredColorScheme(appearance.colorScheme)
             .onAppear {
                 auth.verifyCredentialState()
-                ConnectivityReprocessor.shared.start()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }

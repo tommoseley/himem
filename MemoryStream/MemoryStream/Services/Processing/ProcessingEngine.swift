@@ -55,6 +55,16 @@ final class ProcessingEngine {
     /// the report attributes spend to the tier in force. Tests inject
     /// a fixed string for determinism.
     private let readTier: @MainActor () -> String
+    /// Whether the on-device organizer is available on this device.
+    /// In production reads `OnDeviceOrganizer.availabilityError()`;
+    /// tests inject a fixed Bool to exercise the AI-vs-no-AI routing
+    /// buckets without depending on the Apple Foundation Models stack
+    /// being installed in the test environment.
+    private let hasAvailableAI: () -> Bool
+    /// Reads `Entitlement.shared.isPlus` in production; tests can
+    /// inject a fixed Bool to drive the Plus-vs-Free routing buckets
+    /// without touching the shared singleton.
+    private let isPlus: @MainActor () -> Bool
 
     init(
         storage: StorageService = .shared,
@@ -63,7 +73,9 @@ final class ProcessingEngine {
         localExtractor: EntityExtractor = LocalEntityExtractor.shared,
         connectivity: ConnectivityMonitor = .shared,
         useOnDevice: Bool = ProcessingEngine.defaultUseOnDevice,
-        readTier: @escaping @MainActor () -> String = { Entitlement.shared.tierLabel }
+        readTier: @escaping @MainActor () -> String = { Entitlement.shared.tierLabel },
+        hasAvailableAI: @escaping () -> Bool = { OnDeviceOrganizer.availabilityError() == nil },
+        isPlus: @escaping @MainActor () -> Bool = { Entitlement.shared.isPlus }
     ) {
         self.storage = storage
         self.analyzer = analyzer
@@ -72,6 +84,8 @@ final class ProcessingEngine {
         self.connectivity = connectivity
         self.useOnDevice = useOnDevice
         self.readTier = readTier
+        self.hasAvailableAI = hasAvailableAI
+        self.isPlus = isPlus
     }
 
     // MARK: - Process Entry
@@ -102,21 +116,43 @@ final class ProcessingEngine {
             }
         }
 
-        // Default-on after the assist-quota retirement: Foundation
-        // Models runs on-device when available; failure falls through
-        // to the cloud path. The flag exists for debug/forced-cloud
-        // testing only — see `defaultUseOnDevice`.
-        if useOnDevice,
-           OnDeviceOrganizer.availabilityError() == nil {
+        // Routing matrix (2026-06-06):
+        //
+        //   tier | hasAI | online | primary    | fallback
+        //   -----+-------+--------+------------+-----------------
+        //   Plus |  yes  |  yes   | Anthropic  | AI → NLTagger
+        //   Plus |  yes  |  no    | AI         | NLTagger
+        //   Plus |  no   |  yes   | Anthropic  | NLTagger
+        //   Plus |  no   |  no    | NLTagger   | —
+        //   Free |  yes  |  yes   | AI         | NLTagger
+        //   Free |  yes  |  no    | AI         | NLTagger
+        //   Free |  no   |  yes   | Anthropic  | NLTagger
+        //   Free |  no   |  no    | NLTagger   | —
+        //
+        // Condition collapses to: try Anthropic iff
+        //   online && (isPlus || !hasAI)
+        // Otherwise the hierarchy is AI → NLTagger. Free with AI
+        // never sees Anthropic; Plus always sees it when online; Free
+        // without AI gets Anthropic as their only AI-quality path.
+        //
+        // No reprocess-on-reconnect: once an organize runs, it sticks
+        // until the user explicitly taps Reorganize (see memory entry
+        // `feedback_no_auto_reprocess`).
+        let plus = await MainActor.run { self.isPlus() }
+        let hasAI = useOnDevice && hasAvailableAI()
+        let shouldTryAnthropic = connectivity.isConnected && (plus || !hasAI)
+
+        if shouldTryAnthropic {
+            let succeeded = await processWithCloud(objectID: objectID, content: content, context: context)
+            if succeeded { return }
+        }
+
+        if hasAI {
             let succeeded = await processWithOnDevice(objectID: objectID, content: content, context: context)
             if succeeded { return }
         }
 
-        if connectivity.isConnected {
-            await processWithCloud(objectID: objectID, content: content, context: context)
-        } else {
-            await processLocally(objectID: objectID, content: content, context: context)
-        }
+        await processLocally(objectID: objectID, content: content, context: context)
     }
 
     // MARK: - On-device Processing (PR 8a, debug-gated)
@@ -145,7 +181,13 @@ final class ProcessingEngine {
 
     // MARK: - Cloud Processing
 
-    private func processWithCloud(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async {
+    /// Returns `true` if the cloud call succeeded and the result was
+    /// committed. Returns `false` on any failure — connectivity drop,
+    /// timeout, server error, save failure — and leaves the caller to
+    /// route the fallback. The caller is responsible for trying the
+    /// on-device organizer next, then `processLocally` as the last
+    /// resort.
+    private func processWithCloud(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async -> Bool {
         do {
             let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
 
@@ -162,14 +204,10 @@ final class ProcessingEngine {
                 action: "memory_organize"
             )
 
-            _ = await applyAnalysisResult(result, to: objectID, in: context)
+            return await applyAnalysisResult(result, to: objectID, in: context)
         } catch {
-            // Cloud unreachable or timed out (weak connection, server error,
-            // auth failure). Don't mark .failed and leave the user stuck —
-            // fall back to local entity extraction so the entry still gets
-            // useful tags. The reconnect watcher will re-process it via
-            // cloud once connectivity is good.
-            await processLocally(objectID: objectID, content: content, context: context)
+            NSLog("[HiMem][Organize] cloud pass failed, falling through: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -221,34 +259,30 @@ final class ProcessingEngine {
     /// reorganize rethinks the *interpretation* fields; the *fact*
     /// fields (topics, mentions) are user-managed and stable.
     ///
-    /// Routing matches `processEntry` — on-device first when available,
-    /// cloud fallback otherwise. Any topics or mentions the analyzer
-    /// returns are discarded silently. The resulting `OrganizePass`
-    /// enters the standard draft lifecycle (`dismissedAt = nil` →
-    /// `isReviewed = false` → chip flips to *"Draft organized"*); the
-    /// ReorganizeReviewSheet handles per-field accept-or-keep.
+    /// Routing matches `processEntry` (see the matrix there): try
+    /// Anthropic iff `online && (isPlus || !hasAI)`; otherwise AI
+    /// when available. NLTagger is *not* a fallback for reorganize —
+    /// the spec's "failed passes change nothing" overrides the
+    /// last-resort tier, since NLTagger can't produce a summary or
+    /// title and reorganize only writes those two fields.
     ///
-    /// A failed pass leaves prior state intact — no partial write, no
-    /// pass record — per the spec's "failed passes change nothing."
+    /// Any topics or mentions the analyzer returns are discarded
+    /// silently. The resulting `OrganizePass` enters the standard
+    /// draft lifecycle (`dismissedAt = nil` → `isReviewed = false` →
+    /// chip flips to *"Draft organized"*); the ReorganizeReviewSheet
+    /// handles per-field accept-or-keep.
     func processReorganize(_ entry: JournalEntry) async {
         let objectID = entry.objectID
         let content = entry.content
         let context = storage.backgroundContext()
         let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
 
-        // On-device first when available.
-        var result: ClaudeAPIService.AnalysisResult?
-        if useOnDevice, OnDeviceOrganizer.availabilityError() == nil {
-            result = try? await onDeviceOrganizer.organize(
-                content: content,
-                existingTopics: existingTopics,
-                existingMentions: existingMentions
-            )
-        }
+        let plus = await MainActor.run { self.isPlus() }
+        let hasAI = useOnDevice && hasAvailableAI()
+        let shouldTryAnthropic = connectivity.isConnected && (plus || !hasAI)
 
-        // Cloud fallback. Skipped if on-device already produced a
-        // result, or if we're offline.
-        if result == nil, connectivity.isConnected {
+        var result: ClaudeAPIService.AnalysisResult?
+        if shouldTryAnthropic {
             let tier = await MainActor.run { self.readTier() }
             result = try? await analyzer.analyzeEntry(
                 content,
@@ -256,6 +290,13 @@ final class ProcessingEngine {
                 existingMentions: existingMentions,
                 tier: tier,
                 action: "memory_organize"
+            )
+        }
+        if result == nil, hasAI {
+            result = try? await onDeviceOrganizer.organize(
+                content: content,
+                existingTopics: existingTopics,
+                existingMentions: existingMentions
             )
         }
 
@@ -291,50 +332,6 @@ final class ProcessingEngine {
     }
 
     // MARK: - Queue Processing
-
-    /// Finds entries that were processed via the local fallback (extracted
-    /// entities all marked `processingMethod = "local"`) and re-runs them
-    /// through the cloud analyzer. Wired to fire on connectivity-restored
-    /// transitions so memories captured offline get upgraded once the user
-    /// is back online.
-    func reprocessLocallyHandledEntries() async {
-        // Auto-reprocess only runs for Plus users — Free uses
-        // on-device organize, which already ran inline and doesn't
-        // need a cloud upgrade on reconnect.
-        let entitled: Bool = await MainActor.run { Entitlement.shared.isPlus }
-        guard entitled else { return }
-
-        let viewContext = storage.viewContext
-        let entryIDs: [NSManagedObjectID] = await viewContext.perform {
-            let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
-            request.predicate = NSPredicate(format: "processingMethod == %@", "local")
-            let entities = (try? viewContext.fetch(request)) ?? []
-            let ids = Set(entities.compactMap { $0.entry?.objectID })
-            return Array(ids)
-        }
-
-        guard !entryIDs.isEmpty else { return }
-
-        for entryID in entryIDs {
-            let entry: JournalEntry? = await viewContext.perform {
-                guard let entry = try? viewContext.existingObject(with: entryID) as? JournalEntry else { return nil }
-                let entities = entry.extractedEntities as? Set<ExtractedEntity> ?? []
-                for entity in entities { viewContext.delete(entity) }
-                if let summary = entry.inferenceSummary { viewContext.delete(summary) }
-                if let task = entry.latestProcessingTask() {
-                    task.status = ProcessingTask.Status.pending.rawValue
-                    task.processedAt = nil
-                    task.errorMessage = nil
-                    task.progressDescription = nil
-                }
-                try? viewContext.save()
-                return entry
-            }
-            if let entry {
-                await processEntry(entry)
-            }
-        }
-    }
 
     func processPendingTasks() async {
         let context = storage.backgroundContext()

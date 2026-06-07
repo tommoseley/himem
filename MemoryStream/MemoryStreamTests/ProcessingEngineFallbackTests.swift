@@ -106,10 +106,6 @@ struct ProcessingEngineFallbackTests {
         #expect(entities.allSatisfy { $0.processingMethod == "local" })
     }
 
-    /// Money test for the connectivity-restored re-processing path. An entry
-    /// processed via the local fallback should be re-analyzed via cloud once
-    /// `reprocessLocallyHandledEntries()` fires (which the app wires to a
-    /// connectivity-restored transition).
     /// Happy path: cloud analyzer succeeds → entry gets entities, topics,
     /// and an inference summary; task ends .completed with method=cloud.
     @Test func processEntry_cloudSuccess_storesEverything() async throws {
@@ -244,53 +240,156 @@ struct ProcessingEngineFallbackTests {
         #expect(entities.count == 2, "Two unique (type, value) pairs collapse to two entities")
     }
 
-    @Test func reprocess_upgradesLocalEntriesToCloud() async throws {
-        // `reprocessLocallyHandledEntries` only runs for Plus users —
-        // Free uses on-device organize and doesn't need the cloud
-        // upgrade. Flip Plus on for the test.
-        let prior = Entitlement.shared.developerOverridePlus
-        Entitlement.shared.developerOverridePlus = true
-        defer { Entitlement.shared.developerOverridePlus = prior }
+    // MARK: - Tier × AI routing (#39)
+    //
+    // Matrix being tested:
+    //
+    //   tier | hasAI | online | expected primary
+    //   -----+-------+--------+-----------------
+    //   Plus |  yes  |  yes   | Anthropic
+    //   Plus |  yes  |  no    | AI (NLTagger here — no real AI in tests)
+    //   Plus |  no   |  yes   | Anthropic (covered by existing tests)
+    //   Free |  yes  |  yes   | AI (never Anthropic)
+    //   Free |  no   |  yes   | Anthropic (covered by existing tests)
+    //
+    // The "no real AI" reality of the test environment is handled by
+    // injecting `hasAvailableAI: { Bool }` — `true` simulates an Apple
+    // FM device, `false` simulates an older device. With `hasAvailableAI`
+    // true, we still route as if AI is available; the onDeviceOrganizer
+    // stub decides whether it succeeds.
 
+    /// Stub Organizer for routing tests — returns a deterministic
+    /// `AnalysisResult` so the engine commits via `applyAnalysisResult`
+    /// (which writes `processingMethod = "cloud"` regardless of which
+    /// path produced it).
+    private struct SuccessfulOnDeviceOrganizer: Organizer {
+        let title: String
+        let entityValue: String
+        let topic: String
+        func organize(content: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult {
+            ClaudeAPIService.AnalysisResult(
+                entities: [.init(type: "person", value: entityValue, confidence: 0.95)],
+                topics: [topic],
+                summary: "on-device summary",
+                title: title,
+                nextSteps: nil
+            )
+        }
+    }
+
+    /// Stub Organizer that throws — exercises the AI-failed-fall-through
+    /// path without depending on Apple FM behavior.
+    private struct ThrowingOnDeviceOrganizer: Organizer {
+        struct StubError: Error {}
+        func organize(content: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult {
+            throw StubError()
+        }
+    }
+
+    /// Plus + online → Anthropic runs primary, AI is never called.
+    /// Verifies the cloud summary lands and the on-device stub doesn't
+    /// (it would have written "on-device summary" if it had).
+    @Test func processEntry_plus_online_hitsAnthropicNotAI() async throws {
         let storage = StorageService(inMemory: true)
-        // Deterministic stub instead of `LocalEntityExtractor.shared` —
-        // the iOS 26 simulator's NLTagger doesn't reliably tag the
-        // fixture text on a cold boot, and the test isn't about
-        // tagger quality. The stub gives us a single "Sarah" person
-        // so reprocess has something to upgrade.
-        let offlineEngine = ProcessingEngine(
+        let engine = ProcessingEngine(
+            storage: storage,
+            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
+            onDeviceOrganizer: SuccessfulOnDeviceOrganizer(title: "Should not appear", entityValue: "WrongName", topic: "WrongTopic"),
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: true,
+            hasAvailableAI: { true },
+            isPlus: { true }
+        )
+
+        let entry = try storage.createEntry(content: "Met with Sarah about the garden.", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+        await engine.processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+
+        let summaryRequest = NSFetchRequest<InferenceSummary>(entityName: "InferenceSummary")
+        summaryRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let summary = try storage.viewContext.fetch(summaryRequest).first
+        #expect(summary?.summaryText == "cloud summary", "Plus online must route to Anthropic, not the on-device organizer")
+    }
+
+    /// Free + AI available → on-device runs, Anthropic is never called.
+    /// If Anthropic ran the summary would say "cloud summary"; instead it
+    /// must say "on-device summary".
+    @Test func processEntry_free_withAI_hitsAINotAnthropic() async throws {
+        let storage = StorageService(inMemory: true)
+        let engine = ProcessingEngine(
+            storage: storage,
+            analyzer: SuccessfulAnalyzer(title: "Should not appear", entityValue: "WrongName", topic: "WrongTopic"),
+            onDeviceOrganizer: SuccessfulOnDeviceOrganizer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: true,
+            hasAvailableAI: { true },
+            isPlus: { false }
+        )
+
+        let entry = try storage.createEntry(content: "Met with Sarah about the garden.", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+        await engine.processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+
+        let summaryRequest = NSFetchRequest<InferenceSummary>(entityName: "InferenceSummary")
+        summaryRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let summary = try storage.viewContext.fetch(summaryRequest).first
+        #expect(summary?.summaryText == "on-device summary", "Free with AI must never hit Anthropic")
+    }
+
+    /// Plus + AI available + Anthropic fails → falls through to AI.
+    /// "AI offline fallback" path: simulates the user being online but the
+    /// cloud call failing (server hiccup, auth refresh in flight, etc.).
+    @Test func processEntry_plus_cloudFails_fallsBackToAI() async throws {
+        let storage = StorageService(inMemory: true)
+        let engine = ProcessingEngine(
             storage: storage,
             analyzer: ThrowingAnalyzer(),
+            onDeviceOrganizer: SuccessfulOnDeviceOrganizer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
             localExtractor: StubEntityExtractor.person("Sarah"),
-            useOnDevice: false
+            useOnDevice: true,
+            hasAvailableAI: { true },
+            isPlus: { true }
         )
 
-        let entry = try storage.createEntry(
-            content: "Met with Sarah at Stanford about the new garden project.",
-            inputType: .typed
-        )
+        let entry = try storage.createEntry(content: "Met with Sarah about the garden.", inputType: .typed)
         _ = try storage.createProcessingTask(for: entry)
-
-        await offlineEngine.processEntry(entry)
+        await engine.processEntry(entry)
         storage.viewContext.refreshAllObjects()
 
-        // Sanity: it really was processed locally.
-        let preEntities = try storage.viewContext.fetch(NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity"))
-        #expect(preEntities.allSatisfy { $0.processingMethod == "local" })
+        let summaryRequest = NSFetchRequest<InferenceSummary>(entityName: "InferenceSummary")
+        summaryRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let summary = try storage.viewContext.fetch(summaryRequest).first
+        #expect(summary?.summaryText == "on-device summary", "Plus when Anthropic fails must fall through to AI")
+    }
 
-        // Connectivity returns: simulate the reprocessor firing on the
-        // online transition.
-        let onlineEngine = ProcessingEngine(
+    /// Free + AI available + AI fails → NLTagger fallback (no Anthropic).
+    /// Edge case: AI is "available" per the static check but throws at
+    /// runtime. Free must not silently escalate to Anthropic just because
+    /// AI failed — that would violate the Free-never-hits-Anthropic rule.
+    @Test func processEntry_free_withAI_failure_fallsToNLTaggerNotCloud() async throws {
+        let storage = StorageService(inMemory: true)
+        let engine = ProcessingEngine(
             storage: storage,
-            analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"), useOnDevice: false
+            analyzer: SuccessfulAnalyzer(title: "Should not appear", entityValue: "WrongName", topic: "WrongTopic"),
+            onDeviceOrganizer: ThrowingOnDeviceOrganizer(),
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: true,
+            hasAvailableAI: { true },
+            isPlus: { false }
         )
-        await onlineEngine.reprocessLocallyHandledEntries()
+
+        let entry = try storage.createEntry(content: "Met with Sarah about the garden.", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+        await engine.processEntry(entry)
         storage.viewContext.refreshAllObjects()
 
-        let postEntities = try storage.viewContext.fetch(NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity"))
-        #expect(!postEntities.isEmpty)
-        #expect(postEntities.allSatisfy { $0.processingMethod == "cloud" })
-        #expect(postEntities.contains { $0.value == "Sarah" })
+        let entityRequest = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
+        entityRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        let entities = try storage.viewContext.fetch(entityRequest)
+        #expect(!entities.isEmpty)
+        #expect(entities.allSatisfy { $0.processingMethod == "local" }, "Free with AI failure must fall to NLTagger, never escalate to Anthropic")
     }
 
     // MARK: - Reorganize (PR 8g.1)
