@@ -211,6 +211,15 @@ struct MemoryStreamApp: App {
         Task.detached(priority: .userInitiated) {
             _ = StorageService.shared
         }
+        // Resolve the iCloud Drive ubiquity container off-main during
+        // launch. Apple's docs (FileManager.url(forUbiquityContainerIdentifier:))
+        // require this to run on a background queue — the first call
+        // after a fresh install or restore can take seconds to return
+        // while iCloud configures the container. See
+        // `docs/design/Storage architecture · CLAUDE.md`.
+        Task.detached(priority: .userInitiated) {
+            await UbiquityStore.shared.warmUp()
+        }
         // Pre-warm the en-US SpeechTranscriber model so the first watch
         // clip transcription isn't a blocking download. Best-effort —
         // logs and moves on if the install fails (no network, etc.); the
