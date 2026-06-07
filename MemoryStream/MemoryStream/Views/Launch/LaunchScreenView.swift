@@ -291,6 +291,11 @@ struct LaunchScreenView: View {
         // `UbiquityStore.warmUp()` to have resolved the container; if not,
         // the call is a no-op and re-runs next launch.
         UbiquityStore.shared.migrateSandboxFilesIfNeeded()
+        // Schedule the PHAsset→ubiquity migration as a background task.
+        // Returns immediately; the actual byte-extract + Core Data
+        // rewrite happens off the main queue and re-runs next launch
+        // if interrupted. See `MediaReferenceUbiquityMigration`.
+        MediaReferenceUbiquityMigration.scheduleIfNeeded(in: StorageService.shared)
         if FragmentMigration.hasCompleted { return }
         let context = StorageService.shared.backgroundContext()
         context.perform {
