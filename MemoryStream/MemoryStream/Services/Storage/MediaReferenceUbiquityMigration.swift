@@ -35,21 +35,44 @@ enum MediaReferenceUbiquityMigration {
 
     private static let completionKey = "himem.media.ubiquityMigrationV1Complete"
 
+    /// One-task-at-a-time gate. `LaunchScreenView.runMigration()` fires
+    /// from multiple lifecycle hooks (`.onAppear` + the CK-settled
+    /// callback), and without this gate the same 9-row migration ran
+    /// concurrently 3× on Tom's 2026-06-07 device test — producing
+    /// duplicate ubiquity files for each PHAsset before one task
+    /// "won" the final `osIdentifier` write. The gate is a single
+    /// `Bool` protected by `scheduleLock`; subsequent calls bail
+    /// while a migration is in flight.
+    private static let scheduleLock = NSLock()
+    private static var isScheduled = false
+
     static var hasCompleted: Bool {
         UserDefaults.standard.bool(forKey: completionKey)
     }
 
     /// Launches the migration as a background task. Returns immediately;
     /// the migration runs to completion (or partial completion) in the
-    /// background and re-runs next launch if interrupted.
+    /// background and re-runs next launch if interrupted. Idempotent
+    /// against repeat callers within a single session — only one task
+    /// runs at a time.
     static func scheduleIfNeeded(in storage: StorageService) {
         if hasCompleted { return }
         // Only run when ubiquity is actually available — otherwise
         // we'd "migrate" by moving bytes from PhotoKit into sandbox,
         // gaining nothing and losing the PhotoKit pointer.
         guard UbiquityStore.shared.containerURL != nil else { return }
+        scheduleLock.lock()
+        if isScheduled {
+            scheduleLock.unlock()
+            return
+        }
+        isScheduled = true
+        scheduleLock.unlock()
         Task.detached(priority: .background) {
             await runIfNeeded(in: storage)
+            scheduleLock.lock()
+            isScheduled = false
+            scheduleLock.unlock()
         }
     }
 
