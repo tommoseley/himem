@@ -35,6 +35,13 @@ struct MediaViewerView: View {
     /// path only). Used by `onDisappear` to deactivate symmetrically.
     @State private var activatedAudioSession = false
     @State private var draftDescription: String = ""
+    /// The committed-and-currently-displayed description. The viewer's
+    /// `item` is a struct snapshot from the parent — it doesn't update
+    /// when the user saves a new description, so the reader has to
+    /// track its own committed state. Initialized from
+    /// `item.mediaDescription` in `.task`; updated by
+    /// `commitAndReturnToReading`.
+    @State private var savedDescription: String?
     @State private var isEditing: Bool = false
     @FocusState private var editorFocused: Bool
 
@@ -52,6 +59,7 @@ struct MediaViewerView: View {
             }
         }
         .task {
+            savedDescription = item.mediaDescription
             draftDescription = item.mediaDescription ?? ""
             await load()
         }
@@ -183,7 +191,10 @@ struct MediaViewerView: View {
 
     @ViewBuilder
     private var reader: some View {
-        if let desc = item.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+        // Reads `savedDescription` (local @State) not `item.mediaDescription`
+        // — `item` is a parent-side snapshot that doesn't update when
+        // the user commits a new description from inside the viewer.
+        if let desc = savedDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
             ScrollView {
                 Text(desc)
                     .font(.system(size: 14.5))
@@ -231,7 +242,7 @@ struct MediaViewerView: View {
     // MARK: - Actions
 
     private func beginEditing() {
-        draftDescription = item.mediaDescription ?? ""
+        draftDescription = savedDescription ?? ""
         isEditing = true
         editorFocused = true
     }
@@ -240,16 +251,22 @@ struct MediaViewerView: View {
         // Discard the draft and drop back to reading. Editor closes;
         // viewer itself stays open. The user can hit `×` from there
         // to dismiss the whole sheet.
-        draftDescription = item.mediaDescription ?? ""
+        draftDescription = savedDescription ?? ""
         isEditing = false
         editorFocused = false
     }
 
     private func commitAndReturnToReading() {
         let trimmed = draftDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        let original = (item.mediaDescription ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let original = (savedDescription ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed != original {
             onSaveDescription(trimmed)
+            // Update the local committed state so the reader renders
+            // the new description immediately. The Core Data write
+            // propagates back through the parent's @FetchRequest on
+            // the next render cycle.
+            savedDescription = trimmed.isEmpty ? nil : trimmed
+            NSLog("[HiMem][MediaDesc] committed description for item \(item.id): \(trimmed.count) chars")
         }
         isEditing = false
         editorFocused = false

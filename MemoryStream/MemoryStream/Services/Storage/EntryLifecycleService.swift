@@ -219,13 +219,18 @@ final class EntryLifecycleService {
             let request = NSFetchRequest<MediaReference>(entityName: "MediaReference")
             request.predicate = NSPredicate(format: "id == %@", mediaId as CVarArg)
             request.fetchLimit = 1
-            guard let ref = try storage.viewContext.fetch(request).first else { return }
+            guard let ref = try storage.viewContext.fetch(request).first else {
+                NSLog("[HiMem][MediaDesc] updateMediaDescription MISS mediaId=\(mediaId)")
+                return
+            }
             let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
             ref.mediaDescription = trimmed.isEmpty ? nil : trimmed
             ref.lastEditedAt = Date()
             try storage.save(context: storage.viewContext)
             regenerateContent(forEntryId: entryId)
+            NSLog("[HiMem][MediaDesc] saved mediaId=\(mediaId) chars=\(trimmed.count)")
         } catch {
+            NSLog("[HiMem][MediaDesc] save FAILED mediaId=\(mediaId) error=\(error.localizedDescription)")
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }
     }
