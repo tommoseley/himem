@@ -88,9 +88,11 @@ struct CaptureFlowHost: ViewModifier {
                 .ignoresSafeArea()
             }
             .sheet(isPresented: attachBinding) {
-                PhotoLibraryPicker { identifiers in
-                    if !identifiers.isEmpty {
-                        onCaptured(.attach(localIdentifiers: identifiers))
+                PhotoLibraryPicker { results in
+                    if !results.isEmpty {
+                        let items: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
+                            results.map { ($0.filename, $0.mediaType) }
+                        onCaptured(.attach(items: items))
                     }
                     activeModality = nil
                 }

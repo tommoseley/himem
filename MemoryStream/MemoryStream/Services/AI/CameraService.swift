@@ -74,36 +74,89 @@ final class CameraService: ObservableObject {
         return granted
     }
 
-    // MARK: - Save to Photos
+    // MARK: - Save to ubiquity + Photos library
 
+    /// Saves the captured photo to the iCloud Drive ubiquity container
+    /// (the canonical home — that's what `MediaReference.osIdentifier`
+    /// will reference) and also to the user's Photos library as a
+    /// courtesy (default-on; gated by `alsoSaveToPhotosLibrary`).
+    /// Returns the ubiquity filename for `MediaReference.osIdentifier`.
+    ///
+    /// See `docs/design/Storage architecture · CLAUDE.md` Rule 6.
     func savePhoto(_ image: UIImage) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            var localIdentifier: String?
+        let filename = "\(UUID().uuidString).jpg"
+        let destinationURL = UbiquityStore.shared.photoURL(for: filename)
+        // JPEG at 0.9 — visually indistinguishable from PNG for photos,
+        // ~5-10x smaller. Keeps iCloud quota usage reasonable.
+        guard let data = image.jpegData(compressionQuality: 0.9) else {
+            throw CameraError.saveFailed("JPEG encoding failed")
+        }
+        do {
+            try UbiquityStore.shared.writeData(data, to: destinationURL)
+        } catch {
+            throw CameraError.saveFailed("Ubiquity write failed: \(error.localizedDescription)")
+        }
+        if alsoSaveToPhotosLibrary {
+            // Best-effort secondary write to Photos library. If it
+            // fails the user still has the canonical copy in ubiquity;
+            // the Photos-library copy is convenience, not authority.
+            await savePhotoToPhotosLibrary(image)
+        }
+        return filename
+    }
+
+    /// Saves the captured video to the ubiquity container by moving
+    /// the temp file in place, then optionally copies to the Photos
+    /// library. Returns the ubiquity filename.
+    func saveVideo(at fileURL: URL) async throws -> String {
+        let ext = fileURL.pathExtension.isEmpty ? "mov" : fileURL.pathExtension
+        let filename = "\(UUID().uuidString).\(ext)"
+        let destinationURL = UbiquityStore.shared.videoURL(for: filename)
+        do {
+            // Move into the ubiquity store. NSFileCoordinator ensures
+            // a concurrent iCloud sync read sees a consistent state.
+            try UbiquityStore.shared.moveIntoStore(sourceURL: fileURL, destinationURL: destinationURL)
+        } catch {
+            throw CameraError.saveFailed("Ubiquity move failed: \(error.localizedDescription)")
+        }
+        if alsoSaveToPhotosLibrary {
+            await saveVideoToPhotosLibrary(at: destinationURL)
+        }
+        return filename
+    }
+
+    /// User-facing toggle (Settings → "Also save HiMem captures to my
+    /// Photos library"). Defaults to `true` to match users' intuition
+    /// that captured photos should appear in their Photos app. The
+    /// ubiquity write is non-optional — that's the canonical copy.
+    var alsoSaveToPhotosLibrary: Bool {
+        UserDefaults.standard.object(forKey: Self.alsoSaveToPhotosLibraryKey) as? Bool ?? true
+    }
+
+    static let alsoSaveToPhotosLibraryKey = "himem.camera.alsoSaveToPhotosLibrary"
+
+    /// Best-effort copy to the user's Photos library. Returns
+    /// silently on failure — the canonical copy is already in
+    /// ubiquity, and a user without Photos library permission still
+    /// keeps their memories.
+    private func savePhotoToPhotosLibrary(_ image: UIImage) async {
+        guard isAuthorized else { return }
+        await withCheckedContinuation { continuation in
             PHPhotoLibrary.shared().performChanges {
-                let request = PHAssetChangeRequest.creationRequestForAsset(from: image)
-                localIdentifier = request.placeholderForCreatedAsset?.localIdentifier
-            } completionHandler: { success, error in
-                if success, let identifier = localIdentifier {
-                    continuation.resume(returning: identifier)
-                } else {
-                    continuation.resume(throwing: CameraError.saveFailed(error?.localizedDescription ?? "Unknown error"))
-                }
+                _ = PHAssetChangeRequest.creationRequestForAsset(from: image)
+            } completionHandler: { _, _ in
+                continuation.resume()
             }
         }
     }
 
-    func saveVideo(at fileURL: URL) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            var localIdentifier: String?
+    private func saveVideoToPhotosLibrary(at fileURL: URL) async {
+        guard isAuthorized else { return }
+        await withCheckedContinuation { continuation in
             PHPhotoLibrary.shared().performChanges {
-                let request = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: fileURL)
-                localIdentifier = request?.placeholderForCreatedAsset?.localIdentifier
-            } completionHandler: { success, error in
-                if success, let identifier = localIdentifier {
-                    continuation.resume(returning: identifier)
-                } else {
-                    continuation.resume(throwing: CameraError.saveFailed(error?.localizedDescription ?? "Unknown error"))
-                }
+                _ = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: fileURL)
+            } completionHandler: { _, _ in
+                continuation.resume()
             }
         }
     }

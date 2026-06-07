@@ -85,15 +85,14 @@ struct JournalCaptureCoordinator {
             }
             return newId
 
-        case .attach(let ids):
-            guard !ids.isEmpty else { return nil }
-            // PHPicker doesn't separate photos from videos in its
-            // return shape; classify as image by default. The
-            // asset's actual type will be picked up by
-            // ThumbnailService at render time.
-            let captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
-                ids.map { ($0, .image) }
-            return viewModel.saveEntry(content: "", inputType: .camera, mediaCaptures: captures)
+        case .attach(let items):
+            guard !items.isEmpty else { return nil }
+            // PHPicker import now classifies image-vs-video at
+            // extraction time (see PhotoLibraryPicker.importToUbiquity)
+            // and writes bytes directly to the ubiquity container. The
+            // items carry the right `mediaType` per file — no more
+            // "everything is .image" approximation.
+            return viewModel.saveEntry(content: "", inputType: .camera, mediaCaptures: items)
 
         case .voiceSession(let clips, _):
             // "On a roll" — multi-clip phone voice session. First

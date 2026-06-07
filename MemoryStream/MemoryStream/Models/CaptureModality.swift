@@ -58,7 +58,13 @@ enum CapturedItem {
     case video(localIdentifier: String)
     case note(text: String)
     /// Library attach can return multiple items in a single picker session.
-    case attach(localIdentifiers: [String])
+    /// Per `docs/design/Storage architecture · CLAUDE.md` Rule 1, the
+    /// picker extracts bytes from each picked PHAsset and writes them
+    /// into the ubiquity container; the `localIdentifier` here is the
+    /// ubiquity filename, not a `PHAsset.localIdentifier`. The classifier
+    /// runs at extraction time, so images and videos can be mixed in
+    /// one pick without falsely tagging videos as images.
+    case attach(items: [(localIdentifier: String, mediaType: MediaReference.MediaType)])
     /// Multi-clip voice session — produced by the "on a roll" Next
     /// gesture on phone (`docs/design/on-a-roll-spec.md`). The
     /// composer recorded one continuous master file, split it into

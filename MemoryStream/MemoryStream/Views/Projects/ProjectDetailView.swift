@@ -651,13 +651,35 @@ struct ProjectDetailView: View {
 
         var items: [Any] = [composeProjectText()]
 
-        let photoKitIds: [String] = entries.flatMap { entry in
-            entry.mediaItems
-                .filter { $0.mediaType == .image || $0.mediaType == .video }
-                .map { $0.localIdentifier }
+        // Photos + videos: route through MediaResolver. Ubiquity-backed
+        // media shares as a URL (UIActivityViewController prefers
+        // file URLs for downstream apps). PhotoKit-backed legacy
+        // media still uses the PHImageManager fetch.
+        let mediaItems: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
+            entries.flatMap { entry in
+                entry.mediaItems
+                    .filter { $0.mediaType == .image || $0.mediaType == .video }
+                    .map { ($0.localIdentifier, $0.mediaType) }
+            }
+        var photoKitImageIds: [String] = []
+        var photoKitVideoIds: [String] = []
+        for media in mediaItems {
+            switch MediaResolver.resolve(osIdentifier: media.localIdentifier, mediaType: media.mediaType) {
+            case .ubiquity(let fileURL):
+                if FileManager.default.fileExists(atPath: fileURL.path) {
+                    items.append(fileURL)
+                }
+            case .photoKit(let identifier):
+                if media.mediaType == .image {
+                    photoKitImageIds.append(identifier)
+                } else {
+                    photoKitVideoIds.append(identifier)
+                }
+            }
         }
-        if !photoKitIds.isEmpty {
-            let fetch = PHAsset.fetchAssets(withLocalIdentifiers: photoKitIds, options: nil)
+        let legacyIds = photoKitImageIds + photoKitVideoIds
+        if !legacyIds.isEmpty {
+            let fetch = PHAsset.fetchAssets(withLocalIdentifiers: legacyIds, options: nil)
             var assets: [PHAsset] = []
             fetch.enumerateObjects { asset, _, _ in assets.append(asset) }
             for asset in assets {

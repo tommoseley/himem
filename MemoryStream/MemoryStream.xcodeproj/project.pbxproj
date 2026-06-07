@@ -146,6 +146,7 @@
 		A100000770 /* LaunchSignposter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000770 /* LaunchSignposter.swift */; };
 		A100000780 /* PermissionWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000780 /* PermissionWizardView.swift */; };
 		A100000900 /* UbiquityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000900 /* UbiquityStore.swift */; };
+		A100000901 /* MediaResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000901 /* MediaResolver.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
 		A900000002 /* OnDeviceOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000002 /* OnDeviceOrganizer.swift */; };
 		A900000003 /* ServerOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000003 /* ServerOrganizer.swift */; };
@@ -361,6 +362,7 @@
 		B100000770 /* LaunchSignposter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSignposter.swift; sourceTree = "<group>"; };
 		B100000780 /* PermissionWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionWizardView.swift; sourceTree = "<group>"; };
 		B100000900 /* UbiquityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UbiquityStore.swift; sourceTree = "<group>"; };
+		B100000901 /* MediaResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaResolver.swift; sourceTree = "<group>"; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
 		B900000002 /* OnDeviceOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceOrganizer.swift; sourceTree = "<group>"; };
 		B900000003 /* ServerOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOrganizer.swift; sourceTree = "<group>"; };
@@ -638,6 +640,7 @@
 				B100000744 /* InboxArrivalTracker.swift */,
 				B100000311 /* InboxManifest.swift */,
 				B100000900 /* UbiquityStore.swift */,
+				B100000901 /* MediaResolver.swift */,
 				B100000690 /* ClipSessionGrouper.swift */,
 				B100000501 /* StorageService+EntryQueries.swift */,
 				B100000503 /* FragmentMigration.swift */,
@@ -1172,6 +1175,7 @@
 				A100000750 /* AcceptanceCriticalSection.swift in Sources */,
 				A100000311 /* InboxManifest.swift in Sources */,
 				A100000900 /* UbiquityStore.swift in Sources */,
+				A100000901 /* MediaResolver.swift in Sources */,
 				A100000690 /* ClipSessionGrouper.swift in Sources */,
 				A100000312 /* WatchSessionDelegate.swift in Sources */,
 				A100000691 /* SessionListView.swift in Sources */,

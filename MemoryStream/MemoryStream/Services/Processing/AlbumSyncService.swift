@@ -145,8 +145,19 @@ final class AlbumSyncService: ObservableObject {
     }
 
     private func addAssetsToAlbum(named name: String, assetIdentifiers: [String]) async throws {
+        // Only PHAsset-id identifiers can be added to a Photos
+        // library album — ubiquity-backed captures store their bytes
+        // in iCloud Drive, not in PhotoKit. The courtesy save in
+        // `CameraService.savePhoto` does put a copy in the Photos
+        // library, but we don't remember the resulting PHAsset id, so
+        // those captures don't get added to the topic-named album
+        // here. Known post-launch follow-up: track the PHAsset id
+        // returned by the courtesy save so album-sync covers the
+        // new-capture path too.
+        let phAssetIds = assetIdentifiers.filter { MediaResolver.isPhotoKitIdentifier($0) }
+        guard !phAssetIds.isEmpty else { return }
         let album = try await findOrCreateAlbum(named: name)
-        let assets = PHAsset.fetchAssets(withLocalIdentifiers: assetIdentifiers, options: nil)
+        let assets = PHAsset.fetchAssets(withLocalIdentifiers: phAssetIds, options: nil)
         guard assets.count > 0 else { return }
 
         try await PHPhotoLibrary.shared().performChanges {

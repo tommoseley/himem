@@ -72,25 +72,43 @@ struct MediaViewerView: View {
         // Stop any audio playback that might conflict
         AudioPlayerService.shared.stop()
 
-        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [item.localIdentifier], options: nil).firstObject else {
-            isLoading = false
-            return
-        }
-
         if item.mediaType == .video {
-            // Configure audio session for video playback. The matching
-            // `setActive(false)` lives in `onDisappear`, gated on
-            // `activatedAudioSession` so an image-only viewing (which
-            // never activates) doesn't churn the HAL.
-            let audioSession = AVAudioSession.sharedInstance()
-            try? audioSession.setCategory(.playback, mode: .moviePlayback)
-            try? audioSession.setActive(true)
-            activatedAudioSession = true
+            await loadVideo()
+        } else {
+            fullImage = await ThumbnailService.shared.fullImage(for: item.localIdentifier)
+            isLoading = false
+        }
+    }
 
+    private func loadVideo() async {
+        // Configure audio session for video playback. The matching
+        // `setActive(false)` lives in `onDisappear`, gated on
+        // `activatedAudioSession` so an image-only viewing (which
+        // never activates) doesn't churn the HAL.
+        let audioSession = AVAudioSession.sharedInstance()
+        try? audioSession.setCategory(.playback, mode: .moviePlayback)
+        try? audioSession.setActive(true)
+        activatedAudioSession = true
+
+        switch MediaResolver.resolve(osIdentifier: item.localIdentifier, mediaType: .video) {
+        case .ubiquity(let fileURL):
+            if UbiquityStore.shared.downloadStatus(at: fileURL) == .notDownloaded {
+                UbiquityStore.shared.startDownload(at: fileURL)
+                isLoading = false
+                return
+            }
+            let playerItem = AVPlayerItem(url: fileURL)
+            self.player = AVPlayer(playerItem: playerItem)
+            self.isLoading = false
+            self.player?.play()
+        case .photoKit(let identifier):
+            guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil).firstObject else {
+                isLoading = false
+                return
+            }
             let options = PHVideoRequestOptions()
             options.isNetworkAccessAllowed = true
             options.deliveryMode = .automatic
-
             await withCheckedContinuation { continuation in
                 PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, _ in
                     if let avAsset {
@@ -106,9 +124,6 @@ struct MediaViewerView: View {
                     continuation.resume()
                 }
             }
-        } else {
-            fullImage = await ThumbnailService.shared.fullImage(for: item.localIdentifier)
-            isLoading = false
         }
     }
 }

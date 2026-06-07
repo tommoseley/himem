@@ -77,11 +77,11 @@ final class EntryAppendCoordinator: ObservableObject {
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             lifecycle.append(entryId: entryId, additionalContent: text)
 
-        case .attach(let ids):
-            guard !ids.isEmpty else { return }
-            let captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] =
-                ids.map { ($0, .image) }
-            lifecycle.append(entryId: entryId, additionalContent: "", mediaCaptures: captures)
+        case .attach(let items):
+            guard !items.isEmpty else { return }
+            // PHPicker import now classifies image-vs-video at
+            // extraction time (see PhotoLibraryPicker.importToUbiquity).
+            lifecycle.append(entryId: entryId, additionalContent: "", mediaCaptures: items)
 
         case .voiceSession(let clips, _):
             // "On a roll" — append every clip in the session as its
