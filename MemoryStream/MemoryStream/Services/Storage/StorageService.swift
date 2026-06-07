@@ -167,7 +167,11 @@ final class StorageService {
         //         entity + OrganizePass.nextStepsMarkdown) and the
         //         transient-entity split (#19: ProcessingTask moved
         //         to the Local store, removed from Cloud).
-        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV2"
+        //   V3 — `MediaReference.mediaDescription` added for the
+        //         photo/video description feature (#53). Folds into
+        //         the same dashboard deploy as V2 since V2 has not
+        //         shipped to Production yet.
+        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV3"
         if !UserDefaults.standard.bool(forKey: schemaInitKey) {
             // Only mark the version flag set on actual success. If we
             // failed silently (e.g. account daemon temporarily refused

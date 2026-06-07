@@ -44,6 +44,7 @@ enum EntryMapper {
                     isAccessible: ref.isAccessible,
                     transcript: ref.transcript,
                     text: ref.text,
+                    mediaDescription: ref.mediaDescription,
                     createdAt: ref.createdAt ?? .distantPast,
                     // Per-clip placeName wins when present; otherwise
                     // fall back to the memory's own locationName so

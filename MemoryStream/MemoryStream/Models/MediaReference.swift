@@ -51,6 +51,15 @@ public class MediaReference: NSManagedObject, Identifiable {
     /// chronological capture stream alongside voice/photo/video). Nil for
     /// non-note types.
     @NSManaged public var text: String?
+    /// Human-written description for `.image` and `.video` fragments —
+    /// the manual stand-in for the future visual-analysis pass. Per
+    /// `docs/design/HiMem · Photo Descriptions.html`: AI Organize and
+    /// search read this exactly like a voice transcript, so a photo-
+    /// only memory becomes organizable and findable now. Nil for
+    /// voice/note types and for image/video items the user hasn't
+    /// described yet. Storage attribute is `mediaDescription` (not
+    /// `description`) because `description` collides with `NSObject`.
+    @NSManaged public var mediaDescription: String?
     @NSManaged public var entry: JournalEntry?
 }
 

@@ -92,6 +92,7 @@
         <attribute name="thumbnailCacheFilename" optional="YES" attributeType="String"/>
         <attribute name="transcript" optional="YES" attributeType="String"/>
         <attribute name="text" optional="YES" attributeType="String"/>
+        <attribute name="mediaDescription" optional="YES" attributeType="String"/>
         <relationship name="entry" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="mediaReferences" inverseEntity="JournalEntry"/>
     </entity>
     <entity name="TextSegment" representedClassName="TextSegment" syncable="YES">

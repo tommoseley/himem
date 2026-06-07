@@ -163,6 +163,12 @@ struct MediaDisplayItem: Identifiable, Equatable {
     /// Body text for `.note` MediaReferences. `nil` for every other media
     /// type.
     var text: String? = nil
+    /// Human-written description for `.image` and `.video` items. Per
+    /// `docs/design/HiMem · Photo Descriptions.html`: this is part of
+    /// the memory's words — AI Organize and search read it the same
+    /// way as a voice transcript. `nil` for voice/note items and for
+    /// image/video items the user hasn't described yet.
+    var mediaDescription: String? = nil
     /// Wall-clock timestamp the capture was taken — used to interleave
     /// fragments in the chronological capture stream.
     var createdAt: Date = .distantPast

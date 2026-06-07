@@ -210,6 +210,26 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Updates a photo/video MediaReference's `mediaDescription` and
+    /// regenerates the parent entry's joined content so the new text
+    /// flows into AI Organize + search. Mirrors `updateMediaTranscript`
+    /// for the voice case. Empty string clears the description.
+    func updateMediaDescription(mediaId: UUID, description: String, entryId: UUID) {
+        do {
+            let request = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+            request.predicate = NSPredicate(format: "id == %@", mediaId as CVarArg)
+            request.fetchLimit = 1
+            guard let ref = try storage.viewContext.fetch(request).first else { return }
+            let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+            ref.mediaDescription = trimmed.isEmpty ? nil : trimmed
+            ref.lastEditedAt = Date()
+            try storage.save(context: storage.viewContext)
+            regenerateContent(forEntryId: entryId)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
     /// Pure: builds the joined-content string from an entry's fragments —
     /// voice transcripts and note bodies — in chronological order. After
     /// the fragment migration runs, every contributable text source lives
@@ -229,7 +249,13 @@ final class EntryLifecycleService {
                       !body.isEmpty else { continue }
                 items.append(Item(createdAt: ref.createdAt ?? .distantPast, text: body))
             case .image, .video:
-                continue
+                // Photo/video descriptions feed into AI Organize and
+                // search the same way voice transcripts do — they're
+                // the human stand-in for the future visual-analysis
+                // pass. See `docs/design/HiMem · Photo Descriptions.html`.
+                guard let desc = ref.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !desc.isEmpty else { continue }
+                items.append(Item(createdAt: ref.createdAt ?? .distantPast, text: desc))
             }
         }
         return items
