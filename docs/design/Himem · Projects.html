@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Himem · Projects</title>
+<title>HiMem · Projects</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -26,13 +26,14 @@
 <script type="text/babel" src="screens-projects.jsx"></script>
 <script type="text/babel" src="screens-projects-cards.jsx"></script>
 <script type="text/babel" src="screens-projects-views.jsx"></script>
+<script type="text/babel" src="screens-projects-edit.jsx"></script>
 <script type="text/babel" src="screens-projects-spec.jsx"></script>
 
 <script type="text/babel">
 function App() {
   return (
     <DesignCanvas
-      title="Himem · Projects — MVP"
+      title="HiMem · Projects — MVP"
       subtitle="The smallest project system that feels intentional. Four screens: the tab, the detail before and after Project Assist, and the Plus upsell."
     >
       <DCSection id="mvp" title="MVP project system" subtitle="iPhone · Crucible · May 2026">
@@ -50,6 +51,18 @@ function App() {
         </DCArtboard>
         <DCArtboard id="suggestions" label="5. Suggested memories · review" width={340} height={735}>
           <ScrSuggestionsReview />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="edit" title="Edit project" subtitle="Fixes the Goal field (it didn't look editable) and answers how topics are edited — they're not. Topics are derived from the project's memories; the screen shows them read-only. June 2 2026.">
+        <DCArtboard id="edit-goal-focus" label="1. Edit · Goal empty + focused" width={340} height={735}>
+          <ScrEditProject goalFocused={true} goalEmpty={true} />
+        </DCArtboard>
+        <DCArtboard id="edit-goal-filled" label="2. Edit · Goal filled" width={340} height={735}>
+          <ScrEditProject goalFocused={false} goalEmpty={false} />
+        </DCArtboard>
+        <DCArtboard id="edit-rules" label="Rules · fields + derived topics" width={720} height={520}>
+          <EditRulesPanel />
         </DCArtboard>
       </DCSection>
 
@@ -89,7 +102,7 @@ function RulesPanel() {
       <div style={cell}>
         <div style={eyebrow}>Model</div>
         <div style={body}>
-          Topic ⟷ Project is <strong>many-to-many</strong>. A memory carries one topic and belongs to 0–1 projects.
+          Topic ⟷ Project is <strong>many-to-many</strong>. A memory carries one topic and belongs to <strong>0–N projects</strong> (Memory × Project is many-to-many too).
           A project's topic chips are <em>derived</em> from its member memories — there's no project-level
           topic field. Project shape: <code style={{ fontFamily: '"SF Mono", monospace', fontSize: 12.5 }}>name + goal + memories</code>.
           No cover art, no date range, no archive state in MVP.
@@ -130,10 +143,11 @@ function RulesPanel() {
       <div style={cell}>
         <div style={eyebrow}>Tier</div>
         <div style={body}>
-          <strong>Free</strong> gets 1 active project <em>and</em> 1 free Project Assist run on it — separate
+          <strong>Free</strong> gets 3 active projects <em>and</em> 1 free Project Assist run — separate
           from the 3 starter memory assists, so projects don't feel like they're stealing from capture. The
-          starter run is silent: the first tap of <em>Find the thread</em> just works. The upsell only fires
-          on the second attempt. <strong>Plus / Founders</strong> get unlimited projects and assists from
+          starter run is <strong>loud, not silent</strong>: a <em>Starter · free</em> label marks the first
+          <em>Find the thread</em> so the user knows they're spending their one free pass. The upsell fires
+          on the second run. <strong>Plus / Founders</strong> get unlimited projects and assists from
           the 50/month allowance. Studio (post-MVP) reads raw fragments + cross-project + structured output.
         </div>
       </div>

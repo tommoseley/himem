@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Crucible — a design system for Himem</title>
+<title>Crucible — a design system for HiMem</title>
 <template id="__bundler_thumbnail" data-bg-color="#F7F5F0">
   <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
     <rect width="1200" height="800" fill="#F7F5F0"/>
@@ -1176,7 +1176,7 @@ function ComponentAIAction() {
         <div style={{ flex: 1 }}>
           <div style={{ ...typeStyle(C.type.caption2), color: C.color.ai.base, letterSpacing: 1, textTransform:'uppercase', fontWeight: 700 }}>App is inferring</div>
           <div style={{ ...typeStyle(C.type.footnote), color: C.color.ink, marginTop: 4, lineHeight: 1.5 }}>
-            Himem is thinking about a trip <span style={{ color: C.color.ai.base, fontWeight: 600 }}>Santa Ana</span> on <span style={{ color: C.color.ai.base, fontWeight: 600 }}>May 7</span>. Confirm to add to your calendar.
+            HiMem is thinking about a trip <span style={{ color: C.color.ai.base, fontWeight: 600 }}>Santa Ana</span> on <span style={{ color: C.color.ai.base, fontWeight: 600 }}>May 7</span>. Confirm to add to your calendar.
           </div>
           <div style={{ marginTop: 10, display:'flex', gap: 8 }}>
             <AIButton size="sm" variant="solid">Confirm</AIButton>
@@ -2517,7 +2517,7 @@ Object.assign(window, { PatternComposer });
 
 
 // ───────── Ingest modes ─────────
-// The two paths into Himem. One document, cleanly separated.
+// The two paths into HiMem. One document, cleanly separated.
 function PatternIngestModes() {
   const Cell = ({ children, head, mono }) => (
     <div style={{ padding: '14px 16px', ...typeStyle(mono ? C.type.footnote : C.type.body), color: head ? C.color.ink3 : C.color.ink, fontFamily: mono ? C.type.mono : (head ? C.type.sans : C.type.sans), fontWeight: head ? 700 : 400, fontSize: head ? 11 : undefined, letterSpacing: head ? 1.2 : undefined, textTransform: head ? 'uppercase' : undefined, lineHeight: 1.5, borderBottom: '1px solid ' + C.color.hairline }}>
@@ -2526,7 +2526,7 @@ function PatternIngestModes() {
   );
 
   const rows = [
-    ['Trigger',          '"Hey Siri, tell Himem…" · Watch complication · Lock-screen shortcut', 'Tap the ochre Composer trigger, or + on any existing entry card'],
+    ['Trigger',          '"Hey Siri, tell HiMem…" · Watch complication · Lock-screen shortcut', 'Tap the ochre Composer trigger, or + on any existing entry card'],
     ['UI',               'None. Audio only, through Siri.',                                     'Composer sheet (iPhone) or side panel (iPad/Web)'],
     ['Media types',      'Voice only. The spoken words become text.',                           'Any combination: audio, text, photo, video'],
     ['Commit',           'Automatic when Siri stops listening',                                 'Explicit — the user taps Commit'],
@@ -2541,7 +2541,7 @@ function PatternIngestModes() {
       <div style={{ ...typeStyle(C.type.caption2), color: C.color.ink3, letterSpacing: 1.2, textTransform: 'uppercase' }}>Patterns</div>
       <div style={{ ...typeStyle(C.type.title1), color: C.color.ink, marginTop: 4 }}>Ingest modes</div>
       <div style={{ ...typeStyle(C.type.body), color: C.color.ink2, marginTop: 4, maxWidth: 820, lineHeight: 1.5 }}>
-        Himem has two paths in. Siri and Watch are <em>transactions</em> — one utterance, one commit, zero screen. The app on iPhone, iPad, and Web is <em>composition</em> — deliberate, multi-media, user-controlled. Don't blur the line.
+        HiMem has two paths in. Siri and Watch are <em>transactions</em> — one utterance, one commit, zero screen. The app on iPhone, iPad, and Web is <em>composition</em> — deliberate, multi-media, user-controlled. Don't blur the line.
       </div>
 
       <div style={{ marginTop: 28, display:'grid', gridTemplateColumns: '160px 1fr 1fr', background: C.color.card, borderRadius: 14, overflow:'hidden', border: '1px solid ' + C.color.hairline }}>
@@ -3237,7 +3237,7 @@ Object.assign(window, { PatternTopicNav });
 
 // ───────── Settings → Topics ─────────
 // The management screen for Topics. Also sets the template for how Settings
-// sheets are structured in Himem: grouped cards, eyebrow labels, helper text
+// sheets are structured in HiMem: grouped cards, eyebrow labels, helper text
 // below each group, chunky list rows with inline meta.
 function PatternSettingsTopics() {
   const pal = Object.fromEntries(C.color.topicPalette.map(p => [p.key, p]));
@@ -3332,7 +3332,7 @@ function PatternSettingsTopics() {
       <div style={{ ...typeStyle(C.type.caption2), color: C.color.ink3, letterSpacing: 1.2, textTransform: 'uppercase' }}>Patterns</div>
       <div style={{ ...typeStyle(C.type.title1), color: C.color.ink, marginTop: 4 }}>Settings — Topics & Capture</div>
       <div style={{ ...typeStyle(C.type.body), color: C.color.ink2, marginTop: 4, maxWidth: 760, lineHeight: 1.5 }}>
-        The management surface for Topics. Also the reference pattern for Settings sheets in Himem: grouped cards, eyebrow labels, helper text below each group, inline meta on list rows.
+        The management surface for Topics. Also the reference pattern for Settings sheets in HiMem: grouped cards, eyebrow labels, helper text below each group, inline meta on list rows.
       </div>
 
       <div style={{ marginTop: 26, display:'flex', gap: 40, alignItems:'flex-start' }}>
@@ -4818,7 +4818,7 @@ function CoverBoard() {
       <div>
         <div style={{ ...typeStyle(C.type.eyebrow), color: C.color.accent, textTransform: 'uppercase', marginBottom: 12 }}>Crucible — v0.1</div>
         <div style={{ ...typeStyle(C.type.serif1), color: C.color.ink, maxWidth: 640, marginBottom: 24 }}>
-          A design language for Himem.
+          A design language for HiMem.
         </div>
         <div style={{ ...typeStyle(C.type.title3), color: C.color.ink2, maxWidth: 560, fontWeight: 400, fontFamily: C.type.serif, fontStyle: 'italic' }}>
           Apple-native at its base. Warm in its voice. Swiss in its layout.
@@ -5018,7 +5018,7 @@ function AppShellWeb() {
       <div style={{ width: 240, background: C.color.card, borderRight: '1px solid ' + C.color.hairline, display: 'flex', flexDirection: 'column', padding: '24px 12px' }}>
         <div style={{ padding: '0 12px 24px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 22, height: 22, borderRadius: 11, background: C.color.accent }}/>
-          <div style={{ ...typeStyle(C.type.headline), color: C.color.ink, letterSpacing: -0.3 }}>Himem</div>
+          <div style={{ ...typeStyle(C.type.headline), color: C.color.ink, letterSpacing: -0.3 }}>HiMem</div>
         </div>
         {[['Today','clock',true],['Library','calendar'],['Ideas','sparkle'],['Favorites','bolt'],['Search','search']].map(([n, ic, a]) => (
           <div key={n} style={{
@@ -5114,7 +5114,7 @@ const A = 1040, H1 = 720, H2 = 820, IOS_W = 390, IOS_H = 760;
 function App() {
   return (
     <DesignCanvas>
-      <DCSection id="intro" title="Crucible" subtitle="A design language for Himem — v0.1">
+      <DCSection id="intro" title="Crucible" subtitle="A design language for HiMem — v0.1">
         <DCArtboard id="cover" label="Cover" width={A} height={H1}><CoverBoard/></DCArtboard>
         <DCArtboard id="tokens" label="Tokens at a glance" width={720} height={H1}><TokensSummary/></DCArtboard>
       </DCSection>

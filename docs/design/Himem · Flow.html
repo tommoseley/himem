@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Himem — Flow · Watch to memory</title>
+<title>HiMem — Flow · Watch to memory</title>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <template id="__bundler_thumbnail" data-bg-color="#EFECE5">
   <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
@@ -406,7 +406,7 @@
 <div class="stage">
 
   <header class="intro">
-    <div class="eyebrow">Himem · Flow · Watch &rarr; Memory</div>
+    <div class="eyebrow">HiMem · Flow · Watch &rarr; Memory</div>
     <h1 class="title">From wrist to memory box.</h1>
     <p class="desc">
       The full path a captured clip takes &mdash; from <strong>Watch dictation</strong>, through
@@ -521,11 +521,11 @@
     <!-- 6. Notification logic -->
     <div class="node phone">
       <div class="head"><span class="surface">Phone</span> 6 · Awareness</div>
-      <div class="title-row">Badge always &middot; push on three triggers</div>
-      <div class="body">Two surfaces: the app icon <strong>badge</strong> is live and always reflects the inbox count; a <strong>push</strong> fires only on three specific conditions. Full timing &amp; copy in the <em>Notifications</em> spec below.</div>
+      <div class="title-row">Badge always &middot; two notification channels</div>
+      <div class="body">Two surfaces: the app icon <strong>badge</strong> is live and always reflects the inbox count; <strong>push</strong> notifications flow through two independent channels &mdash; <em>Captured Clips</em> (one pending at a time, updates silently) and <em>Inactivity</em> (user opt-in, 24h since last capture). Full rules in the <em>Notifications</em> spec below.</div>
       <div class="meta">
         <span class="chip">Badge: always live</span>
-        <span class="chip notif">Push: burst, threshold, stale</span>
+        <span class="chip notif">Push: Captured Clips · optional Inactivity</span>
       </div>
     </div>
     <div class="conn short"></div>
@@ -533,7 +533,7 @@
     <!-- 7. User launches app -->
     <div class="node user">
       <div class="head"><span class="surface">User</span> 7 · App launch</div>
-      <div class="title-row">User opens Himem</div>
+      <div class="title-row">User opens HiMem</div>
       <div class="body">Cold start &rarr; launch sequence &rarr; CloudKit handshake &rarr; <strong>always lands on Today</strong>. No auto-open of the inbox in MVP.</div>
     </div>
     <div class="conn short"></div>
@@ -633,53 +633,72 @@
   </div>
 
   <!-- ─── Notifications spec ────────────────────────── -->
-  <div class="section-label">Notifications &middot; timing &amp; copy</div>
+  <div class="section-label">Notifications &middot; two channels, one pending each</div>
   <div class="notif-grid">
 
     <div class="notif-block full">
-      <h3>Triggers</h3>
-      <p class="lead">A push fires when one of these conditions is met. The badge is always live and independent of push behavior. Only one push can fire per day; see the timing rules.</p>
+      <h3>Two independent channels</h3>
+      <p class="lead">Two streams of pending notifications, each with at most <strong>one pending notification at a time</strong>. They can coexist &mdash; Channel A doesn&rsquo;t suppress Channel B and vice versa. Cross-cutting rules at the bottom.</p>
       <div class="trigger-rows">
         <div class="row">
-          <span class="name">Burst</span>
-          <span class="when"><code>&gt;= 3</code> clips arrive in a 5-min window</span>
+          <span class="name">Channel A</span>
+          <span class="when"><strong>Captured Clips</strong> &middot; default <code>on</code> &middot; <strong>always passive</strong> &middot; lands silently in Notification Center, badge does the work</span>
           <span class="copy">&ldquo;4 voice clips ready to organize&rdquo;</span>
         </div>
         <div class="row">
-          <span class="name">Threshold</span>
-          <span class="when">Inbox crosses <code>10</code> clips <em>(unreviewed = still in inbox)</em></span>
-          <span class="copy">&ldquo;You have 12 voice clips waiting&rdquo;</span>
-        </div>
-        <div class="row">
-          <span class="name stale">Stale</span>
-          <span class="when">Clip in inbox <code>&gt; 24h</code> &middot; <em>per-clip scheduled trigger, re-evaluates at fire time</em></span>
-          <span class="copy">&ldquo;Some clips are still waiting to be organized&rdquo;</span>
+          <span class="name stale">Channel B</span>
+          <span class="when"><strong>Inactivity</strong> &middot; user opt-in &middot; first at 24h, then silent until 1 week, then weekly</span>
+          <span class="copy">&ldquo;It&rsquo;s been a quiet day.&rdquo;</span>
         </div>
       </div>
     </div>
 
     <div class="notif-block">
-      <h3>Coalescing &amp; timing</h3>
+      <h3>Channel A &middot; Captured Clips</h3>
       <ul class="notif-list">
-        <li><strong>Daily cap.</strong> Maximum 1 push per day across all triggers. Badge is unaffected.</li>
-        <li><strong>4-hour suppression.</strong> After any push fires, no further push for 4 hours even if a new trigger condition is met. Badge keeps incrementing.</li>
-        <li><strong>Quiet hours.</strong> <code>10 PM &ndash; 7 AM</code> local; pushes deferred to the next morning&rsquo;s first eligible window.</li>
-        <li><strong>Focus modes.</strong> Respected via the <em>Sync &amp; capture</em> notification channel; the user can mute this channel independently.</li>
-        <li><strong>App in foreground.</strong> No push fires &mdash; the banner on Today is already doing the work.</li>
-        <li><strong>Burst coalescing.</strong> Clips that arrive within 5 min of a previous burst are added to that session&rsquo;s count without re-firing.</li>
+        <li><strong>Always passive &mdash; never buzzes, never lights up the screen.</strong> Uses <code>UNNotificationInterruptionLevel.passive</code> so the notification lands silently in Notification Center / on the lock screen but doesn&rsquo;t vibrate, doesn&rsquo;t fire a banner, doesn&rsquo;t wake the device. The badge does the reminder work; the notification is just a tappable handle.</li>
+        <li><strong>App in foreground</strong> &rarr; no notification posted at all; the badge alone reflects state.</li>
+        <li><strong>App backgrounded or locked, first clip into an empty inbox</strong> &rarr; post the passive notification.</li>
+        <li><strong>Subsequent arrivals while pending</strong> &rarr; update the existing notification in place. Same <code>UNNotificationRequest</code> identifier, body re-rendered with current count, badge synced. Still passive.</li>
+        <li><strong>User clears the inbox</strong> &rarr; notification removed, badge cleared.</li>
+        <li><strong>No arbitrary caps.</strong> No daily limit, no per-clip count, no cooldown. Passive + one-pending + in-place-updates is the entire noise budget &mdash; everything that would normally need a cap is solved by never buzzing.</li>
+        <li><strong>Stale is obsolete as a separate trigger.</strong> The pending passive notification already represents the unreviewed inbox.</li>
       </ul>
     </div>
 
     <div class="notif-block">
-      <h3>Tap behavior</h3>
+      <h3>Channel B &middot; Inactivity</h3>
       <ul class="notif-list">
-        <li><strong>Tap notification</strong> &rarr; opens the app directly to <strong>Captured Clips</strong>, skipping Today and the banner.</li>
-        <li><strong>Inline action &middot; &ldquo;Snooze 4h&rdquo;</strong> &rarr; suppresses this channel for 4 hours (<code>UNNotificationAction</code>; iOS does not surface swipe-to-dismiss to the app).</li>
-        <li><strong>Inline action &middot; &ldquo;Mute for today&rdquo;</strong> &rarr; suppresses through <strong>midnight local</strong>; auto-unmutes at midnight to match the action name.</li>
-        <li><strong>Long press &rarr; Manage</strong> &rarr; jumps to iOS settings for the <em>Sync &amp; capture</em> channel.</li>
-        <li><strong>Daily cap resets at midnight local.</strong> All rate-limit counters use the device's local timezone, not UTC.</li>
-        <li><strong>Stale repeat cap.</strong> Stale fires at most <code>7</code> times for a single clip, then stops; badge keeps the count visible. Never nag forever.</li>
-        <li><strong>Deferred pushes re-evaluate at fire time.</strong> If quiet hours suppressed a stale push and the user reviewed everything before 7am, the suppressed push is cancelled &mdash; never fires empty.</li>
+        <li><strong>Trigger.</strong> 24h elapsed since the last successful capture (watch clip received OR phone-side memory created).</li>
+        <li><strong>Cadence.</strong> First nudge at <code>24h</code> (sound + banner). Then <strong>silent for the rest of week 1</strong> &mdash; pending notification stays visible, body re-renders silently as days tick by. From <code>7d</code> onward, <strong>re-buzzes weekly</strong> (7d / 14d / 21d / ...). Each re-buzz updates the body to current duration.</li>
+        <li><strong>User opt-in.</strong> Presented in onboarding alongside Channel A (see below). No silent enrollment.</li>
+        <li><strong>A successful capture</strong> clears Channel B&rsquo;s pending notification and resets the 24h timer.</li>
+        <li><strong>Honest-label copy.</strong> &ldquo;It&rsquo;s been a quiet day.&rdquo; / &ldquo;Three days since you captured anything.&rdquo; / &ldquo;Two quiet weeks.&rdquo; Never &ldquo;Come back!&rdquo; or &ldquo;We miss you!&rdquo;.</li>
+        <li><strong>No badge.</strong> Channel A owns the app icon badge.</li>
+      </ul>
+    </div>
+
+    <div class="notif-block full">
+      <h3>Onboarding &middot; notification setup</h3>
+      <ul class="notif-list">
+        <li><strong>First-message ask.</strong> One of the first onboarding screens shows the two channels with a toggle each and a one-line description. The user decides &mdash; no silent enrollment.</li>
+        <li><strong>Defaults shown:</strong> Channel A toggled on, Channel B toggled off. User sees and confirms both.</li>
+        <li><strong>iOS system permission</strong> fires immediately after the user finishes this screen, only if at least one toggle is on. Standard <code>requestAuthorization</code>.</li>
+        <li><strong>Settings &rarr; Notifications</strong> surfaces the same two toggles afterward, with the same labels and copy.</li>
+      </ul>
+    </div>
+
+    <div class="notif-block full">
+      <h3>Cross-cutting &middot; both channels</h3>
+      <ul class="notif-list">
+        <li><strong>Quiet hours.</strong> <code>10 PM &ndash; 7 AM</code> local. First-of-stretch push defers to 7am. Arrivals during quiet hours update the deferred payload silently so it fires once at 7am with current state.</li>
+        <li><strong>Inline action &middot; &ldquo;Snooze 4h&rdquo;</strong> (<code>UNNotificationAction</code>) &rarr; suppresses <em>that channel</em> for 4 hours; clears its pending notification.</li>
+        <li><strong>Inline action &middot; &ldquo;Mute for today&rdquo;</strong> &rarr; suppresses that channel through local midnight; clears its pending notification.</li>
+        <li><strong>Tap notification</strong> &rarr; A opens Captured Clips, B opens Today.</li>
+        <li><strong>Long press &rarr; Manage</strong> &rarr; jumps to iOS Settings for that channel.</li>
+        <li><strong>Focus modes</strong> respected per-channel &mdash; the user can mute one without the other.</li>
+        <li><strong>App in foreground</strong> &mdash; no push. Channel A keeps the badge live; B doesn&rsquo;t badge.</li>
+        <li><strong>Swipe-to-dismiss-silences is NOT implementable on iOS</strong> &mdash; don&rsquo;t spec it.</li>
       </ul>
     </div>
 
@@ -696,7 +715,7 @@
         </div>
       </div>
       <p class="lead" style="margin-top: 8px;">
-        Body is a single line, count-leading. <strong>No emoji.</strong> No app subtitle. The badge on the app icon does the math; the push tells the user it&rsquo;s worth opening.
+        Body is a single line, count-leading. <strong>No emoji.</strong> No app subtitle. Channel A pushes carry the badge math; Channel B doesn&rsquo;t badge. Same visual template for both channels.
       </p>
     </div>
 
@@ -727,7 +746,7 @@
     <div class="edge">
       <div class="head">D · Phone backgrounded mid-sync</div>
       <div class="title-row">Visible ack lags the actual file landing</div>
-      <div class="body">If the iPhone is asleep or the Himem app is suspended, the watch transfer can complete <em>before</em> the phone wakes to confirm receipt. The clip exists on disk on the phone; only the watch&rsquo;s <strong>&ldquo;removed from Pending&rdquo;</strong> state change waits for the round-trip. iOS schedules the wake within minutes; user sees Pending clear when that completes. <strong>The file is safe the whole time.</strong></div>
+      <div class="body">If the iPhone is asleep or the HiMem app is suspended, the watch transfer can complete <em>before</em> the phone wakes to confirm receipt. The clip exists on disk on the phone; only the watch&rsquo;s <strong>&ldquo;removed from Pending&rdquo;</strong> state change waits for the round-trip. iOS schedules the wake within minutes; user sees Pending clear when that completes. <strong>The file is safe the whole time.</strong></div>
     </div>
 
     <div class="edge danger">
@@ -745,7 +764,7 @@
   </div>
 
   <footer>
-    <span style="font-weight: 500; color: var(--ink2);">Himem · Flow · v1</span>
+    <span style="font-weight: 500; color: var(--ink2);">HiMem · Flow · v1</span>
     <span>Watch &rarr; Memory · happy path + 6 edge cases</span>
   </footer>
 

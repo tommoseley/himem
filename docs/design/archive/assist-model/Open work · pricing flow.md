@@ -19,7 +19,7 @@ These are the answers to the two questions open when I closed the previous sessi
 
 The free tier's one starter Project Assist run is **visible to the user as a starter** — they know they're using their one free pass. Reason: avoid the "I wouldn't have used it on that!" regret if it were silent.
 
-**Suggested copy:** the Find the thread button shows a small adjacent label *"Starter · free"* the first time, replaced by *"1 assist"* on subsequent passes (which fire the upgrade modal for free users). Or: a one-time modal *"You have one free Find the thread — use it on the project that matters most"* with **Use it** / **Not yet** buttons, the latter preserving the starter.
+**Copy (locked):** the Find the thread button shows a small adjacent label *"Starter · free"* the first time, replaced by *"1 assist"* on subsequent passes (which fire the upgrade modal for free users). *(Rejected alternative, kept for reference: a one-time modal "You have one free Find the thread — use it on the project that matters most" with **Use it** / **Not yet** buttons. Dropped — the inline label doesn't interrupt the flow.)*
 
 ### 2. Plus users out of assists can buy more without re-subscribing
 
@@ -29,6 +29,8 @@ Currently the **Exhausted** state (2e on the Pricing canvas, `ScrMemoryExhausted
 - **Plus + exhausted:** CTA = "Get more · pack of N for $X" → assist pack purchase modal. Plus stays Plus; the pack is additive.
 
 Two distinct destinations from one shared surface. Needs a new modal: **assist pack purchase**. The Pricing canvas already mocks the pack tiles (`PackTile` in `pricing-screens-settings.jsx`) — the missing piece is the modal that fires from Memory Detail's stale/exhausted footer.
+
+**IAP dependency:** the pack-purchase modal is the user-visible end of the In-App Purchase pipe. It can be *designed* now (`PackTile` already exists, and the modal is mocked as `plus-pack-modal`), but it **cannot go live until the IAP infrastructure clears** — Paid Apps Agreement, tax, and banking setup are the blocker, not design work. Treat the modal as design-complete / ship-blocked, not done.
 
 ---
 
@@ -41,12 +43,13 @@ Discovered during the previous session's draft:
 The bundle sheet shows an AI-suggested title (`AI Organize · spec.md`). For a free user:
 
 - **With assists:** the title suggestion costs 1 assist when the bundle is committed. ✓ Already specced.
-- **With 0 assists:** the bundle sheet should not pre-suggest a title and burn an assist invisibly. Likely fallback: a generic timestamp title (*"Voice clips · May 27 4:32 PM"*) with a *"Get AI title · 1 assist"* link adjacent. Decision needed: free's third bundle without assists left — does the link route to the upgrade modal? **Likely yes.**
+- **With 0 assists:** the bundle sheet does not pre-suggest a title or burn an assist invisibly. Fallback: a generic timestamp title (*"Voice clips · May 27 4:32 PM"*) with a *"Get AI title · 1 assist"* link adjacent. **Locked:** the link routes to the **Upgrade Hub** (`ScrUpgradeHub`) — not a separate "upgrade modal." Built as `free-bundle-no-ai`.
 
 ### Gap 2 · Free tier second tap on "Find the thread"
 
 After the starter run, free users tapping the button hits a paywall. Where is that modal? The Pricing canvas has an Upgrade Hub (`ScrUpgradeHub`) but no **inline paywall modal** from Project Detail. Needs to be designed:
 
+- **Canonical identifier:** `ProjectAssistUpsellSheet` (carried over from the old CLAUDE.md bullet — preserved here for naming continuity when this gets built; not yet implemented).
 - **Trigger:** free user, project already has summary, taps Find the thread.
 - **Suggested shape:** sheet that pulls up from the bottom, showing "Find the thread refreshes summaries with new memories. Plus gets unlimited Find-the-thread runs." with **Upgrade to Plus** primary, **Buy an assist pack** secondary, **Not now** tertiary.
 
@@ -116,15 +119,15 @@ DCSection id="plus-pack" title="3b · Plus · assist pack purchase"
 
 - `AI Organize · spec.md` § 8 already defines the state matrix this builds on. Don't re-spec; reference.
 - `Projects · MVP spec.md` already locks the starter Project Assist rule and the ≥1 memory threshold. Don't re-litigate.
-- `CLAUDE.md` § Projects already documents the tier model. The starter-loudness decision (May 27) needs to be added there once this work is built — see "Update CLAUDE.md" below.
+- `CLAUDE.md` § Projects already documents the tier model, including the starter-loudness decision (May 27 — now landed in CLAUDE.md). The exhausted-state tier split also landed in `CLAUDE.md` § AI Organize (May 31).
 
-## When this work lands, also update CLAUDE.md
+## CLAUDE.md updates (now complete)
 
-Two additions:
+Both additions are done; this section is kept as a record of what landed where.
 
-**Under § Projects locked rules:** "Starter Project Assist is **visible to the user as a starter** (e.g. *Starter · free* label adjacent to the button on first run). Not silent — avoids regret about which project consumed the starter pass."
+**Done — starter loudness:** the starter-loudness rule now lives in `CLAUDE.md` § Projects — *"The starter run is **loud, not silent**…"* with the *Starter · free* label spec and the May 27 reversal justification.
 
-**Under § AI Organize (or wherever assists are discussed):** "Plus users who run out of assists for the month can purchase an assist pack without changing their subscription. Free users hitting exhaustion are routed to the subscription paywall. Two destinations from one shared exhausted-state surface."
+**Done — exhausted-state tier split (May 31):** `CLAUDE.md` § AI Organize now has the bullet — *"Exhausted state splits by tier."* Plus → assist pack purchase, free → subscription paywall (Upgrade Hub), with a cross-reference back to this doc §2 for the modal spec and the IAP ship-block.
 
 ---
 

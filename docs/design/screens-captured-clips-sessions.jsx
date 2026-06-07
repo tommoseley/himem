@@ -10,10 +10,6 @@
 //  • Auto-excluded clips are a muted note, never amber, never a chip.
 //  • Operational surface — SF Pro throughout, no Source Serif on the list.
 //  • Vocabulary: "Make a Memory" everywhere. "Bundle" is retired.
-//  • Date+time on every session card. Format `EEE MMM d · h:mm a` (current
-//    year) or `EEE MMM d, yyyy · h:mm a` (older). Matches Memory Detail
-//    clip headers. No relative "Today / Yesterday" — operational surface,
-//    spans days, absolute date avoids ambiguity at a glance.
 
 // ─────────────────────────────────────────────────────────────
 // Top chrome — back ‹ on the left, "Done" on the right. No eyebrow.
@@ -155,14 +151,8 @@ function PinGlyph() {
 // `expanded` swaps the transcript preview for inline clip rows.
 // Action pill is the same in both states.
 // ─────────────────────────────────────────────────────────────
-// Date+time format matches Memory Detail clip headers:
-//   • current year:  "Wed May 27 · 3:36 PM"          (EEE MMM d · h:mm a)
-//   • older year:    "Wed May 27, 2025 · 3:36 PM"    (EEE MMM d, yyyy · h:mm a)
-// Sessions are operational, not editorial, so weekday + absolute date
-// over "Today / Yesterday" relative labels — the screen often spans
-// days and the user needs to disambiguate without doing math.
 function SessionCard({
-  dateTime, place, clips, duration, previewLine, autoExcluded = 0,
+  time, date = 'Today', place, clips, duration, previewLine, autoExcluded = 0,
   expanded = false, clipsDetail = null, disabled = false,
 }) {
   const excludeNote =
@@ -175,27 +165,31 @@ function SessionCard({
       background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 14,
       padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12,
     }}>
-      {/* Meta — date+time/clips/duration, then location beneath (if any) */}
+      {/* Meta — time/clips/duration, then date + location beneath */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <div style={{
           display: 'flex', alignItems: 'baseline', gap: 6,
           fontSize: 12.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums', letterSpacing: -0.1,
         }}>
-          <span style={{ fontWeight: 600, color: PX.ink, fontSize: 13.5, letterSpacing: -0.15 }}>{dateTime}</span>
+          <span style={{ fontWeight: 600, color: PX.ink, fontSize: 13.5, letterSpacing: -0.15 }}>{time}</span>
           <span style={{ color: PX.ink4 }}>·</span>
           <span>{clips} clip{clips > 1 ? 's' : ''}</span>
           <span style={{ color: PX.ink4 }}>·</span>
           <span>{duration}</span>
         </div>
-        {place && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            fontSize: 11.5, color: PX.ink3, letterSpacing: -0.05,
-          }}>
-            <span style={{ color: PX.ink4, display: 'inline-flex' }}><PinGlyph /></span>
-            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{place}</span>
-          </div>
-        )}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          fontSize: 11.5, color: PX.ink3, letterSpacing: -0.05,
+        }}>
+          {place && (
+            <React.Fragment>
+              <span style={{ color: PX.ink4, display: 'inline-flex' }}><PinGlyph /></span>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{place}</span>
+              <span style={{ color: PX.ink4 }}>·</span>
+            </React.Fragment>
+          )}
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{date}</span>
+        </div>
       </div>
 
       {/* Body — preview when collapsed, clip rows when expanded */}
@@ -241,13 +235,14 @@ function SessionCard({
 function ScrCCSessionList() {
   return (
     <PhoneScreen>
-      <CCHeader count={9} sessions={3} range="Wed May 27 12:01 PM – Thu May 28 3:36 PM" />
+      <CCHeader count={9} sessions={3} range="today, 12:01 – 3:36 PM" />
       <div style={{
         flex: 1, overflow: 'hidden',
         padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10,
       }}>
         <SessionCard
-          dateTime="Thu May 28 · 3:36 PM"
+          time="3:36 PM"
+          date="Today"
           place="Marsh Walk, Murrells Inlet"
           clips={4}
           duration="0:12"
@@ -255,14 +250,16 @@ function ScrCCSessionList() {
           autoExcluded={1}
         />
         <SessionCard
-          dateTime="Thu May 28 · 2:40 PM"
+          time="2:40 PM"
+          date="Today"
           place="18 Columbus Cir, Bluffton"
           clips={3}
           duration="0:08"
           previewLine="The bit about one point eight billion — I stopped them right there, said first of all that's not even the right number …"
         />
         <SessionCard
-          dateTime="Wed May 27 · 12:01 PM"
+          time="12:01 PM"
+          date="Today"
           place="Home"
           clips={2}
           duration="0:06"
@@ -286,13 +283,14 @@ function ScrCCSessionListExpanded() {
   ];
   return (
     <PhoneScreen>
-      <CCHeader count={9} sessions={3} range="Wed May 27 12:01 PM – Thu May 28 3:36 PM" />
+      <CCHeader count={9} sessions={3} range="today, 12:01 – 3:36 PM" />
       <div style={{
         flex: 1, overflow: 'hidden',
         padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10,
       }}>
         <SessionCard
-          dateTime="Thu May 28 · 3:36 PM"
+          time="3:36 PM"
+          date="Today"
           place="Marsh Walk, Murrells Inlet"
           clips={4}
           duration="0:12"
@@ -301,14 +299,16 @@ function ScrCCSessionListExpanded() {
           clipsDetail={clips336}
         />
         <SessionCard
-          dateTime="Thu May 28 · 2:40 PM"
+          time="2:40 PM"
+          date="Today"
           place="18 Columbus Cir, Bluffton"
           clips={3}
           duration="0:08"
           previewLine="The bit about one point eight billion — I stopped them right there, said first of all that's not even the right number …"
         />
         <SessionCard
-          dateTime="Wed May 27 · 12:01 PM"
+          time="12:01 PM"
+          date="Today"
           place="Home"
           clips={2}
           duration="0:06"
@@ -326,10 +326,10 @@ function ScrCCSessionListExpanded() {
 function ScrCCBundleConfirm() {
   const behind = (
     <PhoneScreen>
-      <CCHeader count={9} sessions={3} range="Wed May 27 12:01 PM – Thu May 28 3:36 PM" />
+      <CCHeader count={9} sessions={3} range="today, 12:01 – 3:36 PM" />
       <div style={{ padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <SessionCard
-          dateTime="Thu May 28 · 3:36 PM" place="Marsh Walk, Murrells Inlet" clips={4} duration="0:12"
+          time="3:36 PM" date="Today" place="Marsh Walk, Murrells Inlet" clips={4} duration="0:12"
           previewLine="One, two, three … one, two, three, four, five … one, two, three, four, five? Hey."
           autoExcluded={1}
         />
@@ -360,10 +360,10 @@ function ScrCCBundleConfirm() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>Thu May 28 · 3:36 PM · 3 clips · 0:12</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>3 clips · 3:36 PM · 0:12</div>
               <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ color: PX.ink4, display: 'inline-flex' }}><PinGlyph /></span>
-                <span>Marsh Walk, Murrells Inlet · 1 clip excluded</span>
+                <span>Marsh Walk, Murrells Inlet · Today · 1 clip excluded</span>
               </div>
             </div>
           </div>
@@ -400,8 +400,326 @@ function ScrCCBundleConfirm() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// SYNC / INCOMING
+// The operational truth the old surface hid: clips don't teleport
+// in. There are two phases — DOWNLOAD (audio watch→phone, known
+// duration, determinate) and TRANSCRIBE (phone reads it, unknown,
+// indeterminate). The wait the user feels is mostly transcribe;
+// naming the phase is what kills the frustration.
+// ─────────────────────────────────────────────────────────────
+
+// One-time keyframes for the in-progress motion. Rendered inside
+// each sync screen so the canvas artboards are self-contained.
+function SyncStyles() {
+  return (
+    <style>{`
+      @keyframes ccPulse  { 0%,100% { opacity: 1 } 50% { opacity: 0.3 } }
+      @keyframes ccBar    { 0% { background-position: 0 0 } 100% { background-position: 22px 0 } }
+      @keyframes ccShimmer{ 0% { background-position: -160px 0 } 100% { background-position: 220px 0 } }
+    `}</style>
+  );
+}
+
+// Small phase glyphs — status is never color alone (Crucible rule).
+function PhaseIcon({ phase }) {
+  const c = 'currentColor';
+  if (phase === 'waiting') {
+    return (
+      <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="7" cy="7" r="5.5"/><path d="M7 4v3l2 1.5"/>
+      </svg>
+    );
+  }
+  if (phase === 'downloading') {
+    return (
+      <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7 1.5v8"/><path d="M3.5 6.5L7 10l3.5-3.5"/><path d="M2.5 12.5h9"/>
+      </svg>
+    );
+  }
+  if (phase === 'transcribing') {
+    return (
+      <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2.5 4h9M2.5 7h9M2.5 10h5.5"/>
+      </svg>
+    );
+  }
+  // paused
+  return (
+    <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 3.5v7M9 3.5v7"/>
+    </svg>
+  );
+}
+
+// The phase pill that sits where the action pill is on a ready card.
+function PhasePill({ phase }) {
+  const map = {
+    waiting:      { label: 'Waiting',     fg: PX.ink3,    bg: PX.sunk,       pulse: false },
+    downloading:  { label: 'Receiving',   fg: PX.accent,  bg: PX.accentTint, pulse: true  },
+    transcribing: { label: 'Transcribing',fg: PX.ink2,    bg: PX.sunk,       pulse: true  },
+    paused:       { label: 'Paused',      fg: PX.warnInk, bg: PX.warnTint,   pulse: false },
+  };
+  const s = map[phase] || map.waiting;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      fontSize: 10.5, fontWeight: 700, color: s.fg, background: s.bg,
+      padding: '4px 9px', borderRadius: 11, letterSpacing: 0.3, textTransform: 'uppercase',
+      animation: s.pulse ? 'ccPulse 1.6s ease-in-out infinite' : 'none',
+    }}>
+      <PhaseIcon phase={phase} />
+      {s.label}
+    </span>
+  );
+}
+
+// Global sync strip — the at-a-glance "system knows, and it's working"
+// signal. Scales: summarizes count + which is active. Sits under header.
+function SyncStrip({ receiving = 1, total = 2, paused = false }) {
+  return (
+    <div style={{
+      margin: '0 14px 10px', padding: '10px 14px',
+      background: PX.card, border: '1px solid ' + (paused ? PX.warnTint : PX.hairline),
+      borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span style={{
+          width: 8, height: 8, borderRadius: 4, flexShrink: 0,
+          background: paused ? PX.warn : PX.accent,
+          animation: paused ? 'none' : 'ccPulse 1.4s ease-in-out infinite',
+        }} />
+        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>
+          {paused ? 'Waiting for your Watch' : 'Receiving from your Watch'}
+        </span>
+        {!paused && (
+          <span style={{ fontSize: 11.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums', letterSpacing: -0.05 }}>
+            {receiving} of {total}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 11, color: PX.ink3, lineHeight: 1.4, letterSpacing: -0.05 }}>
+        {paused
+          ? 'Your Watch went out of range. Sync picks up where it left off when it’s near.'
+          : 'Keep HiMem open to finish faster — it also syncs in the background.'}
+      </div>
+    </div>
+  );
+}
+
+// A horizontal shimmer line — skeleton for text that hasn't arrived.
+function ShimmerLine({ width = '100%' }) {
+  return (
+    <div style={{
+      height: 9, width, borderRadius: 5, marginBottom: 6,
+      background: `linear-gradient(90deg, ${PX.sunk} 0%, rgba(26,22,18,0.10) 50%, ${PX.sunk} 100%)`,
+      backgroundSize: '220px 100%',
+      animation: 'ccShimmer 1.3s linear infinite',
+    }} />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Incoming session card — a proto-card for a session still arriving.
+// Shows what we know (time, place, duration) and its phase where the
+// transcript will eventually be. No Make-a-Memory pill until ready.
+// ─────────────────────────────────────────────────────────────
+function IncomingCard({ time, date = 'Today', place, clips = 1, duration, phase, gotten, paused = false }) {
+  const effPhase = paused ? 'paused' : phase;
+  return (
+    <div style={{
+      background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 14,
+      padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12,
+      opacity: effPhase === 'waiting' ? 0.72 : 1,
+    }}>
+      {/* Meta — same shape as a ready card, with phase pill trailing */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 6,
+            fontSize: 12.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums', letterSpacing: -0.1,
+          }}>
+            <span style={{ fontWeight: 600, color: PX.ink, fontSize: 13.5, letterSpacing: -0.15 }}>{time}</span>
+            <span style={{ color: PX.ink4 }}>·</span>
+            <span>{clips} clip{clips > 1 ? 's' : ''}</span>
+            <span style={{ color: PX.ink4 }}>·</span>
+            <span>{duration}</span>
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            fontSize: 11.5, color: PX.ink3, letterSpacing: -0.05,
+          }}>
+            {place && (
+              <React.Fragment>
+                <span style={{ color: PX.ink4, display: 'inline-flex' }}><PinGlyph /></span>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{place}</span>
+                <span style={{ color: PX.ink4 }}>·</span>
+              </React.Fragment>
+            )}
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{date}</span>
+          </div>
+        </div>
+        <PhasePill phase={effPhase} />
+      </div>
+
+      {/* Phase body — replaces transcript + action while in flight */}
+      {effPhase === 'downloading' && (
+        <div>
+          <div style={{
+            height: 6, borderRadius: 3, background: PX.sunk, overflow: 'hidden', marginBottom: 7,
+          }}>
+            <div style={{
+              height: '100%', width: '58%', borderRadius: 3,
+              background: `repeating-linear-gradient(115deg, ${PX.accent} 0 11px, ${PX.accentMute || PX.accent} 11px 22px)`,
+              backgroundSize: '22px 100%', animation: 'ccBar 0.7s linear infinite',
+              opacity: 0.92,
+            }} />
+          </div>
+          <div style={{ fontSize: 11.5, color: PX.ink3, letterSpacing: -0.05, fontVariantNumeric: 'tabular-nums' }}>
+            Receiving audio · {gotten} of {duration}
+          </div>
+        </div>
+      )}
+
+      {effPhase === 'transcribing' && (
+        <div>
+          <ShimmerLine width="96%" />
+          <ShimmerLine width="100%" />
+          <ShimmerLine width="64%" />
+          <div style={{ fontSize: 11.5, color: PX.ink3, letterSpacing: -0.05, marginTop: 2 }}>
+            Audio’s here. Reading it now.
+          </div>
+        </div>
+      )}
+
+      {effPhase === 'waiting' && (
+        <div style={{ fontSize: 12.5, color: PX.ink3, lineHeight: 1.45, letterSpacing: -0.05 }}>
+          In line behind the clip downloading now.
+        </div>
+      )}
+
+      {effPhase === 'paused' && (
+        <div style={{ fontSize: 12.5, color: PX.ink3, lineHeight: 1.45, letterSpacing: -0.05 }}>
+          {gotten ? `Got ${gotten} of ${duration} so far. ` : ''}Picks up when your Watch is near.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Sync-aware header — count is TOTAL known (ready + incoming); the
+// subline splits it. Keeps "from your Watch" honest about everything
+// the Watch is sending, not just what finished.
+function CCHeaderSync({ total = 4, ready = 2, syncing = 2, range = 'today, 3:37 – 3:50 PM' }) {
+  return (
+    <div style={{ padding: '8px 14px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', height: 32, justifyContent: 'space-between' }}>
+        <span style={{
+          width: 30, height: 30, borderRadius: 15,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: PX.ink2,
+        }}>
+          <svg width="10" height="16" viewBox="0 0 9 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 1L1 7l6 6"/>
+          </svg>
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: PX.accent, letterSpacing: -0.1 }}>Done</span>
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 600, color: PX.ink, letterSpacing: -0.4, marginTop: 14, lineHeight: 1.15 }}>
+        {total} from your Watch
+      </div>
+      <div style={{ fontSize: 12.5, color: PX.ink3, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+        {ready} ready · {syncing} syncing · {range}
+      </div>
+    </div>
+  );
+}
+
+// The two retrieved sessions from the screenshots — reused across the
+// sync screens so the in-flight cards have real, ready siblings below.
+function ReadyCamSessions() {
+  return (
+    <React.Fragment>
+      <SessionCard
+        time="3:43 PM" date="Today" place="Marsh Walk, Murrells Inlet" clips={1} duration="0:14"
+        previewLine="back hole. So once I can pre-capture, more than enough. All right, our road trip. Pixel binning in 2026 for 4K video, Sony has lost the plot. This was interesting because I did…"
+      />
+      <SessionCard
+        time="3:37 PM" date="Today" place="Marsh Walk, Murrells Inlet" clips={1} duration="0:37"
+        previewLine="than the 87R4, and 7R5. Both the latter were set backwards with their slower scanning sensor, then that in the A7 R3. I think that saying that you're not getting the b…"
+      />
+    </React.Fragment>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SYNC SCREEN 1 — actively receiving.
+// 3:50 downloading, 3:44 waiting, then the two ready sessions.
+// ─────────────────────────────────────────────────────────────
+function ScrCCSyncing() {
+  return (
+    <PhoneScreen>
+      <SyncStyles />
+      <CCHeaderSync total={4} ready={2} syncing={2} />
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <SyncStrip receiving={1} total={2} />
+        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <IncomingCard time="3:50 PM" place="Marsh Walk, Murrells Inlet" duration="0:06" gotten="0:04" phase="downloading" />
+          <IncomingCard time="3:44 PM" place="Marsh Walk, Murrells Inlet" duration="5:00" phase="waiting" />
+          <ReadyCamSessions />
+        </div>
+      </div>
+    </PhoneScreen>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SYNC SCREEN 2 — first clip's audio is in, now transcribing;
+// the long 5:00 clip is mid-download. Shows the phase handoff.
+// ─────────────────────────────────────────────────────────────
+function ScrCCTranscribing() {
+  return (
+    <PhoneScreen>
+      <SyncStyles />
+      <CCHeaderSync total={4} ready={2} syncing={2} />
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <SyncStrip receiving={2} total={2} />
+        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <IncomingCard time="3:50 PM" place="Marsh Walk, Murrells Inlet" duration="0:06" phase="transcribing" />
+          <IncomingCard time="3:44 PM" place="Marsh Walk, Murrells Inlet" duration="5:00" gotten="1:48" phase="downloading" />
+          <ReadyCamSessions />
+        </div>
+      </div>
+    </PhoneScreen>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SYNC SCREEN 3 — stalled. Watch went out of range mid-transfer.
+// Honest, no blame. Partial progress is preserved.
+// ─────────────────────────────────────────────────────────────
+function ScrCCStalled() {
+  return (
+    <PhoneScreen>
+      <SyncStyles />
+      <CCHeaderSync total={4} ready={2} syncing={2} />
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <SyncStrip paused />
+        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <IncomingCard time="3:50 PM" place="Marsh Walk, Murrells Inlet" duration="0:06" gotten="0:04" phase="downloading" paused />
+          <IncomingCard time="3:44 PM" place="Marsh Walk, Murrells Inlet" duration="5:00" phase="waiting" paused />
+          <ReadyCamSessions />
+        </div>
+      </div>
+    </PhoneScreen>
+  );
+}
+
 Object.assign(window, {
   ScrCCSessionList,
   ScrCCSessionListExpanded,
   ScrCCBundleConfirm,
+  ScrCCSyncing,
+  ScrCCTranscribing,
+  ScrCCStalled,
 });

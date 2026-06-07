@@ -116,9 +116,35 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 - **Today is always the landing page.** No auto-open of inbox.
 - Inbox status surfaces as a **banner card pinned at top of Today** when count > 0.
 - **Captured Clips** reachable from Settings always, including count of 0.
-- **Audio is the source of truth.** Never auto-delete original audio. Transcripts are derivative and regeneratable.
+- **Audio is the source of truth.** Never auto-delete original audio. Transcripts are derivative and regeneratable. *(Where that audio physically lives → see **Media storage** below.)*
 - **iPhone FAB voice = direct memory** (not inbox-routed). Inbox is Watch-only.
 - One canonical name: **"Captured Clips"** in app chrome; **"X new from Apple Watch"** only in banner copy.
+
+### Media storage (locked direction, June 2026)
+
+**All HiMem-created media — voice recordings, photos, videos — lives in the user's own iCloud (a HiMem container in iCloud Drive / Files), not in the app sandbox.** This is a deliberate change from the prior model and fixes two real bugs in the current build:
+
+1. **Cross-device availability.** Before: audio recorded/received on the phone never synced onward — it was unavailable on other devices (e.g. iPad **Studio**). Now: because the media lives in the user's iCloud, it's reachable from every device the user is signed into. Studio can read the same voice files the phone captured.
+2. **Survives delete + reinstall.** Before: audio lived in the app's storage and was **destroyed when the user deleted the app**, so a reinstall came back with metadata but no original recordings. Now: the media is the user's, in their iCloud — deleting the app no longer deletes their recordings, and reinstall restores them (this is what the Reinstall → *"Bringing your memories back from iCloud"* flow now genuinely delivers, audio included).
+
+**Two-store model:**
+- **Structured data** — memories, transcripts, topics, mentions, projects — stays in **CloudKit + Core Data** (the local index the Memories list reads instantly; see `Memories list · spec.md §9`).
+- **Media blobs** — voice/photo/video — live in **iCloud Files**.
+- The new architectural concern is **reference integrity between the two stores**: a memory's metadata points at a media file that lives in user-visible, user-mutable iCloud Files.
+
+**Consequences worth holding onto (mostly backend; design-light per current call):**
+- **Storage is the user's iCloud quota, not ours.** Economically good (we don't pay to store media); but a user whose iCloud is full can hit a capture/sync ceiling — a calm "iCloud is full" path is a candidate state, not yet designed.
+- **Eviction.** iCloud can purge a local copy to save space; playback may need a download-on-demand (a brief "fetching" state on a clip). Not yet designed; flag if it surfaces.
+- **No design change required right now** beyond retiring the old "create a HiMem folder/album in Photos?" implementation prompt (HiMem no longer writes into the Photos library; media goes to its iCloud Files container instead).
+
+**User-mutable files (locked):** because the media is genuinely the user's — visible in the Files app — they can move, rename, or delete it out from under HiMem, and **there is nothing we can or should do to prevent that.** That's the honest cost of the files being theirs, and we accept it. Consequences:
+- **The DB stays authoritative for metadata; the file is authoritative for the bytes.** If the bytes are gone, the memory still exists (title, transcript, topics all live in CloudKit) — only playback of the original is lost.
+- **A missing file is a calm, honest state, never an error or a blame.** The clip shows something like *"This recording was moved or deleted"* (Crucible voice: never "you deleted this"). The transcript and everything derived from it remain fully intact and usable.
+- **The transcript is what makes the loss survivable.** Voice recordings are transcribed (and, later, video too) — so even with the source media gone, the *words* are still in the memory: searchable, organizable, readable. We lose the original recording, never the substance. This is precisely why we can afford to let the files be the user's.
+- **We don't nag, lock, hide, or duplicate-to-protect.** No "don't touch this folder" warnings, no shadow copy in the sandbox to defeat the point. The transcript being derivative and regeneratable-from-nothing is exactly why losing an original is survivable.
+
+**Durability across uninstall/reinstall (locked):** once media lives in the **public-document-scope ubiquity container** (`NSUbiquitousContainerIsDocumentScopePublic = YES` — the same flag that surfaces the HiMem folder in Files), the bytes have a lifecycle independent of HiMem's install state. Same bundle ID = same container, so uninstall → reinstall (or a brand-new phone signed into the same iCloud) reconnects to the existing folder and everything returns — bytes from iCloud Files, metadata from CloudKit (which already survives reinstall today). The relationship becomes *"your journal is part of your iCloud,"* not *"your journal is on this phone."* The **only** ways media is actually lost: (1) the user deletes the files themselves from Files.app, (2) they sign out of / close their Apple account, (3) they exceed their iCloud quota — which blocks *new* writes, it doesn't destroy existing ones.
+- **Migration caveat.** Audio captured *before* this ships (today's `Documents/VoiceEntries/`) is still sandbox-bound and dies with uninstall **until the migration runs on that device.** Durability is a post-migration property; the migration is what earns the resilience story above.
 
 ### Naming
 - **Memory Box** is the canonical name for the user's archive (not "bin").
@@ -231,8 +257,7 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 | `Himem · Captured Clips.html` — v0, original clip-first design (superseded; kept as reference) | inline |
 | `Himem · Captured Clips (session-first).html` — **v1 canonical**, per session-first spec | `screens-captured-clips-sessions.jsx` |
 | `Himem · Projects.html` — projects MVP canvas | `screens-projects.jsx` (shared bits), `screens-projects-cards.jsx` (cards), `screens-projects-views.jsx` (5 screen views), `screens-projects-spec.jsx` (annotated dev row spec) |
-| `HiMem · Pricing.html` — Capture · Connect · Create pricing canvas (3 sections: pricing page · organize lifecycle · upgrade moment). Per locked `Pricing model · Capture-Connect-Create.md`. | `pricing-screens.jsx`, `pricing-screens-lifecycle.jsx`, `pricing-screens-upgrade.jsx` |
-| ~~`Himem · Pricing.html`~~ (old) — assist-quota model, retired June 5 2026 → `archive/assist-model/` | *(archived)* |
+| `Himem · Pricing.html` — **RETIRED** to `archive/assist-model/` (assist-quota model). New pricing per `Pricing model · Capture-Connect-Create.md`; replacement screens TBD post on-device prototype. | *(archived)* |sx` |
 | `Himem · Launch.html` / `Onboarding.html` / `Search.html` / `Location.html` / `Append.html` — supporting phone flows | inline |
 | `Himem Studio · iPad Wireframes.html` — iPad Studio (lo-fi only) | `studio/wireframes.jsx` |
 | `Himem · App Store.html` — App Store marketing frames (6 portrait frames) | `frames/appstore-frames.jsx` |

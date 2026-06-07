@@ -11,7 +11,7 @@ May 2026. Locked for v1.
 - **Membership is assigned to memories, not the other way around.** A memory is tagged into a project either at memory-creation (chip in the new-memory sheet) or after the fact (Add memory sheet on project detail).
 - **Removing a memory from a project.** **Right-to-left swipe** on a memory row in the project's memory list reveals a red **Remove** action — same convention used elsewhere in the app. Tap removes the memory from this project; the memory itself is untouched. A toast appears at the bottom: *"Removed from [project] · Undo"* with a 5-second timeout. No confirmation modal — the undo toast is the safety net.
   - Memory Detail shows project membership as read-only chips in MVP. To remove a memory from a project, the user goes to the project page and swipes. One canonical management surface.
-  - Removing a memory marks the project's existing Project Assist summary stale (amber footer `"Project membership changed · Refresh · 1 assist"`, same handoff to AI Organize spec § 8 as adding). Derived topic chips recompute on read.
+  - Removing a memory marks the project's existing Project Assist summary stale (amber footer `"Project membership changed · Refresh"`, same handoff to AI Organize spec § 8 as adding). Derived topic chips recompute on read.
 - **Derived topics**: compute on read for MVP. If a project ever crosses ~50 memories, introduce `derivedTopicsSnapshot` cached on the project and invalidated on member add/remove. Not urgent now.
 - **Naming carryover**: Core Data attribute is still `Project.purpose`; UI label is "goal." These can diverge. If the rename is bundled with the pre-TestFlight schema deploy, rename the attribute too — otherwise leave the attribute alone.
 
@@ -27,7 +27,9 @@ May 2026. Locked for v1.
 
 ## Project Assist · “Find the thread”
 
-The single AI action on a project. **One assist per pass produces two outputs.**
+> **Project Assist is the Connect capability — a Plus feature.** It's how projects *grow themselves*: a synthesized summary plus suggested memories that may belong. Free builds projects **by hand** (create, add/remove, title, goal, browse, search-within); Plus is what reaches across the library to grow them. Whether Free gets a one-time *taste* of Find the thread is a trial decision in `Pricing model · Capture-Connect-Create.md`, not a metered “starter assist.”
+
+The single AI action on a project. **One pass produces two outputs.**
 
 **Naming.**
 
@@ -43,7 +45,7 @@ A single Honest-Label paragraph, 2–4 sentences, in second-person voice. Same r
 
 Example:
 
-> You're building a multi-format capture app for content creators — voice and photo on the watch, organized on the phone. You've settled on watch-only capture and a tiered pricing model with one project free.
+> You're building a multi-format capture app for content creators — voice and photo on the watch, organized on the phone. You've settled on watch-only capture and a tiered pricing model with three projects free.
 
 **Output 2 — Suggested memories.**
 A short list (target 3–5) of memories from elsewhere in the user's library that may belong in this project. Each suggestion carries:
@@ -79,38 +81,34 @@ Studio (post-MVP) can structure further. MVP stays the size of a paragraph plus 
 - **Top 20–30 candidates** go to the AI, which re-ranks and produces the “why” line + confidence per memory.
 - **AI returns at most 5 suggestions.** Better to surface 2 strong ones than 5 weak ones; the spec instructs the model to say *“nothing strong this time”* rather than fill space.
 - **No auto-add.** Suggestions live in the review sheet until the user taps Add. Skipped suggestions are remembered for ~30 days so the same proposal doesn't come back next run.
-- **Cost stays at 1 assist** regardless of how many candidates the prefilter surfaces. The AI sees a bounded payload; cost is flat at any project size.
+- **The AI sees a bounded payload** regardless of how many candidates the prefilter surfaces — the work (and inference cost) is flat at any project size.
 
-### Trigger, cost, and what the AI actually reads
+### Trigger and what the AI actually reads
 
-- **Manual only.** No auto-run, even on Plus. New memories arrive often; rewriting the paragraph every time would burn assists for nothing.
-- **1 assist per pass.** Accept / edit / regenerate-after-edit / dismiss = 0 additional cost. *Refresh after new memories = 1 assist* (matches AI Organize spec for memories).
+- **Manual only.** Owner-initiated, even on Plus. New memories arrive often; auto-rewriting the paragraph on every arrival would be noise, not help — the owner decides when to pull the thread.
+- **Re-running is unmetered.** Accept / edit / regenerate-after-edit / dismiss / refresh-after-new-memories all just re-run or commit — nothing is counted (matches the AI Organize spec).
 - **Minimum threshold: 1 memory.** With one memory the "summary" is closer to a paraphrase than a synthesis — fine; the user gets back what they asked for. Zero memories has nothing to summarize and the button shows but is disabled, with a quiet reason line. One is the only structurally defensible threshold; any higher number is arbitrary.
 - **What it sees**: for memories *in* the project — title, topic, date, and existing AI summary. For *candidate* memories (the prefiltered 20–30) — the same fields plus the memory's existing one-line excerpt if present. **Never raw transcripts or full fragments.** That's Studio's territory.
 
 ### States on the detail screen
 
-1. **Never run** (≥1 memory): “Find the thread · 1 assist” card with a single **Run** button, AI blue.
+1. **Never run** (≥1 memory): “Find the thread” card with a single **Run** button, AI blue.
 2. **Below threshold** (0 memories): same card, button disabled, sub-line reads “Add a memory first.”
 3. **Running**: same card with a pulsing dot or progress strip.
 4. **Summarized** (current): AI-blue framed summary card at top. Below it, a quieter “N memories may belong here · Review” card if the AI returned suggestions. Memory list follows.
-5. **Stale** (≥1 new memory since last run): summary card stays, plus a small `Refresh — N new` link inline. Tapping consumes 1 assist.
+5. **Stale** (≥1 new memory since last run): summary card stays, plus a small `Refresh — N new` link inline. Tapping re-runs the pass.
 
-### Tier behavior
+### Tier behavior (Capture · Connect · Create)
 
-| Tier | Project Assist |
-|---|---|
-| Free | **1 active project, 1 starter Project Assist run.** First tap of *Find the thread* just works. Upsell fires only on the second attempt (second project *or* second summary on the same project). Starter run is a separate one-time grant, **not** drawn from the 3 starter memory assists — projects don't feel like they're stealing from capture. |
-| Plus / Founders | Owner-initiated. Counted against the 50/month allowance. Unlimited projects. |
-| Studio (post-MVP) | Reads raw fragments. Cross-project synthesis. Structured output. Export. |
+Project Assist is the **Connect** capability — the intelligence that makes projects grow themselves. It's a **Plus** feature; the gate is intelligence, not a count.
 
-### Starter run, in detail
+| Tier | Projects | Project Assist (“Find the thread”) |
+|---|---|---|
+| **Free / Capture** | Up to **3**, built and managed **by hand** | — (build manually; the growing-itself layer is Plus). A one-time *taste* of Find the thread may be offered as a trial — see `Pricing model · Capture-Connect-Create.md`, not a metered starter. |
+| **Plus / Connect** | **Unlimited** | Owner-initiated, unmetered. Related memories, suggested membership, find-the-thread synthesis, cross-project. |
+| **Studio / Create** (post-launch) | Unlimited | Reads raw fragments. Cross-project synthesis. Structured output. Export. |
 
-- **Same constraints as paid runs.** ≥1 memory, reads summaries + titles + topics + dates (not raw transcripts), produces one Honest-Label paragraph, doesn't mutate individual memories.
-- **Silent in the UI.** No “you get a free one!” badge before use. Don't market the freebie — let the first experience feel like the product just working.
-- **Surfaces only at exhaustion.** The Plus upsell sheet titles itself *“You've used your starter project summary”* (not *“Project summaries are a Plus thing”*) so the user understands what they got, not what they're missing.
-- **One per account, not per project.** A user can't game it by starting another project. (Free is capped at 1 project anyway, but stating the rule keeps Plus-cancel → Free regression honest.)
-- **Persisted in the same `packBalance` mechanism** as the 3 starter memory assists, but as a separate `starterProjectAssist: Int` counter granted once on first launch. CloudKit-backed, no refill.
+No starter counters, no per-run accounting, no `packBalance`. If Free is offered a trial of Find the thread, it's a trial flag (a taste of the Plus magic), decided in the pricing doc — not a quota mechanism specced here.
 
 ## Bugs fixed by this design
 
@@ -138,7 +136,7 @@ For the iOS team. These aren't design decisions but they're worth pinning before
 
 - **Reuse `SummaryRenderer.renderForOwner`.** Don't fork the renderer for projects — the `<User>` token substitution and Honest Label voice rules live in one place.
 - **Reuse the existing re-rank API path.** The “candidate set + ask AI to re-rank with one-sentence rationale” shape is structurally identical to `existing_mentions` already wired into the memory analyze endpoint. Group these as one *context-aware re-ranking* call on the server; don't grow two divergent paths.
-- **Entitlement bucket.** Free's starter Project Assist needs a separate `starterProjectAssistGranted: Bool` (or `Int` counter) in `EntitlementService`/CloudKit. Don't fold it into the 3 memory-assist counter — the whole point is that projects don't steal from capture. Sync with `pricing-model.md` so this gets the right SKU treatment.
+- **Entitlement bucket.** Project Assist is a **Plus capability** in `EntitlementService` — gate it behind the Plus entitlement, not a per-run counter. If a Free trial of Find the thread is offered, it's a single boolean trial flag (`projectAssistTrialUsed`), decided in `Pricing model · Capture-Connect-Create.md` — not a quota counter.
 - **AI-blue color sweep is a separate task**, not a footnote on this spec. See [AI attribution color sweep] below.
 
 ## Related work (not in this spec)

@@ -186,74 +186,44 @@ struct EntryExpandedView: View {
             editedTitle = entry.displayTitle
             migrateOrphanedContentIfNeeded()
         }
-        .sheet(item: $audioPlayerForFile) { target in
-            // Prefer the per-clip transcript captured at recording time;
-            // fall back to entry.content (the joined-transcript blob) for
-            // legacy voice refs from before the schema gained the field.
-            AudioPlayerSheet(
-                filename: target.filename,
-                recordedAt: target.recordedAt,
-                initialTranscript: target.transcript ?? entry.content,
-                onSaveTranscript: { newText in
-                    if let mediaId = target.mediaId {
-                        updateMediaTranscript(id: mediaId, text: newText)
-                    } else {
-                        // Legacy voice entry — transcript IS entry.content.
-                        // Persist through lifecycle.edit so search +
-                        // inference re-derive from the new text.
-                        lifecycle.edit(entryId: entry.id, newContent: newText)
-                    }
+        .modifier(MediaFragmentEditorStack(
+            audioPlayerForFile: $audioPlayerForFile,
+            noteEditorTarget: $noteEditorTarget,
+            selectedMedia: $selectedMedia,
+            legacyTranscriptFallback: entry.content,
+            onSaveAudioTranscript: { mediaId, newText in
+                if let mediaId {
+                    updateMediaTranscript(id: mediaId, text: newText)
+                } else {
+                    // Legacy voice entry — transcript IS entry.content.
+                    // Persist through lifecycle.edit so search +
+                    // inference re-derive from the new text.
+                    lifecycle.edit(entryId: entry.id, newContent: newText)
                 }
-            )
-            // Match the note editor's `.large` detent so the voice
-            // editor and note editor open at the same height — Tom's
-            // edit surfaces should feel the same regardless of clip
-            // type.
-            .presentationDetents([.large])
-        }
-        .sheet(item: $noteEditorTarget) { target in
-            NoteEditorSheet(
-                recordedAt: target.createdAt,
-                initialText: target.text,
-                onSave: { newText in
-                    updateNoteFragment(id: target.mediaId, text: newText)
-                }
-            )
-            .presentationDetents([.large])
-        }
-        // Photo / video tap → directly into the description editor.
-        // The voice clip path opens AudioPlayerSheet directly too
-        // (also a `.sheet`), so the two media editors land on parallel
-        // surfaces with no intermediate viewer step. Per
-        // `docs/design/HiMem · Edit Sheet.html` June 2026.
-        .sheet(item: $selectedMedia) { item in
-            PhotoDescriptionEditSheet(item: item) { newDescription in
-                updateMediaDescription(id: item.id, text: newDescription)
+            },
+            onSaveNoteFragment: { mediaId, newText in
+                updateNoteFragment(id: mediaId, text: newText)
+            },
+            onSaveMediaDescription: { mediaId, newText in
+                updateMediaDescription(id: mediaId, text: newText)
             }
-            .presentationDetents([.large])
-        }
+        ))
         .sheet(isPresented: $showShareSheet) {
             let composed = "\(entry.displayTitle)\n\n\(entry.content)"
             ShareSheet(items: [composed])
         }
-        .alert("Move to Recently Deleted?", isPresented: $showDeleteConfirmation) {
-            Button("Move to Recently Deleted", role: .destructive) {
+        .modifier(EntryDeleteAlerts(
+            showRecycleConfirmation: $showDeleteConfirmation,
+            showPermanentDeletePrompt: $showEmptyMemoryDeletePrompt,
+            onRecycle: {
                 onRecycle?(entry.id)
                 dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This memory will be moved to the Recently Deleted. You can restore it from Settings.")
-        }
-        .alert("Delete this memory?", isPresented: $showEmptyMemoryDeletePrompt) {
-            Button("Delete", role: .destructive) {
+            },
+            onPermanentDelete: {
                 lifecycle.delete(entryId: entry.id)
                 dismiss()
             }
-            Button("Keep", role: .cancel) {}
-        } message: {
-            Text("All content has been removed. This will permanently delete the memory — it won't go to Recently Deleted.")
-        }
+        ))
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .newTopic:
@@ -1180,5 +1150,88 @@ private struct CommitFooter: View {
         }
         .buttonStyle(.plain)
         .padding(.top, 8)
+    }
+}
+
+// MARK: - Body sub-modifiers
+
+/// Three media-fragment edit sheets that ride on top of every
+/// EntryExpandedView. All three use the same `.large` detent and
+/// follow the unified edit-sheet template
+/// (`docs/design/HiMem · Edit Sheet.html` June 2026): audio →
+/// transcript editor, photo/video → description editor, note →
+/// text editor. Extracted from `EntryExpandedView.body` so the
+/// body stops owning their wiring directly — CRAP audit 2026-06-07.
+private struct MediaFragmentEditorStack: ViewModifier {
+    @Binding var audioPlayerForFile: AudioPlayerTarget?
+    @Binding var noteEditorTarget: NoteEditorTarget?
+    @Binding var selectedMedia: MediaDisplayItem?
+    /// Used when a voice clip predates the per-clip transcript
+    /// schema — the joined entry content is the only transcript
+    /// available. Passed through to AudioPlayerSheet's
+    /// `initialTranscript`.
+    let legacyTranscriptFallback: String
+    /// (mediaId?, newText) — `nil` mediaId means a legacy voice
+    /// entry whose transcript IS the entry content.
+    let onSaveAudioTranscript: (UUID?, String) -> Void
+    let onSaveNoteFragment: (UUID, String) -> Void
+    let onSaveMediaDescription: (UUID, String) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $audioPlayerForFile) { target in
+                AudioPlayerSheet(
+                    filename: target.filename,
+                    recordedAt: target.recordedAt,
+                    initialTranscript: target.transcript ?? legacyTranscriptFallback,
+                    onSaveTranscript: { newText in
+                        onSaveAudioTranscript(target.mediaId, newText)
+                    }
+                )
+                .presentationDetents([.large])
+            }
+            .sheet(item: $noteEditorTarget) { target in
+                NoteEditorSheet(
+                    recordedAt: target.createdAt,
+                    initialText: target.text,
+                    onSave: { newText in
+                        onSaveNoteFragment(target.mediaId, newText)
+                    }
+                )
+                .presentationDetents([.large])
+            }
+            .sheet(item: $selectedMedia) { item in
+                PhotoDescriptionEditSheet(item: item) { newDescription in
+                    onSaveMediaDescription(item.id, newDescription)
+                }
+                .presentationDetents([.large])
+            }
+    }
+}
+
+/// Two delete-related alerts: a recycle-to-trash confirmation
+/// and a permanent-delete prompt for memories whose last clip was
+/// just removed. Extracted from `EntryExpandedView.body` so the
+/// body stops owning their wiring directly — CRAP audit 2026-06-07.
+private struct EntryDeleteAlerts: ViewModifier {
+    @Binding var showRecycleConfirmation: Bool
+    @Binding var showPermanentDeletePrompt: Bool
+    let onRecycle: () -> Void
+    let onPermanentDelete: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Move to Recently Deleted?", isPresented: $showRecycleConfirmation) {
+                Button("Move to Recently Deleted", role: .destructive, action: onRecycle)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This memory will be moved to the Recently Deleted. You can restore it from Settings.")
+            }
+            .alert("Delete this memory?", isPresented: $showPermanentDeletePrompt) {
+                Button("Delete", role: .destructive, action: onPermanentDelete)
+                Button("Keep", role: .cancel) {}
+            } message: {
+                Text("All content has been removed. This will permanently delete the memory — it won't go to Recently Deleted.")
+            }
     }
 }

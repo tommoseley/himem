@@ -447,13 +447,13 @@ function ScrProjectCap() {
             <Proj size={18}/>
           </div>
           <div style={{ fontFamily: PX.serif, fontSize: 22, lineHeight: 1.2, letterSpacing: -0.3, color: PX.ink, marginBottom: 10 }}>
-            Free includes one project.
+            Free includes three projects.
           </div>
           <div style={{ fontSize: 14, color: PX.ink2, lineHeight: 1.5, marginBottom: 6 }}>
             Plus opens up as many as you want — keep work, family, and the garden in their own spaces.
           </div>
           <div style={{ fontSize: 12.5, color: PX.ink3, lineHeight: 1.5 }}>
-            You can also tag memories inside your existing project — that's free.
+            You can also tag memories inside your existing projects — that's free.
           </div>
 
           <div style={{ flex: 1 }}/>

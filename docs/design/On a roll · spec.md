@@ -154,8 +154,8 @@ Never "this recording" — that misrepresents the model and could panic a user w
 | Tier | Next |
 |---|---|
 | Free | Fully available on every surface. |
-| Plus / Founders | Same. |
-| Studio (post-MVP) | Same. |
+| Plus | Same. |
+| Studio (post-launch) | Same. |
 
 This is a capture affordance, not an AI or organizational feature. The Honest pricing line: *capture is always free; AI helps organize what you've captured.* Next is on the capture side of that line.
 

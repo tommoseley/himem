@@ -82,7 +82,7 @@ Before recording begins on a fresh start, the watch shows a one-second "breath" 
 "Speak freely."
 ```
 
-**Haptic pattern.** One `.click` at the start of the breath, one `.click` at the moment recording begins (the "go"). Both tactile-only. `.success` was tried and rejected — watchOS pairs it with an audible chime that breaks the quiet "you're free to speak" mood; tactile-only is the call here. No tick-tick-tick.
+**Haptic pattern.** One soft `.click` at the start of the breath, one slightly stronger `.success` at the moment recording begins. No tick-tick-tick. The end haptic is the "go."
 
 **Tap anywhere to cancel.** The whole screen is the cancel target. Returns to the previous surface (Capture page on watch, Today on phone, parent Memory on append). Sub-1-second user reaction is unlikely but supported.
 
@@ -237,8 +237,8 @@ Browsing the Memory Box happens on phone. Always.
 | Tier | Watch |
 |---|---|
 | Free | Fully available. 50-clip local storage cap is the same ceiling for everyone. |
-| Plus / Founders | Same. |
-| Studio (post-MVP) | Same. |
+| Plus | Same. |
+| Studio (post-launch) | Same. |
 
 Capture is always free. The watch is the purest capture surface — gating any of it would punish the people we want most to retain.
 

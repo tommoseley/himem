@@ -1,5 +1,5 @@
 // crucible-primitives.jsx
-// Canonical Crucible iOS primitives. Used by every page that mocks Himem screens.
+// Canonical Crucible iOS primitives. Used by every page that mocks HiMem screens.
 // PhoneScreen, Sheet, plus the PX token set (cream paper, ochre accent, Source Serif 4 + SF Pro).
 // Sized for design-canvas artboards (340×735).
 //

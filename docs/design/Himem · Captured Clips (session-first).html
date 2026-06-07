@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Himem · Captured Clips · session-first</title>
+<title>HiMem · Captured Clips · session-first</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -41,6 +41,18 @@ function App() {
         </DCArtboard>
         <DCArtboard id="sheet" label="3. Make a Memory · confirm sheet" width={340} height={735}>
           <ScrCCBundleConfirm />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="sync" title="Sync · incoming" subtitle="The operational truth the surface used to hide: clips don't teleport in. Two phases — download (determinate) then transcribe (indeterminate). The wait the user feels is mostly transcribe; naming the phase is what kills the frustration. May 29 2026.">
+        <DCArtboard id="syncing" label="1. Receiving · download in progress" width={340} height={735}>
+          <ScrCCSyncing />
+        </DCArtboard>
+        <DCArtboard id="transcribing" label="2. Transcribing · phase handoff" width={340} height={735}>
+          <ScrCCTranscribing />
+        </DCArtboard>
+        <DCArtboard id="stalled" label="3. Stalled · Watch out of range" width={340} height={735}>
+          <ScrCCStalled />
         </DCArtboard>
       </DCSection>
 

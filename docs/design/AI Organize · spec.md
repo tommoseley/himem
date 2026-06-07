@@ -2,9 +2,11 @@
 
 **Status:** Draft 2026-05-18 — derived from the pricing-model lock of 2026-05-15 and the Memory-Detail design conversations of 2026-05-18.
 **Owner:** Tom
-**Companion files:** `Himem · Pricing.html` (Sections 2, 2b, 2c, 2d), `CLAUDE.md`.
+**Companion files:** `Pricing model · Capture-Connect-Create.md` (current pricing direction); `archive/assist-model/` (retired assist-quota canvas + screens); `CLAUDE.md`.
 
-This is the design and behavior spec for the **AI Organize** feature: what one assist buys, what the summary should and shouldn't be, where suggestions surface in the UI, and how the system stays honest at scale. Read this before changing any AI-touched surface.
+> **Pricing direction:** Capture · Connect · Create — see `Pricing model · Capture-Connect-Create.md`. Free organize is **manual + on-device**; Plus organize is **automatic + frontier**. The metering model (assists/packs/quotas) is retired; its old canvas lives in `archive/assist-model/`. The Honest-Label rules, voice, QA rubric, and provenance behavior in this spec are all current and binding — and the on-device path must itself pass this spec's Honest-Label rubric (the open hard dependency).
+
+This is the design and behavior spec for the **AI Organize** feature: what organize produces, what the summary should and shouldn't be, where suggestions surface in the UI, and how the system stays honest at scale. Read this before changing any AI-touched surface.
 
 ---
 
@@ -18,7 +20,7 @@ The product promise is **"AI gives every memory a name."** Not insight. Not inte
 
 ---
 
-## 2. What one assist buys
+## 2. What an organize pass produces
 
 A whole-memory pass that produces:
 
@@ -26,21 +28,33 @@ A whole-memory pass that produces:
 - **Summary** — a 1–4 sentence honest label
 - **Topics** — 1–3 topic suggestions, from a controlled vocabulary
 - **Mentions** — 0–5 first-class entity suggestions (places, people, projects, ideas) the user can accept individually
-- **Next steps** — 0–4 action items, only if the memory contains intent or unresolved threads
+- **Next steps** — 0–4 action items, only if the memory contains intent or unresolved threads. **Plus-tier only** — see below.
 
 Fewer outputs is correct when the clips don't warrant more. Empty outputs are correct when there's nothing to say. Fluff to fill the card is never correct.
 
-### Pricing rules
+### Output by tier (June 5 spike)
 
-| Action | Cost |
-|---|---|
-| First Organize with AI on a memory | 1 assist |
-| Accept, edit, or skip any individual suggestion | 0 assists |
-| Manual edit of any field (Title, Summary, etc.) | 0 assists |
-| Refresh after new clips arrive | 1 assist |
-| Failed / aborted / errored pass | 0 assists |
+The on-device model (Free) and the frontier model (Plus) produce the *same shape* with one exception: **`nextSteps` is Plus-only.** The on-device model fabricated forward actions when given the field, so it was cut from the on-device schema (`OrganizeOutput` = title / summary / topics / mentions). This fits the seam — proactive "what to do next" is the system acting *for* you, which is the automatic/Plus side. Free describes what's there; Plus also tells you what's next.
 
-The 1-assist cost is per-pass, not per-output. A user who accepts 1 of 5 suggestions paid the same as a user who accepted all 5.
+### When organize runs (Capture · Connect · Create)
+
+- **Free — manual, on-device.** Organize is a deliberate act: the user taps **Organize** on a memory. Runs on Apple Foundation Models (iPhone 15 Pro+/iOS 26), 1.2–1.7s, fully offline, or via a server fallback on older devices. There is **no counter, no allotment, no exhausted state** — organize and re-organize as often as you like. The output is an **editable first draft** (see §2b).
+- **Plus — automatic, frontier.** The same pass happens **for you**, on capture, on a frontier model — plus `nextSteps` and the deeper connective work (mentions across memories, related memories, project suggestions). When a Plus user captures offline, the validated on-device draft serves immediately and the frontier polish lands silently on reconnect (one pipeline, two backends).
+- **Re-running and editing never penalize.** Manual field edits, accepting/skipping individual suggestions, re-running after new clips, and failed/aborted passes all leave nothing to “spend.” There is nothing to count.
+
+*(Full tier/pricing model: `Pricing model · Capture-Connect-Create.md`. On-device validation: `docs/architecture/foundation-models-spike-findings.md`.)*
+
+## 2b. Honest Label on Free is an editable draft, not a guarantee
+
+The June 5 spike validated the on-device model as **good enough to be the default Free layer** — 12/15 fixtures clean, the rest hand-editable. But three failure classes survive every prompt approach and are **model-capability ceilings, not prompt bugs**:
+
+1. **Factual inversion / misreading** — e.g. "plumber called" rendered as "call a plumber"; weak agent/verb-direction tracking.
+2. **Wrong-genre categorization** — an emerging concept gets filed under the nearest *well-known* category (a memory-capture app titled "Time Management").
+3. **Purposive evasion (the *"to relieve stress"* class)** — clips pairing an emotion verb with a physical action get an invented purpose, even though the prompt explicitly bans *"to ___"*. This is the **most brand-central violation** — it's interpretation, the exact thing §3 forbids — and it appears at maximum-probability deterministic output.
+
+**Design consequence.** On Free there is no Plus pass to catch these, so the on-device draft **must never be presented as authoritative.** The spike (§7.1) recommends a concrete treatment: while a pass is **unreviewed**, the chip reads **"Draft organized"** with **"Give this a glance"** review copy; once the user accepts or edits, it becomes plain **"Organized."** The label tracks **review state, not tier** — an unreviewed pass is a draft whether on-device or frontier — so a memory never gets stamped "Free," and "Organized" is never claimed before a human has confirmed it. Editing is first-class and frictionless (it already is — same flow as Memory Detail). The visible difference between a glanced-and-kept draft and an untouched one is also the honest upgrade nudge toward Plus's more-trustworthy output. *(Exact UI strings + the review-state transition: §9 state table; `Pricing model` · §7b.4.)*
+
+Plus output, on a frontier model with the stricter rubric, meets the standard more reliably and gets the full §3–§8 treatment. The tiers differ by **quality and reach, not automation alone** — Plus drifts less and reaches across the library; that fidelity gap is the value prop, not just "skip the tap."
 
 ---
 
@@ -83,29 +97,27 @@ The user must have set their first name **before they can share or export**. If 
 - **Pure-observation clips** (sunset photo, no audio): leave the subject out entirely. *"A sunset over the ridge."* No "you" needed — these summaries render the same on share.
 - **Multi-person memories:** use other people's first names where known. *"You and Sarah talked about pears."* If a co-subject's name isn't known, use *"someone"* or omit.
 
-### No third-person personal pronouns
+### Pronouns for other people
 
-The rule **only allows** *you / your* for the owner, plus proper names for everyone else. For **any other person** referenced in a memory, **always use the name**, on every reference. Never use *he, she, they, him, her, them, his, hers, theirs*.
+Pronouns are allowed. Refer to the owner as **you** (second-person, never by name); for anyone else, use their name and **pronouns as appropriate** — *he, she, they, him, her, them, his, hers, theirs* — the way natural writing does.
 
-This rule exists for one reason: we don't know any third party's pronouns and we will never ask the user to register them. Treating every co-subject by name sidesteps every assumption.
+**When a person's pronoun isn't established in the memory, default to singular *they*.** The model should never *guess* someone's gender from a name alone. If the clips make a pronoun clear (the speaker uses it, or it's otherwise unambiguous), use it; otherwise *they* is the safe, natural default.
 
-| Allowed | Not allowed |
+| Natural (preferred) | Avoid |
 |---|---|
-| *"Sarah brought a camera."* | *"Sarah brought her camera."* |
-| *"Sarah's recipe was older than the kitchen."* | *"Her recipe was older than the kitchen."* |
-| *"You and Sarah talked. Sarah said the harvest was good."* | *"You and Sarah talked. She said the harvest was good."* |
+| *"Sarah brought her camera."* | stilted name-on-every-reference: *"Sarah brought Sarah's camera."* |
+| *"You and Sarah talked. She said the harvest was good."* | guessing an unknown pronoun — use *they* instead |
+| *"Alex dropped by. They stayed for an hour."* (pronoun unknown) | inventing *he* / *she* for Alex with no basis |
 
-**Possessives.** When the possessive isn't load-bearing, drop it: *"Sarah brought a camera"* not *"Sarah's camera."* When it is load-bearing, repeat the name: *"Sarah's recipe…"*
+**Name collisions** are still solved by restructuring, not awkward repetition: *"Sarah said she was happy"* is fine; *"Sarah said Sarah was happy"* is not.
 
-**Avoid name-collisions** by restructuring, not pronoun substitution. *"Sarah said Sarah was happy"* never ships; *"Sarah was happy"* does.
-
-**Non-personal pronouns are fine.** *it, this, that, these, those* — the rule is specifically about third-person *personal* pronouns.
+The owner stays **you** in storage regardless — that's what the share/export substitution swaps for the first name.
 
 ### Prompt instruction
 
 The AI prompt's voice section is exactly:
 
-> *Refer to the journal owner as "you" — always second-person, never with a name. For any other person mentioned, use that person's name on every reference. Do not use third-person personal pronouns (he, she, they, him, her, them, his, hers, theirs) anywhere. Restructure to avoid awkward repetition. Non-personal pronouns (it, this, that) are fine.*
+> *Refer to the journal owner as "you" — always second-person, never with a name. For any other person mentioned, use their name and pronouns naturally. When a person's pronoun is not clear from the memory, default to singular "they" rather than guessing. Restructure to avoid awkward name repetition.*
 
 ### Hand-edited summaries
 
@@ -166,7 +178,7 @@ Most summaries should land in the 1-4 sentence range. The distribution should be
 The summary model only sees:
 
 - **Text clips**
-- **Audio clips** — transcribed on-device first (free; doesn't cost a separate assist)
+- **Audio clips** — transcribed on-device first
 - **Clip metadata** — timestamps, location if attached, capture device
 
 It **does not see** photo or video content as analyzable material. Only their metadata.
@@ -177,20 +189,18 @@ It **does not see** photo or video content as analyzable material. Only their me
 **UI rule:** On a memory whose clips are *only* photos and videos, the Organize card shows:
 > *Summary describes text and audio. Photos and videos are referenced by count.*
 
-The user can still spend the assist if they want metadata-only synthesis. But it's transparent that AI's input is limited.
+The user can still run organize if they want metadata-only synthesis. But it's transparent that AI's input is limited.
 
-A memory with zero analyzable content (no text, no transcribable audio) **should not display the Organize card at all** for v1. There's nothing for the assist to do.
+A memory with zero analyzable content (no text, no transcribable audio) **should not display the Organize card at all** for v1. There's nothing for organize to do.
 
 ### v1.5+ — vision opt-in
 
-When photo/video analysis ships, the Organize card grows a second button:
+When photo/video analysis ships, the Organize card grows a second option:
 
-- **Organize · 1 assist** — text + audio (unchanged default)
-- **Organize with media · 3 assists** — text + audio + visual analysis
+- **Organize** — text + audio (the default pass)
+- **Organize with media** — text + audio + visual analysis
 
-Vision is **opt-in per-organize-pass, never automatic**. The 1-assist default never includes vision. The 3-assist tier exists because vision is genuinely more expensive at the inference layer — passing that through transparently is honest, and 3 assists positions media analysis as meaningful but accessible (a Plus user can run ~4 full passes per day before hitting the monthly cap).
-
-No new SKU. No new pricing page. The 3-assist option is just spending more of your existing allowance on a single memory.
+Vision is **opt-in per-organize-pass, never automatic**. The default pass never includes vision. Visual analysis is genuinely heavier at the inference layer, so it's a deliberate, separate choice (and a candidate for a higher tier) rather than something that fires silently. No new SKU, no new pricing page — just an explicit “analyze the images too” action on a single memory.
 
 ---
 
@@ -211,7 +221,7 @@ No new SKU. No new pricing page. The 3-assist option is just spending more of yo
 - **Unorganized memory with text clips:** italic first-clip excerpt, prefixed by a small `from first clip` caption. Visually different from a real summary.
 - **Unorganized memory, no text** (photos/audio without transcription): metadata line only — *"3 photos · garden"* or *"2 audio · home"*. No "from first clip" prefix.
 
-The visible difference between organized and unorganized rows is **the value proposition for the assist**. The user sees the contrast and the assist's value becomes visible — not nagged, shown.
+The visible difference between organized and unorganized rows is **the value of organizing**. The user sees the contrast and the value becomes visible — not nagged, shown.
 
 ### C · Search results
 
@@ -222,26 +232,47 @@ Summary becomes the search snippet when present. This subtly changes prompt opti
 ## 8. Provenance, editing, refresh
 
 - **Once accepted, suggestions are the memory's.** No persistent AI badge on Title, Topics, Mentions, or Summary fields. The **Organized chip** is the only provenance indicator on the memory page; tap to re-open the review card.
-- **Edits are free.** Editing any accepted field costs zero assists.
-- **Refresh costs an assist.** If new clips arrive after a pass, the user can refresh; that's a new whole-memory pass at 1 assist. The previous summary remains visible until the refresh commits (never silently overwritten).
-- **Failed passes cost zero assists.** Aborted, errored, or model-failure passes don't decrement.
+- **Edits never penalize.** Editing any accepted field is free and unmetered.
+- **Refresh = re-run the pass.** If new clips arrive after a pass, the user can refresh — a fresh whole-memory pass (manual on Free; automatic on Plus). The previous summary stays visible until the refresh commits (never silently overwritten).
+- **Failed passes change nothing.** Aborted, errored, or model-failure passes leave the prior state intact.
+
+### 8.0 Reorganize — generous, not scarce (June 6 2026)
+
+Organization is never metered. A user who looks at a memory and thinks *“that’s not quite right”* can hit **Reorganize** as often as they like — on Free it runs on-device (cost to us: effectively zero), on Plus it runs on the frontier model (the subscription already funds it). We are no longer selling *organization*; we are selling *better* organization. No counters, no “are you sure?”, no “2 reorganizations remaining.” Free reorganize being local is precisely what lets us be this generous.
+
+The rules that keep this from growing version-management hair:
+
+- **Scope: Title and Summary only.** Reorganize rethinks *only* the title and the summary. Topics and Mentions are **not** touched by a reorganize pass — they're managed separately and a reorganize never churns them.
+- **Both new values require explicit approval — always.** Whether or not the user had hand-edited a field, the new title and new summary are each shown as a before/after and must be **approved to apply**. Each field defaults to the **current** value (selection ring + check on *“Current · kept”*); the new wording is the opt-in (*“New suggestion · tap to use”*). There is no silent refresh — the AI never swaps a value behind the user, even on a field they never touched.
+- **Reorganize replaces the draft; it never branches.** Memory → current AI draft → reorganize → *new* AI draft. There is never a stored “v1 vs v2.” The before/after is a *transient review moment*, not persisted state.
+- **Reorganize re-enters the same lifecycle.** The Organized memory drops back to `reviewed: false` (chip → *“Draft organized”*) and re-opens the review sheet. It is not a separate path — same states, same chip, same accept beat.
+- **Review is always shown**, even when nothing was hand-edited (the pure “let’s see what it comes up with” case). Seeing the fresh take can spur ideas; silently mutating the memory behind the user cannot.
+- **Entry point.** A quiet AI-blue **Reorganize** affordance sits on the Organized memory (opposite the chip) — present but unobtrusive, never a nag. *(See `HiMem · Pricing.html` §2 → `life-3` / `life-3r`.)*
+
+### 8.1 The list-level "App is inferring" prompt is retired (May 31 2026)
+
+- **One review surface, and it's Memory Detail.** The old yellow/blue *"App is inferring"* card on the Memories list — a half-summary with Confirm / Adjust / Not this time inline on the row — is **retired**. Review happens only inside the memory, via the "Organized · review" card with per-field Accept.
+- **Why.** The list is the wrong place to adjudicate AI output: the user can't see what's being summarized, and hosting a second confirm flow there means two review surfaces for one decision. The honest per-field flow in Memory Detail supersedes it.
+- **The Memories list shows no review chrome.** It's a reflective surface — it shows memories, not a task queue of pending AI chores. No "review" badge, no inline prompt, no count of un-reviewed organizes. To review, the user opens the memory. (Considered and rejected: a quiet AI-blue "Organized · review" marker chip on the row — reintroduces operational chrome onto the gallery wall.)
+- **Provenance is unchanged:** the **Organized chip** inside the memory remains the single provenance indicator; tap to re-open the review card.
+- **iOS impact.** Shipped iOS still renders the list-level prompt; removing it is part of the same pre-TestFlight uniform AI sweep noted in `CLAUDE.md` (the ochre/amber → AI-blue pass), not a separate effort.
 
 ---
 
 ## 9. State table
 
-Inputs are stable across tiers. Auto-organize on Plus / Founder just changes *when* a memory enters the Organized state, never *what* gets rendered.
+Inputs are stable across tiers. Auto-organize on Plus just changes *when* a memory enters the Organized state, never *what* gets rendered. There is no exhausted/muted state — Free organize is manual and on-device, with nothing to run out of.
 
-| `organized` | `reviewed` | `stale` | `assists > 0` | Memory view shows |
-|---|---|---|---|---|
-| false | — | — | true | Organize card · 1 assist |
-| false | — | — | false | Organize card · muted · "Resets Jun 1 · See options" |
-| true | false | — | — | AI Suggestions review card (modal sheet) |
-| true | true | false | — | Title + Summary at top · clips · Organized chip |
-| true | true | true | true | Same + amber footer: *"2 new clips · Refresh · 1 assist"* |
-| true | true | true | false | Same + amber footer: *"Resets Jun 1"* (no refresh action) |
+**Plus offline-grace reuses these states, no new ones.** When a Plus user organizes offline, the on-device draft enters `organized: true, reviewed: false` immediately; the frontier polish landing on reconnect is just the existing `reviewed`/`stale` transition (the same path new-clips-arriving already uses). One pipeline, two backends — the UI layer knows nothing about which model produced a given output. *(Spike §7.1.)*
 
-See `Himem · Pricing.html` Section 2 → "Decision tree · every condition set" for the full visual reference.
+| `organized` | `reviewed` | `stale` | Memory view shows |
+|---|---|---|---|
+| false | — | — | Organize card (Free: **Organize** button; Plus: already auto-organized) |
+| true | false | — | AI Suggestions review card (modal sheet). **Chip reads *“Draft organized”*** — the pass ran but the user hasn't confirmed it. (Reorganize re-enters here: an Organized memory drops back to this row, chip returns to *“Draft organized”*, review sheet re-opens.) |
+| true | true | false | Title + Summary at top · clips · **Organized chip** (earned once reviewed/accepted/edited) |
+| true | true | true | Same + amber footer: *"2 new clips · Refresh"* (re-runs the pass) |
+
+**The chip is a review-state label, not a tier badge.** Before review (`reviewed: false`) the chip reads *“Draft organized”* with *“Give this a glance”* review copy — on **both** tiers, because an unreviewed pass is a draft regardless of which model produced it. On accept or edit it becomes plain *“Organized.”* In practice Free dwells in the draft state more (manual review is the norm) and Plus's auto-organize often shows *“Draft organized”* until the user next opens the memory — but the *label tracks review, not tier*. This keeps the affordance honest without ever stamping "Free" on a memory.
 
 ---
 
@@ -279,7 +310,7 @@ Per output:
 
 - [ ] Does every claim in the summary appear in the clips?
 - [ ] Is the length proportional to the substance?
-- [ ] Is the voice third-person, user-named, descriptive?
+- [ ] Is the voice second-person for the owner, named for others, descriptive?
 - [ ] Does it avoid interpretation of mental state or meaning?
 - [ ] Would the user recognize the memory from this summary in 6 months?
 
@@ -294,7 +325,7 @@ A summary that fails any single check fails the rubric. The whole grading set is
 - **The journalist drift.** Model starts with stage-setting ("On a sunny May afternoon, Tom…"). Catch in QA.
 - **The TL;DR drift.** Model strips information to be "concise." Concision is good. Stripping specific nouns is bad.
 - **The label drift.** Model says "a memory about gardening" instead of "the pear tree finally fruited." Specific nouns over abstractions, always.
-- **The pronoun drift.** Model slips in *he / she / they / her / his* to avoid name repetition. The fix is to restructure the sentence, not to substitute a pronoun. Every QA pass greps the output for third-person personal pronouns and fails on any hit.
+- **The unknown-pronoun guess.** Model infers *he / she* for a person whose pronoun the memory never establishes. The fix is to default to singular *they*, not to guess from the name. (Pronouns themselves are fine — only *guessing* an unestablished one is the error.)third-person personal pronouns and fails on any hit.
 
 ---
 
@@ -305,4 +336,4 @@ A summary that fails any single check fails the rubric. The whole grading set is
 - **Stale-summary visibility threshold.** How many new clips trigger the stale state vs. silent? Currently: any new clip.
 - **Search relevance ranking.** Whether summary or original clip text wins when both match a query.
 - **Family-shared memories.** Whose first name renders into `<user>` when a memory is co-owned? Likely: each viewer sees their own perspective — the original creator's view shows *you*, the co-owner sees the creator's first name. To be specced when family sharing lands.
-- **Pronouns.** Forbidden for third parties in v1 (see §3); owner is *you*, co-subjects are always named. Pronoun-preference handling is not on the roadmap — the rule sidesteps the entire question. The crude `replacingOccurrences` share substitution may produce odd contractions (*"You'll"* → *"Tom'll"*); fix in v1.1 if it shows up in practice.
+- **Pronouns.** Allowed for everyone; owner is *you*, others are named with pronouns as appropriate. When a third party's pronoun isn't established in the memory, default to singular *they* (see §3). We don't ask users to register anyone's pronouns; *they* is the safe default. The crude `replacingOccurrences` share substitution may produce odd contractions (*"You'll"* → *"Tom'll"*); fix in v1.1 if it shows up in practice.

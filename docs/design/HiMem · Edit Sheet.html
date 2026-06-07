@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>HiMem · Memory Detail · changes</title>
+<title>HiMem · Unified Edit Sheet</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -23,30 +23,31 @@
 
 <script type="text/babel" src="design-canvas.jsx"></script>
 <script type="text/babel" src="crucible-primitives.jsx"></script>
-<script type="text/babel" src="screens-memory-detail.jsx"></script>
+<script type="text/babel" src="screens-photo-description.jsx"></script>
+<script type="text/babel" src="screens-edit-sheet.jsx"></script>
 
 <script type="text/babel">
+const AB = 340, ABH = 735;
 function App() {
   return (
     <DesignCanvas
-      title="Memory Detail · two changes"
-      subtitle="Date + location on every clip header. Mentions promoted out of the bottom expander, sitting between clips and the Organized · review card."
+      title="One edit sheet, two media"
+      subtitle="The description editor and the transcript editor do the same job — edit the words attached to a media item. They now share one template: same sheet, same Cancel·title·Done bar, same focused field, same footer slot. Only the hero (photo vs audio player) and the footer line differ, because those are content."
     >
-      <DCSection id="page" title="Full page" subtitle="Top-to-bottom view of the updated Memory detail.">
-        <DCArtboard id="md-full" label="Memory detail · with changes" width={340} height={1320}>
-          <ScrMemoryDetailFull />
+      <DCSection id="unified" title="1 · The unified editor" subtitle="Side by side — obvious siblings now. Identical chrome; the media hero and footer are the only content-driven differences.">
+        <DCArtboard id="edit-photo" label="Edit · photo description" width={AB} height={ABH}>
+          <ScrEditDescription />
         </DCArtboard>
-      </DCSection>
-
-      <DCSection id="diff" title="Changes" subtitle="Exactly what moved.">
-        <DCArtboard id="changes" label="What changed" width={520} height={360}>
-          <MDChangesCard />
+        <DCArtboard id="edit-voice" label="Edit · voice transcript" width={AB} height={ABH}>
+          <ScrEditTranscript />
+        </DCArtboard>
+        <DCArtboard id="spec" label="One edit sheet, two media" width={380} height={420}>
+          <div style={{ padding: 16 }}><EditSheetSpecCard /></div>
         </DCArtboard>
       </DCSection>
     </DesignCanvas>
   );
 }
-
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>

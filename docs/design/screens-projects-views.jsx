@@ -10,7 +10,7 @@ function ScrProjectsList() {
       <ProjectsTabHeader activeTopic="Content" />
       <div style={{ flex: 1, overflow: 'hidden', padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <ProjectCard
-          title="Building Himem"
+          title="Building HiMem"
           topics={['content','tech']}
           count={14}
           date="May 13"
@@ -48,7 +48,7 @@ function ScrProjectPreCoalesce() {
     <PhoneScreen>
       <ProjectDetailNav />
       <ProjectTitleBlock
-        title="Building Himem"
+        title="Building HiMem"
         topics={['content','tech']}
         count="14 memories · started March 28"
         goal="A capture-and-organize app for content creators."
@@ -110,7 +110,7 @@ function ScrProjectPostCoalesce() {
     <PhoneScreen>
       <ProjectDetailNav />
       <ProjectTitleBlock
-        title="Building Himem"
+        title="Building HiMem"
         topics={['content','tech']}
         count="14 memories · summarized May 18"
       />
@@ -139,7 +139,7 @@ function ScrProjectPostCoalesce() {
           }}>
             You're building a multi-format capture app for content creators — voice and photo on
             the watch, organized on the phone. You've settled on watch-only capture and a tiered
-            pricing model with one project free.
+            pricing model with three projects free.
           </div>
           <div style={{ display: 'flex', gap: 16, marginTop: 14, fontSize: 13, fontWeight: 500 }}>
             <span style={{ color: PX.ai }}>Edit</span>
@@ -204,7 +204,7 @@ function ScrCoalesceUpsell() {
     <PhoneScreen>
       <ProjectDetailNav />
       <ProjectTitleBlock
-        title="Building Himem"
+        title="Building HiMem"
         topics={['content','tech']}
         count="14 memories"
         goal="A capture-and-organize app for content creators."
@@ -290,7 +290,7 @@ function ScrSuggestionsReview() {
     <PhoneScreen>
       <ProjectDetailNav />
       <ProjectTitleBlock
-        title="Building Himem"
+        title="Building HiMem"
         topics={['content','tech']}
         count="14 memories"
       />
@@ -318,7 +318,7 @@ function ScrSuggestionsReview() {
             }}>From your memories</span>
           </div>
           <div style={{ fontFamily: PX.serif, fontSize: 17, lineHeight: 1.35, color: PX.ink, letterSpacing: -0.2 }}>
-            These three may belong in <em>Building Himem</em>.
+            These three may belong in <em>Building HiMem</em>.
           </div>
           <div style={{ fontSize: 12.5, color: PX.ink3, marginTop: 8, lineHeight: 1.5 }}>
             HiMem found these by looking at topics, mentions, and dates — not by reading every word.

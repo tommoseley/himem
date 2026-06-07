@@ -119,7 +119,6 @@ struct JournalView: View {
             SessionListView(viewModel: viewModel)
         }
         .onReceive(NotificationCenter.default.publisher(for: NotificationService.openInboxNotification)) { _ in
-            // Tap on inbox-arrival notification → open the inbox sheet.
             showInbox = true
         }
         // Per the Watch → Memory flow spec (2026-05-14): the iPhone app
@@ -135,74 +134,12 @@ struct JournalView: View {
             }
         )
         .navigationDestination(item: $selectedEntryId) { entryId in
-            if let entry = viewModel.currentEntry(id: entryId) {
-                EntryExpandedView(
-                    entry: entry,
-                    backLabel: dateLabel(for: entry.createdAt),
-                    allTopics: viewModel.topics,
-                    cameraService: cameraService,
-                    speechService: speechService,
-                    onSave: { entryId, newContent, newTitle, removedTagIds, removedMediaIds, addedTopics, removedTopics in
-                        viewModel.editEntry(
-                            entryId: entryId,
-                            newContent: newContent,
-                            newTitle: newTitle,
-                            removedTagIds: removedTagIds,
-                            removedMediaIds: removedMediaIds,
-                            addedTopicNames: addedTopics,
-                            removedTopicNames: removedTopics
-                        )
-                    },
-                    onFeedback: { entryId, state in
-                        viewModel.submitFeedback(entryId: entryId, state: state)
-                    },
-                    onAdjust: { entryId, correction in
-                        viewModel.submitFeedback(entryId: entryId, state: .edited, correction: correction)
-                    },
-                    onCommit: { entryId, additionalContent, mediaCaptures in
-                        viewModel.appendToEntry(
-                            entryId: entryId,
-                            additionalContent: additionalContent,
-                            mediaCaptures: mediaCaptures
-                        )
-                    },
-                    onRecycle: { entryId in
-                        viewModel.recycleEntry(entryId: entryId)
-                    },
-                    onAddToProject: { entryId, projectId in
-                        projectVM.addMemory(entryId: entryId, toProjectId: projectId)
-                    },
-                    availableProjects: projectVM.projects
-                )
-                .onAppear { viewModel.markEntryViewed(entryId) }
-            }
+            entryDetailDestination(for: entryId)
         }
-        .sheet(isPresented: Binding(
-            get: { topicApproval.pendingTopic != nil },
-            set: { if !$0 { topicApproval.reject() } }
-        )) {
-            if let pending = topicApproval.pendingTopic {
-                TopicApprovalSheet(
-                    topicName: pending.name,
-                    onApprove: { paletteKey in topicApproval.approve(paletteKey: paletteKey) },
-                    onReject: { topicApproval.reject() }
-                )
-            }
-        }
-        .alert(
-            "Photos Album",
-            isPresented: Binding(
-                get: { albumSync.pendingProposal != nil },
-                set: { if !$0 { albumSync.reject() } }
-            )
-        ) {
-            Button("Create Album") { albumSync.approve() }
-            Button("Not Now", role: .cancel) { albumSync.reject() }
-        } message: {
-            if let proposal = albumSync.pendingProposal {
-                Text("Add all media from \"\(proposal.topicName)\" entries to a \"\(proposal.topicName)\" Photos album? Future captures in this topic will be added automatically.")
-            }
-        }
+        .modifier(JournalPromptDialogs(
+            topicApproval: topicApproval,
+            albumSync: albumSync
+        ))
         .onAppear {
             // Cold-launch fix 2026-06-02: removed the pre-fetch of speech +
             // photo-library authorization. On fresh install, these two
@@ -245,52 +182,84 @@ struct JournalView: View {
         .onChange(of: speechService.error) { _, error in
             speechErrorMessage = error?.localizedDescription
         }
-        .alert("Voice Recording Error", isPresented: Binding(
-            get: { speechErrorMessage != nil },
-            set: { if !$0 { speechErrorMessage = nil } }
-        )) {
-            Button("OK") { speechErrorMessage = nil }
-            if speechService.error == .notAuthorized {
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
-            }
-        } message: {
-            Text(speechErrorMessage ?? "")
-        }
-        .alert("Camera Error", isPresented: Binding(
-            get: { cameraService.error != nil },
-            set: { if !$0 { cameraService.error = nil } }
-        )) {
-            Button("OK") { cameraService.error = nil }
-            if cameraService.error == .notAuthorized {
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
-            }
-        } message: {
-            Text(cameraService.error?.localizedDescription ?? "")
-        }
+        .modifier(JournalServiceErrorAlerts(
+            speechService: speechService,
+            cameraService: cameraService,
+            speechErrorMessage: $speechErrorMessage
+        ))
         .navigationBarHidden(true)
         .onChange(of: quickAction.pendingAction) { _, action in
-            guard let action else { return }
-            quickAction.pendingAction = nil
-            switch action {
-            case "com.himem.app.voice-capture":
-                activeCaptureModality = .voice
-            case "com.himem.app.new-entry":
-                // No specific modality — open the FAB stack equivalent: just
-                // jump to the typed-note capture as the safe default.
-                activeCaptureModality = .note
-            default:
-                break
-            }
+            if let action { handleQuickAction(action) }
         }
         } // NavigationStack
+    }
+
+    /// Routes a Siri / shortcut action to the right capture surface.
+    /// Extracted from `body`'s `.onChange(of: quickAction.pendingAction)`
+    /// — keeps the body free of the inline switch and the early-return
+    /// guard. Returns immediately for unrecognized actions.
+    private func handleQuickAction(_ action: String) {
+        quickAction.pendingAction = nil
+        switch action {
+        case "com.himem.app.voice-capture":
+            activeCaptureModality = .voice
+        case "com.himem.app.new-entry":
+            // No specific modality — fall back to the typed-note path
+            // as the safe default.
+            activeCaptureModality = .note
+        default:
+            break
+        }
+    }
+
+    /// Builds the entry-detail destination for a given UUID. The
+    /// guard-let was inline in `body`'s `.navigationDestination(item:)`
+    /// closure with all eight EntryExpandedView callbacks — that
+    /// stacked CC inside the body for no decomposition win. Lifted
+    /// into a `@ViewBuilder` so the body stays a one-liner.
+    @ViewBuilder
+    private func entryDetailDestination(for entryId: UUID) -> some View {
+        if let entry = viewModel.currentEntry(id: entryId) {
+            EntryExpandedView(
+                entry: entry,
+                backLabel: dateLabel(for: entry.createdAt),
+                allTopics: viewModel.topics,
+                cameraService: cameraService,
+                speechService: speechService,
+                onSave: { entryId, newContent, newTitle, removedTagIds, removedMediaIds, addedTopics, removedTopics in
+                    viewModel.editEntry(
+                        entryId: entryId,
+                        newContent: newContent,
+                        newTitle: newTitle,
+                        removedTagIds: removedTagIds,
+                        removedMediaIds: removedMediaIds,
+                        addedTopicNames: addedTopics,
+                        removedTopicNames: removedTopics
+                    )
+                },
+                onFeedback: { entryId, state in
+                    viewModel.submitFeedback(entryId: entryId, state: state)
+                },
+                onAdjust: { entryId, correction in
+                    viewModel.submitFeedback(entryId: entryId, state: .edited, correction: correction)
+                },
+                onCommit: { entryId, additionalContent, mediaCaptures in
+                    viewModel.appendToEntry(
+                        entryId: entryId,
+                        additionalContent: additionalContent,
+                        mediaCaptures: mediaCaptures
+                    )
+                },
+                onRecycle: { entryId in
+                    viewModel.recycleEntry(entryId: entryId)
+                },
+                onAddToProject: { entryId, projectId in
+                    projectVM.addMemory(entryId: entryId, toProjectId: projectId)
+                },
+                availableProjects: projectVM.projects
+            )
+            .onAppear { viewModel.markEntryViewed(entryId) }
+        }
     }
 
 
@@ -490,6 +459,92 @@ struct JournalView: View {
                 selectedEntryId = newId
             }
         }
+    }
+}
+
+// MARK: - Body sub-modifiers
+
+/// Stacks the topic-approval sheet and the album-sync alert.
+/// Both are driven by shared services (`TopicApprovalService`,
+/// `AlbumSyncService`) and ride on top of every memories-list
+/// screen. Extracted from `JournalView.body` so the body stops
+/// owning their wiring directly — CRAP audit 2026-06-07.
+private struct JournalPromptDialogs: ViewModifier {
+    @ObservedObject var topicApproval: TopicApprovalService
+    @ObservedObject var albumSync: AlbumSyncService
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: Binding(
+                get: { topicApproval.pendingTopic != nil },
+                set: { if !$0 { topicApproval.reject() } }
+            )) {
+                if let pending = topicApproval.pendingTopic {
+                    TopicApprovalSheet(
+                        topicName: pending.name,
+                        onApprove: { paletteKey in topicApproval.approve(paletteKey: paletteKey) },
+                        onReject: { topicApproval.reject() }
+                    )
+                }
+            }
+            .alert(
+                "Photos Album",
+                isPresented: Binding(
+                    get: { albumSync.pendingProposal != nil },
+                    set: { if !$0 { albumSync.reject() } }
+                )
+            ) {
+                Button("Create Album") { albumSync.approve() }
+                Button("Not Now", role: .cancel) { albumSync.reject() }
+            } message: {
+                if let proposal = albumSync.pendingProposal {
+                    Text("Add all media from \"\(proposal.topicName)\" entries to a \"\(proposal.topicName)\" Photos album? Future captures in this topic will be added automatically.")
+                }
+            }
+    }
+}
+
+/// Stacks the two recoverable-error alerts driven by the speech
+/// and camera services. Both share the same "OK / Open Settings"
+/// shape, but each has its own underlying service. Extracted
+/// from `JournalView.body` — CRAP audit 2026-06-07.
+private struct JournalServiceErrorAlerts: ViewModifier {
+    @ObservedObject var speechService: SpeechService
+    @ObservedObject var cameraService: CameraService
+    @Binding var speechErrorMessage: String?
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Voice Recording Error", isPresented: Binding(
+                get: { speechErrorMessage != nil },
+                set: { if !$0 { speechErrorMessage = nil } }
+            )) {
+                Button("OK") { speechErrorMessage = nil }
+                if speechService.error == .notAuthorized {
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                }
+            } message: {
+                Text(speechErrorMessage ?? "")
+            }
+            .alert("Camera Error", isPresented: Binding(
+                get: { cameraService.error != nil },
+                set: { if !$0 { cameraService.error = nil } }
+            )) {
+                Button("OK") { cameraService.error = nil }
+                if cameraService.error == .notAuthorized {
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                }
+            } message: {
+                Text(cameraService.error?.localizedDescription ?? "")
+            }
     }
 }
 
