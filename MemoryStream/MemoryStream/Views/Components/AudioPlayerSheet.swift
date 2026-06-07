@@ -39,8 +39,18 @@ struct AudioPlayerSheet: View {
     @State private var currentTime: TimeInterval = 0
     @State private var tickTimer: Timer?
     @State private var downloadPollTimer: Timer?
+    /// Number of `.downloading` polls without a state change. Once this
+    /// exceeds `downloadPollCeiling` we give up and treat the file as
+    /// `.missing`. Catches the case where iCloud Drive has metadata
+    /// for a path but the bytes were never uploaded — e.g. clips
+    /// destroyed by the pre-2026-06-07 line-774 bug, which left
+    /// `MediaReference` rows pointing at filenames whose audio is gone
+    /// from both local cache and iCloud.
+    @State private var downloadPollCount = 0
     @State private var draftTranscript: String = ""
     @State private var isRetryingTranscription = false
+
+    private let downloadPollCeiling = 10  // 10 polls at 1s = ~10 seconds
 
     enum MediaState: Equatable {
         case checking
@@ -326,11 +336,15 @@ struct AudioPlayerSheet: View {
     }
 
     /// Polls the download status every 1s. Cancels itself when the
-    /// state resolves to `.ready` or `.missing`. The view's
-    /// `.onDisappear` invalidates the timer if the user closes the
-    /// sheet during download.
+    /// state resolves to `.ready`, `.missing`, or the poll counter
+    /// exceeds `downloadPollCeiling` — the latter catches paths that
+    /// iCloud knows about but never received bytes for (the pre-fix
+    /// line-774 clip-destruction case). The view's `.onDisappear`
+    /// invalidates the timer if the user closes the sheet during
+    /// download.
     private func startDownloadPolling(url: URL) {
         downloadPollTimer?.invalidate()
+        downloadPollCount = 0
         downloadPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
             Task { @MainActor in
                 let status = UbiquityStore.shared.downloadStatus(at: url)
@@ -342,8 +356,12 @@ struct AudioPlayerSheet: View {
                     timer.invalidate()
                     mediaState = .missing
                 case .downloading, .notDownloaded:
-                    // Keep polling.
-                    break
+                    downloadPollCount += 1
+                    if downloadPollCount >= downloadPollCeiling {
+                        timer.invalidate()
+                        NSLog("[HiMem][AudioPlayerSheet] download timeout for \(filename) — falling back to .missing after \(downloadPollCount) polls")
+                        mediaState = .missing
+                    }
                 }
             }
         }
