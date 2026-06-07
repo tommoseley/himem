@@ -25,8 +25,11 @@ final class AudioPlayerService: ObservableObject {
         stop()
 
         let url = SpeechService.audioURL(for: filename)
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? -1
         guard FileManager.default.fileExists(atPath: url.path) else {
-            print("Audio file not found: \(url.path)")
+            // 2026-06-06 diagnostic — promote silent print to NSLog
+            // and include the URL so device logs show the lookup miss.
+            NSLog("[HiMem][AudioPlayer] play MISS filename=\(filename) path=\(url.path)")
             return
         }
 
@@ -37,7 +40,8 @@ final class AudioPlayerService: ObservableObject {
 
             player = try AVAudioPlayer(contentsOf: url)
             player?.delegate = PlaybackDelegate.shared
-            player?.play()
+            let started = player?.play() ?? false
+            NSLog("[HiMem][AudioPlayer] play filename=\(filename) size=\(size) duration=\(player?.duration ?? 0) startedPlaying=\(started)")
             isPlaying = true
             currentFile = filename
 
@@ -53,7 +57,7 @@ final class AudioPlayerService: ObservableObject {
                 }
             }
         } catch {
-            print("Playback failed: \(error)")
+            NSLog("[HiMem][AudioPlayer] play FAILED filename=\(filename) size=\(size) error=\(error.localizedDescription)")
         }
     }
 

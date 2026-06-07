@@ -177,10 +177,20 @@ struct MediaTile: View {
             // and avoiding the synchronous disk hit keeps the per-tile
             // `.task` off the main thread.
             guard mediaType == .voice, createdAt != nil else { return }
+            // 2026-06-06 diagnostic — see AudioPlayerSheet.loadDuration.
             let url = SpeechService.audioURL(for: localIdentifier)
+            let exists = FileManager.default.fileExists(atPath: url.path)
+            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? -1
             let asset = AVURLAsset(url: url)
-            if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
-                audioDuration = cm.seconds
+            do {
+                let cm = try await asset.load(.duration)
+                let seconds = cm.seconds
+                NSLog("[HiMem][MediaTile] loadDuration filename=\(localIdentifier) exists=\(exists) size=\(size) duration=\(seconds) isFinite=\(seconds.isFinite)")
+                if seconds.isFinite {
+                    audioDuration = seconds
+                }
+            } catch {
+                NSLog("[HiMem][MediaTile] loadDuration FAILED filename=\(localIdentifier) exists=\(exists) size=\(size) error=\(error.localizedDescription)")
             }
         }
     }

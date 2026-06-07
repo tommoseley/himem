@@ -72,6 +72,33 @@ struct AudioCompressorTests {
         #expect(result.segmentCount > 0, "AAC file produced 0 segments — SpeechAnalyzer rejected the format")
     }
 
+    /// Regression coverage: `compressInPlace` writes M4A/AAC bytes to a
+    /// file with the original `.caf` extension. Both
+    /// `AudioPlayerSheet.loadDuration` and `MediaTile`'s audio-tile
+    /// footer use `AVURLAsset.load(.duration)` against that path, so
+    /// the asset has to sniff the actual format — extension hints
+    /// won't match. If `AVURLAsset` ever loses magic-byte sniffing for
+    /// extension/content mismatches, every voice-clip UI surface shows
+    /// 0:00 silently. This test guards that invariant.
+    @Test func compressInPlace_AVURLAssetCanReadDuration() async throws {
+        guard let fixture = fixtureURL() else {
+            Issue.record("Fixture missing")
+            return
+        }
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scratch-\(UUID().uuidString).caf")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        try FileManager.default.copyItem(at: fixture, to: scratch)
+        try await AudioCompressor.compressInPlace(at: scratch)
+
+        let asset = AVURLAsset(url: scratch)
+        let cm = try await asset.load(.duration)
+        let seconds = cm.seconds
+
+        #expect(seconds.isFinite, "AVURLAsset returned non-finite duration (\(seconds)) for compressed .caf — clip will display 0:00 in UI")
+        #expect(seconds > 0, "AVURLAsset returned zero duration for compressed .caf — clip will display 0:00 in UI")
+    }
+
     @Test func compressInPlace_replacesAtSameURL() async throws {
         guard let fixture = fixtureURL() else {
             Issue.record("Fixture missing")

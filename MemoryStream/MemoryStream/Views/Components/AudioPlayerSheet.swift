@@ -210,13 +210,24 @@ struct AudioPlayerSheet: View {
     // MARK: - Time tracking
 
     private func loadDuration() async {
-        // No `fileExists` pre-check — `try? asset.load(.duration)`
-        // returns nil for missing files; the synchronous disk hit was
-        // a needless main-thread block on sheet present.
+        // 2026-06-06 diagnostic: Tom reported every voice clip showing
+        // 0:00 + no playback. Format-mismatch hypothesis ruled out by
+        // AudioCompressorTests.compressInPlace_AVURLAssetCanReadDuration.
+        // These NSLogs surface the actual failure mode on device so the
+        // money test can target it. Revert when fixed.
         let url = SpeechService.audioURL(for: filename)
+        let exists = FileManager.default.fileExists(atPath: url.path)
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? -1
         let asset = AVURLAsset(url: url)
-        if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
-            totalDuration = cm.seconds
+        do {
+            let cm = try await asset.load(.duration)
+            let seconds = cm.seconds
+            NSLog("[HiMem][AudioPlayerSheet] loadDuration filename=\(filename) exists=\(exists) size=\(size) duration=\(seconds) isFinite=\(seconds.isFinite)")
+            if seconds.isFinite {
+                totalDuration = seconds
+            }
+        } catch {
+            NSLog("[HiMem][AudioPlayerSheet] loadDuration FAILED filename=\(filename) exists=\(exists) size=\(size) error=\(error.localizedDescription)")
         }
     }
 
