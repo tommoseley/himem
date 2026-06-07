@@ -221,10 +221,16 @@ struct EntryExpandedView: View {
             )
             .presentationDetents([.large])
         }
-        .fullScreenCover(item: $selectedMedia) { item in
-            MediaViewerView(item: item) { newDescription in
+        // Photo / video tap → directly into the description editor.
+        // The voice clip path opens AudioPlayerSheet directly too
+        // (also a `.sheet`), so the two media editors land on parallel
+        // surfaces with no intermediate viewer step. Per
+        // `docs/design/HiMem · Edit Sheet.html` June 2026.
+        .sheet(item: $selectedMedia) { item in
+            PhotoDescriptionEditSheet(item: item) { newDescription in
                 updateMediaDescription(id: item.id, text: newDescription)
             }
+            .presentationDetents([.large])
         }
         .sheet(isPresented: $showShareSheet) {
             let composed = "\(entry.displayTitle)\n\n\(entry.content)"

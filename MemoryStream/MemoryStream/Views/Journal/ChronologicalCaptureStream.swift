@@ -77,7 +77,7 @@ struct ChronologicalCaptureStream: View {
                     .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
                         Button { onTapPhoto(item) } label: {
-                            Label("Describe", systemImage: "pencil")
+                            Label("Edit", systemImage: "pencil")
                         }
                         .tint(Crucible.Color.accent)
                     }
@@ -324,8 +324,10 @@ struct MediaDescriptionEmpty: View {
 }
 
 /// Filled-state description. The description becomes the card's body
-/// text — parallel to a voice clip's transcript. Small Edit affordance
-/// underneath, in ochre.
+/// text — parallel to a voice clip's transcript. No inline Edit
+/// affordance: the whole card is tappable, and the swipe action says
+/// Edit. That matches the voice clip panel (which also has no inline
+/// Edit affordance) and the unified edit-sheet contract.
 struct MediaDescriptionFilled: View {
     let text: String
 
@@ -339,13 +341,6 @@ struct MediaDescriptionFilled: View {
                 .font(.system(size: 14.5))
                 .foregroundStyle(Crucible.Color.ink)
                 .lineSpacing(3)
-            HStack(spacing: 5) {
-                Image(systemName: "pencil")
-                    .font(.system(size: 11, weight: .semibold))
-                Text("Edit")
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(Crucible.Color.accent)
         }
     }
 }
