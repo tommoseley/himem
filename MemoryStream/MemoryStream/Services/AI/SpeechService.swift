@@ -98,11 +98,16 @@ final class SpeechService: ObservableObject {
 
     // MARK: - Audio Directory
 
+    /// Resolves to the iCloud Drive ubiquity container's `Audio/`
+    /// subdirectory when iCloud is available, sandbox `Documents/Audio/`
+    /// otherwise. The legacy sandbox path was
+    /// `Documents/VoiceEntries/`; `UbiquityStore.migrateSandboxFilesIfNeeded()`
+    /// moves files from that legacy dir on first launch after the
+    /// ubiquity migration ships, so existing `MediaReference.osIdentifier`
+    /// filenames stay resolvable through the transition. See
+    /// `docs/design/Storage architecture · CLAUDE.md`.
     nonisolated static var audioDirectory: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let dir = docs.appendingPathComponent("VoiceEntries", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        UbiquityStore.shared.audioDirectory
     }
 
     // MARK: - Authorization + analyzer prep
@@ -494,7 +499,7 @@ final class SpeechService: ObservableObject {
     // MARK: - Playback
 
     nonisolated static func audioURL(for filename: String) -> URL {
-        audioDirectory.appendingPathComponent(filename)
+        UbiquityStore.shared.audioURL(for: filename)
     }
 }
 

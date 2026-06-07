@@ -283,6 +283,14 @@ struct LaunchScreenView: View {
     /// the race for both.
     private func runMigration() {
         InboxManifest.shared.runStartupMigrationsIfNeeded()
+        // Move existing audio files from sandbox `Documents/VoiceEntries`
+        // and `Documents/ClipInbox/audio` into the iCloud Drive ubiquity
+        // container. Idempotent — empty legacy dirs are no-ops. Runs after
+        // CloudKit import-settle so we don't race the two-MOM crash window
+        // (see `feedback_inboxmanifest_launch_gating` memory). Requires
+        // `UbiquityStore.warmUp()` to have resolved the container; if not,
+        // the call is a no-op and re-runs next launch.
+        UbiquityStore.shared.migrateSandboxFilesIfNeeded()
         if FragmentMigration.hasCompleted { return }
         let context = StorageService.shared.backgroundContext()
         context.perform {

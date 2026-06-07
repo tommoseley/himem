@@ -201,13 +201,22 @@ final class InboxManifest: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
+    /// Audio clips from the watch land here, then move to
+    /// `SpeechService.audioDirectory` when bundled into a memory.
+    /// Resolves to the iCloud Drive ubiquity container's `Inbox/`
+    /// subdirectory when iCloud is available, sandbox
+    /// `Documents/Inbox/` otherwise. The legacy sandbox path was
+    /// `Documents/ClipInbox/audio/`; migrated on first launch via
+    /// `UbiquityStore.migrateSandboxFilesIfNeeded()`. The inbox
+    /// `manifest.json` itself stays in sandbox via `inboxRoot` — it's
+    /// per-device sync state, not user content.
     nonisolated static var audioDirectory: URL {
-        let dir = inboxRoot.appendingPathComponent("audio", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        UbiquityStore.shared.inboxDirectory
     }
     nonisolated static var manifestURL: URL { inboxRoot.appendingPathComponent("manifest.json") }
-    nonisolated static func audioURL(for filename: String) -> URL { audioDirectory.appendingPathComponent(filename) }
+    nonisolated static func audioURL(for filename: String) -> URL {
+        UbiquityStore.shared.inboxURL(for: filename)
+    }
 
     /// Pure: drops `.disposed` rows whose `disposedAt` is strictly
     /// older than `(days * 86400)` seconds before `now`. Tombstones

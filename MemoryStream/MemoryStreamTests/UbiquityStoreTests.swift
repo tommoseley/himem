@@ -133,4 +133,27 @@ struct UbiquityStoreTests {
         let bytes = try Data(contentsOf: dest)
         #expect(String(decoding: bytes, as: UTF8.self) == "second")
     }
+
+    // MARK: - Sandbox-to-ubiquity migration
+
+    /// When the container is unavailable (test environment), the
+    /// migration is a no-op and leaves the sandbox legacy files
+    /// alone. Critical: tests must never destroy user data.
+    @Test func migrateSandboxFilesIfNeeded_noContainer_isNoOp() throws {
+        let (root, cleanup) = try scratchSandbox()
+        defer { cleanup() }
+        let store = UbiquityStore(sandboxOverride: root)
+        // Plant a legacy file at the sandbox VoiceEntries location.
+        let legacyDir = root.appendingPathComponent("VoiceEntries", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacyDir, withIntermediateDirectories: true)
+        let legacyFile = legacyDir.appendingPathComponent("clip.caf")
+        try Data("audio".utf8).write(to: legacyFile)
+
+        store.migrateSandboxFilesIfNeeded()
+
+        // With no container the file MUST still be at the legacy
+        // path. The migration code is gated on `containerURL != nil`.
+        #expect(FileManager.default.fileExists(atPath: legacyFile.path),
+                "Migration must not touch sandbox files when ubiquity is unavailable")
+    }
 }

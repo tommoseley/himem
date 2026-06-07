@@ -235,6 +235,66 @@ final class UbiquityStore: @unchecked Sendable {
         return resultURL
     }
 
+    // MARK: - Sandbox migration
+
+    /// Migrates files from legacy sandbox subdirectories into the
+    /// matching ubiquity subdirectories. Idempotent: walks each
+    /// legacy directory, moves every regular file, removes the
+    /// legacy directory once empty. Safe to call from
+    /// `LaunchScreenView.runMigration()` on every launch — empty
+    /// legacy dirs are no-ops. No-op when ubiquity is unavailable
+    /// (in which case the sandbox path IS the canonical path).
+    ///
+    /// `MediaReference.osIdentifier` stores only the filename
+    /// (`<UUID>.caf`), not a directory-relative path, so moving files
+    /// across directories without changing the filename leaves every
+    /// reference resolvable.
+    func migrateSandboxFilesIfNeeded() {
+        guard containerURL != nil else { return }
+        let fm = FileManager.default
+        // Each entry: (legacy sandbox subdir name, ubiquity destination dir)
+        let migrations: [(legacy: String, destination: URL)] = [
+            ("VoiceEntries", audioDirectory),
+            ("ClipInbox/audio", inboxDirectory)
+        ]
+        for (legacyName, destination) in migrations {
+            let legacyDir = sandboxDocuments.appendingPathComponent(legacyName, isDirectory: true)
+            guard fm.fileExists(atPath: legacyDir.path) else { continue }
+            let items = (try? fm.contentsOfDirectory(at: legacyDir, includingPropertiesForKeys: nil)) ?? []
+            var movedCount = 0
+            var skippedCount = 0
+            for item in items {
+                // Hidden dotfiles (`.foo.aac-tmp` etc) are leftovers
+                // from the in-place compressor; not worth migrating.
+                if item.lastPathComponent.hasPrefix(".") { continue }
+                let destURL = destination.appendingPathComponent(item.lastPathComponent)
+                if fm.fileExists(atPath: destURL.path) {
+                    // Destination already exists — keep the ubiquity
+                    // copy, remove the legacy one to clear space.
+                    try? fm.removeItem(at: item)
+                    skippedCount += 1
+                    continue
+                }
+                do {
+                    try fm.moveItem(at: item, to: destURL)
+                    movedCount += 1
+                } catch {
+                    NSLog("[HiMem][Ubiquity] migration skipped \(item.lastPathComponent): \(error.localizedDescription)")
+                }
+            }
+            if movedCount > 0 || skippedCount > 0 {
+                NSLog("[HiMem][Ubiquity] migrated \(legacyName) → ubiquity: \(movedCount) moved, \(skippedCount) skipped (already in destination)")
+            }
+            // Best-effort: remove the now-empty legacy dir so it
+            // doesn't accumulate. Fails silently if it's not empty
+            // (something we don't recognize lives there).
+            let remaining = (try? fm.contentsOfDirectory(atPath: legacyDir.path))?.count ?? 0
+            if remaining == 0 {
+                try? fm.removeItem(at: legacyDir)
+            }
+        }
+    }
+
     /// Writes raw `Data` into the store at `destinationURL` via
     /// `NSFileCoordinator`. Used by PHPicker import and CameraService
     /// to drop bytes from PHAsset extracts into the ubiquity container.
