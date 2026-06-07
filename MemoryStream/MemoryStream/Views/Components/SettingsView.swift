@@ -16,6 +16,7 @@ struct SettingsView: View {
     @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
     @AppStorage("tagMemoriesWithLocation") private var tagMemoriesWithLocation = true
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
+    @AppStorage(CameraService.alsoSaveToPhotosLibraryKey) private var alsoSaveToPhotosLibrary = true
     @AppStorage("appearance") private var appearanceRaw: String = Appearance.system.rawValue
     private var appearance: Appearance {
         Appearance(rawValue: appearanceRaw) ?? .system
@@ -270,6 +271,31 @@ struct SettingsView: View {
                     Text("Handedness")
                 } footer: {
                     Text("Anchors the Add button to the bottom-left of the screen instead of the bottom-right. The action stack flips with it.")
+                }
+
+                // MARK: - Captures (Photos library mirror)
+                Section {
+                    Toggle("Also save HiMem captures to my Photos library", isOn: $alsoSaveToPhotosLibrary)
+                } header: {
+                    Text("Captures")
+                } footer: {
+                    Text("Captures from HiMem's camera also land in your Photos library, the same way the iPhone Camera app does. Turn this off and HiMem keeps captures only in its own iCloud Drive folder.")
+                }
+
+                // MARK: - About: where memories live
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Where your memories live")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Crucible.Color.ink)
+                        Text("Your transcripts, titles, summaries, topics, and projects sync via iCloud. Original audio, photos, and videos live in your iCloud Drive under a folder called **HiMem** — visible in the Files app, exportable anywhere, and durable across reinstalls.\n\nWe don't store original recordings on our servers.")
+                            .font(.footnote)
+                            .foregroundStyle(Crucible.Color.ink2)
+                            .lineSpacing(2)
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("Storage")
                 }
 
                 #if DEBUG
