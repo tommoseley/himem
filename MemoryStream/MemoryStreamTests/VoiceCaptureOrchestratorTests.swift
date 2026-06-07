@@ -226,6 +226,58 @@ struct VoiceCaptureOrchestratorTests {
         }
         #expect(message.contains("Transcription deferred"))
     }
+
+    // MARK: - shouldDeleteMaster — 2026-06-07 voice-clip 0:00 regression
+
+    /// Money test for Tom's QA 2026-06-07: every voice clip showed 0:00
+    /// in `MediaTile` and `AudioPlayerSheet`; `Documents/VoiceEntries`
+    /// was empty. Root cause: `VoiceCaptureScreen.finishOrAbandon` ran
+    /// `AudioPlayerService.deleteAudio(filename: masterFilename)`
+    /// unconditionally after the orchestrator returned, but the
+    /// orchestrator's single-clip path returns the master itself as
+    /// the fragment (`audioFilename = masterURL.lastPathComponent`).
+    /// Deleting the master orphaned the persisted `MediaReference` at
+    /// a phantom path. This helper encodes the "did the orchestrator
+    /// reuse the master?" question so the view can ask before
+    /// deleting.
+    @Test func shouldDeleteMaster_singleClip_keepsMaster() {
+        let master = "abc.caf"
+        let fragments = [
+            VoiceClipFragment(audioFilename: master, transcript: "t", duration: 1.0)
+        ]
+        #expect(
+            VoiceCaptureOrchestrator.shouldDeleteMaster(masterFilename: master, fragments: fragments) == false,
+            "single-clip path returns the master as the fragment — deleting it loses the audio"
+        )
+    }
+
+    @Test func shouldDeleteMaster_splitFallback_keepsMaster() {
+        let master = "abc.caf"
+        // Split-fallback path also returns the master as the single
+        // fragment (after `compressIfPossible` runs in-place).
+        let fragments = [
+            VoiceClipFragment(audioFilename: master, transcript: "t", duration: 1.0)
+        ]
+        #expect(
+            VoiceCaptureOrchestrator.shouldDeleteMaster(masterFilename: master, fragments: fragments) == false,
+            "split-fallback path also reuses the master as the fragment"
+        )
+    }
+
+    @Test func shouldDeleteMaster_multiClipSplits_deletesMaster() {
+        let master = "abc.caf"
+        // Multi-clip success: the splitter wrote N separate files;
+        // none equals the master's filename. The master is now an
+        // orphan that should be cleaned up.
+        let fragments = [
+            VoiceClipFragment(audioFilename: "split1.caf", transcript: "t", duration: 0.5),
+            VoiceClipFragment(audioFilename: "split2.caf", transcript: "t", duration: 0.5)
+        ]
+        #expect(
+            VoiceCaptureOrchestrator.shouldDeleteMaster(masterFilename: master, fragments: fragments) == true,
+            "multi-clip success path produces separate split files; the master is left orphaned and must be cleaned up"
+        )
+    }
 }
 
 /// Anchor for `Bundle(for:)` so the test target's resource bundle

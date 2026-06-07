@@ -244,4 +244,16 @@ enum VoiceCaptureOrchestrator {
         let sidecarURL = masterURL.deletingPathExtension().appendingPathExtension("offsets.json")
         try? FileManager.default.removeItem(at: sidecarURL)
     }
+
+    /// True iff the master audio file at `masterFilename` is safe to
+    /// delete given the returned fragments. The single-clip path and
+    /// the split-fallback path both reuse the master as the fragment
+    /// file (compressed in place); a fragment whose `audioFilename`
+    /// equals `masterFilename` means the master IS the persisted
+    /// audio. Deleting it would orphan the `MediaReference`
+    /// downstream, producing the 2026-06-07 "voice clip shows 0:00 +
+    /// won't play" regression.
+    static func shouldDeleteMaster(masterFilename: String, fragments: [VoiceClipFragment]) -> Bool {
+        !fragments.contains { $0.audioFilename == masterFilename }
+    }
 }

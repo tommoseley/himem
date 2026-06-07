@@ -771,7 +771,17 @@ struct VoiceCaptureScreen: View {
             )
         }
 
-        AudioPlayerService.deleteAudio(filename: masterFilename)
+        // 2026-06-07 fix (#43): only delete the master if no fragment
+        // references it. The orchestrator's single-clip and
+        // split-fallback paths compress the master in place and
+        // return it as the fragment file; deleting it then orphans
+        // the persisted MediaReference at a phantom path. Tom's QA
+        // device log showed `exists=false` for every clip and an
+        // empty `Documents/VoiceEntries`. See
+        // `VoiceCaptureOrchestrator.shouldDeleteMaster`.
+        if VoiceCaptureOrchestrator.shouldDeleteMaster(masterFilename: masterFilename, fragments: fragments) {
+            AudioPlayerService.deleteAudio(filename: masterFilename)
+        }
         VoiceCaptureOrchestrator.deleteOffsetsSidecarIfAny(masterURL: masterURL)
         nextController.sessionDidEnd()
 
