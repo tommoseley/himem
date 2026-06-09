@@ -367,14 +367,22 @@ struct ProcessingEngineFallbackTests {
     /// Free + AI available + AI fails → NLTagger fallback (no Anthropic).
     /// Edge case: AI is "available" per the static check but throws at
     /// runtime. Free must not silently escalate to Anthropic just because
-    /// AI failed — that would violate the Free-never-hits-Anthropic rule.
-    @Test func processEntry_free_withAI_failure_fallsToNLTaggerNotCloud() async throws {
+    /// Updated 2026-06-08: Free + on-device failure + online now
+    /// escalates to Anthropic as a last-resort fallback rather than
+    /// going straight to NLTagger. The prior "Free never sees
+    /// Anthropic" rule was based on COGS discipline, but in practice
+    /// it produced mentions-only output (NLTagger doesn't generate
+    /// titles or summaries) whenever Apple's on-device safety
+    /// classifier rejected content — a silent UX failure. Tom 2026-06-08:
+    /// "imo it should have (if internet available) gone to anthropic."
+    /// NLTagger remains the offline last-resort.
+    @Test func processEntry_free_withAI_failure_fallsToCloudAsLastResort() async throws {
         let storage = StorageService(inMemory: true)
         let engine = ProcessingEngine(
             storage: storage,
-            analyzer: SuccessfulAnalyzer(title: "Should not appear", entityValue: "WrongName", topic: "WrongTopic"),
+            analyzer: SuccessfulAnalyzer(title: "Garden talk with Sarah", entityValue: "Sarah", topic: "Garden"),
             onDeviceOrganizer: ThrowingOnDeviceOrganizer(),
-            localExtractor: StubEntityExtractor.person("Sarah"),
+            localExtractor: StubEntityExtractor.person("Should not appear"),
             useOnDevice: true,
             hasAvailableAI: { true },
             isPlus: { false }
@@ -389,10 +397,89 @@ struct ProcessingEngineFallbackTests {
         entityRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
         let entities = try storage.viewContext.fetch(entityRequest)
         #expect(!entities.isEmpty)
-        #expect(entities.allSatisfy { $0.processingMethod == "local" }, "Free with AI failure must fall to NLTagger, never escalate to Anthropic")
+        #expect(entities.allSatisfy { $0.processingMethod == "cloud" }, "Free with AI failure should now escalate to Anthropic (cloud) when online, recovering from on-device safety rejections")
     }
 
     // MARK: - Reorganize (PR 8g.1)
+
+    // MARK: - Haiku routing for AI-failure fallback (#92)
+    //
+    // Per Tom 2026-06-08: "for the ones that fail AI, just send then
+    // to Haiku." When on-device organize throws and we fall through to
+    // cloud as a last resort, the action label distinguishes it from
+    // primary cloud traffic so the proxy can map it to Claude Haiku
+    // (cheaper) instead of the standard model. Primary cloud calls
+    // (Plus tier, or Free without AI) keep using "memory_organize" so
+    // the user experience for those isn't downgraded.
+
+    /// Records the `action` arg on every `analyzeEntry` call so the
+    /// tests can assert routing labels rather than only output.
+    private final class ActionRecordingAnalyzer: EntryAnalyzer, @unchecked Sendable {
+        var actionsReceived: [String] = []
+        let title: String
+        init(title: String) { self.title = title }
+        func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String], tier: String, action: String) async throws -> ClaudeAPIService.AnalysisResult {
+            actionsReceived.append(action)
+            return ClaudeAPIService.AnalysisResult(
+                entities: [.init(type: "person", value: "Sarah", confidence: 0.95)],
+                topics: ["Garden"],
+                summary: "cloud summary",
+                title: title,
+                nextSteps: nil
+            )
+        }
+    }
+
+    /// Money test for the Haiku routing change. Free + AI available +
+    /// AI throws → cloud fallback fires with action="memory_organize_fallback"
+    /// so the proxy can route it to Haiku. Without this label, every
+    /// AI failure escalates to the standard model and bloats COGS on
+    /// content the on-device model couldn't handle anyway.
+    @Test func processEntry_aiFailure_cloudFallback_usesHaikuActionLabel() async throws {
+        let storage = StorageService(inMemory: true)
+        let recorder = ActionRecordingAnalyzer(title: "Recovered title")
+        let engine = ProcessingEngine(
+            storage: storage,
+            analyzer: recorder,
+            onDeviceOrganizer: ThrowingOnDeviceOrganizer(),
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: true,
+            hasAvailableAI: { true },
+            isPlus: { false }
+        )
+
+        let entry = try storage.createEntry(content: "Met with Sarah.", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+        await engine.processEntry(entry)
+
+        #expect(recorder.actionsReceived == ["memory_organize_fallback"],
+                "Cloud-as-fallback after on-device failure must use the fallback action label so the proxy routes to Haiku, not the standard model")
+    }
+
+    /// Regression: Plus tier + online primary cloud call must NOT use the
+    /// fallback label. Plus users pay for the standard-model polish; if
+    /// we mistakenly tag their primary calls as fallback, the proxy
+    /// would silently downgrade them to Haiku.
+    @Test func processEntry_plus_online_primaryCloud_usesStandardActionLabel() async throws {
+        let storage = StorageService(inMemory: true)
+        let recorder = ActionRecordingAnalyzer(title: "Primary title")
+        let engine = ProcessingEngine(
+            storage: storage,
+            analyzer: recorder,
+            onDeviceOrganizer: SuccessfulOnDeviceOrganizer(title: "Should not appear", entityValue: "WrongName", topic: "WrongTopic"),
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: true,
+            hasAvailableAI: { true },
+            isPlus: { true }
+        )
+
+        let entry = try storage.createEntry(content: "Met with Sarah.", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+        await engine.processEntry(entry)
+
+        #expect(recorder.actionsReceived == ["memory_organize"],
+                "Plus primary cloud calls must keep the standard action label so the proxy routes to the standard model")
+    }
 
     /// Money test for the scope contract from `AI Organize · spec.md`
     /// §8.0: reorganize writes a new `OrganizePass` with title + summary

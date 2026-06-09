@@ -141,14 +141,30 @@ final class ProcessingEngine {
         let plus = await MainActor.run { self.isPlus() }
         let hasAI = useOnDevice && hasAvailableAI()
         let shouldTryAnthropic = connectivity.isConnected && (plus || !hasAI)
+        var cloudAttempted = false
 
         if shouldTryAnthropic {
+            cloudAttempted = true
             let succeeded = await processWithCloud(objectID: objectID, content: content, context: context)
             if succeeded { return }
         }
 
         if hasAI {
             let succeeded = await processWithOnDevice(objectID: objectID, content: content, context: context)
+            if succeeded { return }
+        }
+
+        // Cloud as last-resort fallback when we're online and haven't
+        // already tried it. Covers the Free + hasAI case where the
+        // on-device safety classifier rejects content ("Detected
+        // content likely to be unsafe") — Anthropic's policy differs
+        // from Apple's, so content the local model refuses often
+        // organizes cleanly via cloud. Costs us COGS on Free users
+        // but produces honest output instead of mentions-only via
+        // NLTagger. Per Tom 2026-06-08.
+        if !cloudAttempted && connectivity.isConnected {
+            NSLog("[HiMem][Organize] on-device failed; retrying via cloud as last-resort fallback")
+            let succeeded = await processWithCloud(objectID: objectID, content: content, context: context, isFallback: true)
             if succeeded { return }
         }
 
@@ -172,9 +188,22 @@ final class ProcessingEngine {
                 existingTopics: existingTopics,
                 existingMentions: existingMentions
             )
-            return await applyAnalysisResult(result, to: objectID, in: context)
+            return await applyAnalysisResult(result, existingTopics: existingTopics, to: objectID, in: context)
         } catch {
-            NSLog("[HiMem][Organize] on-device pass failed, falling through: \(error.localizedDescription)")
+            // Detailed diagnostic logging — Apple's Foundation Models
+            // errors are opaque ("Detected content likely to be unsafe"
+            // tells us a filter tripped but not which kind, on which
+            // content). We dump every signal available so failures
+            // can be correlated against content patterns.
+            let typeStr = String(describing: type(of: error))
+            let desc = error.localizedDescription
+            let contentLen = content.count
+            NSLog("[HiMem][Organize] on-device pass failed, falling through: \(desc) [type=\(typeStr) contentChars=\(contentLen)]")
+            let nsErr = error as NSError
+            NSLog("[HiMem][Organize]   domain=\(nsErr.domain) code=\(nsErr.code)")
+            if !nsErr.userInfo.isEmpty {
+                NSLog("[HiMem][Organize]   userInfo=\(nsErr.userInfo)")
+            }
             return false
         }
     }
@@ -187,7 +216,21 @@ final class ProcessingEngine {
     /// route the fallback. The caller is responsible for trying the
     /// on-device organizer next, then `processLocally` as the last
     /// resort.
-    private func processWithCloud(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async -> Bool {
+    ///
+    /// `isFallback` distinguishes the AI-failure → cloud recovery path
+    /// from the primary cloud path. Fallback traffic sends
+    /// `action="memory_organize_fallback"` so the proxy routes it to
+    /// Claude Haiku — cheap recovery on content the on-device model
+    /// couldn't handle (long transcripts, safety classifier rejects,
+    /// etc.) without bloating COGS at the standard-model rate. Per Tom
+    /// 2026-06-08 after the 25-min composting transcript blew the 4k
+    /// on-device context window.
+    private func processWithCloud(
+        objectID: NSManagedObjectID,
+        content: String,
+        context: NSManagedObjectContext,
+        isFallback: Bool = false
+    ) async -> Bool {
         do {
             let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
 
@@ -196,15 +239,16 @@ final class ProcessingEngine {
             // spend to the tier that authorized the assist, not the
             // tier they end up at.
             let tier = await MainActor.run { self.readTier() }
+            let action = isFallback ? "memory_organize_fallback" : "memory_organize"
             let result = try await analyzer.analyzeEntry(
                 content,
                 existingTopics: existingTopics,
                 existingMentions: existingMentions,
                 tier: tier,
-                action: "memory_organize"
+                action: action
             )
 
-            return await applyAnalysisResult(result, to: objectID, in: context)
+            return await applyAnalysisResult(result, existingTopics: existingTopics, to: objectID, in: context)
         } catch {
             NSLog("[HiMem][Organize] cloud pass failed, falling through: \(error.localizedDescription)")
             return false
@@ -396,16 +440,32 @@ final class ProcessingEngine {
     /// `OrganizePass`, marks the task complete, saves. Returns true
     /// if the save committed cleanly; false if `markFailed` was
     /// invoked. Shared by the on-device and cloud paths.
-    private func applyAnalysisResult(_ result: ClaudeAPIService.AnalysisResult, to objectID: NSManagedObjectID, in context: NSManagedObjectContext) async -> Bool {
-        await context.perform { [self] in
+    ///
+    /// Topics are canonicalized against `existingTopics` first
+    /// (per AI Organize spec §2c) — a model returning "garden" when
+    /// the user's palette already has "Garden" gets the palette's
+    /// casing, not the model's. Without this step the model's case
+    /// variants could leak into `OrganizePass.suggestedTopics` and
+    /// surface to the user as fake "different" topic suggestions.
+    private func applyAnalysisResult(_ result: ClaudeAPIService.AnalysisResult, existingTopics: [String], to objectID: NSManagedObjectID, in context: NSManagedObjectContext) async -> Bool {
+        let canonicalResult = Self.canonicalizeTopics(result: result, against: existingTopics)
+        return await context.perform { [self] in
             do {
                 let entry = try context.existingObject(with: objectID) as! JournalEntry
-                storeEntities(from: result, for: entry, in: context)
-                let newTopics = assignTopics(from: result, for: entry, in: context)
-                queueNewTopics(newTopics, entryObjectID: objectID)
-                checkAlbumSync(for: entry, topics: result.topics, context: context)
-                storeInference(from: result, for: entry, in: context)
-                storeOrganizePass(from: result, for: entry, in: context)
+                storeEntities(from: canonicalResult, for: entry, in: context)
+                // `assignTopics` still attaches existing-palette
+                // matches to the entry; the returned `newTopics` list
+                // is the names that didn't match any existing Topic.
+                // Per AI Organize spec §2c: NEW topics are no longer
+                // auto-promoted to the palette via a popup approval
+                // sheet. They live only on `OrganizePass.suggestedTopicsJSON`
+                // until the user reviews the draft (DraftReviewSheet
+                // commits them). The old `queueNewTopics(...)` call
+                // and its TopicApprovalService backing are retired.
+                _ = assignTopics(from: canonicalResult, for: entry, in: context)
+                checkAlbumSync(for: entry, topics: canonicalResult.topics, context: context)
+                storeInference(from: canonicalResult, for: entry, in: context)
+                storeOrganizePass(from: canonicalResult, for: entry, in: context)
                 markCompleted(entry)
                 try context.save()
                 return true
@@ -414,6 +474,30 @@ final class ProcessingEngine {
                 return false
             }
         }
+    }
+
+    /// Pure topic-canonicalization wrapper around `TopicPalette.partition`.
+    /// Returned topics that match an existing palette entry (case-
+    /// insensitive, whitespace-trimmed) are rewritten to the palette's
+    /// canonical casing; non-matches pass through unchanged. Other
+    /// fields on `AnalysisResult` (entities, summary, title,
+    /// nextSteps) are preserved bit-for-bit. The "matches first,
+    /// novelties next" ordering matches `TopicPalette.Partition`'s
+    /// own ordering — the review UI can derive the NEW vs existing
+    /// split by re-running the partition at render time.
+    static func canonicalizeTopics(
+        result: ClaudeAPIService.AnalysisResult,
+        against existingTopics: [String]
+    ) -> ClaudeAPIService.AnalysisResult {
+        let partition = TopicPalette.partition(returned: result.topics, existing: existingTopics)
+        let canonicalTopics = partition.existing + partition.new
+        return ClaudeAPIService.AnalysisResult(
+            entities: result.entities,
+            topics: canonicalTopics,
+            summary: result.summary,
+            title: result.title,
+            nextSteps: result.nextSteps
+        )
     }
 
     // MARK: - Cloud Processing Helpers
@@ -470,15 +554,6 @@ final class ProcessingEngine {
             }
         }
         return newTopicNames
-    }
-
-    private func queueNewTopics(_ names: [String], entryObjectID: NSManagedObjectID) {
-        guard !names.isEmpty else { return }
-        Task { @MainActor in
-            for name in names {
-                TopicApprovalService.shared.suggest(name: name, entryObjectID: entryObjectID)
-            }
-        }
     }
 
     private func checkAlbumSync(for entry: JournalEntry, topics: [String], context: NSManagedObjectContext) {

@@ -110,13 +110,14 @@ These strings must not be renamed after data starts landing —
 historical aggregations break across the rename boundary. Add new
 actions by extending the list, not by repurposing existing keys.
 
-| `action` string         | Triggered by                                                   |
-|-------------------------|----------------------------------------------------------------|
-| `memory_organize`       | `POST /himem/analyze` from `ProcessingEngine.processWithCloud` |
-| `project_assist`        | `POST /himem/analyze` from Find-the-thread (when wired)        |
-| `bundle_title`          | `POST /himem/analyze` for the bundle-sheet title (when wired)  |
-| `transcript_cleanup`    | `POST /himem/cleanup` (currently unused but reserved)          |
-| `anonymous` / `unknown` | Pre-instrumentation iOS clients or unknown action — fallback   |
+| `action` string             | Triggered by                                                                                                                                                |
+|-----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `memory_organize`           | Primary `POST /himem/analyze` from `ProcessingEngine.processWithCloud` (Plus tier, or Free without on-device AI).                                            |
+| `memory_organize_fallback`  | `POST /himem/analyze` retried after on-device organize threw (long content over the 4k context window, Apple safety-classifier rejection, or other failure). Same Haiku endpoint, distinct label so cost reports can separate primary spend from AI-recovery spend. Added 2026-06-08. |
+| `project_assist`            | `POST /himem/analyze` from Find-the-thread (when wired)                                                                                                     |
+| `bundle_title`              | `POST /himem/analyze` for the bundle-sheet title (when wired)                                                                                               |
+| `transcript_cleanup`        | `POST /himem/cleanup` (currently unused but reserved)                                                                                                       |
+| `anonymous` / `unknown`     | Pre-instrumentation iOS clients or unknown action — fallback                                                                                                |
 
 ## Endpoint contracts
 
