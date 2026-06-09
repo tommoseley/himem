@@ -325,8 +325,10 @@ final class ProcessingEngine {
         let hasAI = useOnDevice && hasAvailableAI()
         let shouldTryAnthropic = connectivity.isConnected && (plus || !hasAI)
 
+        var cloudAttempted = false
         var result: ClaudeAPIService.AnalysisResult?
         if shouldTryAnthropic {
+            cloudAttempted = true
             let tier = await MainActor.run { self.readTier() }
             result = try? await analyzer.analyzeEntry(
                 content,
@@ -341,6 +343,26 @@ final class ProcessingEngine {
                 content: content,
                 existingTopics: existingTopics,
                 existingMentions: existingMentions
+            )
+        }
+
+        // Cloud as last-resort fallback — mirrors `processEntry`'s
+        // post-yesterday routing. Free + AI-available + online but
+        // on-device threw (guardrail-violation on long content, etc.)
+        // would otherwise leave the entry's stale prior pass in place.
+        // Tagged "memory_organize_fallback" so COGS reports attribute
+        // recovery spend separately. Per Tom 2026-06-09: the
+        // composting transcript reorganize was silently failing on
+        // Free until this parity fix.
+        if result == nil, !cloudAttempted, connectivity.isConnected {
+            NSLog("[HiMem][Reorganize] on-device failed; retrying via cloud as last-resort fallback")
+            let tier = await MainActor.run { self.readTier() }
+            result = try? await analyzer.analyzeEntry(
+                content,
+                existingTopics: existingTopics,
+                existingMentions: existingMentions,
+                tier: tier,
+                action: "memory_organize_fallback"
             )
         }
 

@@ -481,6 +481,66 @@ struct ProcessingEngineFallbackTests {
                 "Plus primary cloud calls must keep the standard action label so the proxy routes to the standard model")
     }
 
+    /// Money test for the reorganize cloud-fallback parity bug
+    /// (Tom 2026-06-09). `processEntry` got a cloud-as-last-resort
+    /// fallback after on-device organize threw (long content, Apple
+    /// guardrail, etc.) — but `processReorganize` didn't get the same
+    /// treatment. Symptom: Free + AI-available + long content =
+    /// reorganize silently fails (on-device throws, no second cloud
+    /// attempt), and the stale prior `OrganizePass` keeps surfacing in
+    /// the UI even after the user edits the entry text to remove the
+    /// offending content. Fix: mirror `processEntry`'s last-resort
+    /// cloud retry inside `processReorganize` and tag the call with
+    /// `action="memory_organize_fallback"` so it routes to Haiku and
+    /// shows up distinctly in the COGS log.
+    @Test func processReorganize_free_withAI_failure_fallsToCloudAsLastResort() async throws {
+        let storage = StorageService(inMemory: true)
+        let recorder = ActionRecordingAnalyzer(title: "Cloud-recovered title")
+        let engine = ProcessingEngine(
+            storage: storage,
+            analyzer: recorder,
+            onDeviceOrganizer: ThrowingOnDeviceOrganizer(),
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: true,
+            hasAvailableAI: { true },
+            isPlus: { false }
+        )
+
+        // Seed: one prior successful organize so the entry has a
+        // committed OrganizePass to compare against. Used a different
+        // analyzer instance so the recorder only sees the reorganize
+        // call.
+        let seedAnalyzer = SuccessfulAnalyzer(title: "Stale title", entityValue: "Sarah", topic: "Garden")
+        let seedEngine = ProcessingEngine(
+            storage: storage,
+            analyzer: seedAnalyzer,
+            localExtractor: StubEntityExtractor.person("Sarah"),
+            useOnDevice: false
+        )
+        let entry = try storage.createEntry(content: "Met with Sarah about the garden.", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+        await seedEngine.processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+
+        // Now reorganize via the engine that throws on-device and
+        // records what the cloud sees.
+        await engine.processReorganize(entry)
+        storage.viewContext.refreshAllObjects()
+
+        // The cloud must have been called exactly once as a fallback.
+        #expect(recorder.actionsReceived == ["memory_organize_fallback"],
+                "Reorganize on Free + on-device failure must escalate to cloud with the Haiku-routed action label")
+
+        // A new OrganizePass with the recovered title must be the
+        // latest one — proves the cloud fallback's result was
+        // actually committed, not silently dropped.
+        let passReq = NSFetchRequest<OrganizePass>(entityName: "OrganizePass")
+        passReq.sortDescriptors = [NSSortDescriptor(keyPath: \OrganizePass.createdAt, ascending: true)]
+        let passes = try storage.viewContext.fetch(passReq)
+        #expect(passes.count == 2, "Reorganize must commit a new pass when cloud fallback succeeds")
+        #expect(passes.last?.suggestedTitle == "Cloud-recovered title")
+    }
+
     /// Money test for the scope contract from `AI Organize · spec.md`
     /// §8.0: reorganize writes a new `OrganizePass` with title + summary
     /// only. Topics and mentions from the new analyzer pass are
