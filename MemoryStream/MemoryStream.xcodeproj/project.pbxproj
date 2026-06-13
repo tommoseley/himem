@@ -160,7 +160,6 @@
 		A100000992 /* TutorialOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000992 /* TutorialOrchestrator.swift */; };
 		A100000993 /* QuickLookViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000993 /* QuickLookViewer.swift */; };
 		A100000994 /* BottomDeleteButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000994 /* BottomDeleteButton.swift */; };
-		A100000995 /* PresentationSwizzle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000995 /* PresentationSwizzle.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
 		A900000002 /* OnDeviceOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000002 /* OnDeviceOrganizer.swift */; };
 		A900000003 /* ServerOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000003 /* ServerOrganizer.swift */; };
@@ -391,7 +390,6 @@
 		B100000992 /* TutorialOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TutorialOrchestrator.swift; path = MemoryStream/Services/Tutorials/TutorialOrchestrator.swift; sourceTree = SOURCE_ROOT; };
 		B100000993 /* QuickLookViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookViewer.swift; sourceTree = "<group>"; };
 		B100000994 /* BottomDeleteButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomDeleteButton.swift; sourceTree = "<group>"; };
-		B100000995 /* PresentationSwizzle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MemoryStream/App/PresentationSwizzle.swift"; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
 		B900000002 /* OnDeviceOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceOrganizer.swift; sourceTree = "<group>"; };
 		B900000003 /* ServerOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOrganizer.swift; sourceTree = "<group>"; };
@@ -651,7 +649,6 @@
 				B100000992 /* TutorialOrchestrator.swift */,
 				B100000993 /* QuickLookViewer.swift */,
 				B100000994 /* BottomDeleteButton.swift */,
-				B100000995 /* PresentationSwizzle.swift */,
 				B100000951 /* ManageTopicsSheet.swift */,
 				B100000980 /* VideoPlayerSheet.swift */,
 				B100000732 /* TopicColorPicker.swift */,
@@ -1298,7 +1295,6 @@
 				A100000992 /* TutorialOrchestrator.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,
 				A100000994 /* BottomDeleteButton.swift in Sources */,
-				A100000995 /* PresentationSwizzle.swift in Sources */,
 				A100000951 /* ManageTopicsSheet.swift in Sources */,
 				A100000980 /* VideoPlayerSheet.swift in Sources */,
 				A100000201 /* MediaTile.swift in Sources */,

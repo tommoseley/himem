@@ -180,11 +180,6 @@ struct MemoryStreamApp: App {
         )
         defer { LaunchSignposter.signposter.endInterval("app.init", appInitState) }
 
-        // DIAGNOSTIC ONLY (remove before ship): swizzle present/dismiss
-        // to log every modal presentation. Used to pin down the Z
-        // controller in the Review-draft rise-and-fall race.
-        _ = PresentationSwizzle.install
-
         DispatchQueue.main.async {
             HiMemShortcuts.updateAppShortcutParameters()
         }
