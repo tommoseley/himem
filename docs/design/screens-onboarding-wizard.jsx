@@ -224,9 +224,9 @@ function ScrW1Apple() {
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 26 }}>
             {[
-              ['Capture anything.', 'Voice, photo, video — on your phone or your Watch.'],
-              ['Organized quietly.', 'HiMem listens for the thread. You stay in control.'],
-              ['Yours, end to end.', 'Synced privately through your own iCloud.'],
+              ['Capture first, organize later.', 'Voice, photo, video, or a note — on your phone or your Watch.'],
+              ['AI suggests, you decide.', 'HiMem drafts a title, summary, and topics. Review, edit, or ignore.'],
+              ['Your memories stay yours.', 'Synced privately through your own iCloud. Never our servers.'],
             ].map(([h, b]) => (
               <div key={h} style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
                 <span style={{ width: 6, height: 6, borderRadius: 3, background: PX.accent, marginTop: 7, flexShrink: 0 }} />
@@ -249,6 +249,9 @@ function ScrW1Apple() {
           </button>
           <div style={{ fontSize: 11.5, color: PX.ink3, textAlign: 'center', lineHeight: 1.45, padding: '0 10px' }}>
             One tap with Face ID. No password to set, no email to verify. Your name comes from Apple — we never ask for it twice.
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: PX.accent, letterSpacing: -0.1 }}>How HiMem works →</span>
           </div>
         </div>
       </div>
@@ -632,13 +635,17 @@ function ScrWLand() {
 // reassuring thing — their memories coming back, counted as they land.
 // ═════════════════════════════════════════════════════════════
 
-// Glyph: a soft cloud with a downward return — memories coming home.
+// Glyph: an iCloud mark with slowly-turning sync arrows — reads as
+// "syncing / in progress," deliberately NOT the iOS cloud-with-down-arrow
+// "tap to download" control (which read as a broken button). Status, not action.
 function RestoreGlyph({ color }) {
   return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 18a4 4 0 0 1-.5-7.97 5.5 5.5 0 0 1 10.6-1.55A3.75 3.75 0 0 1 17.5 16" />
-      <path d="M12 11v7" />
-      <path d="M9 15l3 3 3-3" />
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 16.5a3.8 3.8 0 0 1-.5-7.6 5.3 5.3 0 0 1 10.2-1.5A3.6 3.6 0 0 1 17.3 16.5" />
+      <g style={{ transformOrigin: '12px 13px', animation: 'rgSpin 2.6s linear infinite' }}>
+        <path d="M14.6 12.4a2.7 2.7 0 1 0 .3 2.6" />
+        <path d="M14.9 10.7v1.9h-1.9" />
+      </g>
     </svg>
   );
 }
@@ -648,6 +655,7 @@ function ScrReinstallRestore() {
     <PhoneScreen>
       <style>{`
         @keyframes wrBar { 0% { transform: translateX(-100%) } 100% { transform: translateX(320%) } }
+        @keyframes rgSpin { to { transform: rotate(360deg) } }
       `}</style>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 26px', overflow: 'hidden' }}>
         <div style={{ width: 64, height: 64, borderRadius: 18, background: PX.accentTint, color: PX.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 56 }}>
@@ -797,6 +805,97 @@ function WizardPrinciples() {
   );
 }
 
+// ═════════════════════════════════════════════════════════════
+// LEARN MORE · “How HiMem works” ladder
+// Optional, reachable from the sign-in screen and permanently from Settings.
+// The one place we explain the *unusual* parts — the loop, Projects, Studio,
+// and the data-custody differentiator. Never a wall: it's a page you choose.
+// ═════════════════════════════════════════════════════════════
+function LadderStep({ glyph, name, line, last, dim }) {
+  return (
+    <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+      {/* node + connector */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 11, flexShrink: 0,
+          background: dim ? PX.sunk : PX.accentTint, color: dim ? PX.ink3 : PX.accent,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>{glyph}</div>
+        {!last && <div style={{ width: 2, flex: 1, minHeight: 8, background: PX.hairline, marginTop: 3 }} />}
+      </div>
+      {/* text */}
+      <div style={{ paddingBottom: last ? 0 : 5, paddingTop: 3 }}>
+        <div style={{
+          fontSize: 15, fontWeight: 600, color: dim ? PX.ink3 : PX.ink, letterSpacing: -0.2,
+          display: 'flex', alignItems: 'baseline', gap: 8,
+        }}>
+          {name}
+          {dim && <span style={{ fontSize: 11, fontWeight: 500, color: PX.ink3, letterSpacing: 0 }}>coming later</span>}
+        </div>
+        <div style={{ fontSize: 13, lineHeight: 1.45, color: PX.ink2, marginTop: 3, letterSpacing: -0.1, maxWidth: 252 }}>{line}</div>
+      </div>
+    </div>
+  );
+}
+
+function ScrWLearnMore() {
+  const sparkGlyph = <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>;
+  const memGlyph = <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></svg>;
+  const projGlyph = <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>;
+  const studioGlyph = <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.4 6.5L21 9l-5 4.5L17.5 21 12 17l-5.5 4L8 13.5 3 9l6.6-.5z"/></svg>;
+  const capGlyph = <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>;
+  return (
+    <PhoneScreen>
+      {/* top bar — back + close, matches the modal-edit pattern */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '14px 18px 6px', flexShrink: 0 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: PX.accent, fontSize: 15 }}>
+          <svg width="9" height="15" viewBox="0 0 10 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 8l7 7"/></svg>
+          Back
+        </span>
+        <span style={{ flex: 1 }} />
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 26px', overflow: 'hidden' }}>
+        <h1 style={{ fontFamily: PX.serif, fontWeight: 400, fontSize: 28, lineHeight: 1.15, letterSpacing: -0.5, color: PX.ink, margin: '2px 0 0' }}>
+          How <em style={{ fontStyle: 'italic', color: PX.accent }}>HiMem</em> works
+        </h1>
+        <p style={{ fontSize: 14, lineHeight: 1.5, color: PX.ink2, margin: '7px 0 10px', letterSpacing: -0.1 }}>
+          Capture first. Organize later. The rest takes care of itself.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <LadderStep glyph={capGlyph} name="Capture" line="Record a thought, snap a photo, save a video, or jot a note — on your phone or your Watch." />
+          <LadderStep glyph={memGlyph} name="Memory" line="Those pieces become a memory: something you can find again, in your words." />
+          <LadderStep glyph={sparkGlyph} name="Organize" line="HiMem suggests a title, summary, and topics. You review, edit, or ignore — always your call." />
+          <LadderStep glyph={projGlyph} name="Projects" line="A project collects related memories. Over time, HiMem helps surface what belongs together." />
+          <LadderStep glyph={studioGlyph} name="Studio" line="Turn a project into something you can share." dim last />
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {/* data-custody differentiator — the unusual, trust-building truth */}
+        <div style={{
+          background: PX.sunk, borderRadius: 14, padding: '8px 14px', marginBottom: 10,
+          display: 'flex', gap: 11, alignItems: 'flex-start',
+        }}>
+          <span style={{ color: PX.ink3, flexShrink: 0, marginTop: 1 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg>
+          </span>
+          <div style={{ fontSize: 12.5, lineHeight: 1.5, color: PX.ink2, letterSpacing: -0.1 }}>
+            Your originals — photos, videos, recordings — stay in <strong style={{ color: PX.ink, fontWeight: 600 }}>your own iCloud</strong>. HiMem builds memories from them, but never uploads them to our servers.
+          </div>
+        </div>
+
+        <div style={{ paddingBottom: 16 }}>
+          <button style={{ height: 50, borderRadius: 14, border: 'none', cursor: 'pointer', width: '100%', background: PX.accent, color: PX.accentInk, fontSize: 16, fontWeight: 600, letterSpacing: -0.2 }}>
+            Got it
+          </button>
+        </div>
+      </div>
+    </PhoneScreen>
+  );
+}
+
 Object.assign(window, {
   ScrW1Apple, ScrW1Name,
   ScrW2Mic, ScrW2MicDialog,
@@ -806,7 +905,7 @@ Object.assign(window, {
   ScrW6Location,
   ScrW7Notifications, ScrW7NotificationsDialog,
   ScrRequiredBlock, ScrBlockApple, ScrBlockMic, ScrBlockSpeech,
-  ScrWLand,
+  ScrWLand, ScrWLearnMore, LadderStep,
   ScrReinstallRestore, ScrReinstallRestoreDone, RestoreGlyph,
   WizardPage, WizardTopBar, SystemDialog, ChannelToggle,
   WizardNotes, WizardPrinciples,

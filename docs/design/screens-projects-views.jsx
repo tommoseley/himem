@@ -1,5 +1,10 @@
 // screens-projects-views.jsx
-// The four MVP project screens.
+// The MVP project screens. Audited & locked June 10 2026 against:
+//   · No-quota model (no "assists" anywhere) — Pricing · Capture-Connect-Create
+//   · Button colour code — ochre = you act, blue = invoke AI (+ trailing ✦)
+//   · Projects "AI blue, always" — summary, confidence chips, why-lines, sparkle
+//   · 44px touch floor
+//   · One vocabulary — "Find the thread" (the internal name "Coalesce" is gone)
 
 // ─────────────────────────────────────────────────────────────
 // 1. Projects tab — populated. De-blued chrome, no FAB.
@@ -21,17 +26,18 @@ function ScrProjectsList() {
           count={6}
           date="May 9"
         />
+        {/* New project — ochre action, 44px tap row */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '12px 4px 4px', color: PX.accent,
-          fontSize: 15, fontWeight: 500, letterSpacing: -0.2,
+          minHeight: 44, padding: '6px 4px', color: PX.accent,
+          fontSize: 15, fontWeight: 500, letterSpacing: -0.2, cursor: 'pointer',
         }}>
           <span style={{
-            width: 22, height: 22, borderRadius: 11,
+            width: 24, height: 24, borderRadius: 12,
             background: PX.accent, color: PX.accentInk,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Plus size={12} color={PX.accentInk} />
+            <Plus size={13} color={PX.accentInk} />
           </span>
           New project
         </div>
@@ -41,9 +47,11 @@ function ScrProjectsList() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 2. Project detail — pre-coalesce. 3+ memories. Coalesce affordance visible.
+// 2. Project detail — before a Project Assist run. 3+ memories.
+//    "Find the thread" is a Plus AI action: blue, named, trailing ✦, ≥44px.
+//    No quota, no "assist" — running it is just running it.
 // ─────────────────────────────────────────────────────────────
-function ScrProjectPreCoalesce() {
+function ScrProjectDetail() {
   return (
     <PhoneScreen>
       <ProjectDetailNav />
@@ -54,47 +62,57 @@ function ScrProjectPreCoalesce() {
         goal="A capture-and-organize app for content creators."
       />
 
-      {/* Coalesce affordance — AI blue, intentional, not pushy */}
+      {/* Find the thread — AI blue, named feature, trailing sparkle */}
       <div style={{ padding: '16px 14px 10px' }}>
         <div style={{
           background: PX.card, border: '1px solid ' + PX.hairline,
           borderRadius: 14, padding: '14px 16px',
-          display: 'flex', alignItems: 'center', gap: 12,
+          display: 'flex', flexDirection: 'column', gap: 12,
         }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10, background: PX.aiTint, color: PX.ai,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <Spark size={18} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>
-              Find the thread
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10, background: PX.aiTint, color: PX.ai,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <Spark size={18} />
             </div>
-            <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 2, lineHeight: 1.35 }}>
-              A short summary across these memories. 1 assist.
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>
+                Find the thread
+              </div>
+              <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 2, lineHeight: 1.35 }}>
+                A short summary across these 14 memories, and others that may belong.
+              </div>
             </div>
           </div>
+          {/* AI button: blue fill, named feature + trailing ✦, full-width, ≥44px */}
           <button style={{
-            height: 30, padding: '0 14px', borderRadius: 15,
+            height: 46, width: '100%', borderRadius: 12,
             background: PX.ai, color: PX.accentInk, border: 'none',
-            fontSize: 13, fontWeight: 600, letterSpacing: -0.1, cursor: 'default',
-          }}>Run</button>
+            fontSize: 14.5, fontWeight: 600, letterSpacing: -0.1, cursor: 'default',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}>
+            Find the thread
+            <Spark size={15} color={PX.accentInk} />
+          </button>
         </div>
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', padding: '4px 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <ProjectMemoryCard
+        {/* Canonical journal MemoryCard — one definition everywhere (screens-memories.jsx) */}
+        <MemoryCard
           title="Inspiration capture app concept"
-          time="May 13 · 2:22 PM"
-          audio={2} photo={1}
+          time="May 13 · 2:22 PM" place="Marsh Walk"
+          media={{ audio: 2, photo: 1 }}
           topics={['content','tech']}
+          gist={{ kind: 'summary', text: 'A product idea for capturing creative fragments from Watch, phone, and iPad, then using AI to organize them into scripts, essays, and longer-form projects over time.' }}
         />
-        <ProjectMemoryCard
+        <MemoryCard
           title="Watch-first capture, no transcription"
           time="May 11 · 9:04 AM"
-          audio={1}
+          media={{ audio: 1 }}
           topics={['tech']}
+          gist={{ kind: 'excerpt', text: 'The watch should just capture — no transcription on-device, no screen to manage. Audio syncs to the phone and becomes a memory there.' }}
         />
       </div>
     </PhoneScreen>
@@ -105,7 +123,7 @@ function ScrProjectPreCoalesce() {
 // 3. Project detail — after a Project Assist run.
 //    AI-blue summary card + suggested-memories card.
 // ─────────────────────────────────────────────────────────────
-function ScrProjectPostCoalesce() {
+function ScrProjectSummarized() {
   return (
     <PhoneScreen>
       <ProjectDetailNav />
@@ -131,7 +149,8 @@ function ScrProjectPostCoalesce() {
               letterSpacing: 1.6, textTransform: 'uppercase',
             }}>Project summary</span>
             <span style={{ flex: 1 }} />
-            <span style={{ fontSize: 11, color: PX.ink3 }}>Organized · today</span>
+            {/* review-state label (AI blue, quiet — not a button) */}
+            <span style={{ fontSize: 11, color: PX.ai, fontWeight: 600 }}>Draft · give this a glance</span>
           </div>
           <div style={{
             fontFamily: PX.serif, fontSize: 16, lineHeight: 1.45, color: PX.ink,
@@ -141,9 +160,16 @@ function ScrProjectPostCoalesce() {
             the watch, organized on the phone. You've settled on watch-only capture and a tiered
             pricing model with three projects free.
           </div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 14, fontSize: 13, fontWeight: 500 }}>
-            <span style={{ color: PX.ai }}>Edit</span>
-            <span style={{ color: PX.ink2 }}>Regenerate</span>
+          {/* Unified editing model: the paragraph is tap-to-edit (no "Edit" link).
+             The only action is the AI re-run, as a real blue AI button — not a bare text link. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 44, padding: '0 15px',
+              borderRadius: 12, border: '1.5px solid ' + PX.ai, color: PX.ai,
+              fontSize: 13, fontWeight: 600, letterSpacing: -0.1,
+            }}>
+              Find the thread again <Spark size={13} color={PX.ai} />
+            </span>
             <span style={{ flex: 1 }} />
             <span style={{ color: PX.ink3, fontSize: 11.5 }}>14 of 14 memories</span>
           </div>
@@ -154,7 +180,7 @@ function ScrProjectPostCoalesce() {
       <div style={{ padding: '0 14px 10px' }}>
         <div style={{
           background: PX.card, border: '1px solid ' + PX.hairline,
-          borderRadius: 14, padding: '13px 16px',
+          borderRadius: 14, padding: '13px 16px', minHeight: 44,
           display: 'flex', alignItems: 'center', gap: 12,
         }}>
           <div style={{
@@ -174,7 +200,8 @@ function ScrProjectPostCoalesce() {
               From elsewhere in your memories.
             </div>
           </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: PX.ai, letterSpacing: -0.1 }}>
+          {/* Review = blue link into the suggestions sheet, 44px tap */}
+          <span style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', fontSize: 13, fontWeight: 600, color: PX.ai, letterSpacing: -0.1 }}>
             Review
           </span>
         </div>
@@ -185,11 +212,12 @@ function ScrProjectPostCoalesce() {
           fontSize: 10.5, fontWeight: 700, color: PX.ink3, letterSpacing: 1.6,
           textTransform: 'uppercase', padding: '2px 4px',
         }}>Memories</div>
-        <ProjectMemoryCard
+        <MemoryCard
           title="Inspiration capture app concept"
-          time="May 13 · 2:22 PM"
-          audio={2} photo={1}
+          time="May 13 · 2:22 PM" place="Marsh Walk"
+          media={{ audio: 2, photo: 1 }}
           topics={['content','tech']}
+          gist={{ kind: 'summary', text: 'A product idea for capturing creative fragments from Watch, phone, and iPad, then using AI to organize them into scripts, essays, and longer-form projects over time.' }}
         />
       </div>
     </PhoneScreen>
@@ -197,63 +225,13 @@ function ScrProjectPostCoalesce() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 4. Free user taps Coalesce → Plus upsell sheet over the project
-// ─────────────────────────────────────────────────────────────
-function ScrCoalesceUpsell() {
-  const behind = (
-    <PhoneScreen>
-      <ProjectDetailNav />
-      <ProjectTitleBlock
-        title="Building HiMem"
-        topics={['content','tech']}
-        count="14 memories"
-        goal="A capture-and-organize app for content creators."
-      />
-    </PhoneScreen>
-  );
-  return (
-    <PhoneScreen>
-      <Sheet behind={behind} height="58%">
-        <div style={{ padding: '14px 22px 26px', display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10, background: PX.aiTint, color: PX.ai,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-          }}>
-            <Spark size={20} />
-          </div>
-          <div style={{ fontFamily: PX.serif, fontSize: 24, lineHeight: 1.15, letterSpacing: -0.3, color: PX.ink, marginBottom: 10 }}>
-            You've used your starter project summary.
-          </div>
-          <div style={{ fontSize: 14, color: PX.ink2, lineHeight: 1.5, marginBottom: 8 }}>
-            Plus lets HiMem keep finding threads — across this project and any others you start.
-            Edit, regenerate, or ignore each one.
-          </div>
-          <div style={{ fontSize: 12.5, color: PX.ink3, lineHeight: 1.5 }}>
-            Free keeps storing and capturing forever. Your starter project, and its summary, stay yours.
-          </div>
-
-          <div style={{ flex: 1 }} />
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <Btn kind="primary">Upgrade to Plus · $4.99/mo</Btn>
-            <Btn kind="ghost" size="md">Not now</Btn>
-          </div>
-        </div>
-      </Sheet>
-    </PhoneScreen>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// 5. Suggested-memories review sheet.
-// AI proposes, the user decides. No auto-add.
+// 4. Suggested-memories review sheet.
+//    AI proposes, the user decides. No auto-add.
+//    Confidence is AI blue, ALWAYS — never green/amber (Projects lock).
+//    Distinguished by fill (Likely = filled dot) vs outline (Maybe = hollow).
 // ─────────────────────────────────────────────────────────────
 function SuggestionRow({ title, date, why, confidence = 'likely', selected, sub }) {
-  const tones = {
-    likely: { dot: PX.confirmed, label: 'Likely' },
-    maybe:  { dot: PX.warn,      label: 'Maybe'  },
-  };
-  const t = tones[confidence];
+  const likely = confidence === 'likely';
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 12,
@@ -261,7 +239,7 @@ function SuggestionRow({ title, date, why, confidence = 'likely', selected, sub 
       borderBottom: '1px solid ' + PX.divider,
     }}>
       <span style={{
-        width: 22, height: 22, borderRadius: 11, flexShrink: 0, marginTop: 1,
+        width: 24, height: 24, borderRadius: 12, flexShrink: 0, marginTop: 1,
         border: '1.5px solid ' + (selected ? PX.ai : PX.ink4),
         background: selected ? PX.ai : 'transparent',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -273,12 +251,18 @@ function SuggestionRow({ title, date, why, confidence = 'likely', selected, sub 
           <span style={{ fontSize: 14.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>{title}</span>
         </div>
         <div style={{ fontSize: 11, color: PX.ink3, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>{date}</div>
-        <div style={{ fontSize: 12.5, color: PX.ink2, lineHeight: 1.45, fontStyle: 'italic', fontFamily: PX.serif }}>
+        {/* "why" line — AI attribution, AI blue per the Projects lock */}
+        <div style={{ fontSize: 12.5, color: PX.ai, lineHeight: 1.45, fontStyle: 'italic', fontFamily: PX.serif }}>
           {why}
         </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 11, color: PX.ink3, fontWeight: 500, letterSpacing: 0.4 }}>
-          <span style={{ width: 6, height: 6, borderRadius: 3, background: t.dot }} />
-          {t.label.toUpperCase()} MATCH
+        {/* confidence chip — AI blue; Likely = filled dot, Maybe = hollow dot */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 11, color: PX.ai, fontWeight: 600, letterSpacing: 0.4 }}>
+          <span style={{
+            width: 7, height: 7, borderRadius: 4,
+            background: likely ? PX.ai : 'transparent',
+            border: '1.5px solid ' + PX.ai, boxSizing: 'border-box',
+          }} />
+          {likely ? 'LIKELY MATCH' : 'MAYBE MATCH'}
         </div>
       </div>
     </div>
@@ -304,7 +288,8 @@ function ScrSuggestionsReview() {
           <span style={{ flex: 1 }} />
           <span style={{ fontSize: 15, fontWeight: 600, color: PX.ink, letterSpacing: -0.2 }}>Suggested</span>
           <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 15, fontWeight: 600, color: PX.ai }}>Add 2</span>
+          {/* Add = commit user action → ochre (you act). Muted when 0 selected. */}
+          <span style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', fontSize: 15, fontWeight: 600, color: PX.ink3 }}>Add</span>
         </div>
 
         <div style={{ padding: '14px 20px 6px' }}>
@@ -326,20 +311,27 @@ function ScrSuggestionsReview() {
           </div>
         </div>
 
+        {/* selection toolbar — count + a Select all/none toggle (ochre = you act).
+           Default state: nothing selected, so the toggle offers "Select all";
+           once all are selected it flips to "Select none". */}
+        <div style={{ display: 'flex', alignItems: 'center', padding: '2px 20px 6px' }}>
+          <span style={{ fontSize: 12, color: PX.ink3, letterSpacing: -0.05 }}>3 suggestions · none selected</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', fontSize: 13, fontWeight: 600, color: PX.accent, letterSpacing: -0.1 }}>Select all</span>
+        </div>
+
         <div style={{ padding: '4px 20px 14px', overflow: 'auto', flex: 1 }}>
           <SuggestionRow
             title="Notes on Studio as creator workspace"
             date="May 12 · 10:14 AM"
             why="Mentions Studio, project synthesis, and creator tooling — the same thread you're pulling on here."
             confidence="likely"
-            selected
           />
           <SuggestionRow
             title="Watch capture session feedback"
             date="May 8 · 4:48 PM"
             why="Tagged Technology; mentions watch recording, the central capture surface for this project."
             confidence="likely"
-            selected
           />
           <SuggestionRow
             title="AI displacement, historical job patterns"
@@ -351,7 +343,7 @@ function ScrSuggestionsReview() {
 
         <div style={{ padding: '0 20px 18px', borderTop: '1px solid ' + PX.divider, paddingTop: 12 }}>
           <div style={{ fontSize: 11, color: PX.ink3, textAlign: 'center', lineHeight: 1.5 }}>
-            Suggestions are proposals. Nothing gets added until you tap <strong style={{ color: PX.ink2 }}>Add 2</strong>.
+            Suggestions are proposals. Nothing gets added until you tap <strong style={{ color: PX.ink2 }}>Add</strong>.
           </div>
         </div>
       </Sheet>
@@ -360,5 +352,5 @@ function ScrSuggestionsReview() {
 }
 
 Object.assign(window, {
-  ScrProjectsList, ScrProjectPreCoalesce, ScrProjectPostCoalesce, ScrCoalesceUpsell, ScrSuggestionsReview,
+  ScrProjectsList, ScrProjectDetail, ScrProjectSummarized, ScrSuggestionsReview,
 });

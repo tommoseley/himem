@@ -485,7 +485,6 @@ final class ProcessingEngine {
                 // commits them). The old `queueNewTopics(...)` call
                 // and its TopicApprovalService backing are retired.
                 _ = assignTopics(from: canonicalResult, for: entry, in: context)
-                checkAlbumSync(for: entry, topics: canonicalResult.topics, context: context)
                 storeInference(from: canonicalResult, for: entry, in: context)
                 storeOrganizePass(from: canonicalResult, for: entry, in: context)
                 markCompleted(entry)
@@ -576,34 +575,6 @@ final class ProcessingEngine {
             }
         }
         return newTopicNames
-    }
-
-    private func checkAlbumSync(for entry: JournalEntry, topics: [String], context: NSManagedObjectContext) {
-        // Photos albums hold images and videos. Voice/audio refs aren't in
-        // PhotoKit and shouldn't trigger the "create an album for this topic"
-        // prompt — that question is meaningless for voice-only memories.
-        let visualMediaIds = entry.mediaReferencesArray
-            .filter { $0.mediaTypeEnum == .image || $0.mediaTypeEnum == .video }
-            .map(\.osIdentifier)
-        guard !visualMediaIds.isEmpty else { return }
-
-        let existingTopics = topics.filter { topicName in
-            let slug = TopicSlugHelper.slugify(topicName)
-            let req = NSFetchRequest<Topic>(entityName: "Topic")
-            req.predicate = NSPredicate(format: "slug == %@", slug)
-            req.fetchLimit = 1
-            return (try? context.fetch(req).first) != nil
-        }
-        guard !existingTopics.isEmpty else { return }
-        Task { @MainActor in
-            for name in existingTopics {
-                if AlbumSyncService.shared.isAutoSyncEnabled(for: name) {
-                    AlbumSyncService.shared.addNewMedia(topicName: name, identifiers: visualMediaIds)
-                } else {
-                    AlbumSyncService.shared.proposeIfNeeded(topicName: name)
-                }
-            }
-        }
     }
 
     private func storeInference(from result: ClaudeAPIService.AnalysisResult, for entry: JournalEntry, in context: NSManagedObjectContext) {

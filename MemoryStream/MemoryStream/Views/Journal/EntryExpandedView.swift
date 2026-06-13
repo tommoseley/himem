@@ -1,19 +1,5 @@
 import SwiftUI
 
-enum EntryViewMode {
-    case reading, editing
-}
-
-private enum ExpandedSheet: Identifiable {
-    case newTopic
-
-    var id: String {
-        switch self {
-        case .newTopic: return "newTopic"
-        }
-    }
-}
-
 /// Identifies the voice tile a user tapped, so the AudioPlayerSheet can be
 /// presented via SwiftUI's `sheet(item:)` API. `mediaId` is the
 /// MediaReference id (so the sheet's transcript edit can save back to the
@@ -29,28 +15,21 @@ struct AudioPlayerTarget: Identifiable {
     var id: String { filename }
 }
 
-/// Identifies the note fragment a user tapped, so `NoteEditorSheet` can be
-/// presented via SwiftUI's `sheet(item:)` API. `mediaId` is the
-/// MediaReference id so the sheet's save callback can persist back to the
-/// right `.note` fragment; `text` seeds the editor; `createdAt` is shown as
-/// a header timestamp.
-struct NoteEditorTarget: Identifiable {
-    let mediaId: UUID
-    let text: String
-    let createdAt: Date
-    var id: UUID { mediaId }
-}
-
 struct EntryExpandedView: View {
     let entry: EntryDisplayModel
     var backLabel: String = "Today"
     let allTopics: [String]
     let cameraService: CameraService
     @ObservedObject var speechService: SpeechService
-    /// (entryId, newContent, newTitle, removedTagIds, removedMediaIds, addedTopics, removedTopics).
-    /// `newTitle == nil` means "leave the title alone"; an empty string clears it
-    /// so `displayTitle` falls back to the AI/derived ladder.
-    let onSave: (UUID, String, String?, Set<UUID>, Set<UUID>, Set<String>, Set<String>) -> Void
+    /// `(entryId, newContent, newTitle)`. Title-only path that the
+    /// inline title tap-to-edit (`commitTitleEdit`) routes through.
+    /// `newTitle == nil` means "leave the title alone"; an empty
+    /// string clears it so `displayTitle` falls back to the
+    /// AI/derived ladder. Tags / topics / media edits each have
+    /// their own dedicated lifecycle paths now — they don't ride
+    /// `onSave` anymore (the legacy 7-arg shape was retired with the
+    /// pen-mode cleanup, June 11 2026).
+    let onSave: (UUID, String, String?) -> Void
     var onFeedback: ((UUID, InferenceSummary.FeedbackState) -> Void)? = nil
     var onAdjust: ((UUID, String) -> Void)? = nil
     /// One-shot commit of a batch of appends. Fires at most once per session.
@@ -59,27 +38,105 @@ struct EntryExpandedView: View {
     var onCommit: ((UUID, String, [(localIdentifier: String, mediaType: MediaReference.MediaType)]) -> Void)? = nil
     var onRecycle: ((UUID) -> Void)? = nil
     var onAddToProject: ((UUID, UUID) -> Void)? = nil  // entryId, projectId
+    /// Set when this Memory Detail was opened from inside a project.
+    /// When non-nil, the bottom destruction button swaps from
+    /// `Delete memory` to `Remove from project` per `Memory Detail ·
+    /// unified editing model.md` line 109: "member memory → bottom
+    /// **Remove from project** (memory survives)". The callback
+    /// receives the entry id; the host wires the project context.
+    var onRemoveFromProject: ((UUID) -> Void)? = nil
     var availableProjects: [ProjectDisplayModel] = []
 
     @Environment(\.dismiss) private var dismiss
-    @State private var mode: EntryViewMode = .reading
 
-    // Editing state
+    // Per-fragment editing state. The legacy global-edit-mode flip
+    // (`mode: EntryViewMode = .reading/.editing`, `enterEditing`,
+    // `cancelEditing`, `commitEdits`, staged `addedTopics`/
+    // `removedTagIds`) was retired in the unified-editing pass per
+    // `docs/design/Memory Detail · unified editing model.md`. Every
+    // field now commits inline through its own dedicated tap-to-edit
+    // path; this state cluster only retains things still consumed by
+    // the live code (inline title draft, staged media deletes routed
+    // through `applyEditsImmediately`, and the per-sheet target ids).
     @State private var editedTitle = ""
-    @State private var removedTagIds: Set<UUID> = []
     @State private var removedMediaIds: Set<UUID> = []
-    @State private var addedTopics: Set<String> = []
-    @State private var removedTopics: Set<String> = []
     @State private var selectedMedia: MediaDisplayItem? = nil
+    /// Non-nil while the full-screen video player is presented. Set
+    /// when the user taps a video in the chronological capture stream
+    /// (photos still open `PhotoDescriptionEditSheet` via
+    /// `selectedMedia`). Pre-launch addition (Tom 2026-06-09): videos
+    /// in the ubiquity container had a play-overlay glyph but tapping
+    /// only opened the description sheet — no playback path existed.
+    @State private var videoPlayerForItem: MediaDisplayItem? = nil
     @State private var audioPlayerForFile: AudioPlayerTarget? = nil
-    @State private var noteEditorTarget: NoteEditorTarget? = nil
-    @State private var showDeleteConfirmation = false
-    @State private var showEmptyMemoryDeletePrompt = false
     @State private var showShareSheet = false
-    @State private var newTopicName = ""
-    @State private var newTopicColorKey = Crucible.Color.topicPalette[0].key
-    @State private var aiCardUnfolded = false
     @ObservedObject private var entitlement = Entitlement.shared
+
+    // MARK: - Long-memory transcript mode (Tom 2026-06-09)
+    // Source of truth: `docs/design/screens-memory-detail.jsx`
+    // §"Long memory · Full ⇄ Compact". Mode + anchor are session-scoped
+    // (process-lifetime), kept in `TranscriptModeSessionStore`. Short
+    // memories pin to .full and never see the toggle.
+
+    /// View mode for the transcript section. Synced to the session
+    /// store on every change so a navigate-back-and-forth in the same
+    /// session preserves the user's choice. Initialized to a safe `.full`;
+    /// the threshold-driven default is applied in `.onAppear` so we have
+    /// access to entry data without recomputing in init.
+    @State private var transcriptMode: TranscriptMode = .full
+
+    /// In Compact mode, the id of the one row currently expanded as a
+    /// single-open accordion. Tapping a closed row sets this to its id;
+    /// tapping the open row sets it back to nil. Photos/notes/voice
+    /// rows all live in the same id space (the MediaReference id).
+    @State private var transcriptOpenRowId: UUID? = nil
+
+    // MARK: - Unified editing (Tom 2026-06-09)
+    // Per `docs/design/Memory Detail · unified editing model.md`:
+    // tap text → edit in place → save on commit. No global edit
+    // mode — each text field manages its own focused state.
+
+    /// True while the user is editing the summary in place. The
+    /// section flips from a Text display to a TextEditor for the
+    /// duration; commit writes through `EntryLifecycleService.updateSummary`
+    /// which sets `JournalEntry.summaryUserEdited = true`.
+    @State private var summaryIsEditing: Bool = false
+    /// Draft buffer for the in-place summary edit. Initialized from
+    /// `entry.renderedSummary` when editing begins; written to
+    /// `JournalEntry.summary` on commit.
+    @State private var summaryDraft: String = ""
+    @FocusState private var summaryFieldFocused: Bool
+
+    /// True while the user is editing the title in place. Tap text →
+    /// `titleIsEditing = true` + focus the field; commit via Done in
+    /// the inline `EditCommitBar` (tap-away is NOT an implicit commit
+    /// per `Memory Detail · unified editing model.md` §"Committing an
+    /// edit by weight").
+    @State private var titleIsEditing: Bool = false
+    @FocusState private var titleFieldFocused: Bool
+
+    /// Drives the FAB-hide rule + "one edit at a time" rule from the
+    /// unified editing spec. EntryExpandedView observes
+    /// `editCoordinator.isAnyEditing` to hide the FAB; per-clip rows
+    /// observe `editCoordinator.activeEditId` to commit-and-close
+    /// when a different editor takes focus.
+    @StateObject private var editCoordinator = TextEditCoordinator.shared
+
+    /// True once `onAppear` has resolved `transcriptMode` from the
+    /// session store / threshold default. Prevents the brief flash
+    /// where a long memory would render Full for one frame before
+    /// `onAppear` flips it to Compact.
+    @State private var transcriptModeResolved = false
+
+    private var transcriptClipCount: Int {
+        TranscriptWordCount.clipCount(transcriptsAndNotes: entry.mediaItems)
+    }
+    private var transcriptWordCount: Int {
+        TranscriptWordCount.count(transcriptsAndNotes: entry.mediaItems)
+    }
+    private var transcriptHeaderShown: Bool {
+        TranscriptModeThreshold.headerShown(clipCount: transcriptClipCount)
+    }
 
     /// Direct lifecycle reference for per-panel edit/delete operations on the
     /// chronological capture stream and for the Append spec's per-modality
@@ -93,31 +150,24 @@ struct EntryExpandedView: View {
     /// the modality binding (passed to AppendFAB) but the dispatch
     /// logic lives on the coordinator.
     @StateObject private var appendCoordinator = EntryAppendCoordinator()
-    @State private var activeSheet: ExpandedSheet?
+    /// Drives the ManageTopicsSheet — the sole sheet still presented
+    /// from this view. Was previously an enum with `.newTopic` and
+    /// `.manageTopics` cases; the `.newTopic` case rode the dead
+    /// `addTopicMenu` and went out with the cleanup.
+    @State private var showManageTopics: Bool = false
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
-    private var currentTopics: [String] {
-        entry.topicNames.filter { !removedTopics.contains($0) } + addedTopics.sorted()
-    }
+    /// Topic names assigned to this memory. Was previously composed
+    /// from `entry.topicNames` minus `removedTopics` plus `addedTopics` —
+    /// that staging set rode the legacy global edit mode, which is gone.
+    /// Topic changes now write straight through `ManageTopicsSheet`.
+    private var currentTopics: [String] { entry.topicNames }
 
-    private var availableToAdd: [String] {
-        allTopics.filter { topic in
-            !entry.topicNames.contains(topic) && !addedTopics.contains(topic)
-            || removedTopics.contains(topic)
-        }
-    }
-
-    private var visibleTags: [TagDisplayModel] {
-        entry.tags.filter { !removedTagIds.contains($0.id) }
-    }
-
-    private var hasChanges: Bool {
-        editedTitle != entry.displayTitle
-            || !removedTagIds.isEmpty
-            || !removedMediaIds.isEmpty
-            || !addedTopics.isEmpty
-            || !removedTopics.isEmpty
-    }
+    /// Mentions to render in the always-visible mentions row. Used to
+    /// filter out staged `removedTagIds`; deletion now writes directly
+    /// to Core Data through `ManagedChipEdit`'s ✕ → `lifecycle.removeMention`,
+    /// so the list is just the entry's tags.
+    private var visibleTags: [TagDisplayModel] { entry.tags }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -128,25 +178,44 @@ struct EntryExpandedView: View {
         // over a custom swipe modifier traps vertical drags before the
         // parent `ScrollView` can claim them.
         List {
-            // Per Memory Detail v3 spec: title is the hero (serif),
-            // topic chip sits *below* it and above the meta line, not
-            // above. The four header rows (title, chip, date, summary)
-            // use `headerRow` for a tight rhythm; the rest of the
-            // page keeps `sectionRow`'s normal 8pt gap.
+            // Header rhythm per `AI Organize · spec.md §2c` and
+            // `screens-topics.jsx` `ScrMemoryWithTopics`: title →
+            // timestamp → summary → topic chip row. The topics row
+            // sits *under* the summary — that's the spec's
+            // "persistent home" for topics. Reorganize never touches
+            // it; the chip row Edit affordance opens the dedicated
+            // ManageTopicsSheet.
             headerRow { titleSection }
-            headerRow(top: -3) { topicChipsRow }
             headerRow {
                 Text(fullTimestamp)
                     .font(.caption)
                     .foregroundStyle(Crucible.Color.ink3)
             }
-            // Memory Detail v3: the memory-level location pill is
-            // retired. Per-clip headers in the chronological capture
-            // stream carry their own date + time + place name now,
-            // making the page-level pill redundant. `locationChip`
-            // remains defined below for the share/export composer
-            // until that path migrates to per-clip place names.
             headerRow { summarySection }
+            headerRow(top: -3) { topicChipsRow }
+            // Transcript Full ⇄ Compact toggle sits between the topic
+            // chips row and the chronological body. Hidden for short
+            // memories — the section header itself disappears, the
+            // body still renders fine without any eyebrow.
+            if transcriptHeaderShown {
+                sectionRow {
+                    TranscriptHeaderControl(
+                        clipCount: transcriptClipCount,
+                        wordCount: transcriptWordCount,
+                        mode: Binding(
+                            get: { transcriptMode },
+                            set: { newMode in
+                                transcriptMode = newMode
+                                TranscriptModeSessionStore.shared.set(newMode, for: entry.id)
+                                // Switching modes collapses any open
+                                // Compact row so the next entry into
+                                // Compact starts clean.
+                                if newMode == .full { transcriptOpenRowId = nil }
+                            }
+                        )
+                    )
+                }
+            }
             bodyContent
             // Mentions promoted out of the previous bottom expander
             // (was after OrganizeMemorySection / inferenceCardSection)
@@ -160,11 +229,44 @@ struct EntryExpandedView: View {
                 // Organized (chip + body, optional stale banner).
                 OrganizeMemorySection(
                     entryID: entry.id,
-                    unfolded: $aiCardUnfolded,
                     onOrganize: { triggerManualAIOrganize() }
                 )
+                // Pin SwiftUI identity to the entry id. Without an
+                // explicit `.id`, the List's cell housing this view
+                // can recycle across body re-evals (especially when
+                // the parent's other rows update from the new
+                // `OrganizePass`), which un-mounts and re-mounts
+                // `OrganizeMemorySection`. Each re-mount destroys
+                // the `@State activeSheet` AND orphans the
+                // `.sheet(item:)`'s SwiftUI `PresentationHostingController`
+                // in UIKit's tracking — that orphaned controller is
+                // the "already presenting Z" UIKit reports on the
+                // next presentation attempt. Pinning identity makes
+                // SwiftUI preserve the view across body re-evals.
+                .id(entry.id)
             }
             sectionRow { inferenceCardSection }
+            // Bottom Delete memory — the sole memory-delete path per
+            // `HiMem · Buttons & Actions.html` §3 and `Memory Detail ·
+            // unified editing model.md` (June 12 2026). Full-width red
+            // button at the very end of the opened item; the scroll to
+            // reach it *is* the deliberation, so no confirm. Recently
+            // Deleted (30 days) is the safety net.
+            sectionRow {
+                if let onRemoveFromProject {
+                    BottomDeleteButton(kind: .removeFromProject) {
+                        onRemoveFromProject(entry.id)
+                        dismiss()
+                    }
+                    .padding(.top, 24)
+                } else {
+                    BottomDeleteButton(kind: .delete(noun: "memory")) {
+                        onRecycle?(entry.id)
+                        dismiss()
+                    }
+                    .padding(.top, 24)
+                }
+            }
             // Bottom inset so the floating Contribute FAB doesn't cover the
             // last row.
             Color.clear
@@ -179,17 +281,31 @@ struct EntryExpandedView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) { leadingToolbar }
-            ToolbarItem(placement: .principal) { principalToolbar }
             ToolbarItem(placement: .navigationBarTrailing) { trailingToolbar }
         }
         .onAppear {
             editedTitle = entry.displayTitle
             migrateOrphanedContentIfNeeded()
+            resolveTranscriptModeIfNeeded()
+        }
+        // Rule #6 — one edit at a time. When the coordinator's
+        // `activeEditId` changes to something other than the title or
+        // summary id while one of them is open, commit it. Mirrors
+        // the same observer pattern used in VoiceClipPanel and
+        // CompactClipRow so cross-editor jumps always commit, never
+        // discard.
+        .onChange(of: editCoordinator.activeEditId) { _, newId in
+            if titleIsEditing && newId != "title" {
+                commitTitleEdit()
+            }
+            if summaryIsEditing && newId != "summary" {
+                commitSummaryEdit()
+            }
         }
         .modifier(MediaFragmentEditorStack(
             audioPlayerForFile: $audioPlayerForFile,
-            noteEditorTarget: $noteEditorTarget,
             selectedMedia: $selectedMedia,
+            videoPlayerForItem: $videoPlayerForItem,
             legacyTranscriptFallback: entry.content,
             onSaveAudioTranscript: { mediaId, newText in
                 if let mediaId {
@@ -201,57 +317,37 @@ struct EntryExpandedView: View {
                     lifecycle.edit(entryId: entry.id, newContent: newText)
                 }
             },
-            onSaveNoteFragment: { mediaId, newText in
-                updateNoteFragment(id: mediaId, text: newText)
-            },
             onSaveMediaDescription: { mediaId, newText in
                 updateMediaDescription(id: mediaId, text: newText)
+            },
+            onDeleteMedia: { mediaId in
+                lifecycle.deleteMediaReferences(ids: [mediaId])
+                lifecycle.regenerateContent(forEntryId: entry.id)
             }
         ))
         .sheet(isPresented: $showShareSheet) {
             let composed = "\(entry.displayTitle)\n\n\(entry.content)"
             ShareSheet(items: [composed])
         }
-        .modifier(EntryDeleteAlerts(
-            showRecycleConfirmation: $showDeleteConfirmation,
-            showPermanentDeletePrompt: $showEmptyMemoryDeletePrompt,
-            onRecycle: {
-                onRecycle?(entry.id)
-                dismiss()
-            },
-            onPermanentDelete: {
-                lifecycle.delete(entryId: entry.id)
-                dismiss()
-            }
-        ))
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .newTopic:
-                NewTopicSheet(
-                    name: $newTopicName,
-                    colorKey: $newTopicColorKey,
-                    onAdd: { name, colorKey in
-                        addedTopics.insert(name)
-                        TopicPaletteStore.shared.set(key: colorKey, for: name)
-                    }
-                )
-            }
+        .sheet(isPresented: $showManageTopics) {
+            ManageTopicsSheet(entryID: entry.id, onDismiss: {
+                showManageTopics = false
+            })
+            .presentationDetents([.large])
         }
-
-            // Append-spec FAB — pick a modality, capture, append to
-            // this memory. After the assist-quota retirement (PR 8d.2b)
-            // there's no inline always-visible review card to suppress
-            // the FAB against; the B1 review sheet is modal and
-            // doesn't share screen real estate with the FAB.
-            if mode == .reading {
-                AppendFAB(
-                    onSelect: { modality in
-                        appendCoordinator.activeCaptureModality = modality
-                    },
-                    accessibilityLabel: "Add to memory"
-                )
-            }
-        }
+        // Capture-flow host attached to the List (NavigationStack-level
+        // hosting controller), NOT the outer ZStack (`UIHostingController
+        // <RootModifier>`). On iOS 26 the `UIPresentationController`-based
+        // animator coordination adds a runloop tick after `viewDidDisappear`
+        // before `_presentedViewController` clears. When `.captureFlowHost`
+        // was on the ZStack, its sheets anchored to the same root UIKit
+        // slot as `OrganizeMemorySection`'s `.sheet(item:)` — leftover
+        // captures from a memory-creation voice flow would block the next
+        // Review-draft presentation in that one-tick window (the
+        // rise-and-fall bug the troika diagnosed June 13 2026). Moving
+        // it inside the List re-routes capture-flow presentations to the
+        // NavigationStack's hosting controller, eliminating the slot
+        // collision.
         .captureFlowHost(
             activeModality: $appendCoordinator.activeCaptureModality,
             speechService: speechService,
@@ -265,63 +361,74 @@ struct EntryExpandedView: View {
                 )
             }
         )
+
+            // Append-spec FAB — pick a modality, capture, append to
+            // this memory. Hidden during any active text edit per
+            // `Memory Detail · unified editing model.md` §"Editing a
+            // clip transcript — exact layout behavior" rule 3: the
+            // FAB must never sit over the caret line. The
+            // `editCoordinator` flips on any title/summary/transcript
+            // edit; the FAB disappears until the edit commits or
+            // cancels.
+            if !editCoordinator.isAnyEditing {
+                AppendFAB(
+                    onSelect: { modality in
+                        appendCoordinator.activeCaptureModality = modality
+                    },
+                    accessibilityLabel: "Add to memory"
+                )
+            }
+        }
     }
 
     // MARK: - Body sections (decomposed from var body)
 
-    /// Topic chips + (edit-mode) Add menu + (read-mode) status badge.
-    /// Per Memory Detail v3 spec (`MDTopicChip`): full-width chip,
-    /// neutral subtle dark background, `ink2` label, 11.5pt — the
-    /// dot picks up the topic's pip color while the chip body stays
-    /// muted. Spec's `inline-flex` child of a flex-column parent
-    /// stretches to the column width via CSS's default
-    /// `align-items: stretch`; SwiftUI parallel is
-    /// `.frame(maxWidth: .infinity, alignment: .leading)` per chip.
-    /// Vertical padding is 2pt — the v2 4pt was reading ~50% too
-    /// tall against the spec.
+    /// The persistent topic chip row — the "visible home" for topics
+    /// per `AI Organize · spec.md §2c` and `screens-topics.jsx`
+    /// `TopicRow`. Lives directly under the summary on every memory.
     ///
-    /// Multi-topic memories stack chips vertically; each chip still
-    /// spans the full width. Status badge moves to its own row
-    /// (rendered below) so it doesn't compete with the chip's
-    /// full-width band.
+    /// Shape:
+    /// - TOPICS eyebrow (small caps, ink3)
+    /// - Inline ochre-dot chips on `wash1` background (`TopicChip(.set)`)
+    /// - Persistent dashed-ochre **Edit** affordance — opens
+    ///   `ManageTopicsSheet`. Always visible (not gated on edit mode)
+    ///   so the user can manage topics deliberately, never as an AI
+    ///   side effect.
+    ///
+    /// Status badge (for inferring/failed/etc.) moves below the chips
+    /// — it's orthogonal to topics and shouldn't squat the topic row.
     private var topicChipsRow: some View {
-        VStack(spacing: 6) {
-            ForEach(currentTopics, id: \.self) { topic in
-                let hue = Crucible.Color.topicHue(for: topic)
-                HStack(spacing: 6) {
-                    Circle().fill(hue.fg).frame(width: 7, height: 7)
-                    Text(topic)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Crucible.Color.ink2)
-                    if mode == .editing {
-                        Button {
-                            if addedTopics.contains(topic) {
-                                addedTopics.remove(topic)
-                            } else {
-                                removedTopics.insert(topic)
-                            }
-                        } label: {
-                            Text("×")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundStyle(Crucible.Color.ink3)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Crucible.Color.ink.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 11))
-            }
+        VStack(alignment: .leading, spacing: 7) {
+            Text("TOPICS")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(1.6)
+                .foregroundStyle(Crucible.Color.ink3)
 
-            if mode == .editing {
-                HStack {
-                    addTopicMenu
-                    Spacer()
+            // Chips size to their content (no text wrapping) and
+            // flow-wrap to a new row when the available width runs
+            // out. `LazyVGrid(.adaptive)` was wrong here — it pinned
+            // a fixed column width and the chip text wrapped inside.
+            FlowLayout(spacing: 10) {
+                ForEach(currentTopics, id: \.self) { topic in
+                    // Per the unified-editing model (Tom 2026-06-09),
+                    // tap any topic chip → ManageTopicsSheet. The
+                    // dedicated "+ Edit" pill is retired; the entry
+                    // gesture is now tap-on-chip itself, exactly the
+                    // same gesture that's now used everywhere else in
+                    // the app for metadata management.
+                    Button {
+                        showManageTopics = true
+                    } label: {
+                        TopicChip(label: topic, state: .set)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Manage topic: \(topic)")
                 }
+                // "+ Add" affordance — dashed border = add/provisional
+                // per the affordance vocabulary lock. Same sheet as
+                // tapping a chip; the dashed border still signals
+                // "add a new one" specifically (vs. "manage existing").
+                addTopicAffordance
             }
 
             if let status = entry.displayStatus, entry.inferenceSummary == nil {
@@ -329,63 +436,87 @@ struct EntryExpandedView: View {
                     StatusBadge(text: status.text, style: status.style)
                     Spacer()
                 }
+                .padding(.top, 2)
             }
+        }
+        // Hairline separator between Summary and TOPICS. 4pt
+        // breathing room above the line (the summary sits closer
+        // than the clips do above the mentions row, so it needs an
+        // explicit buffer), then 8pt below before the eyebrow text.
+        // Per Tom 2026-06-08.
+        .padding(.top, 12)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Crucible.Color.hairline)
+                .frame(height: 0.5)
+                .padding(.top, 4)
         }
     }
 
-    /// Edit-mode menu for toggling existing topics or creating a new one.
-    private var addTopicMenu: some View {
-        Menu {
-            // Show every topic. Currently-applied ones are marked with a
-            // checkmark; tapping toggles membership so the user can switch
-            // topics in a single gesture without first having to × the
-            // existing chip.
-            ForEach(allTopics, id: \.self) { topic in
-                let isSelected = currentTopics.contains(topic)
-                Button {
-                    toggleTopic(topic, currentlySelected: isSelected)
-                } label: {
-                    if isSelected {
-                        Label(topic, systemImage: "checkmark")
-                    } else {
-                        Text(topic)
-                    }
-                }
-            }
-            if !allTopics.isEmpty { Divider() }
-            Button {
-                newTopicName = ""
-                newTopicColorKey = Crucible.Color.topicPalette[0].key
-                activeSheet = .newTopic
-            } label: {
-                Label("New Topic…", systemImage: "plus.circle")
-            }
+    /// Dashed-ochre **+ Add** affordance — opens the topic management
+    /// sheet for adding a new topic. Per the unified-editing model
+    /// (Tom 2026-06-09), the dashed border still means
+    /// "add / provisional" per the affordance vocabulary lock; what
+    /// changed is the label from "+ Edit" to "+ Add" — tapping any
+    /// existing chip handles editing now, so the dedicated pill no
+    /// longer needs to overload that role.
+    private var addTopicAffordance: some View {
+        Button {
+            showManageTopics = true
         } label: {
-            Text("+ Add")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(Crucible.Color.ink2)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Crucible.Color.sunk)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Crucible.Color.divider, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Add")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.accent)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 38)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            )
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit topics")
     }
 
     /// Title field swaps between an editable `TextField` and a read-mode
-    /// `Text` that taps into editing.
+    /// `Text` that taps into editing. Unified editing model (Tom
+    /// 2026-06-09): tap-to-edit fires a per-field `titleIsEditing`
+    /// state instead of the legacy global `mode == .editing` flip, so
+    /// the rest of the screen stays in "reading" while just the title
+    /// is hot. Commit on focus loss or Return — no dismiss.
     @ViewBuilder
     private var titleSection: some View {
-        if mode == .editing {
-            TextField("Title", text: $editedTitle)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundStyle(Crucible.Color.ink)
-                .padding(10)
-                .background(Crucible.Color.paper)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
+        if titleIsEditing {
+            // Title editor in flow: TextField + inline Cancel/Done bar
+            // directly beneath. Per `Memory Detail · unified editing
+            // model.md` §"Committing an edit (accept / cancel) — by
+            // weight": **anything that opens a full editing context
+            // gets an explicit Cancel/Done anchored on the control**,
+            // never a floating keyboard toolbar (that bug was called
+            // out in the June-9 spec update). Tap-away is NOT an
+            // implicit commit — user must hit Cancel or Done.
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Title", text: $editedTitle)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .padding(10)
+                    .background(Crucible.Color.paper)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
+                    .focused($titleFieldFocused)
+                    .submitLabel(.done)
+                    .onSubmit { commitTitleEdit() }
+                EditCommitBar(
+                    onCancel: { cancelTitleEdit() },
+                    onDone:   { commitTitleEdit() }
+                )
+            }
         } else {
             // Provenance lives in the Organized chip below — once a
             // suggestion is accepted, the field is the memory's, not
@@ -395,7 +526,7 @@ struct EntryExpandedView: View {
                 .fontWeight(.bold)
                 .foregroundStyle(Crucible.Color.ink)
                 .contentShape(Rectangle())
-                .onTapGesture { enterEditing() }
+                .onTapGesture { beginEditingTitle() }
         }
     }
 
@@ -404,27 +535,139 @@ struct EntryExpandedView: View {
     /// `✦ AI` glyph + caption make the origin visible at a glance.
     /// Empty when the summary isn't accepted (or doesn't exist) —
     /// view collapses without taking layout space.
+    ///
+    /// Unified editing model (Tom 2026-06-09): tap the summary text →
+    /// it flips to a TextEditor focused inline. Tap-away commits via
+    /// `EntryLifecycleService.updateSummary` which writes the new
+    /// text to `JournalEntry.summary` and flips
+    /// `summaryUserEdited` to true. Empty content on commit clears
+    /// the summary back to nil; the section then renders an empty
+    /// placeholder until the next organize pass or another edit.
     @ViewBuilder
     private var summarySection: some View {
-        if let summary = entry.renderedSummary {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 9, weight: .semibold))
-                    Text("SUMMARY")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .tracking(0.5)
-                }
-                .foregroundStyle(Crucible.Color.aiBlue)
-                Text(summary)
-                    .font(.body)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.top, 4)
+        if summaryIsEditing {
+            summaryEditor
+        } else if let summary = entry.renderedSummary {
+            summaryReadable(summary)
         }
+    }
+
+    private var summaryEyebrow: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 9, weight: .semibold))
+            Text("SUMMARY")
+                .font(.caption2)
+                .fontWeight(.bold)
+                .tracking(0.5)
+        }
+        .foregroundStyle(Crucible.Color.aiBlue)
+    }
+
+    @ViewBuilder
+    private func summaryReadable(_ summary: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            summaryEyebrow
+            Text(summary)
+                .font(.body)
+                .foregroundStyle(Crucible.Color.ink)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 4)
+        .contentShape(Rectangle())
+        .onTapGesture { beginEditingSummary() }
+    }
+
+    @ViewBuilder
+    private var summaryEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            summaryEyebrow
+            // `TextField(axis: .vertical)` matches the read view's
+            // metrics 1:1 and auto-grows to fit the entire content —
+            // a 6-line summary edits in a 6-line field, no internal
+            // scrolling, no fixed-height clipping. Per the new spec
+            // rule #7: edit field must mirror the read view's font,
+            // line-height, weight, and width.
+            TextField("", text: $summaryDraft, axis: .vertical)
+                .font(.body)
+                .foregroundStyle(Crucible.Color.ink)
+                .lineSpacing(3)
+                .focused($summaryFieldFocused)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(Crucible.Color.paper)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Crucible.Color.accent, lineWidth: 1)
+                )
+            EditCommitBar(
+                onCancel: { cancelSummaryEdit() },
+                onDone:   { commitSummaryEdit() }
+            )
+        }
+        .padding(.top, 4)
+    }
+
+    private func beginEditingSummary() {
+        summaryDraft = entry.renderedSummary ?? ""
+        summaryIsEditing = true
+        editCoordinator.begin(id: "summary")
+        // Defer focus to the next runloop so the field is in the
+        // hierarchy before the focus state asks for it.
+        DispatchQueue.main.async {
+            summaryFieldFocused = true
+        }
+    }
+
+    private func commitSummaryEdit() {
+        // Only persist if the text actually changed. Avoids writing
+        // an identical value and (more importantly) avoids flipping
+        // the `summaryUserEdited` marker when the user opens the
+        // editor and immediately taps Done without typing.
+        let trimmed = summaryDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = entry.renderedSummary ?? ""
+        if trimmed != current {
+            lifecycle.updateSummary(entryId: entry.id, summary: trimmed)
+        }
+        summaryFieldFocused = false
+        summaryIsEditing = false
+        editCoordinator.end(id: "summary")
+    }
+
+    private func cancelSummaryEdit() {
+        summaryDraft = ""
+        summaryFieldFocused = false
+        summaryIsEditing = false
+        editCoordinator.end(id: "summary")
+    }
+
+    private func beginEditingTitle() {
+        editedTitle = entry.displayTitle
+        titleIsEditing = true
+        editCoordinator.begin(id: "title")
+        DispatchQueue.main.async {
+            titleFieldFocused = true
+        }
+    }
+
+    private func commitTitleEdit() {
+        let trimmed = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleToSave: String? = (trimmed == entry.displayTitle) ? nil : trimmed
+        if titleToSave != nil {
+            onSave(entry.id, entry.content, titleToSave)
+        }
+        titleFieldFocused = false
+        titleIsEditing = false
+        editCoordinator.end(id: "title")
+    }
+
+    private func cancelTitleEdit() {
+        editedTitle = entry.displayTitle
+        titleFieldFocused = false
+        titleIsEditing = false
+        editCoordinator.end(id: "title")
     }
 
     /// Tappable location chip — variant E (Himem · Location.html). Pin
@@ -552,18 +795,60 @@ struct EntryExpandedView: View {
                         transcript: item.transcript
                     )
                 },
-                onOpenNote: { item in
-                    noteEditorTarget = NoteEditorTarget(
-                        mediaId: item.id,
-                        text: item.text ?? "",
-                        createdAt: item.createdAt
+                onCommitVoiceTranscript: { mediaId, newText in
+                    lifecycle.updateMediaTranscript(
+                        mediaId: mediaId,
+                        transcript: newText,
+                        entryId: entry.id
                     )
                 },
-                onTapPhoto: { item in
+                onCommitNoteText: { mediaId, newText in
+                    lifecycle.updateNoteFragment(
+                        id: mediaId,
+                        text: newText,
+                        entryId: entry.id
+                    )
+                },
+                onPlayVideo: { item in
+                    videoPlayerForItem = item
+                },
+                onEditMediaDescription: { item in
+                    // Whole-card tap on a photo or video routes here.
+                    // Opens the description editor — the editor itself
+                    // hosts a tap-to-open larger viewer for the image
+                    // / video. Putting the description on the primary
+                    // gesture keeps it reachable; the prior whole-card
+                    // → QuickLook/player routing left it hidden behind
+                    // a swipe most users never tried.
                     selectedMedia = item
+                },
+                mode: transcriptMode,
+                openCompactRowId: transcriptOpenRowId,
+                onToggleCompactRow: { rowId in
+                    // Single-open accordion: tapping the open row closes
+                    // it, tapping a different row replaces it.
+                    transcriptOpenRowId = transcriptOpenRowId == rowId ? nil : rowId
                 }
             )
         }
+    }
+
+    /// Resolves the transcript mode for this entry's first appearance
+    /// inside this app session: prior session-store choice wins; falls
+    /// back to the threshold-driven default. Idempotent — the
+    /// `transcriptModeResolved` flag prevents re-applying the default
+    /// after the user has manually toggled.
+    fileprivate func resolveTranscriptModeIfNeeded() {
+        guard !transcriptModeResolved else { return }
+        transcriptModeResolved = true
+        if let stored = TranscriptModeSessionStore.shared.mode(for: entry.id) {
+            transcriptMode = stored
+            return
+        }
+        transcriptMode = TranscriptModeThreshold.defaultMode(
+            clipCount: transcriptClipCount,
+            wordCount: transcriptWordCount
+        )
     }
 
     /// On first detail view, mint a `.note` fragment for orphaned
@@ -619,151 +904,101 @@ struct EntryExpandedView: View {
     }
 
     /// Mentions section — always-visible row of extracted entity
-    /// tags per Memory Detail v3. Previously a bottom-of-page
-    /// collapsed `MENTIONS ⌄` expander; the chevron + count are
-    /// retired and all chips render in a single FlowLayout. The
-    /// section sits between the chronological capture stream and the
-    /// Organized · review card. Person-typed mentions and others
-    /// flow together — no internal split.
+    /// tags per Memory Detail v3. Now uses the **managed chip · edit
+    /// state** Crucible pattern: each chip is tap-to-edit in place
+    /// (rename or remove via ✕). A trailing dashed **+ Add** chip
+    /// matches the unified-editing model's "lightweight inline" rule
+    /// for mentions. The section sits between the chronological
+    /// capture stream and the Organized · review card; the section
+    /// stays mounted even when empty so the + Add affordance is always
+    /// reachable.
     @ViewBuilder
     private var mentionsSection: some View {
-        if !entry.tags.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("MENTIONS")
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .tracking(0.5)
-                    .foregroundStyle(Crucible.Color.ink3)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("MENTIONS")
+                .font(.caption2)
+                .fontWeight(.bold)
+                .tracking(1.6)
+                .foregroundStyle(Crucible.Color.ink3)
 
-                FlowLayout(spacing: 6) {
-                    ForEach(visibleTags) { mentionChip($0) }
+            FlowLayout(spacing: 6) {
+                ForEach(visibleTags) { tag in
+                    ManagedChipEdit(
+                        id: "mention-\(tag.id.uuidString)",
+                        value: tag.value,
+                        dotTint: tag.entityType.mentionTint,
+                        onCommitRename: { newValue in
+                            lifecycle.renameMention(
+                                entityId: tag.id,
+                                newValue: newValue,
+                                entryId: entry.id
+                            )
+                        },
+                        onRemove: {
+                            lifecycle.removeMention(entityId: tag.id, entryId: entry.id)
+                        }
+                    )
                 }
-            }
-            .padding(.top, 8)
-            .overlay(alignment: .top) {
-                Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
+                ManagedChipAddAffordance(
+                    id: "mention-add",
+                    onCommit: { newValue in
+                        lifecycle.addMention(value: newValue, entryId: entry.id)
+                    }
+                )
             }
         }
-    }
-
-    /// One standalone-mentions chip. Persons get a `person.fill`
-    /// glyph; other types get a colored dot. Tint comes from
-    /// `ExtractedEntity.EntityType.mentionTint` so any mention
-    /// surface reads from one palette.
-    @ViewBuilder
-    private func mentionChip(_ tag: TagDisplayModel) -> some View {
-        HStack(spacing: 4) {
-            if tag.entityType == .person {
-                Image(systemName: "person.fill")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(tag.entityType.mentionTint)
-            } else {
-                Circle()
-                    .fill(tag.entityType.mentionTint)
-                    .frame(width: 5, height: 5)
-            }
-            Text(tag.value)
-            if mode == .editing {
-                Button {
-                    removedTagIds.insert(tag.id)
-                } label: {
-                    Text("×")
-                        .fontWeight(.bold)
-                        .foregroundStyle(Crucible.Color.ink3)
-                }
-                .buttonStyle(.plain)
-            }
+        .padding(.top, 8)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
         }
-        .font(.caption)
-        .fontWeight(.medium)
-        .foregroundStyle(Crucible.Color.ink2)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Crucible.Color.sunk)
-        .clipShape(Capsule())
     }
 
     // MARK: - Toolbar items (decomposed from var body)
 
     @ViewBuilder
     private var leadingToolbar: some View {
-        if mode == .editing {
-            Button("Cancel") { cancelEditing() }
-                .foregroundStyle(Crucible.Color.accent)
-        } else {
-            Button {
-                dismiss()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                        .font(.subheadline.weight(.semibold))
-                    Text(backLabel)
-                }
-                .foregroundStyle(Crucible.Color.accent)
+        Button {
+            dismiss()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.subheadline.weight(.semibold))
+                Text(backLabel)
             }
-            .accessibilityLabel("Back to \(backLabel)")
+            .foregroundStyle(Crucible.Color.accent)
         }
+        .accessibilityLabel("Back to \(backLabel)")
     }
 
-    @ViewBuilder
-    private var principalToolbar: some View {
-        if mode == .editing {
-            Text("Editing")
-                .font(.subheadline)
-                .fontWeight(.bold)
-                .foregroundStyle(Crucible.Color.ink)
-        }
-    }
-
+    /// Trailing toolbar — Folder · Share. Per the unified editing model
+    /// (June 12 2026 supersession): destruction is no longer a toolbar
+    /// affordance. The bottom Delete memory button at the very end of
+    /// the body is the sole memory-delete path.
     @ViewBuilder
     private var trailingToolbar: some View {
-        if mode == .editing {
-            Button("Done") {
-                if hasChanges {
-                    commitEdits()
-                } else {
-                    withAnimation(.easeInOut(duration: 0.2)) { mode = .reading }
-                }
-            }
-            .fontWeight(.bold)
-            .foregroundStyle(Crucible.Color.accent)
-        } else {
-            HStack(spacing: 16) {
-                Button { showDeleteConfirmation = true } label: {
-                    Image(systemName: "trash")
-                        .font(.subheadline)
-                        .foregroundStyle(Crucible.Color.ink3)
-                }
-                .accessibilityLabel("Delete memory")
-                if !availableProjects.isEmpty {
-                    Menu {
-                        ForEach(availableProjects) { project in
-                            Button {
-                                onAddToProject?(entry.id, project.id)
-                            } label: {
-                                Label(project.name, systemImage: "folder")
-                            }
+        HStack(spacing: 16) {
+            if !availableProjects.isEmpty {
+                Menu {
+                    ForEach(availableProjects) { project in
+                        Button {
+                            onAddToProject?(entry.id, project.id)
+                        } label: {
+                            Label(project.name, systemImage: "folder")
                         }
-                    } label: {
-                        Image(systemName: "folder.badge.plus")
-                            .font(.subheadline)
-                            .foregroundStyle(Crucible.Color.ink2)
                     }
-                    .accessibilityLabel("Add to project")
-                }
-                Button { showShareSheet = true } label: {
-                    Image(systemName: "square.and.arrow.up")
+                } label: {
+                    Image(systemName: "folder.badge.plus")
                         .font(.subheadline)
                         .foregroundStyle(Crucible.Color.ink2)
                 }
-                .accessibilityLabel("Share memory")
-                Button { enterEditing() } label: {
-                    Image(systemName: "pencil")
-                        .font(.subheadline)
-                        .foregroundStyle(Crucible.Color.ink2)
-                }
-                .accessibilityLabel("Edit memory")
+                .accessibilityLabel("Add to project")
             }
+            Button { showShareSheet = true } label: {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.subheadline)
+                    .foregroundStyle(Crucible.Color.ink2)
+            }
+            .accessibilityLabel("Share memory")
         }
     }
 
@@ -800,38 +1035,6 @@ struct EntryExpandedView: View {
         }
     }
 
-    // MARK: - Mode transitions
-
-    private func enterEditing() {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            mode = .editing
-        }
-    }
-
-    private func cancelEditing() {
-        editedTitle = entry.displayTitle
-        removedTagIds = []
-        removedMediaIds = []
-        addedTopics = []
-        removedTopics = []
-        withAnimation(.easeInOut(duration: 0.2)) {
-            mode = .reading
-        }
-    }
-
-    private func commitEdits() {
-        let trimmedTitle = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Pass nil when the title field wasn't touched so we don't overwrite
-        // the entry's actual title with the displayTitle fallback that
-        // `enterEditing` seeded into editedTitle.
-        let titleToSave: String? = (trimmedTitle == entry.displayTitle) ? nil : trimmedTitle
-        // Body editing happens per-fragment now (NotePanel inline edit,
-        // AudioPlayerSheet transcript edit). Pass entry.content unchanged so
-        // the save round-trip touches only title/tags/media/topics.
-        onSave(entry.id, entry.content, titleToSave, removedTagIds, removedMediaIds, addedTopics, removedTopics)
-        dismiss()
-    }
-
     private var fullTimestamp: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM d · h:mm a"
@@ -846,33 +1049,6 @@ struct EntryExpandedView: View {
         }
     }
 
-    // MARK: - Topic toggle (edit mode)
-
-    /// Flips a topic's membership on the current entry. Maintains the
-    /// staged `addedTopics` / `removedTopics` sets so the change can be
-    /// committed atomically by Done or rolled back by Cancel.
-    private func toggleTopic(_ topic: String, currentlySelected: Bool) {
-        if currentlySelected {
-            // Currently selected → remove it.
-            if entry.topicNames.contains(topic) {
-                // Was on the entry originally; stage a removal.
-                removedTopics.insert(topic)
-            } else {
-                // Was just added in this edit session; un-stage.
-                addedTopics.remove(topic)
-            }
-        } else {
-            // Not currently selected → add it.
-            if removedTopics.contains(topic) {
-                // Was originally on the entry, then staged for removal —
-                // un-stage the removal.
-                removedTopics.remove(topic)
-            } else {
-                addedTopics.insert(topic)
-            }
-        }
-    }
-
     // MARK: - Chronological capture stream helpers
 
     /// Removes a media reference immediately rather than batching it with
@@ -884,27 +1060,11 @@ struct EntryExpandedView: View {
         lifecycle.deleteMediaReferences(ids: ids)
         lifecycle.regenerateContent(forEntryId: entry.id)
         removedMediaIds = []
-        promptForPermanentDeleteIfEmpty()
     }
 
     private func deleteNoteFragment(id: UUID) {
         lifecycle.deleteMediaReferences(ids: [id])
         lifecycle.regenerateContent(forEntryId: entry.id)
-        promptForPermanentDeleteIfEmpty()
-    }
-
-    /// Surfaces the "delete this empty memory?" prompt when the just-deleted
-    /// fragment was the entry's last one. A memory that has lost every
-    /// fragment renders as a blank shell — recycle would just defer the
-    /// problem to the bin, so we offer a permanent delete instead.
-    private func promptForPermanentDeleteIfEmpty() {
-        if lifecycle.isEntryEmpty(entryId: entry.id) {
-            showEmptyMemoryDeletePrompt = true
-        }
-    }
-
-    private func updateNoteFragment(id: UUID, text: String) {
-        lifecycle.updateNoteFragment(id: id, text: text, entryId: entry.id)
     }
 
     private func updateMediaDescription(id: UUID, text: String) {
@@ -1155,17 +1315,19 @@ private struct CommitFooter: View {
 
 // MARK: - Body sub-modifiers
 
-/// Three media-fragment edit sheets that ride on top of every
-/// EntryExpandedView. All three use the same `.large` detent and
-/// follow the unified edit-sheet template
-/// (`docs/design/HiMem · Edit Sheet.html` June 2026): audio →
-/// transcript editor, photo/video → description editor, note →
-/// text editor. Extracted from `EntryExpandedView.body` so the
-/// body stops owning their wiring directly — CRAP audit 2026-06-07.
+/// Media-fragment edit sheets that ride on top of every
+/// EntryExpandedView. Audio → transcript editor; photo/video →
+/// description editor; video → full-screen player. Note-fragment
+/// edits are inline now (NotePanel tap-to-edit); the legacy
+/// `NoteEditorSheet.swift` was deleted 2026-06-11 once its last
+/// caller went away. Follows the unified edit-sheet template
+/// (`docs/design/HiMem · Edit Sheet.html` June 2026). Extracted from
+/// `EntryExpandedView.body` so the body stops owning their wiring
+/// directly — CRAP audit 2026-06-07.
 private struct MediaFragmentEditorStack: ViewModifier {
     @Binding var audioPlayerForFile: AudioPlayerTarget?
-    @Binding var noteEditorTarget: NoteEditorTarget?
     @Binding var selectedMedia: MediaDisplayItem?
+    @Binding var videoPlayerForItem: MediaDisplayItem?
     /// Used when a voice clip predates the per-clip transcript
     /// schema — the joined entry content is the only transcript
     /// available. Passed through to AudioPlayerSheet's
@@ -1174,8 +1336,11 @@ private struct MediaFragmentEditorStack: ViewModifier {
     /// (mediaId?, newText) — `nil` mediaId means a legacy voice
     /// entry whose transcript IS the entry content.
     let onSaveAudioTranscript: (UUID?, String) -> Void
-    let onSaveNoteFragment: (UUID, String) -> Void
     let onSaveMediaDescription: (UUID, String) -> Void
+    /// Deletes the photo/video clip from inside the description editor's
+    /// bottom Delete button. Wired to the same `EntryLifecycleService`
+    /// delete path the Full/Compact rows use.
+    let onDeleteMedia: (UUID) -> Void
 
     func body(content: Content) -> some View {
         content
@@ -1190,48 +1355,21 @@ private struct MediaFragmentEditorStack: ViewModifier {
                 )
                 .presentationDetents([.large])
             }
-            .sheet(item: $noteEditorTarget) { target in
-                NoteEditorSheet(
-                    recordedAt: target.createdAt,
-                    initialText: target.text,
-                    onSave: { newText in
-                        onSaveNoteFragment(target.mediaId, newText)
+            .sheet(item: $selectedMedia) { item in
+                PhotoDescriptionEditSheet(
+                    item: item,
+                    onSaveDescription: { newDescription in
+                        onSaveMediaDescription(item.id, newDescription)
+                    },
+                    onDelete: {
+                        onDeleteMedia(item.id)
                     }
                 )
                 .presentationDetents([.large])
             }
-            .sheet(item: $selectedMedia) { item in
-                PhotoDescriptionEditSheet(item: item) { newDescription in
-                    onSaveMediaDescription(item.id, newDescription)
-                }
-                .presentationDetents([.large])
+            .fullScreenCover(item: $videoPlayerForItem) { item in
+                VideoPlayerSheet(item: item)
             }
     }
 }
 
-/// Two delete-related alerts: a recycle-to-trash confirmation
-/// and a permanent-delete prompt for memories whose last clip was
-/// just removed. Extracted from `EntryExpandedView.body` so the
-/// body stops owning their wiring directly — CRAP audit 2026-06-07.
-private struct EntryDeleteAlerts: ViewModifier {
-    @Binding var showRecycleConfirmation: Bool
-    @Binding var showPermanentDeletePrompt: Bool
-    let onRecycle: () -> Void
-    let onPermanentDelete: () -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .alert("Move to Recently Deleted?", isPresented: $showRecycleConfirmation) {
-                Button("Move to Recently Deleted", role: .destructive, action: onRecycle)
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This memory will be moved to the Recently Deleted. You can restore it from Settings.")
-            }
-            .alert("Delete this memory?", isPresented: $showPermanentDeletePrompt) {
-                Button("Delete", role: .destructive, action: onPermanentDelete)
-                Button("Keep", role: .cancel) {}
-            } message: {
-                Text("All content has been removed. This will permanently delete the memory — it won't go to Recently Deleted.")
-            }
-    }
-}

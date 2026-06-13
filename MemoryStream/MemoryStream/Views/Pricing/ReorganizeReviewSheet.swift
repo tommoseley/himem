@@ -117,13 +117,17 @@ struct ReorganizeReviewSheet: View {
             Button {
                 onKeep(titleChoice, summaryChoice)
             } label: {
+                // Rank-1 primary per Buttons & Actions: filled
+                // ochre, full-width, ≥50pt. User commit ("Keep") =
+                // ochre, no sparkle. No "with AI" suffix because
+                // the user is the one doing the keeping.
                 Text("Keep this version")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15.5, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .frame(minHeight: 50)
                     .background(Crucible.Color.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
 
@@ -135,17 +139,25 @@ struct ReorganizeReviewSheet: View {
                 summaryChoice = .current
                 onReorganizeAgain()
             } label: {
-                Text("Reorganize again")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Crucible.Color.ink2)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Crucible.Color.card)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Crucible.Color.hairline, lineWidth: 1)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                // Rank-2 secondary per Buttons & Actions: hairline
+                // bordered, no fill, full-width, same height as
+                // primary (≥50pt). Trailing sparkle marks this as an
+                // AI-invoking action; the verb "Reorganize again"
+                // carries the meaning.
+                HStack(spacing: 7) {
+                    Text("Reorganize again")
+                        .font(.system(size: 15.5, weight: .semibold))
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(Crucible.Color.ink2)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 50)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Crucible.Color.hairline, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
         }
@@ -218,27 +230,24 @@ struct ReorgFieldRow: View {
         unselectedLabel: String,
         value: String
     ) -> some View {
+        // Per Crucible accessibility rule (June 8 lock): **selection
+        // = ring; completion = check; don't conflate.** The old card
+        // mixed both signals — a check inside the eyebrow plus a
+        // colored border. New shape: selection is the ochre 1.5pt
+        // ring around the whole card; eyebrow text + color carries
+        // the human-readable status; no check, no leading circle.
+        // The AI-blue eyebrow on the unselected "New suggestion" row
+        // stays — it's an AI status signal, the row is still an AI
+        // artifact even when not selected.
         let borderColor = isSelected ? selectedAccent : Crucible.Color.hairline
-        let borderWidth: CGFloat = isSelected ? 2 : 1
+        let borderWidth: CGFloat = isSelected ? 1.5 : 1
         let labelColor = isSelected ? selectedAccent : unselectedAccent
 
         VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(labelColor)
-                        .frame(width: 11, height: 11)
-                } else {
-                    Circle()
-                        .strokeBorder(unselectedAccent, lineWidth: 1.5)
-                        .frame(width: 11, height: 11)
-                }
-                Text(isSelected ? selectedLabel : unselectedLabel)
-                    .font(.system(size: 10.5, weight: .bold))
-                    .tracking(0.2)
-                    .foregroundStyle(labelColor)
-            }
+            Text(isSelected ? selectedLabel : unselectedLabel)
+                .font(.system(size: 10.5, weight: .bold))
+                .tracking(0.2)
+                .foregroundStyle(labelColor)
             Text(value)
                 .font(valueIsSerif
                       ? .system(size: 12.5, design: .serif)
@@ -268,30 +277,21 @@ enum ReorgFieldChoice: Equatable {
     case new
 }
 
-/// The "Draft organized" chip rendered standalone (without an
-/// `OrganizePass`) so the Reorganize sheet's header can show it
-/// directly. Visual matches `OrganizedChip` for `Variant.draftOrganized`.
+/// "Draft organized" header label for the Reorganize sheet. Per
+/// `HiMem · Buttons & Actions` Section 4: AI status is a quiet
+/// label — sparkle + text, **no border, no pill**. The dashed
+/// pill form this lived as before the June 8 lock dressed status
+/// as a button, which the standard explicitly retires.
 private struct DraftChipBadge: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "sparkles")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
             Text("Draft organized")
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .tracking(0.1)
         }
         .foregroundStyle(Crucible.Color.aiBlue)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 3)
-        .background(Crucible.Color.aiBlueTint)
-        .overlay(
-            RoundedRectangle(cornerRadius: 13)
-                .strokeBorder(
-                    Crucible.Color.aiBlue,
-                    style: StrokeStyle(lineWidth: 1, dash: [3, 2])
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 13))
         .accessibilityLabel("Draft organized")
     }
 }

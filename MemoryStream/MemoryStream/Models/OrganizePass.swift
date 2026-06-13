@@ -187,9 +187,23 @@ extension OrganizePass {
 
         switch summaryChoice {
         case .new:
-            break
+            // Per the unified-editing model (Tom 2026-06-09): the
+            // canonical working summary lives on `JournalEntry.summary`.
+            // Copy the AI's accepted new wording there so the Memory
+            // Detail surface (which now reads `entry.summary` first
+            // via `renderedSummary`) shows the freshly-accepted text.
+            // Do NOT set `summaryUserEdited` — that marker is reserved
+            // for user tap-to-edits and gates the auto-pass-no-clobber
+            // rule. Accepting an AI suggestion is not a "user edit"
+            // for that purpose.
+            if let newSummary = summaryText, !newSummary.isEmpty {
+                entry.summary = newSummary
+            }
         case .current:
             summaryText = previousSummary
+            // Current kept → `entry.summary` already holds whatever
+            // the user was looking at (either a previously-accepted
+            // AI summary or a user tap-to-edit). Nothing to do.
         }
 
         markRowsAccepted([.title, .summary])

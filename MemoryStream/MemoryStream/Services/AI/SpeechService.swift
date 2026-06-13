@@ -81,15 +81,21 @@ final class SpeechService: ObservableObject {
         case modelNotReady
 
         var errorDescription: String? {
+            // User-facing strings only — stock human sentences. The
+            // raw `detail` payload on the failure cases stays inside
+            // the enum (for NSLog and telemetry); we don't dump it at
+            // the user. Per CLAUDE.md § Code Style ("No silent
+            // failures") the detail still surfaces, just not in the
+            // alert body.
             switch self {
             case .notAuthorized:
-                return "Speech recognition not authorized. Enable in Settings."
+                return "Speech recognition isn't allowed. You can enable it in Settings."
             case .notAvailable:
-                return "Speech recognition not available on this device."
-            case .audioSessionFailed(let detail):
-                return "Audio session error: \(detail)"
-            case .recognitionFailed(let detail):
-                return "Recognition error: \(detail)"
+                return "Speech recognition isn't available on this device."
+            case .audioSessionFailed:
+                return "Couldn't start recording. Try again in a moment."
+            case .recognitionFailed:
+                return "Speech recognition stopped unexpectedly. Try again."
             case .modelNotReady:
                 return "Setting up speech…"
             }

@@ -209,12 +209,12 @@ enum MediaReferenceUbiquityMigration {
         do {
             // PHAsset video URLs point at PhotoKit-owned files inside
             // the user's library cache. We need to COPY (not move)
-            // since we don't own the source.
-            let fm = FileManager.default
-            if fm.fileExists(atPath: destination.path) {
-                try fm.removeItem(at: destination)
-            }
-            try fm.copyItem(at: sourceURL, to: destination)
+            // since we don't own the source. Route through
+            // `UbiquityStore.copyIntoStore` so the write is
+            // NSFileCoordinator-wrapped — without coordination,
+            // iCloud's file-presenter can read mid-copy and ship a
+            // torn video to other devices.
+            try UbiquityStore.shared.copyIntoStore(sourceURL: sourceURL, destinationURL: destination)
             return filename
         } catch {
             NSLog("[HiMem][MediaMigration] video copy failed: \(error.localizedDescription)")

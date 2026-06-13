@@ -1,72 +1,46 @@
 import SwiftUI
 
+/// Horizontally-scrolling topic filter bar shown at the top of the
+/// Memories list. After the June 8 affordance lock + H1/H2 answers,
+/// renders through the canonical `TopicChip` with two locked rules:
+///
+/// - **Compact size** — memory cards' density rhythm benefits from
+///   28pt body + ≥10pt row gap rather than the strict 44pt body.
+/// - **`All` pill is dotless** (H2) — `All` is a scope selector, not
+///   a palette topic; a leading dot would falsely imply it's a
+///   colored topic like the rest.
+///
+/// Selected = `.set` (wash1 fill, palette-colored dot). Unselected =
+/// `.off` (hairline outline, palette-colored dot). The dot stays
+/// visible in both states so the user can identify the topic at a
+/// glance regardless of selection.
 struct TopicTabBar: View {
     let topics: [String]
     @Binding var selected: String?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                TopicTab(label: "All", isSelected: selected == nil, hue: nil) {
-                    selected = nil
-                }
+            HStack(spacing: 10) {
+                TopicChip(
+                    label: "All",
+                    state: selected == nil ? .set : .off,
+                    size: .compact,
+                    showsLeadingDot: false,
+                    onTap: { selected = nil }
+                )
 
                 ForEach(topics, id: \.self) { topic in
-                    TopicTab(
+                    let hue = Crucible.Color.topicHue(for: topic)
+                    TopicChip(
                         label: topic,
-                        isSelected: selected == topic,
-                        hue: Crucible.Color.topicHue(for: topic)
-                    ) {
-                        selected = topic
-                    }
+                        state: selected == topic ? .set : .off,
+                        size: .compact,
+                        dotColor: hue.fg,
+                        onTap: { selected = topic }
+                    )
                 }
             }
             .padding(.horizontal)
         }
-    }
-}
-
-struct TopicTab: View {
-    let label: String
-    let isSelected: Bool
-    let hue: Crucible.Color.TopicHue?
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if let hue {
-                    Circle()
-                        .fill(hue.fg)
-                        .frame(width: 7, height: 7)
-                        .accessibilityHidden(true)
-                }
-                Text(label)
-                    .font(.subheadline)
-                    .fontWeight(isSelected ? .semibold : .regular)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(chipBackground)
-            .foregroundStyle(chipForeground)
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(isSelected ? Color.clear : Crucible.Color.divider, lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var chipBackground: Color {
-        guard isSelected else { return .clear }
-        if let hue { return hue.bg }
-        return Crucible.Color.accentTint // "All" uses accent
-    }
-
-    private var chipForeground: Color {
-        guard isSelected else { return Crucible.Color.ink }
-        if let hue { return hue.fg }
-        return Crucible.Color.accentPressed
     }
 }

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HiMem · Tutorials</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="crucible.css" />
+<script src="crucible-theme.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: var(--paper); font-family: var(--sans); color: var(--ink); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="crucible-primitives.jsx"></script>
+<script type="text/babel" src="screens-tutorials.jsx"></script>
+
+<script type="text/babel">
+function App() {
+  return (
+    <DesignCanvas
+      title="HiMem · Tutorials"
+      subtitle="One-pager walkthroughs. Delivered in-context at first encounter; replayed from the ? in the toolbar. Seeded with only the moments that earn a tutorial — the rest of the app teaches itself.">
+      <DCSection id="tuts" title="The five one-pagers" subtitle="Capture is the only must on Free; Organizing is a light first-encounter; Find the thread is a Plus in-context first-use; the Watch story stitches capture across surfaces; Watch discovery is the ownership-triggered nudge (paired but HiMem not yet on the watch).">
+        <DCArtboard id="t-capture" label="1 · Capture · Next · Watch" width={340} height={735}>
+          <ScrTutCapture />
+        </DCArtboard>
+        <DCArtboard id="t-organize" label="2 · Organizing with AI" width={340} height={735}>
+          <ScrTutOrganize />
+        </DCArtboard>
+        <DCArtboard id="t-thread" label="3 · Find the thread (Plus)" width={340} height={735}>
+          <ScrTutFindThread />
+        </DCArtboard>
+        <DCArtboard id="t-watch" label="4 · Captured Clips · the Watch story" width={340} height={735}>
+          <ScrTutWatch />
+        </DCArtboard>
+        <DCArtboard id="t-watch-discovery" label="5 · Watch discovery (paired · not installed)" width={340} height={735}>
+          <ScrTutWatchDiscovery />
+        </DCArtboard>
+        <DCArtboard id="t-watch-manual" label="5b · Watch discovery · manual fallback (CTA failed)" width={340} height={735}>
+          <ScrTutWatchManual />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

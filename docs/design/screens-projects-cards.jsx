@@ -38,40 +38,16 @@ function ProjectCard({ title, topics, count, date }) {
   );
 }
 
-// Reusable: memory card inside a project (simplified — no inline AI block)
-function ProjectMemoryCard({ title, time, audio, photo, topics, sub }) {
-  return (
-    <div style={{
-      background: PX.card, border: '1px solid ' + PX.hairline,
-      borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10,
-    }}>
-      <div>
-        <div style={{ fontSize: 16, fontWeight: 600, color: PX.ink, letterSpacing: -0.2, lineHeight: 1.2 }}>{title}</div>
-        <div style={{ fontSize: 12, color: PX.ink3, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{time}</div>
-      </div>
-      {sub && (
-        <div style={{ fontSize: 13, color: PX.ink2, lineHeight: 1.45 }}>{sub}</div>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ display: 'inline-flex', gap: 3 }}>
-          {/* media-type indicator dots: audio=accent, photo=warn, text=confirmed */}
-          {[PX.accent, PX.warn, PX.confirmed].slice(0, (audio ? 1 : 0) + (photo ? 1 : 0) + 1).map((c,i) => (
-            <span key={i} style={{ width: 6, height: 6, borderRadius: 3, background: c }} />
-          ))}
-        </div>
-        <span style={{ fontSize: 12, color: PX.ink2, fontVariantNumeric: 'tabular-nums' }}>
-          {[audio && `${audio} audio`, photo && `${photo} photo`].filter(Boolean).join(' · ')}
-        </span>
-        <span style={{ flex: 1 }} />
-        <div style={{ display: 'flex', gap: 6 }}>
-          {topics.map(k => <TopicPipChip key={k} k={k} />)}
-        </div>
-      </div>
-    </div>
-  );
-}
+// (ProjectMemoryCard removed June 10 2026 — the canonical journal `MemoryCard`
+// from screens-memories.jsx is the single memory-card definition everywhere,
+// including inside projects. One card, one source of truth.)
 
-// Project detail nav: back + (+ / share / edit) on the right
+// Project detail nav: back + (add-memory / share / delete-project) on the right.
+
+// Project detail nav: back + (add-memory / share / delete-project) on the right.
+// No pen — per the unified editing model, the title & goal are tap-to-edit
+// (they open the Edit Project sheet), and the only memory/project-level
+// destructive action is this Trash. (CLAUDE.md · unified editing model.)
 function ProjectDetailNav({ pill = true }) {
   return (
     <div style={{ paddingTop: 6, padding: '10px 14px 8px', display: 'flex', alignItems: 'center' }}>
@@ -97,8 +73,9 @@ function ProjectDetailNav({ pill = true }) {
         <svg width="14" height="16" viewBox="0 0 16 18" fill="none" stroke={PX.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M8 1v11"/><path d="M4 5l4-4 4 4"/><path d="M2 12v3a2 2 0 002 2h8a2 2 0 002-2v-3"/>
         </svg>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke={PX.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M11 2l3 3-8 8-4 1 1-4 8-8z"/>
+        {/* Trash = delete the whole project. The only project-delete path. */}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={PX.ink} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/>
         </svg>
       </div>
     </div>
@@ -127,4 +104,4 @@ function ProjectTitleBlock({ title, topics, count, goal }) {
   );
 }
 
-Object.assign(window, { ProjectCard, ProjectMemoryCard, ProjectDetailNav, ProjectTitleBlock });
+Object.assign(window, { ProjectCard, ProjectDetailNav, ProjectTitleBlock });

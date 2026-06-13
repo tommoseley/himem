@@ -20,15 +20,14 @@ struct SessionListView: View {
     @State private var sessions: [ClipGroup] = []
     @State private var expandedSessionId: UUID? = nil
     @State private var bundleSession: BundleRequest? = nil
-    @State private var pendingDeleteClipId: UUID? = nil
-    @State private var openedSwipeRowId: AnyHashable? = nil
     @State private var playingClipId: UUID? = nil
     @State private var player: AVAudioPlayer? = nil
-    /// Session whose inline "Discard session" link is in the
-    /// red "Discard N clips?" confirm state. Per v2.1 spec: tap once
-    /// swaps the label, second tap commits. No confirmation dialog.
-    @State private var linkDiscardConfirmingSessionId: UUID? = nil
-    @State private var linkDiscardTimeoutTask: Task<Void, Never>? = nil
+    /// Tracks whether THIS view activated the audio session. Only
+    /// flipped true after a successful setActive(true) in playClip;
+    /// gates stopPlayback's setActive(false) so we never deactivate
+    /// a session we don't own. Per CLAUDE.md § Audio Session
+    /// Coordination — mirrors AudioPlayerService.sessionActivated.
+    @State private var sessionActivated = false
     /// Per-session, per-clip selection state for the expanded card.
     /// Keyed by clip id. Defaults to "non-accidental clips selected"
     /// when the user expands a session for the first time; once they
@@ -72,26 +71,16 @@ struct SessionListView: View {
                 viewModel: viewModel
             )
         }
-        .confirmationDialog(
-            "Delete this clip?",
-            isPresented: deleteClipDialogBinding,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let id = pendingDeleteClipId {
-                    inbox.remove(clipId: id)
-                    openedSwipeRowId = nil
-                }
-                pendingDeleteClipId = nil
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDeleteClipId = nil
-            }
-        } message: {
-            Text("This audio can't be recovered.")
-        }
         .onAppear {
             sessions = computeSessions()
+            // Tutorial #4 (Captured Clips · the Watch story). Spec
+            // gate: opened **non-empty** — clips have actually
+            // arrived. Empty-state is intentionally NOT a trigger
+            // (nothing to explain yet). The orchestrator handles the
+            // once-each + session/day caps + arming gate.
+            if !sessions.isEmpty {
+                TutorialOrchestrator.shared.tryFire(.watchStory)
+            }
         }
         .onChange(of: inbox.clips) { _, _ in
             sessions = computeSessions()
@@ -322,17 +311,11 @@ struct SessionListView: View {
                 toggleExpand(session)
             }
         }
-        // Native left-swipe with two-tap inline confirm per v2.1
-        // spec. Confirm-state lives inside the swipe affordance;
-        // no separate dialog. `clipCount` drives the "Discard N
-        // clips?" label.
-        .swipeToDiscard(
-            id: session.id,
-            openedRowId: $openedSwipeRowId,
-            clipCount: session.clips.count
-        ) {
-            deleteSession(session)
-        }
+        // Swipe-to-discard and long-press Trash both retired per
+        // `HiMem · Buttons & Actions.html` §3 (June 12 2026). The
+        // session is "opened" by tapping the card; the bottom `Delete
+        // session` button inside the expanded body is the sole
+        // destruction path.
         .contextMenu {
             Button {
                 let selected = selectionFor(session)
@@ -341,14 +324,6 @@ struct SessionListView: View {
                 bundleSession = BundleRequest(session: session, clipsToBundle: clips)
             } label: {
                 Label("Make or Add To a memory", systemImage: "sparkles")
-            }
-            // Long-press is a power-user shortcut per v2.1 spec —
-            // the contextMenu itself supplies "Cancel"; tapping
-            // "Discard session" commits directly with no dialog.
-            Button(role: .destructive) {
-                deleteSession(session)
-            } label: {
-                Label("Discard session", systemImage: "trash")
             }
         }
     }
@@ -436,13 +411,18 @@ struct SessionListView: View {
                     isSelected: selected.contains(clip.clipId),
                     isLast: idx == ordered.count - 1
                 )
-                .swipeToDelete(
-                    id: clip.clipId,
-                    openedRowId: $openedSwipeRowId
-                ) {
-                    pendingDeleteClipId = clip.clipId
-                }
             }
+            // Bottom `Delete session` — the session is the opened item
+            // on Captured Clips per `Memory Detail · unified editing
+            // model.md` (June 12 2026). Swipe-to-discard and long-press
+            // Trash were both retired; this is the sole destruction
+            // path. No confirm — scrolling past every clip in the
+            // session *is* the deliberation.
+            BottomDeleteButton(kind: .delete(noun: "session")) {
+                deleteSession(session)
+            }
+            .padding(.top, 18)
+            .padding(.bottom, 4)
         }
         .padding(.top, 10)
     }
@@ -603,25 +583,17 @@ struct SessionListView: View {
 
     // MARK: - Action row (Make a Memory + optional Discard link)
 
-    /// Action row layout per v2.1 spec:
-    /// - Collapsed, normal:        [   Make a Memory pill (full)   ]
-    /// - Collapsed, all-excluded:  [ Discard session ] [ pill (dim) ]
-    /// - Expanded:                 [ Discard session ] [ pill        ]
-    ///
-    /// The `Discard session` link is the visible-exit path (the
-    /// other two are swipe and long-press). Two-tap inline confirm
-    /// shares state across both link and swipe via
-    /// `linkDiscardConfirmingSessionId`.
+    /// Action row layout per v2.2 (June 12 2026 delete sweep): the
+    /// Make a Memory pill is the only action-row affordance. The
+    /// session's own destruction lives at the bottom of the expanded
+    /// body — same bottom-Delete rule as everywhere else; swipe and
+    /// the inline "Discard session" link are retired.
     @ViewBuilder
     private func sessionActionRow(_ session: ClipGroup, isExpanded: Bool) -> some View {
         let selected = selectionFor(session)
         let selectedClips = session.clips.filter { selected.contains($0.clipId) }
         let isDisabled = selectedClips.isEmpty
-        let showDiscardLink = isExpanded || session.isAllAccidental
         HStack(spacing: 12) {
-            if showDiscardLink {
-                discardSessionLink(session)
-            }
             makeAMemoryPill(session, selectedClips: selectedClips, isDisabled: isDisabled)
         }
     }
@@ -658,55 +630,6 @@ struct SessionListView: View {
         .simultaneousGesture(TapGesture().onEnded {})
     }
 
-    /// Inline "Discard session" text link. SF Pro 13, ink2 in the
-    /// default state; swaps to red "Discard N clips?" on the first
-    /// tap; commits on the second. Same two-tap pattern as the
-    /// swipe-revealed button — both share confirm state via
-    /// `linkDiscardConfirmingSessionId` so the user can't end up
-    /// with two hot confirms on screen.
-    @ViewBuilder
-    private func discardSessionLink(_ session: ClipGroup) -> some View {
-        let confirming = linkDiscardConfirmingSessionId == session.id
-        let n = session.clips.count
-        Button {
-            if confirming {
-                deleteSession(session)
-                linkDiscardConfirmingSessionId = nil
-                linkDiscardTimeoutTask?.cancel()
-                linkDiscardTimeoutTask = nil
-            } else {
-                linkDiscardConfirmingSessionId = session.id
-                scheduleLinkDiscardTimeout()
-            }
-        } label: {
-            Text(confirming
-                 ? "Discard \(n) clip\(n == 1 ? "" : "s")?"
-                 : "Discard session")
-                .font(.system(size: 13, weight: confirming ? .semibold : .regular))
-                .foregroundStyle(confirming
-                                 ? Crucible.Color.danger
-                                 : Crucible.Color.ink2)
-                .frame(height: 40)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        // Don't let the link tap bubble to the card's tap-to-expand.
-        .simultaneousGesture(TapGesture().onEnded {})
-        .accessibilityLabel(confirming ? "Confirm discard \(n) clips" : "Discard session")
-    }
-
-    /// Auto-clears the link's confirm state after 5s — same hot-
-    /// button safety as the swipe-revealed button's timeout.
-    private func scheduleLinkDiscardTimeout() {
-        linkDiscardTimeoutTask?.cancel()
-        linkDiscardTimeoutTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            if !Task.isCancelled {
-                linkDiscardConfirmingSessionId = nil
-            }
-        }
-    }
-
     // MARK: - Selection state
 
     /// Returns the current selection for a session — explicit if the
@@ -736,23 +659,22 @@ struct SessionListView: View {
             expandedSessionId = nil
         } else {
             expandedSessionId = session.id
-            openedSwipeRowId = nil
         }
     }
 
     private func deleteSession(_ session: ClipGroup) {
+        // Stop playback first: if any clip in this session is
+        // currently playing, leaving the AVAudioPlayer pointed at a
+        // file we're about to remove leaks audio + an activated audio
+        // session past the row's disappearance.
+        if let playing = playingClipId, session.clips.contains(where: { $0.clipId == playing }) {
+            stopPlayback()
+        }
         let ids = session.clips.map(\.clipId)
         for id in ids {
             inbox.remove(clipId: id)
         }
         if expandedSessionId == session.id { expandedSessionId = nil }
-    }
-
-    private var deleteClipDialogBinding: Binding<Bool> {
-        Binding(
-            get: { pendingDeleteClipId != nil },
-            set: { if !$0 { pendingDeleteClipId = nil } }
-        )
     }
 
     // MARK: - Helpers
@@ -771,6 +693,7 @@ struct SessionListView: View {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
             try AVAudioSession.sharedInstance().setActive(true)
+            sessionActivated = true
             let p = try AVAudioPlayer(contentsOf: url)
             p.prepareToPlay()
             p.play()
@@ -781,10 +704,19 @@ struct SessionListView: View {
         }
     }
 
+    /// Per CLAUDE.md § Audio Session Coordination: only call
+    /// setActive(false) on a session we activated. Calling it on
+    /// an already-inactive session churns the audio HAL and can
+    /// stomp on whatever other audio path (SpeechService,
+    /// AudioPlayerService) currently owns the session.
+    /// Mirrors AudioPlayerService's canonical pattern.
     private func stopPlayback() {
         player?.stop()
         player = nil
         playingClipId = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if sessionActivated {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            sessionActivated = false
+        }
     }
 }

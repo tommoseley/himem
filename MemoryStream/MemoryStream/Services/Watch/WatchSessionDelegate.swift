@@ -156,10 +156,16 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         let source = file.fileURL
 
         // If the destination already exists, this is a re-delivery —
-        // skip the copy. Otherwise copy from the system staging path.
+        // skip the copy. Otherwise copy from the system staging path
+        // via `UbiquityStore.copyIntoStore` so the write is
+        // NSFileCoordinator-wrapped — without coordination, iCloud's
+        // file-presenter can read mid-copy and ship truncated audio
+        // bytes to other devices. The system deletes file.fileURL
+        // after this delegate method returns, so the copy must
+        // remain synchronous (which `copyIntoStore` is).
         if !FileManager.default.fileExists(atPath: dest.path) {
             do {
-                try FileManager.default.copyItem(at: source, to: dest)
+                try UbiquityStore.shared.copyIntoStore(sourceURL: source, destinationURL: dest)
                 NSLog("[HiMem][WC] copied audio to \(dest.path)")
             } catch {
                 NSLog("[HiMem][WC] FAILED to copy audio from \(source.path) to \(dest.path): \(error.localizedDescription)")

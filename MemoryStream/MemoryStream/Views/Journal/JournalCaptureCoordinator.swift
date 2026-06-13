@@ -106,14 +106,16 @@ struct JournalCaptureCoordinator {
             let newId = viewModel.saveEntry(
                 content: first.transcript,
                 inputType: .voiceInApp,
-                voiceFilename: first.audioFilename
+                voiceFilename: first.audioFilename,
+                voiceCapturedAt: first.capturedAt
             )
             if let entryId = newId {
                 for clip in clips.dropFirst() {
                     viewModel.appendToEntry(
                         entryId: entryId,
                         additionalContent: clip.transcript,
-                        voiceFilename: clip.audioFilename
+                        voiceFilename: clip.audioFilename,
+                        voiceCapturedAt: clip.capturedAt
                     )
                 }
             }

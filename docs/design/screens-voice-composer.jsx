@@ -458,8 +458,80 @@ Object.assign(window, {
   ScrVCTightMidRoll,
   ScrVCTightAppend,
   ScrVCBreath,
+  ScrVCFirstRunTutorial,
   BREATH_CAPTIONS,
 });
+
+// ─────────────────────────────────────────────────────────────
+// First-run capture tutorial (shown ONCE, before the first recording).
+// Teaches three things the UI can't say on its own:
+//   1. what a recording is (capture a thought, transcribed for you),
+//   2. the Next / "on a roll" behavior (the button no label can fully explain),
+//   3. that the Apple Watch records too (cross-surface capture).
+// Dismissed with "Start recording"; persisted so it never shows again.
+// ─────────────────────────────────────────────────────────────
+function TutorialPoint({ glyph, title, body, accent }) {
+  return (
+    <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+      <span style={{
+        width: 40, height: 40, borderRadius: 11, flexShrink: 0,
+        background: accent ? PX.accentTint2 : PX.aiTint,
+        color: accent ? PX.accent : PX.ai,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      }}>{glyph}</span>
+      <div style={{ flex: 1, paddingTop: 1 }}>
+        <div style={{ fontSize: 15.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.2 }}>{title}</div>
+        <div style={{ fontSize: 13, color: PX.ink2, lineHeight: 1.5, marginTop: 3, letterSpacing: -0.05 }}>{body}</div>
+      </div>
+    </div>
+  );
+}
+
+function ScrVCFirstRunTutorial() {
+  const micGlyph = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>;
+  const nextGlyph = <svg width="20" height="14" viewBox="0 0 22 14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M2 2l5 5-5 5"/><circle cx="15" cy="7" r="1.8" fill="currentColor" stroke="none"/></svg>;
+  const watchGlyph = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M8 6l1-3h6l1 3M8 18l1 3h6l1-3"/></svg>;
+  return (
+    <PhoneScreen>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 26px', background: PX.paper }}>
+        <div style={{ height: 40 }}/>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: PX.ink3 }}>
+          Capturing a memory
+        </div>
+        <h1 style={{ fontFamily: PX.serif, fontWeight: 400, fontSize: 28, lineHeight: 1.15, letterSpacing: -0.5, color: PX.ink, margin: '8px 0 0' }}>
+          Just start talking.
+        </h1>
+        <p style={{ fontSize: 14, lineHeight: 1.5, color: PX.ink2, margin: '10px 0 26px', letterSpacing: -0.1 }}>
+          HiMem listens, transcribes, and keeps it — no buttons to fumble while a thought is fresh.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <TutorialPoint accent glyph={micGlyph} title="Speak, and it's saved"
+            body="Tap record and talk. The audio stays on your device; the words become a searchable memory." />
+          <TutorialPoint accent glyph={nextGlyph} title="On a roll? Tap Next"
+            body="Next saves the current clip and starts a fresh one without stopping — they group into one memory. Great for a list of thoughts." />
+          <TutorialPoint glyph={watchGlyph} title="Your Watch records too"
+            body="Catch a thought on your Apple Watch and it syncs here automatically. No phone needed in the moment." />
+        </div>
+
+        <div style={{ flex: 1, minHeight: 20 }}/>
+        <div style={{ paddingBottom: 30 }}>
+          <button style={{
+            height: 52, width: '100%', borderRadius: 14, border: 'none', cursor: 'pointer',
+            background: PX.accent, color: PX.accentInk, fontSize: 16, fontWeight: 600, letterSpacing: -0.2,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+          }}>
+            {micGlyph && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={PX.accentInk} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>}
+            Start recording
+          </button>
+          <div style={{ fontSize: 11.5, color: PX.ink3, textAlign: 'center', marginTop: 10, lineHeight: 1.4 }}>
+            You can always find this again in Settings.
+          </div>
+        </div>
+      </div>
+    </PhoneScreen>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────
 // Fresh-start countdown · revised May 27 2026.

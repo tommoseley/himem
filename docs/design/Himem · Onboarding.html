@@ -60,6 +60,9 @@ function App() {
         <DCArtboard id="wland" label="Land · into Today" width={340} height={735}>
           <ScrWLand />
         </DCArtboard>
+        <DCArtboard id="learnmore" label="Learn more · How HiMem works (optional)" width={340} height={735}>
+          <ScrWLearnMore />
+        </DCArtboard>
       </DCSection>
 
       <DCSection id="reinstall" title="Reinstall · restore from iCloud" subtitle="Shown only when a reinstall is detected. No permission cascade — a returning user already chose. The flow is Apple auth → restore → Today; anything iOS revoked is re-requested in context at first capture. The restore is the honest version of covering the CloudKit wait.">

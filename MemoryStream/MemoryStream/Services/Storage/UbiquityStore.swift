@@ -295,6 +295,38 @@ final class UbiquityStore: @unchecked Sendable {
         }
     }
 
+    /// Copies a file into the store at `destinationURL` via
+    /// `NSFileCoordinator`. Use this for sources we don't own (PHPicker
+    /// temp paths, PHAsset cache URLs, WatchConnectivity staging) —
+    /// `moveIntoStore` would require deleting the source. The
+    /// coordinator wrap is what prevents iCloud's file-presenter from
+    /// reading mid-copy and shipping a torn blob to other devices.
+    ///
+    /// Overwrites the destination if it already exists. Throws on
+    /// either coordination error or the underlying `copyItem` error.
+    @discardableResult
+    func copyIntoStore(sourceURL: URL, destinationURL: URL) throws -> URL {
+        let fm = FileManager.default
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        var copyError: Error?
+        var resultURL: URL = destinationURL
+        coordinator.coordinate(writingItemAt: destinationURL, options: .forReplacing, error: &coordinationError) { writeURL in
+            do {
+                if fm.fileExists(atPath: writeURL.path) {
+                    try fm.removeItem(at: writeURL)
+                }
+                try fm.copyItem(at: sourceURL, to: writeURL)
+                resultURL = writeURL
+            } catch {
+                copyError = error
+            }
+        }
+        if let coordinationError { throw coordinationError }
+        if let copyError { throw copyError }
+        return resultURL
+    }
+
     /// Writes raw `Data` into the store at `destinationURL` via
     /// `NSFileCoordinator`. Used by PHPicker import and CameraService
     /// to drop bytes from PHAsset extracts into the ubiquity container.

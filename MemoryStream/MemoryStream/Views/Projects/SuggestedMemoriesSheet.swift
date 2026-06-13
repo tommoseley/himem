@@ -14,8 +14,11 @@ struct SuggestedMemoriesSheet: View {
     let suggestions: [Suggestion]
     let onCommit: (_ acceptedIDs: Set<UUID>) -> Void
     @Environment(\.dismiss) private var dismiss
-    /// Default selected — bias toward accepting the AI's surfaced
-    /// memories. Tap a row to deselect; tap again to reselect.
+    /// Empty by default — the user makes a deliberate choice. A
+    /// "Select all" / "Select none" toggle in the selection toolbar
+    /// (between the eyebrow and the rows) flips everything at once.
+    /// Spec update June 10 2026: review is an active read, not a
+    /// gentle nudge to accept-all.
     @State private var selected: Set<UUID>
 
     struct Suggestion: Identifiable {
@@ -25,21 +28,14 @@ struct SuggestedMemoriesSheet: View {
         let rationale: String
         let confidence: Confidence
 
-        enum Confidence {
+        enum Confidence: Equatable {
             case likely
             case maybe
 
             var label: String {
                 switch self {
                 case .likely: return "LIKELY MATCH"
-                case .maybe:  return "MAYBE"
-                }
-            }
-
-            var dotColor: Color {
-                switch self {
-                case .likely: return Crucible.Color.confirmed
-                case .maybe:  return Crucible.Color.warn
+                case .maybe:  return "MAYBE MATCH"
                 }
             }
         }
@@ -53,14 +49,16 @@ struct SuggestedMemoriesSheet: View {
         self.projectName = projectName
         self.suggestions = suggestions
         self.onCommit = onCommit
-        // Default-select everything — see Suggestion docs above.
-        self._selected = State(initialValue: Set(suggestions.map(\.id)))
+        // None selected by default — see `selected` docs above.
+        self._selected = State(initialValue: [])
     }
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
                 eyebrow
+
+                selectionToolbar
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -85,12 +83,18 @@ struct SuggestedMemoriesSheet: View {
                         .foregroundStyle(Crucible.Color.ink2)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add \(selected.count)") {
+                    // Add = user-commit action → ochre per the colour
+                    // code lock. The AI ran already; committing the
+                    // selection is *you* acting, not the AI. Label is
+                    // plain "Add" (not "Add N") per the June 10 spec
+                    // update — the selection-toolbar row carries the
+                    // count, so the button doesn't need to repeat it.
+                    Button("Add") {
                         onCommit(selected)
                         dismiss()
                     }
                     .fontWeight(.semibold)
-                    .foregroundStyle(selected.isEmpty ? Crucible.Color.ink3 : Crucible.Color.aiBlue)
+                    .foregroundStyle(selected.isEmpty ? Crucible.Color.ink3 : Crucible.Color.accent)
                     .disabled(selected.isEmpty)
                 }
             }
@@ -148,6 +152,55 @@ struct SuggestedMemoriesSheet: View {
         }
     }
 
+    /// Row between the eyebrow and the rows: live count on the left,
+    /// a `Select all` / `Select none` toggle on the right. The toggle
+    /// is ochre (user action — "you act"), not blue. Flips its label
+    /// based on whether the user has already accepted everything.
+    @ViewBuilder
+    private var selectionToolbar: some View {
+        let total = suggestions.count
+        let count = selected.count
+        let countLabel: String = {
+            let suggestionsLabel = "\(total) suggestion\(total == 1 ? "" : "s")"
+            if count == 0 {
+                return "\(suggestionsLabel) · none selected"
+            } else if count == total {
+                return "\(suggestionsLabel) · all selected"
+            } else {
+                return "\(suggestionsLabel) · \(count) selected"
+            }
+        }()
+        let allSelected = (count == total && total > 0)
+
+        HStack(spacing: 8) {
+            Text(countLabel)
+                .font(.system(size: 12))
+                .foregroundStyle(Crucible.Color.ink3)
+            Spacer(minLength: 8)
+            Button {
+                if allSelected {
+                    selected.removeAll()
+                } else {
+                    selected = Set(suggestions.map(\.id))
+                }
+            } label: {
+                Text(allSelected ? "Select none" : "Select all")
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(-0.1)
+                    .foregroundStyle(Crucible.Color.accent)
+                    .frame(minHeight: 40)
+                    .padding(.horizontal, 4)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(allSelected ? "Deselect all suggestions" : "Select all suggestions")
+            .disabled(total == 0)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 2)
+        .padding(.bottom, 6)
+    }
+
     @ViewBuilder
     private var bottomDisclaimer: some View {
         VStack(spacing: 0) {
@@ -168,7 +221,7 @@ struct SuggestedMemoriesSheet: View {
     }
 
     private var disclaimerString: String {
-        "Suggestions are proposals. Nothing gets added until you tap Add \(selected.count)."
+        "Suggestions are proposals. Nothing gets added until you tap Add."
     }
 
     /// One row. Pixel rules from row spec:
@@ -197,19 +250,23 @@ struct SuggestedMemoriesSheet: View {
                         .monospacedDigit()
                         .foregroundStyle(Crucible.Color.ink3)
                         .padding(.top, 3)
+                    // "why" line — AI attribution → AI blue serif
+                    // italic (Projects "AI blue, always" lock).
                     Text(s.rationale)
                         .font(.system(size: 12.5, design: .serif).italic())
-                        .foregroundStyle(Crucible.Color.ink2)
+                        .foregroundStyle(Crucible.Color.aiBlue)
                         .lineSpacing(2)
                         .padding(.top, 7)
+                    // Confidence chip — AI blue per same lock; Likely
+                    // = filled dot, Maybe = hollow dot. Form (fill vs
+                    // outline) carries the distinction; colour is
+                    // constant so it always reads as AI attribution.
                     HStack(spacing: 5) {
-                        Circle()
-                            .fill(s.confidence.dotColor)
-                            .frame(width: 6, height: 6)
+                        confidenceDot(for: s.confidence)
                         Text(s.confidence.label)
                             .font(.system(size: 11, weight: .bold))
                             .tracking(1.4)
-                            .foregroundStyle(Crucible.Color.ink3)
+                            .foregroundStyle(Crucible.Color.aiBlue)
                     }
                     .padding(.top, 9)
                 }
@@ -218,6 +275,24 @@ struct SuggestedMemoriesSheet: View {
             .padding(.vertical, 14)
         }
         .buttonStyle(.plain)
+    }
+
+    /// Confidence dot shape: Likely = filled AI-blue, Maybe = hollow
+    /// AI-blue outline. Same colour either way so the chip always
+    /// reads as AI attribution; form carries the strength signal.
+    @ViewBuilder
+    private func confidenceDot(for confidence: Suggestion.Confidence) -> some View {
+        let likely = (confidence == .likely)
+        ZStack {
+            Circle()
+                .strokeBorder(Crucible.Color.aiBlue, lineWidth: 1.5)
+                .frame(width: 7, height: 7)
+            if likely {
+                Circle()
+                    .fill(Crucible.Color.aiBlue)
+                    .frame(width: 7, height: 7)
+            }
+        }
     }
 
     @ViewBuilder

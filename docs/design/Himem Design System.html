@@ -1216,14 +1216,18 @@ function ComponentTopicChip() {
 
   const Chip = ({ t, size = 'md', variant = 'tint', active }) => {
     const p = pal[t.paletteKey] || pal.ember;
+    // Interactive topic chips clear the 44px-class target (min-height 40 + row gap).
+    // `sm` is for dense, NON-interactive display only. (Affordance vocabulary,
+    // Accessibility guidelines · June 8 2026.)
     const sizes = {
-      sm: { py: 2, px: 8,  fs: 11, gap: 5, dot: 5 },
-      md: { py: 4, px: 12, fs: 13, gap: 6, dot: 6 },
-      lg: { py: 6, px: 14, fs: 14, gap: 7, dot: 7 },
+      sm: { minH: 32, px: 12, fs: 12.5, gap: 6, dot: 6 },
+      md: { minH: 40, px: 15, fs: 14,   gap: 7, dot: 7 },
+      lg: { minH: 44, px: 16, fs: 15,   gap: 8, dot: 8 },
     }[size];
     const base = {
       display:'inline-flex', alignItems:'center', gap: sizes.gap,
-      padding: `${sizes.py}px ${sizes.px}px`, borderRadius: 999,
+      minHeight: sizes.minH, boxSizing: 'border-box',
+      padding: `0 ${sizes.px}px`, borderRadius: 12,
       fontSize: sizes.fs, fontWeight: 600, fontFamily: C.type.sans,
       letterSpacing: -0.1, lineHeight: 1,
     };
@@ -1314,7 +1318,7 @@ function ComponentTopicChip() {
 
       {/* Rules */}
       <div style={{ marginTop: 18, ...typeStyle(C.type.footnote), color: C.color.ink, lineHeight: 1.6, maxWidth: 760 }}>
-        <b style={{ color: C.color.ink }}>Rules.</b> Topics are the only chip type that uses the topic palette. <b>One Topic per entry</b> on cards — if more exist (rare), show the first and a "+N". Entity Tags never use these hues; they're neutral (see the Entry Details pattern). And Topics never hard-code in the system: Crucible provides the pool, the product provides the data.
+        <b style={{ color: C.color.ink }}>Rules.</b> Topics are the only chip type that uses the topic palette. <b>One Topic per entry</b> on cards — if more exist (rare), show the first and a "+N". <b>Interactive topic chips clear a 44px-class tap target</b> (min-height 40 + row gap); <code style={{ fontFamily: C.type.mono }}>sm</code> is for dense, non-interactive display only. Entity Tags never use these hues; they're neutral (see the Entry Details pattern). And Topics never hard-code in the system: Crucible provides the pool, the product provides the data.
       </div>
     </div>
   );
@@ -3806,6 +3810,7 @@ function Accessibility() {
     ['Labels', 'Every icon-only control names itself via aria-label or accessibilityLabel.', 'Names use voice: "Record memory", not "Mic".'],
     ['Colorblind', 'Status is never color alone. Pair with icon + label.', 'Success = check + "Synced". Danger = alert + word.'],
     ['Selection', 'Ring indicates selection. Check indicates completion.', 'Ring = "this is the one." Check = "I did the thing."'],
+    ['Affordance', 'One look, one job: a real button (≥ 44px) is the action; a solid pill + dot is managed content; a quiet label is status. Dashed = add / incomplete only.', 'Status is never dressed as a button; the action is never a bare text link. One primary action per moment, and it is the loudest interactive thing. Origin: the “Draft organized” cluster.'],
     ['Surface', 'One surface per concept. Modes, not screens, for read vs. edit.', 'Entry card expands in place; Done/Cancel swap the top bar. No second "Details" screen.'],
     ['Provenance', 'Derived content never demotes its primary media.', 'Transcripts, captions, extractions are derived. Editing them is allowed; the audio / photo / video stays a first‑class attachment and source of truth.'],
     ['Peer actions', 'Destructive actions never sit beside primary actions in the same equal-weight button row.', 'On watch especially: Cancel is a corner ✕, never a peer pill. Mis-taps after a 30-second recording are unforgivable.'],

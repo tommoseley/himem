@@ -45,12 +45,30 @@ enum VoiceCaptureOrchestrator {
     /// a single fragment with the live transcript, surfaces an
     /// `.mediaError` so the user knows the multi-clip session
     /// collapsed.
+    /// Pure helper: maps a roll's recording-start wall-clock and the
+    /// user's Next-tap offsets to one `capturedAt` per resulting clip.
+    /// `offsets.count == 0` → one clip at `start`. `offsets.count == N`
+    /// → `N+1` clips: clip 1 starts at `start`, clip k+1 at
+    /// `start + offsets[k-1]`. Caller is responsible for ordering
+    /// offsets (NextClipController appends in tap order).
+    ///
+    /// Extracted so the timestamp logic — the load-bearing piece for
+    /// fixing the "all roll clips show the same time" bug — is testable
+    /// without touching disk or the splitter. Money tests in
+    /// `VoiceCaptureCapturedAtTests`.
+    static func capturedAtSequence(start: Date, offsets: [TimeInterval]) -> [Date] {
+        var result: [Date] = [start]
+        result.append(contentsOf: offsets.map { start.addingTimeInterval($0) })
+        return result
+    }
+
     @available(iOS 26.0, *)
     static func runSplitAndTranscribe(
         masterURL: URL,
         offsets: [TimeInterval],
         rollGroupId: UUID,
         liveTranscript: String,
+        recordingStartedAt: Date,
         sessionLatitude: Double?,
         sessionLongitude: Double?,
         transcribe: @Sendable (URL) async -> TranscriptionService.Outcome = { url in
@@ -59,6 +77,7 @@ enum VoiceCaptureOrchestrator {
     ) async -> [VoiceClipFragment] {
         let lat = sessionLatitude
         let lon = sessionLongitude
+        let capturedAts = capturedAtSequence(start: recordingStartedAt, offsets: offsets)
 
         if offsets.isEmpty {
             await compressIfPossible(at: masterURL, label: "phone single-clip master")
@@ -67,6 +86,7 @@ enum VoiceCaptureOrchestrator {
                 audioFilename: masterURL.lastPathComponent,
                 transcript: liveTranscript,
                 duration: duration,
+                capturedAt: capturedAts[0],
                 latitude: lat,
                 longitude: lon
             )]
@@ -89,7 +109,7 @@ enum VoiceCaptureOrchestrator {
             // the toast tells the user the empty-ness is a deferral,
             // not genuine silence.
             var transcriptionDeferred = false
-            for split in splits {
+            for (idx, split) in splits.enumerated() {
                 let url = SpeechService.audioURL(for: split.audioFilename)
                 // Compress each split before transcribing — saves
                 // disk, and SpeechAnalyzer reads AAC fine.
@@ -98,10 +118,17 @@ enum VoiceCaptureOrchestrator {
                 if outcome.userFacingDeferralMessage != nil {
                     transcriptionDeferred = true
                 }
+                // Defensive clamp: if the splitter ever emits more
+                // pieces than our capturedAtSequence accounted for
+                // (shouldn't happen — splits.count == offsets.count + 1),
+                // fall back to the last computed timestamp rather than
+                // crash on an out-of-range read.
+                let capturedAt = idx < capturedAts.count ? capturedAts[idx] : capturedAts.last ?? recordingStartedAt
                 fragments.append(VoiceClipFragment(
                     audioFilename: split.audioFilename,
                     transcript: outcome.textOrEmpty,
                     duration: split.duration,
+                    capturedAt: capturedAt,
                     latitude: lat,
                     longitude: lon
                 ))
@@ -125,6 +152,7 @@ enum VoiceCaptureOrchestrator {
                 audioFilename: masterURL.lastPathComponent,
                 transcript: liveTranscript,
                 duration: duration,
+                capturedAt: recordingStartedAt,
                 latitude: lat,
                 longitude: lon
             )]
@@ -141,9 +169,11 @@ enum VoiceCaptureOrchestrator {
         offsets: [TimeInterval],
         rollGroupId: UUID,
         liveTranscript: String,
+        recordingStartedAt: Date,
         sessionLatitude: Double?,
         sessionLongitude: Double?
     ) async -> [VoiceClipFragment] {
+        let capturedAts = capturedAtSequence(start: recordingStartedAt, offsets: offsets)
         if offsets.isEmpty {
             await compressIfPossible(at: masterURL, label: "phone single-clip master (no transcribe)")
             let duration = audioDuration(at: masterURL)
@@ -151,6 +181,7 @@ enum VoiceCaptureOrchestrator {
                 audioFilename: masterURL.lastPathComponent,
                 transcript: liveTranscript,
                 duration: duration,
+                capturedAt: capturedAts[0],
                 latitude: sessionLatitude,
                 longitude: sessionLongitude
             )]
@@ -163,11 +194,13 @@ enum VoiceCaptureOrchestrator {
                 outputDir: outputDir,
                 rollGroupId: rollGroupId
             )
-            return splits.map { split in
-                VoiceClipFragment(
+            return splits.enumerated().map { idx, split in
+                let capturedAt = idx < capturedAts.count ? capturedAts[idx] : capturedAts.last ?? recordingStartedAt
+                return VoiceClipFragment(
                     audioFilename: split.audioFilename,
                     transcript: "",
                     duration: split.duration,
+                    capturedAt: capturedAt,
                     latitude: sessionLatitude,
                     longitude: sessionLongitude
                 )
@@ -182,6 +215,7 @@ enum VoiceCaptureOrchestrator {
                 audioFilename: masterURL.lastPathComponent,
                 transcript: liveTranscript,
                 duration: duration,
+                capturedAt: recordingStartedAt,
                 latitude: sessionLatitude,
                 longitude: sessionLongitude
             )]

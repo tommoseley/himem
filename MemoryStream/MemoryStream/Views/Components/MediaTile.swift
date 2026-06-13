@@ -165,7 +165,7 @@ struct MediaTile: View {
         }
         .task(id: localIdentifier) {
             guard mediaType != .voice else { return }
-            if let cached = await ThumbnailService.shared.cacheThumbnail(for: localIdentifier) {
+            if let cached = await ThumbnailService.shared.cacheThumbnail(for: localIdentifier, mediaType: mediaType) {
                 thumbnail = ThumbnailService.shared.cachedThumbnail(filename: cached)
             }
         }

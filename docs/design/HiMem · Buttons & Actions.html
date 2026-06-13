@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HiMem · Buttons &amp; Actions Standard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper:#EFECE5; --card:#FBF9F4; --ink:#1A1612; --ink2:#46413A;
+    --ink3:#857E72; --hairline:#E0DBD0; --sunk:#E6E1D7; --wash1:#EDE8DE;
+    --accent:#C64A1C; --accent-ink:#FFFFFF; --accent-tint:#F6E4DA;
+    --ai:#1E5C8E; --ai-tint:#E2ECF4; --ai-edge:#BFD4E6;
+    --danger:#B8311E; --danger-tint:#F4DFDB;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+    --serif:"Source Serif 4",Georgia,serif;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans); }
+  .wrap { max-width:1040px; margin:0 auto; padding:56px 40px 100px; }
+  .kicker { font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--ink3); }
+  h1 { font-family:var(--serif); font-weight:400; font-size:44px; letter-spacing:-1px; margin:10px 0 14px; line-height:1.05; }
+  .lede { font-size:16px; line-height:1.6; color:var(--ink2); max-width:680px; }
+  .lede strong { color:var(--ink); font-weight:600; }
+  section { margin-top:54px; }
+  h2 { font-family:var(--serif); font-weight:500; font-size:25px; letter-spacing:-0.4px; margin:0 0 6px; }
+  .sub { font-size:14px; color:var(--ink3); line-height:1.5; margin:0 0 22px; max-width:680px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .card { background:var(--card); border:1px solid var(--hairline); border-radius:16px; padding:22px; }
+  .card .lab { font-size:11px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:var(--ink3); margin-bottom:4px; }
+  .card .nm { font-size:15px; font-weight:600; color:var(--ink); margin-bottom:14px; letter-spacing:-0.2px; }
+  .card .rule { font-size:13px; line-height:1.55; color:var(--ink2); margin-top:14px; }
+  .card .rule b { color:var(--ink); font-weight:600; }
+  .demo { display:flex; flex-direction:column; gap:10px; align-items:flex-start; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+  /* ── Canonical button specimens ── */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px;
+         min-height:50px; padding:0 22px; border-radius:14px; font-size:15.5px; font-weight:600;
+         letter-spacing:-0.2px; font-family:var(--sans); border:none; cursor:pointer; }
+  .btn.full { width:100%; }
+  .btn-primary { background:var(--accent); color:var(--accent-ink); }
+  .btn-secondary { background:transparent; color:var(--ink); border:1px solid var(--hairline); }
+  .btn-tertiary { min-height:44px; padding:0 16px; border-radius:12px; font-size:14px;
+                  background:transparent; color:var(--accent); border:1.5px solid var(--accent); }
+  .btn-tertiary.filled { background:var(--accent); color:var(--accent-ink); border:none; }
+  .btn-ai { background:var(--ai); color:#fff; }
+  .btn-tertiary.ai { color:var(--ai); border-color:var(--ai); }
+  .btn-tertiary.ai.filled { background:var(--ai); color:#fff; border:none; }
+
+  /* inline link */
+  .link { display:inline-flex; align-items:center; gap:6px; min-height:44px; padding:0 2px;
+          color:var(--ai); font-size:15px; font-weight:600; letter-spacing:-0.15px; background:none; border:none; cursor:pointer; }
+
+  /* nav bar */
+  .nav { display:flex; align-items:center; justify-content:space-between; width:100%;
+         background:var(--card); border:1px solid var(--hairline); border-radius:12px; padding:12px 16px; }
+  .nav .c { font-size:15px; color:var(--ink2); }
+  .nav .t { font-size:15px; font-weight:600; }
+  .nav .d { font-size:15px; font-weight:700; color:var(--accent); }
+
+  /* add affordance */
+  .add { display:inline-flex; align-items:center; gap:6px; min-height:40px; padding:0 15px;
+         border-radius:12px; border:1px dashed var(--accent); color:var(--accent); font-size:14px; font-weight:600; }
+
+  /* managed content chip */
+  .chip { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:0 15px;
+          border-radius:12px; background:var(--wash1); color:var(--ink); font-size:14px; }
+  .chip .dot { width:7px; height:7px; border-radius:4px; background:var(--accent); }
+
+  /* status label */
+  .status { display:inline-flex; align-items:center; gap:7px; color:var(--ai); font-size:13px; font-weight:600; }
+  .status .sp { width:13px; height:13px; }
+
+  /* swipe action */
+  .swipe { display:flex; gap:0; border-radius:14px; overflow:hidden; width:100%; max-width:340px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+  .swipe .body { flex:1; background:var(--card); padding:14px 16px; font-size:14px; color:var(--ink); }
+  .swipe .act { width:78px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+                color:#fff; font-size:12px; font-weight:600; }
+  .swipe .act.trash { background:var(--danger); }
+  .swipe .act.recycle { background:var(--danger); }
+  .swipe .act.edit { background:var(--accent); }
+  .swipe .act svg { width:20px; height:20px; }
+
+  /* full-width Delete button */
+  .delbtn { display:flex; align-items:center; justify-content:center; gap:9px;
+            width:100%; min-height:50px; border-radius:14px; background:transparent;
+            border:1.5px solid var(--danger); color:var(--danger);
+            font-size:15.5px; font-weight:600; letter-spacing:-0.1px; }
+  .delbtn svg { width:16px; height:16px; }
+  .delnote { font-size:11.5px; color:var(--ink3); text-align:center; margin-top:8px; }
+  .delwrap { max-width:340px; }
+
+  .swatch-row { display:flex; gap:14px; flex-wrap:wrap; }
+  .swatch { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--ink2); }
+  .swatch .s { width:30px; height:30px; border-radius:8px; border:1px solid rgba(0,0,0,0.08); }
+  .do-dont { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:8px; }
+  .dd { border-radius:14px; padding:16px 18px; font-size:13px; line-height:1.55; }
+  .dd.do { background:var(--ai-tint); }
+  .dd.dont { background:var(--danger-tint); }
+  .dd h4 { margin:0 0 8px; font-size:12px; letter-spacing:1px; text-transform:uppercase; }
+  .dd.do h4 { color:var(--ai); }
+  .dd.dont h4 { color:var(--danger); }
+  .dd ul { margin:0; padding-left:16px; color:var(--ink2); }
+  .dd li { margin:3px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">Crucible · interaction standard</div>
+  <h1>Buttons &amp; Actions</h1>
+  <p class="lede">One look per job, so the user never has to guess what is tappable or what it will do. The button colour says <strong>who acts</strong>: <strong>ochre = you</strong> (commit, save, keep), <strong>blue = the AI</strong> (organize, reorganize, run, review a draft). Destruction is red, in a swipe only. Three meanings, learned once.</p>
+
+  <section>
+    <h2>The colour code — three meanings, learned once</h2>
+    <p class="sub">A user should be able to internalize this in a day and never think about it again.</p>
+    <div class="swatch-row">
+      <div class="swatch"><span class="s" style="background:var(--accent)"></span><div><b style="color:var(--ink)">Ochre</b> · <em>you</em> act — commit, save, keep</div></div>
+      <div class="swatch"><span class="s" style="background:var(--ai)"></span><div><b style="color:var(--ink)">Blue</b> · the <em>AI</em> acts (button), or an inline link / AI signal</div></div>
+      <div class="swatch"><span class="s" style="background:var(--danger)"></span><div><b style="color:var(--ink)">Red</b> · destruction (the bottom Delete button)</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>1 · Buttons — ochre = you, blue = the AI</h2>
+    <p class="sub">Every real button is ochre (you act) or blue (the AI acts). Rank is carried by <em>fill and width</em> within each colour. One primary per surface; it is the loudest interactive thing on screen. The AI sparkle rides on blue buttons and is dropped from ochre ones.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="lab">Rank 1</div><div class="nm">Primary · the loudest action</div>
+        <div class="demo" style="width:100%"><button class="btn btn-primary full">Keep this version</button><button class="btn btn-ai full">Organize with AI&nbsp; ✦</button></div>
+        <div class="rule"><b>Filled, full-width, one per surface.</b> Ochre when <em>you</em> commit (<em>Keep this version</em>); blue when it <em>invokes AI</em> (<em>Organize with AI</em>). ≥50px.</div>
+      </div>
+      <div class="card">
+        <div class="lab">Rank 2</div><div class="nm">Secondary · the alternative</div>
+        <div class="demo"><button class="btn btn-secondary full">Reorganize again</button></div>
+        <div class="rule"><b>Hairline border, no fill, full-width.</b> Sits directly under the primary. Same size, quieter weight.</div>
+      </div>
+      <div class="card">
+        <div class="lab">Rank 3</div><div class="nm">Tertiary · inline action</div>
+        <div class="demo"><div class="row"><button class="btn-tertiary ai">Reorganize with AI ✦</button><button class="btn-tertiary ai filled">Run ✦</button></div></div>
+        <div class="rule"><b>Bordered pill</b> inline in a row — blue because <em>Reorganize</em> and <em>Run</em> invoke AI. <b>Filled</b> only when it is the sole action of its card. ≥44px.</div>
+      </div>
+      <div class="card" style="grid-column:1 / -1; background:var(--ai-tint); border-color:var(--ai-edge)">
+        <div class="lab" style="color:var(--ai)">Labelling · blue buttons</div><div class="nm">Name the AI, don't just hint it</div>
+        <div class="rule" style="margin-top:0">A blue button carries <b>a verb that names the AI (the promise) + a trailing sparkle (the marker)</b> — <em>Organize with AI ✦</em>, <em>Reorganize with AI ✦</em>, <em>Analyze with AI ✦</em>, or a named feature (<em>Find the thread ✦</em>). The sparkle sits <b>after</b> the label. Two signals, one honest meaning: the user always knows when they're handing work to the AI. The sparkle is mandatory; the “…with AI” phrasing is used wherever it reads naturally. Never ghost it cream-on-cream — honesty shouldn't cost the button its presence; it stays a legible blue.</div>
+      </div>
+      <div class="card">
+        <div class="lab">Top bar only</div><div class="nm">Nav text actions</div>
+        <div class="demo"><div class="nav"><span class="c">Cancel</span><span class="t">Voice clip</span><span class="d">Done</span></div></div>
+        <div class="rule"><b>The one place bare text may act.</b> <em>Cancel</em> plain ink left; <em>Done / Save</em> ochre right. Nowhere else in the page.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2 · Inline links — blue</h2>
+    <p class="sub">Tappable text that opens, reviews, or edits in place. No border, no pill — it reads as a link, never competing with a real button.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="nm" style="margin-bottom:14px">Review &amp; navigate</div>
+        <div class="demo"><button class="link">Review<span>›</span></button><button class="link">↻ Retry transcription</button></div>
+        <div class="rule">Blue, ≥44px tap target. Used for <em>Review ›</em>, <em>Retry transcription</em>, and edit links. If it needs more weight than a link, it should become a tertiary <b>button</b>, not a louder link.</div>
+      </div>
+      <div class="card">
+        <div class="lab">Add / incomplete</div><div class="nm">Dashed affordance</div>
+        <div class="demo"><div class="row"><span class="add">+ Edit</span><span class="add">+ New</span></div></div>
+        <div class="rule"><b>Dashed = add or provisional, only.</b> Topic editing, a new-topic stub. Never used for status or for a committed action.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · Destructive — the bottom Delete button</h2>
+    <p class="sub">Destruction is a full-width Delete button at the <b>bottom of an opened item</b>, below all its content. To reach it you open the item and scroll past everything — that scroll <b>is</b> the deliberation, so there is no confirm dialog. Swipe-to-delete is retired everywhere (June 12 2026): you can't destroy what you haven't deliberately opened and scrolled through. Recently Deleted (30 days) is the safety net.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="lab">Destroys the thing</div><div class="nm">Delete</div>
+        <div class="demo"><div class="delwrap" style="width:100%">
+          <div class="delbtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
+            Delete memory
+          </div>
+          <div class="delnote">Moves to Recently Deleted · kept for 30 days.</div>
+        </div></div>
+        <div class="rule"><b>Deletes the memory, clip, or project.</b> Lives at the very bottom of the opened item. Danger red, hairline-bordered, ≥50px, full width. The label names what goes (<em>Delete memory</em> / <em>Delete clip</em> / <em>Delete project</em>).</div>
+      </div>
+      <div class="card">
+        <div class="lab">Unlinks — the thing survives</div><div class="nm">Remove from project</div>
+        <div class="demo"><div class="delwrap" style="width:100%">
+          <div class="delbtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+            Remove from project
+          </div>
+          <div class="delnote">The memory stays in your library.</div>
+        </div></div>
+        <div class="rule"><b>Removes a memory from a project</b> — the memory itself is untouched, returned to the pool. Same bottom-button shape, parallel red, label carries the difference.</div>
+      </div>
+      <div class="card">
+        <div class="lab">Rule</div><div class="nm">One affordance, one place</div>
+        <div class="rule" style="margin-top:0">No swipe-to-delete, no floating circle, no toolbar trash, no list-row destroy. <b>Every</b> destroy/remove is the bottom Delete button inside the opened object. Open → scroll → Delete is the entire deletion vocabulary, identical for memories, clips, and projects. (Origin: accidental swipe-deletions — the deliberate open-and-scroll gesture is hard to do by mistake.)</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4 · Not buttons — content &amp; status</h2>
+    <p class="sub">These are tappable or informational, but they are not actions and must never wear a button's clothes.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="lab">Managed content</div><div class="nm">Topic &amp; mention chips</div>
+        <div class="demo"><div class="row"><span class="chip"><span class="dot"></span>How We Work</span><span class="chip"><span class="dot" style="background:var(--ai)"></span>Abraham Lincoln</span></div></div>
+        <div class="rule"><b>Solid pill + leading dot.</b> Tap to manage. ≥40px. Distinct from buttons (no ochre fill) and from add (no dash).</div>
+      </div>
+      <div class="card">
+        <div class="lab">Status / information</div><div class="nm">Quiet AI label</div>
+        <div class="demo"><span class="status"><svg class="sp" viewBox="0 0 24 24" fill="var(--ai)"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>Draft organized · unreviewed</span></div>
+        <div class="rule"><b>Icon + text, no border, no pill.</b> It informs; it never looks tappable. The <em>action</em> it implies (Review draft) is a separate real button.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Do / Don't</h2>
+    <div class="do-dont">
+      <div class="dd do">
+        <h4>Do</h4>
+        <ul>
+          <li>Ochre primary = you commit; blue primary = invoke AI. One per surface.</li>
+          <li>Blue for AI buttons, inline links, and AI status signals — form keeps them distinct.</li>
+          <li>Red is the bottom Delete button only — open the item, scroll, Delete.</li>
+          <li>Bare text actions confined to the nav top bar.</li>
+        </ul>
+      </div>
+      <div class="dd dont">
+        <h4>Don't</h4>
+        <ul>
+          <li>Colour a button against the rule — ochre is you, blue is the AI.</li>
+          <li>Dress status (Draft organized) as a dashed button.</li>
+          <li>Swipe-to-delete, floating circles, or a toolbar trash for destroy/remove.</li>
+          <li>Make a real action a bare blue text link in the page body.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

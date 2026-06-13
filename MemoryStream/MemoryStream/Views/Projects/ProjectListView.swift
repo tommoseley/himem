@@ -56,13 +56,10 @@ struct ProjectListView: View {
                             .listRowBackground(Color.clear)
                             .contentShape(Rectangle())
                             .onTapGesture { selectedProjectId = project.id }
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    projectVM.deleteProject(id: project.id)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
+                            // Swipe-to-delete retired per
+                            // `HiMem · Buttons & Actions.html` §3
+                            // (June 12 2026). Destruction lives at
+                            // the bottom of the opened project.
                     }
 
                     // Inline "+ New project" row. Per the JSX
@@ -140,6 +137,9 @@ private struct NewProjectSheet: View {
     @Binding var purpose: String
     let onCreate: (String, String) -> Void
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focused: Field?
+
+    private enum Field { case name, goal }
 
     var body: some View {
         NavigationStack {
@@ -148,22 +148,39 @@ private struct NewProjectSheet: View {
                     .font(.title3)
                     .fontWeight(.semibold)
                     .foregroundStyle(Crucible.Color.ink)
+                    .tint(Crucible.Color.accent)
+                    .focused($focused, equals: .name)
                     .padding(12)
                     .background(Crucible.Color.paper)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1.5))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(
+                                focused == .name ? Crucible.Color.accent : Crucible.Color.hairline,
+                                lineWidth: focused == .name ? 1.5 : 1
+                            )
+                    )
 
                 VStack(alignment: .leading, spacing: 4) {
                     // UI label "goal" — Core Data attribute remains
                     // `Project.purpose` for backward-compat (renaming
                     // would force a CloudKit schema deploy).
-                    TextField("Goal", text: $purpose)
+                    TextField("Goal", text: $purpose, axis: .vertical)
                         .font(.subheadline)
                         .foregroundStyle(Crucible.Color.ink)
+                        .tint(Crucible.Color.accent)
+                        .focused($focused, equals: .goal)
+                        .lineLimit(2...6)
                         .padding(12)
                         .background(Crucible.Color.paper)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(
+                                    focused == .goal ? Crucible.Color.accent : Crucible.Color.hairline,
+                                    lineWidth: focused == .goal ? 1.5 : 1
+                                )
+                        )
                     Text("What are you building toward? A video, a post, an idea.")
                         .font(.caption)
                         .foregroundStyle(Crucible.Color.ink4)
@@ -178,8 +195,10 @@ private struct NewProjectSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .foregroundStyle(Crucible.Color.ink2)
                 }
                 ToolbarItem(placement: .confirmationAction) {
+                    // Create = user-commit → ochre.
                     Button("Create") {
                         let trimmed = name.trimmingCharacters(in: .whitespaces)
                         guard !trimmed.isEmpty else { return }
@@ -187,6 +206,9 @@ private struct NewProjectSheet: View {
                         dismiss()
                     }
                     .fontWeight(.semibold)
+                    .foregroundStyle(name.trimmingCharacters(in: .whitespaces).isEmpty
+                                     ? Crucible.Color.ink3
+                                     : Crucible.Color.accent)
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }

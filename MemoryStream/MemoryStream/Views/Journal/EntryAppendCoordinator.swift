@@ -19,7 +19,7 @@ import SwiftUI
 ///     pollute the host memory with a no-op fragment.
 ///
 /// The view keeps the per-panel sheet bindings (audioPlayerForFile,
-/// noteEditorTarget) for now — moving those into
+/// selectedMedia, videoPlayerForItem) for now — moving those into
 /// `ChronologicalCaptureStream` is a separate restructuring of the
 /// SwiftUI hierarchy and was deferred from this batch.
 @MainActor
@@ -85,12 +85,16 @@ final class EntryAppendCoordinator: ObservableObject {
 
         case .voiceSession(let clips, _):
             // "On a roll" — append every clip in the session as its
-            // own voice fragment on this Memory.
+            // own voice fragment on this Memory. `capturedAt` carries
+            // the orchestrator-computed per-clip wall-clock so each
+            // appended MediaReference lands with an honest createdAt
+            // instead of a save-time `Date()`.
             for clip in clips {
                 lifecycle.append(
                     entryId: entryId,
                     additionalContent: clip.transcript,
-                    voiceFilename: clip.audioFilename
+                    voiceFilename: clip.audioFilename,
+                    voiceCapturedAt: clip.capturedAt
                 )
             }
             // Stamp the session's location fix onto every appended

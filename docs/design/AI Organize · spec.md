@@ -26,7 +26,7 @@ A whole-memory pass that produces:
 
 - **Title** — a concrete noun phrase, usually 3–8 words
 - **Summary** — a 1–4 sentence honest label
-- **Topics** — 1–3 topic suggestions, from a controlled vocabulary
+- **Topics** — 1–3 topic suggestions. **Prefer the user's existing palette; coin a new topic only when the memory clearly doesn't fit** (see §2c). New topics are flagged for the user.
 - **Mentions** — 0–5 first-class entity suggestions (places, people, projects, ideas) the user can accept individually
 - **Next steps** — 0–4 action items, only if the memory contains intent or unresolved threads. **Plus-tier only** — see below.
 
@@ -43,6 +43,17 @@ The on-device model (Free) and the frontier model (Plus) produce the *same shape
 - **Re-running and editing never penalize.** Manual field edits, accepting/skipping individual suggestions, re-running after new clips, and failed/aborted passes all leave nothing to “spend.” There is nothing to count.
 
 *(Full tier/pricing model: `Pricing model · Capture-Connect-Create.md`. On-device validation: `docs/architecture/foundation-models-spike-findings.md`.)*
+
+## 2c. Topic lifecycle — visible home, review moment, palette discipline
+
+When Reorganize was scoped to Title + Summary, topics lost their user-facing surface: suggested by the model but never shown for review or correction. And the on-device path coined fresh names every pass, fragmenting the palette (Garden / Gardening / Plants / Yard / Vegetables) until topics were useless as filters. The lock that fixes both (June 2026, design + GPT + CC aligned):
+
+- **Palette discipline (the model rule).** The organizer is given the user's existing topics and **must prefer an existing topic when one fits.** It may coin a **new** topic only when the memory clearly doesn't fit the palette. New topics are **flagged as new** so the vocabulary grows on purpose, never silently.
+  - **Plumbing fix:** both organizers already receive `existingTopics`. The Anthropic backend forwards it; the **on-device `OnDeviceOrganizer` currently ignores it** and always invents de-novo names. The on-device prompt must be updated to bias toward the supplied palette — this is the one-sided plumbing to close. Until it lands, the on-device path is the source of topic sprawl.
+- **First organize reviews topics.** Topics are accepted in the draft→review→organized sheet, alongside title and summary. Existing-palette chips are **pre-selected**; a genuinely-new topic is **marked NEW** (AI-blue dashed chip) and can be dropped in one tap before it sticks.
+- **Reorganize never touches topics.** Reorganize stays **Title + Summary only** (§8.0). A wording refresh must never churn the topic set — topics are orthogonal to the title/summary the model is rethinking.
+- **A persistent home.** Every memory shows a **topic chip row directly under the summary** — solid ochre-dot chips for assigned topics, with an **Edit** affordance opening a manage sheet (pick from the existing library, or add one). **Topic changes are deliberate user actions**, never an AI side effect of some other pass.
+- **Color.** Topics are user-owned organization → **ochre** dots on wash chips. The only AI-blue moment is the *suggested / NEW* flag during review. *(Reference: `HiMem · Topics.html`.)*
 
 ## 2b. Honest Label on Free is an editable draft, not a guarantee
 
@@ -246,6 +257,7 @@ The rules that keep this from growing version-management hair:
 - **Both new values require explicit approval — always.** Whether or not the user had hand-edited a field, the new title and new summary are each shown as a before/after and must be **approved to apply**. Each field defaults to the **current** value (selection ring + check on *“Current · kept”*); the new wording is the opt-in (*“New suggestion · tap to use”*). There is no silent refresh — the AI never swaps a value behind the user, even on a field they never touched.
 - **Reorganize replaces the draft; it never branches.** Memory → current AI draft → reorganize → *new* AI draft. There is never a stored “v1 vs v2.” The before/after is a *transient review moment*, not persisted state.
 - **Reorganize re-enters the same lifecycle.** The Organized memory drops back to `reviewed: false` (chip → *“Draft organized”*) and re-opens the review sheet. It is not a separate path — same states, same chip, same accept beat.
+- **Dismissing the sheet = decide later, never discard (pinned June 12 2026).** Closing the review sheet (corner ✕, swipe-down) without deciding leaves the memory **in the Draft-organized state with the new draft held**: chip reads *“Draft organized”*, and the full-width **Review this draft** button (the standard Stage-2 affordance) is present to re-open the same sheet. The user’s previously accepted values remain the live title/summary until they approve the new ones — so nothing is lost in either direction. **Accept-or-lose is a bug:** the only ways a reorganize draft goes away are (a) the user approves/keeps values in the review, or (b) the user runs Reorganize again, which replaces the draft. *(Build bug seen June 12: closing the auto-opened sheet left no review entry point — the draft was unreachable, forcing accept-or-lose.)*
 - **Review is always shown**, even when nothing was hand-edited (the pure “let’s see what it comes up with” case). Seeing the fresh take can spur ideas; silently mutating the memory behind the user cannot.
 - **Entry point.** A quiet AI-blue **Reorganize** affordance sits on the Organized memory (opposite the chip) — present but unobtrusive, never a nag. *(See `HiMem · Pricing.html` §2 → `life-3` / `life-3r`.)*
 

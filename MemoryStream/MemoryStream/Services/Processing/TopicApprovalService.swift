@@ -32,16 +32,10 @@ final class TopicApprovalService: ObservableObject {
             // Update the in-memory palette cache
             TopicPaletteStore.shared.set(key: paletteKey, for: current.name)
 
-            // If this entry has media, propose album sync for the new topic
-            let mediaIds = entry.mediaReferencesArray.map(\.osIdentifier)
-            if !mediaIds.isEmpty {
-                let albumSync = AlbumSyncService.shared
-                if albumSync.isAutoSyncEnabled(for: current.name) {
-                    albumSync.addNewMedia(topicName: current.name, identifiers: mediaIds)
-                } else {
-                    albumSync.proposeIfNeeded(topicName: current.name)
-                }
-            }
+            // Per-topic Photos-album sync was retired June 10 2026 —
+            // captures now land in a single "HiMem" album (gated by
+            // `CameraService.alsoSaveToPhotosLibrary`). Approving a
+            // topic no longer touches the Photos library.
         } catch {
             ErrorState.shared.report(.topicError(error.localizedDescription))
         }

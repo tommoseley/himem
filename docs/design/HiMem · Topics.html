@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HiMem · Topic Lifecycle</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="crucible.css" />
+<script src="crucible-theme.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: var(--paper); font-family: var(--sans); color: var(--ink); }
+  #root { width: 100vw; height: 100vh; overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="crucible-primitives.jsx"></script>
+<script type="text/babel" src="screens-topics.jsx"></script>
+
+<script type="text/babel">
+const AB = 340, ABH = 735;
+function App() {
+  return (
+    <DesignCanvas
+      title="Topic lifecycle"
+      subtitle="Topics get a visible home, a review moment, and palette discipline. They're assigned in the first-organize review and managed deliberately from the memory — never churned by Reorganize (which stays Title + Summary)."
+    >
+      <DCSection id="home" title="1 · The home — a persistent topic chip row" subtitle="Under the summary on every memory. Solid ochre-dot chips for assigned topics, tappable Edit. This is the surface topics were missing.">
+        <DCArtboard id="mem-topics" label="Memory detail · topic chip row" width={AB} height={520}>
+          <ScrMemoryWithTopics />
+        </DCArtboard>
+        <DCArtboard id="topic-spec" label="How topics work" width={400} height={560}>
+          <div style={{ padding: 16 }}><TopicSpecCard /></div>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="review" title="2 · First-organize review — Topics section" subtitle="Topics are accepted here, alongside title and summary. Existing-palette chips pre-selected; a genuinely-new topic is flagged NEW so the user grows the vocabulary on purpose.">
+        <DCArtboard id="organize-topics" label="Draft review · existing + flagged new" width={AB} height={ABH}>
+          <ScrOrganizeReviewTopics />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="manage" title="3 · Manage topics — deliberate, independent" subtitle="Tap the chip row's Edit. Pick from the existing library, or add a new one. A user action, never an AI side effect — and never coupled to Reorganize.">
+        <DCArtboard id="manage-topics" label="Manage · pick existing or add new" width={AB} height={ABH}>
+          <ScrManageTopics />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

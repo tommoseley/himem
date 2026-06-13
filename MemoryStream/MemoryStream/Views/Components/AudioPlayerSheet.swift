@@ -48,6 +48,11 @@ struct AudioPlayerSheet: View {
     @State private var downloadPollCount = 0
     @State private var draftTranscript: String = ""
     @State private var isRetryingTranscription = false
+    /// Surfaces the outcome of a retry that didn't overwrite the draft —
+    /// either a failure (model not installed, transcriber threw) or a
+    /// genuine empty success. Cleared on the next user edit or after a
+    /// short delay so it doesn't linger.
+    @State private var retryStatusMessage: String? = nil
 
     private let downloadPollCeiling = 10  // 10 polls at 1s = ~10 seconds
 
@@ -200,43 +205,86 @@ struct AudioPlayerSheet: View {
 
     @ViewBuilder
     private var footer: some View {
-        Button(action: retryTranscription) {
-            if isRetryingTranscription {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Retrying…")
-                        .font(.system(size: 12.5, weight: .semibold))
-                }
-            } else {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("Retry transcription")
-                        .font(.system(size: 12.5, weight: .semibold))
+        VStack(alignment: .leading, spacing: 4) {
+            // Inline link per `HiMem · Buttons & Actions §2`: blue,
+            // no border, no pill, ≥44pt tap target. "Retry
+            // transcription" is the canonical mockup example in
+            // the standard. The leading arrow glyph stays as the
+            // verb-icon; AI sparkle is reserved for the quiet AI
+            // status label above the footer, not for this link.
+            Button(action: retryTranscription) {
+                if isRetryingTranscription {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Retrying…")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                } else {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Retry transcription")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
                 }
             }
+            .foregroundStyle(Crucible.Color.aiBlue)
+            .frame(minHeight: 44, alignment: .leading)
+            .buttonStyle(.plain)
+            .disabled(isRetryingTranscription || mediaState != .ready)
+            .opacity(mediaState == .ready ? 1.0 : 0.4)
+
+            // Honest-label retry status. Shown ONLY when a retry
+            // landed on `.keepDraft` (failure or empty recognition);
+            // an auto-clear in `applyRetryOutcome` removes it after
+            // a few seconds so it doesn't linger.
+            if let message = retryStatusMessage {
+                Text(message)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .accessibilityLabel(message)
+            }
         }
-        .foregroundStyle(Crucible.Color.accent)
-        .buttonStyle(.plain)
-        .disabled(isRetryingTranscription || mediaState != .ready)
-        .opacity(mediaState == .ready ? 1.0 : 0.4)
     }
 
-    /// Re-runs `TranscriptionService` against this clip's audio file and
-    /// replaces the draft transcript with the result. The user can still
-    /// edit the result before tapping Done, or hit Cancel to revert
-    /// everything (including the retry) and keep the original transcript.
+    /// Re-runs `TranscriptionService` against this clip's audio file. On
+    /// success with non-empty text, replaces the draft. On any failure
+    /// or genuine empty result, keeps the draft and surfaces a short
+    /// status message — the user's typed words are protected from
+    /// recognizer failure modes.
+    @available(iOS 26.0, *)
     private func retryTranscription() {
         isRetryingTranscription = true
+        retryStatusMessage = nil
         Task {
             let url = SpeechService.audioURL(for: filename)
-            // `.textOrEmpty` preserves the pre-2026-05-29 behavior
-            // here: manual retry that hits a transient failure
-            // (model not ready) silently clears the draft.
             let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
             await MainActor.run {
-                draftTranscript = outcome.textOrEmpty
+                applyRetryOutcome(outcome)
                 isRetryingTranscription = false
+            }
+        }
+    }
+
+    /// MainActor side of `retryTranscription` — separated so the
+    /// outcome handling can be exercised without standing up a
+    /// SpeechAnalyzer pipeline. Pairs with the pure
+    /// `decideRetryAction` decision function for testability.
+    @available(iOS 26.0, *)
+    private func applyRetryOutcome(_ outcome: TranscriptionService.Outcome) {
+        switch Self.decideRetryAction(outcome: outcome) {
+        case .overwriteDraft(let newText):
+            draftTranscript = newText
+            retryStatusMessage = nil
+        case .keepDraft(let reason):
+            retryStatusMessage = reason
+            // Auto-clear the status line after a few seconds so it
+            // doesn't linger. The draft itself stays untouched.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if retryStatusMessage == reason {
+                    retryStatusMessage = nil
+                }
             }
         }
     }
@@ -362,4 +410,40 @@ struct AudioPlayerSheet: View {
         f.timeStyle = .short
         return f
     }()
+
+    // MARK: - Retry decision (pure, testable)
+
+    /// Outcome of `decideRetryAction(outcome:)` — separates the
+    /// destination-changing case (overwrite the user's draft) from
+    /// the preserve-draft case (failure or recognizer-said-silence).
+    enum RetryAction: Equatable {
+        case overwriteDraft(String)
+        case keepDraft(reason: String)
+    }
+
+    /// Decides what to do with the retry outcome. Extracted as a
+    /// static pure function so the test suite can exercise every
+    /// outcome variant without standing up a SpeechAnalyzer pipeline.
+    ///
+    /// Contract:
+    /// - `.transcribed` with non-empty (post-trim) text → overwrite.
+    /// - `.transcribed` with empty / whitespace text → keep draft.
+    ///   Genuine silence is a definitive recognizer answer, but the
+    ///   user's typed words are probably better than the silence
+    ///   verdict; let them decide whether to clear it themselves.
+    /// - Any failure variant (`modelNotInstalled`, `fileUnreadable`,
+    ///   `transcriberFailed`) → keep draft. The pre-2026-06-07
+    ///   regression here was that `outcome.textOrEmpty` returned
+    ///   `""` for these and silently wiped the draft.
+    @available(iOS 26.0, *)
+    static func decideRetryAction(outcome: TranscriptionService.Outcome) -> RetryAction {
+        if case .transcribed(let result) = outcome {
+            let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return .overwriteDraft(result.text)
+            }
+            return .keepDraft(reason: "Retry returned no speech — kept your text")
+        }
+        return .keepDraft(reason: "Couldn't retranscribe — kept your text")
+    }
 }

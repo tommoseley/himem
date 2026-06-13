@@ -33,14 +33,38 @@ function App() {
       subtitle="Date + location on every clip header. Mentions promoted out of the bottom expander, sitting between clips and the Organized · review card."
     >
       <DCSection id="page" title="Full page" subtitle="Top-to-bottom view of the updated Memory detail.">
-        <DCArtboard id="md-full" label="Memory detail · with changes" width={340} height={1320}>
+        <DCArtboard id="md-full" label="Memory detail · with changes" width={340} height={1460}>
           <ScrMemoryDetailFull />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="editmodel" title="Unified editing model" subtitle="One rule per category. All text (title · summary · transcript) = tap to edit in place — no pen, no edit mode. Media = tap to consume; audio is demoted to a quiet 'Original recording' control because the transcript is the working object. Removable rows = trailing red Trash swipe; delete the whole memory = toolbar Trash. Topics = tap chip → management sheet; Mentions = lightweight inline.">
+        <DCArtboard id="edit-rest" label="Rest · tap anything to edit" width={340} height={1240}>
+          <ScrMemoryUnifiedRest />
+        </DCArtboard>
+        <DCArtboard id="edit-active" label="Editing a transcript · Cancel / Done below the field" width={340} height={1240}>
+          <ScrMemoryUnifiedEditing />
+        </DCArtboard>
+        <DCArtboard id="mention-edit" label="Mention · managed-chip edit state" width={340} height={380}>
+          <ScrMentionEditState />
         </DCArtboard>
       </DCSection>
 
       <DCSection id="diff" title="Changes" subtitle="Exactly what moved.">
         <DCArtboard id="changes" label="What changed" width={520} height={360}>
           <MDChangesCard />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="longmem" title="Long memory · Full ⇄ Compact" subtitle="Rule: any memory with >1 clip shows the Full/Compact toggle (no magic). Size picks only the default — larger memories (>6 clips or >1,500 words) OPEN compressed in the Compact index; smaller multi-clip memories open Full. Each Compact row is a single-open expander and still a clip (same Trash/Edit swipe). This lecture (14 clips) opens Compact.">
+        <DCArtboard id="lecture-compact" label="Compact · default for large memories" width={340} height={1380}>
+          <ScrMemoryLectureCompact />
+        </DCArtboard>
+        <DCArtboard id="lecture-compact-edit" label="Compact · editing a clip (in-flow, no overlap)" width={340} height={1380}>
+          <ScrMemoryLectureCompactEditing />
+        </DCArtboard>
+        <DCArtboard id="lecture-full" label="Full · continuous read" width={340} height={3780}>
+          <ScrMemoryLectureFull />
         </DCArtboard>
       </DCSection>
     </DesignCanvas>

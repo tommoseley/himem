@@ -144,8 +144,12 @@ class JournalViewModel: ObservableObject {
     // MARK: - Entry Operations (delegated to EntryLifecycleService)
 
     @discardableResult
-    func saveEntry(content: String, inputType: JournalEntry.InputType, voiceFilename: String? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = [], topicName: String? = nil) -> UUID? {
-        let id = lifecycle.save(content: content, inputType: inputType, voiceFilename: voiceFilename, mediaCaptures: mediaCaptures, topicName: topicName)
+    /// `voiceCapturedAt` carries the wall-clock the voice clip *began*
+    /// recording (orchestrator-computed from master start + Next-tap
+    /// offsets). When nil, the lifecycle save falls back to `Date()` —
+    /// the historical behavior for non-roll callers.
+    func saveEntry(content: String, inputType: JournalEntry.InputType, voiceFilename: String? = nil, voiceCapturedAt: Date? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = [], topicName: String? = nil) -> UUID? {
+        let id = lifecycle.save(content: content, inputType: inputType, voiceFilename: voiceFilename, voiceCapturedAt: voiceCapturedAt, mediaCaptures: mediaCaptures, topicName: topicName)
         loadEntries()
         return id
     }
@@ -155,8 +159,8 @@ class JournalViewModel: ObservableObject {
         loadEntries()
     }
 
-    func appendToEntry(entryId: UUID, additionalContent: String, voiceFilename: String? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []) {
-        lifecycle.append(entryId: entryId, additionalContent: additionalContent, voiceFilename: voiceFilename, mediaCaptures: mediaCaptures)
+    func appendToEntry(entryId: UUID, additionalContent: String, voiceFilename: String? = nil, voiceCapturedAt: Date? = nil, mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []) {
+        lifecycle.append(entryId: entryId, additionalContent: additionalContent, voiceFilename: voiceFilename, voiceCapturedAt: voiceCapturedAt, mediaCaptures: mediaCaptures)
         loadEntries()
     }
 

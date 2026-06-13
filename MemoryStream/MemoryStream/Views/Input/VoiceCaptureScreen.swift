@@ -51,6 +51,12 @@ struct VoiceCaptureScreen: View {
     @State private var didAutoStart = false
     @State private var isFinalizing = false
     @State private var finalizingClipCount = 0
+    /// Captured at the moment `startRecording()` fires the SpeechService
+    /// + NextClipController. Threaded through the orchestrator's
+    /// `capturedAtSequence` so each split clip lands with an honest
+    /// per-clip wall-clock instead of the all-at-save-time `Date()`
+    /// the codebase used pre-fix. Tom 2026-06-09.
+    @State private var recordingStartedAt: Date? = nil
     /// REC dot pulse phase (~1.4s ease-in-out per watch spec; mirrored
     /// here for visual continuity between capture surfaces).
     @State private var recPulse: Bool = false
@@ -69,13 +75,19 @@ struct VoiceCaptureScreen: View {
     /// Next-clip (mic never pauses). Replaced the previous 3·2·1
     /// two-phase countdown — felt too long, broke the "you press,
     /// it listens" rhythm.
-    @State private var phase: ComposerPhase = .breathing
+    @State private var phase: ComposerPhase
     @State private var countdownTask: Task<Void, Never>? = nil
     @State private var breathProgress: CGFloat = 0
     /// Caption index for the current breath. Read from UserDefaults
     /// on first appear; the persisted store is bumped (mod count)
     /// only when the user commits to recording, not on cancel.
     @State private var breathCaptionIndex: Int = 0
+
+    /// Observes the orchestrator's `visible` so we can defer the
+    /// breath / mic-permission flow until the tutorial overlay (if
+    /// it auto-fires) dismisses. Without this gate the mic permission
+    /// system prompt would land *under* the tutorial sheet.
+    @ObservedObject private var tutorialOrchestrator = TutorialOrchestrator.shared
 
     enum ComposerPhase: Equatable {
         case breathing
@@ -98,6 +110,11 @@ struct VoiceCaptureScreen: View {
         self.speechService = speechService
         self.appendingTo = appendingTo
         self._nextController = StateObject(wrappedValue: NextClipController(handoff: speechService))
+        // Initial phase is always `.breathing`. The Capture tutorial
+        // surfaces (if it's going to) via the root-level orchestrator
+        // overlay; `bootBreathPhase()` waits on `orchestrator.visible`
+        // so the mic permission prompt doesn't fire under the tutorial.
+        self._phase = State(initialValue: .breathing)
     }
 
     var body: some View {
@@ -127,6 +144,9 @@ struct VoiceCaptureScreen: View {
                 // countdown — the whole screen is the cancel target
                 // (single affordance). ✕ re-appears once we're in
                 // the recording phase as the explicit discard path.
+                // Tutorial phase suppresses ALL toolbar items — it's
+                // a self-contained intro page, dismissed only by
+                // Start recording (or swipe-down).
                 if phase == .recording {
                     ToolbarItem(placement: .navigationBarLeading) {
                         cancelGlyph
@@ -148,26 +168,33 @@ struct VoiceCaptureScreen: View {
             }
         }
         .onAppear {
-            // Run the one-breath entry the first time the composer
-            // appears. Recording begins when the ring closes — see
-            // `runBreath()`.
-            if !didAutoStart {
-                didAutoStart = true
-                // Snapshot the persisted caption index NOW so we show
-                // the right line on the first frame. The index only
-                // moves forward in `runBreath`'s commit path.
-                breathCaptionIndex = UserDefaults.standard.integer(
-                    forKey: BreathCaption.defaultsKey
-                )
-                countdownTask = Task { @MainActor in
-                    let granted = await speechService.requestAuthorization()
-                    guard !Task.isCancelled else { return }
-                    guard granted else { phase = .denied; return }
-                    await runBreath()
-                }
+            // Attempt to fire the Capture tutorial. Append flow opts
+            // out per the spec's content-framing (tutorial assumes a
+            // new memory, not an add-to-existing).
+            //
+            // If the orchestrator fires it, the root-level overlay
+            // (mounted in `MemoryStreamApp`) presents the one-pager
+            // *above* this screen. `bootBreathPhase()` is gated below
+            // on `orchestrator.visible == nil` so the mic permission
+            // prompt doesn't land under the tutorial sheet — it waits
+            // for the user to dismiss.
+            if appendingTo == nil {
+                TutorialOrchestrator.shared.tryFire(.capture)
+            }
+            if !didAutoStart && phase == .breathing && tutorialOrchestrator.visible == nil {
+                bootBreathPhase()
             }
             withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
                 recPulse = true
+            }
+        }
+        .onChange(of: tutorialOrchestrator.visible) { _, newValue in
+            // Tutorial dismissed → start the breath (and the mic
+            // permission flow that lives inside it). The orchestrator
+            // has already marked Capture as seen via its `dismiss(_:)`
+            // on the overlay's onDisappear.
+            if newValue == nil && !didAutoStart && phase == .breathing {
+                bootBreathPhase()
             }
         }
         .onDisappear {
@@ -632,6 +659,24 @@ struct VoiceCaptureScreen: View {
         startRecording()
     }
 
+    /// Mic-permission + breath-start sequence. Was inline in `.onAppear`
+    /// pre-tutorial; extracted so the first-run tutorial's Start
+    /// recording button can call exactly the same boot path. Idempotent
+    /// via `didAutoStart` so a re-presentation of the screen doesn't
+    /// fire twice.
+    private func bootBreathPhase() {
+        didAutoStart = true
+        breathCaptionIndex = UserDefaults.standard.integer(
+            forKey: BreathCaption.defaultsKey
+        )
+        countdownTask = Task { @MainActor in
+            let granted = await speechService.requestAuthorization()
+            guard !Task.isCancelled else { return }
+            guard granted else { phase = .denied; return }
+            await runBreath()
+        }
+    }
+
     /// Assigns `value` to `target`. When `animated` is false, wraps
     /// the assignment in a no-animation transaction so the view-
     /// level `.animation(...)` modifier doesn't interpolate. Reduced
@@ -671,6 +716,7 @@ struct VoiceCaptureScreen: View {
         // `Views/Input/VoiceRecordingController.swift`.
         recording.start()
         nextController.sessionDidStart()
+        recordingStartedAt = Date()
         // Snapshot a one-shot location fix in parallel with the
         // recording. The result lands in `sessionLocation` whenever
         // CoreLocation returns; if Done fires before the fix arrives
@@ -750,6 +796,12 @@ struct VoiceCaptureScreen: View {
         finalizingClipCount = offsets.count + 1
         isFinalizing = true
 
+        // Falls back to "now" if the start anchor was somehow not
+        // captured (defensive — `startRecording()` always sets it
+        // before SpeechService starts, but a future call-site could
+        // bypass that). The fallback collapses to the pre-fix
+        // behavior for that one session, not a crash.
+        let startedAt = recordingStartedAt ?? Date()
         let fragments: [VoiceClipFragment]
         if #available(iOS 26.0, *) {
             fragments = await VoiceCaptureOrchestrator.runSplitAndTranscribe(
@@ -757,6 +809,7 @@ struct VoiceCaptureScreen: View {
                 offsets: offsets,
                 rollGroupId: rollId,
                 liveTranscript: liveTranscript,
+                recordingStartedAt: startedAt,
                 sessionLatitude: lat,
                 sessionLongitude: lon
             )
@@ -766,6 +819,7 @@ struct VoiceCaptureScreen: View {
                 offsets: offsets,
                 rollGroupId: rollId,
                 liveTranscript: liveTranscript,
+                recordingStartedAt: startedAt,
                 sessionLatitude: lat,
                 sessionLongitude: lon
             )

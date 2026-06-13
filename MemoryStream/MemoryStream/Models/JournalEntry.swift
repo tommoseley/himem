@@ -29,6 +29,27 @@ public class JournalEntry: NSManagedObject, Identifiable {
     /// memory detail view to decide whether to show the "N new clips
     /// since last organize" Re-organize callout.
     @NSManaged public var lastOrganizedAt: Date?
+    /// Canonical working summary the Memory Detail surface displays
+    /// and the user edits in place. Spec: `Memory Detail · unified
+    /// editing model.md` §"Where an edited summary lives" (Tom 2026-06-09).
+    /// AI drafts live on `OrganizePass.summaryText`; on accept (via
+    /// DraftReviewSheet) the draft is copied here. A user tap-to-edit
+    /// writes here directly and sets `summaryUserEdited`. `nil` means
+    /// either never-organized or never-accepted — `renderedSummary`
+    /// falls back to the latest accepted OrganizePass.summaryText for
+    /// pre-migration rows.
+    @NSManaged public var summary: String?
+    /// True iff the user has tap-to-edited the summary at least once.
+    /// The load-bearing job is preventing silent overwrites by a Plus
+    /// automatic Reorganize pass: when this is true, an auto-pass must
+    /// only *propose* a new summary (writes OrganizePass), never
+    /// directly replace `summary`. Manual Reorganize is already safe
+    /// because it routes through the existing review sheet (which
+    /// defaults to current — the user's edit). Never reverts the
+    /// "Organized" chip → "Draft organized"; editing is an improvement,
+    /// not an un-organizing. See spec §"Locked decisions" + §"AI never
+    /// silently overwrites a user-edited field."
+    @NSManaged public var summaryUserEdited: Bool
     /// True when the current `title` originated from an AI Organize
     /// pass that the user accepted (via the Title row of the
     /// AISuggestionsCard or via Accept all). Drives the small `✦ AI`
@@ -233,12 +254,23 @@ extension JournalEntry {
     }
 
     /// Owner-rendered summary for surfaces outside the AI Suggestions
-    /// card — memory detail header, journal feed snippet. Returns the
-    /// summary text from the latest organize pass only when the user
-    /// has accepted the summary row; nil otherwise. Storage form uses
-    /// the `<user>` token, which `SummaryRenderer.renderForOwner`
-    /// substitutes to second-person English.
+    /// card — memory detail header, journal feed snippet. After the
+    /// unified-editing migration (Tom 2026-06-09), the canonical
+    /// working summary lives on `JournalEntry.summary` — the user can
+    /// tap-to-edit it in place, and `summaryUserEdited` records that
+    /// touch. AI drafts still live on `OrganizePass.summaryText`; on
+    /// accept (DraftReviewSheet), the draft is copied into `summary`.
+    ///
+    /// Fallback to the latest accepted `OrganizePass.summaryText`
+    /// covers pre-migration entries whose `summary` hasn't been
+    /// backfilled yet — `EntryLifecycleService.backfillSummaryFromOrganizePass`
+    /// handles that on first launch. The `<user>` token in the stored
+    /// form is substituted to second-person via
+    /// `SummaryRenderer.renderForOwner`.
     var renderedSummary: String? {
+        if let stored = summary, !stored.isEmpty {
+            return SummaryRenderer.renderForOwner(stored)
+        }
         guard let pass = latestOrganizePass,
               pass.acceptedRows.contains(.summary),
               let text = pass.summaryText,

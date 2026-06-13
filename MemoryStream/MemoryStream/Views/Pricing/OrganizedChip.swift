@@ -1,22 +1,31 @@
 import SwiftUI
 
-/// Review-state label for an `OrganizePass`. Two variants, per
-/// `docs/design/pricing-screens-lifecycle.jsx` and `AI Organize · spec.md`
-/// §2b/§9:
+/// Review-state **label** for an `OrganizePass`. Two variants:
 ///
-///   1. **Draft organized** — dashed AI-blue chip + sparkle icon.
-///      Pass exists but the user hasn't reviewed it yet.
-///      *"This is a first draft. Give it a glance."*
-///   2. **Organized** — solid AI-blue chip + check icon. The user
-///      has dismissed or accepted the review surface.
+///   1. **Draft organized** — sparkle icon + label. Pass exists but
+///      the user hasn't reviewed it yet.
+///   2. **Organized** — check icon + label. The user has dismissed
+///      or accepted the review surface.
+///
+/// Per `docs/design/CLAUDE.md` (June 8 2026 lock — "one affordance
+/// vocabulary, three signals"): **status is never dressed as a
+/// button.** This chip is a quiet status label — icon + text, no
+/// border, no pill, not tappable. The Memory-Detail "Draft organized"
+/// cluster is the origin case for the rule: it previously shipped as
+/// a dashed pill that collided with the dashed `+ Edit` button on
+/// the topic row. Resolution: this label communicates state, and a
+/// separate full-width primary button next to it (in
+/// `OrganizeMemorySection`) carries the actual review action.
+///
+/// Dashed borders are reserved for *add / incomplete / provisional*
+/// affordances (e.g. `+ Edit`, `NEW` topic chips) — never for
+/// status. That's why the draft variant here is a label, not a
+/// dashed pill.
 ///
 /// The chip tracks **review state, not tier** — a Plus auto-organize
 /// pass also reads as "Draft organized" until the user engages with
 /// it. Stale (memory has new clips since last organize) is **not** a
 /// chip variant; it surfaces as a separate warning banner alongside.
-///
-/// Replaces the assist-quota chip variants (refreshStale,
-/// staleNoAssists, nextStepsCount, default) retired in PR 8c.
 struct OrganizedChip: View {
     let pass: OrganizePass
 
@@ -43,15 +52,9 @@ struct OrganizedChip: View {
             }
         }
 
-        /// Dashed border on draft; solid on organized. The dashed
-        /// edge is the design's "this is not yet authoritative"
-        /// signal — paired with the "Draft" label so the visual
-        /// reinforces the copy.
-        var isDashed: Bool { self == .draftOrganized }
-
         var accessibilityLabel: String {
             switch self {
-            case .draftOrganized: return "Draft organized, tap to review"
+            case .draftOrganized: return "Draft organized"
             case .organized:      return "Organized"
             }
         }
@@ -64,26 +67,15 @@ struct OrganizedChip: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: variant.iconName)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
             Text(variant.labelText)
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .tracking(0.1)
         }
         .foregroundStyle(Crucible.Color.aiBlue)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 3)
-        .background(Crucible.Color.aiBlueTint)
-        .overlay(
-            RoundedRectangle(cornerRadius: 13)
-                .strokeBorder(
-                    Crucible.Color.aiBlue,
-                    style: StrokeStyle(
-                        lineWidth: 1,
-                        dash: variant.isDashed ? [3, 2] : []
-                    )
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 13))
         .accessibilityLabel(variant.accessibilityLabel)
+        // Intentionally NO background, NO border. Per the June 8
+        // affordance-vocabulary lock, status is a quiet label —
+        // never dressed to look tappable.
     }
 }

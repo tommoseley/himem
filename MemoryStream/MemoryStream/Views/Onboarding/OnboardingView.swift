@@ -429,7 +429,7 @@ private struct TopicsScreen: View {
             // Topic grid
             FlowLayout(spacing: 10) {
                 ForEach(topics, id: \.self) { topic in
-                    TopicChip(
+                    OnboardingTopicChip(
                         name: topic,
                         isSelected: selectedTopics.contains(topic),
                         ink: ink, ochre: ochre
@@ -470,7 +470,7 @@ private struct TopicsScreen: View {
     }
 }
 
-private struct TopicChip: View {
+private struct OnboardingTopicChip: View {
     let name: String
     let isSelected: Bool
     let ink: Color

@@ -250,9 +250,18 @@ struct TopicChipsRow: View {
     var body: some View {
         let shown = Array(topicNames.prefix(2))
         let extra = topicNames.count - shown.count
-        HStack(spacing: 6) {
+        // Compact TopicChip per H1 of the affordance lock — memory
+        // cards are dense/scan surfaces where strict 44pt would
+        // bloat row rhythm. 28pt body + 10pt row gap clears the
+        // 38pt-with-gap tap allowance.
+        HStack(spacing: 10) {
             ForEach(shown, id: \.self) { name in
-                TopicChip(name: name)
+                TopicChip(
+                    label: name,
+                    state: .set,
+                    size: .compact,
+                    dotColor: Crucible.Color.topicHue(for: name).fg
+                )
             }
             if extra > 0 {
                 Text("+\(extra)")
@@ -261,27 +270,6 @@ struct TopicChipsRow: View {
                     .monospacedDigit()
             }
         }
-    }
-}
-
-private struct TopicChip: View {
-    let name: String
-
-    var body: some View {
-        let hue = Crucible.Color.topicHue(for: name)
-        HStack(spacing: 5) {
-            Circle()
-                .fill(hue.fg)
-                .frame(width: 6, height: 6)
-            Text(name)
-                .font(.system(size: 11.5, weight: .medium))
-                .tracking(-0.1)
-                .foregroundStyle(Crucible.Color.ink2)
-        }
-        .padding(.horizontal, 9)
-        .frame(height: 22)
-        .background(Crucible.Color.wash1)
-        .clipShape(Capsule())
     }
 }
 

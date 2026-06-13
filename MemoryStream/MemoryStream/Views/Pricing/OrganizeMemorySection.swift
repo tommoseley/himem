@@ -1,47 +1,61 @@
 import SwiftUI
 import CoreData
 
-/// State router for the Memory Detail AI zone after the assist-quota
-/// retirement (PR 8d.2b).
+/// The Memory Detail AI zone — status chip, action button, stale
+/// banner, C1 upgrade nudge. Spec: `AI Organize · spec.md` §7–§9.
 ///
-///   • **No pass yet** — render `OrganizeMemoryCard(.idle)` so the
-///     user can tap to run the on-device organize.
-///   • **Has a draft (unreviewed) pass** — render `OrganizedChip` +
-///     summary + topic chips + a *"Tap to review & keep"* link.
-///     Tapping the chip or the link opens the B1 review sheet
-///     (`DraftReviewSheet`). The user signs off there.
-///   • **Has a reviewed pass** — render `OrganizedChip` + summary +
-///     topic chips. No review CTA. If the entry has new clips since
-///     the pass, surface a stale warning banner below per
-///     `pricing-screens-lifecycle.jsx` Stage 3st — tapping fires a
-///     re-organize.
+/// **Single source of truth** for what to render: `AIState`, derived
+/// from `(entry, latestOrganizePass)` on every body eval. No `@State`
+/// mirrors of Core Data, no flag-juggling between sheets. The current
+/// state — idle / draft (initial or reorganize) / organized — is a
+/// function of the model.
+///
+/// **Single sheet binding.** One `@State activeSheet: ActiveSheet?`
+/// drives `.sheet(item:)`. Multi-`.sheet(isPresented:)` stacking was
+/// the cause of the rise-and-fall race (June 12 2026): each modifier
+/// fights for the same UIViewController stack, and a sibling cover
+/// (the AppendFAB voice capture, or the TutorialAutoFireOverlay) wins
+/// arbitration while the new sheet is mid-animation. `.sheet(item:)`
+/// with a unique id per sheet kind lets SwiftUI serialize cleanly.
+///
+/// **Dismiss = decide later (spec §8.0 June 12).** Closing the
+/// Reorganize sheet without committing leaves the draft as `isReviewed
+/// == false`. The same `Review draft` button re-opens it. The only
+/// ways a draft goes away are (a) commit via `Keep this version`, or
+/// (b) `Reorganize again` from inside the sheet, which replaces it.
 struct OrganizeMemorySection: View {
     let entryID: UUID
     var onOrganize: () -> Void
-    @Binding var unfolded: Bool  // Kept for EntryExpandedView API compat; unused after the AISuggestionsCard retirement.
 
     @ObservedObject private var entitlement = Entitlement.shared
     @FetchRequest private var entries: FetchedResults<JournalEntry>
-    @State private var showReviewSheet = false
-    @State private var showReorganizeSheet = false
-    @State private var showPricing = false
+
+    /// Reference to the currently-presented review sheet host, if
+    /// any. Manual UIKit presentation pattern (Path B, 2026-06-13):
+    /// SwiftUI's `.fullScreenCover(item:)` and `.sheet(item:)` both
+    /// fire `present()` TWICE during the iOS 26 binding-flip body
+    /// re-evaluation — verified via swizzled UIViewController logs
+    /// showing the second `present()` call from
+    /// `SwiftUI.Update.dispatchActions()` after a SwiftUI-internal
+    /// `dismiss()` on the navigation hosting controller. The first
+    /// present succeeds, occupies UIKit's `_presentedViewController`
+    /// slot, the second is refused with "Attempt to present X on Y
+    /// which is already presenting Z" — and Z is our own first PHC.
+    /// Bypassing SwiftUI's modifier and presenting via UIKit directly
+    /// avoids the double-fire entirely.
+    @State private var presentedHost: UIHostingController<AnyView>?
+
     @State private var c1HasShown = UpgradeNudgeFlags.c1HasShown
+
     /// Reorganize in flight — disables the affordance and surfaces a
     /// spinner alongside the chip.
     @State private var isReorganizing = false
-    /// Captured before firing a reorganize pass — the *previous* pass's
-    /// summary, shown as "Current · kept" on the Reorganize sheet
-    /// (since `entry.latestOrganizePass` becomes the *new* pass once
-    /// processReorganize commits).
-    @State private var capturedCurrentSummary: String = ""
 
     init(
         entryID: UUID,
-        unfolded: Binding<Bool>,
         onOrganize: @escaping () -> Void
     ) {
         self.entryID = entryID
-        self._unfolded = unfolded
         self.onOrganize = onOrganize
         let request: NSFetchRequest<JournalEntry> = NSFetchRequest(entityName: "JournalEntry")
         request.predicate = NSPredicate(format: "id == %@", entryID as CVarArg)
@@ -49,6 +63,8 @@ struct OrganizeMemorySection: View {
         request.fetchLimit = 1
         _entries = FetchRequest(fetchRequest: request)
     }
+
+    // MARK: - Derived state
 
     private var entry: JournalEntry? { entries.first }
     private var pass: OrganizePass? { entry?.latestOrganizePass }
@@ -60,243 +76,234 @@ struct OrganizeMemorySection: View {
         }
     }
 
-    var body: some View {
-        Group {
-            if let entry, let pass {
-                organizedView(pass: pass, entry: entry)
-            } else if entry != nil {
-                OrganizeMemoryCard(
-                    state: .idle,
-                    onOrganize: onOrganize,
-                    isProcessing: isProcessing
-                )
-            } else {
-                EmptyView()
-            }
-        }
-        .sheet(isPresented: $showReviewSheet) {
-            if let entry, let pass {
-                DraftReviewSheet(
-                    pass: pass,
-                    entry: entry,
-                    onDismiss: { showReviewSheet = false }
-                )
-                .presentationDetents([.large])
-            }
-        }
-        .sheet(isPresented: $showReorganizeSheet, onDismiss: handleReorganizeSheetDismissed) {
-            if let entry, let pass {
-                ReorganizeReviewSheet(
-                    currentTitle: entry.title ?? "",
-                    newTitle: pass.suggestedTitle ?? "",
-                    currentSummary: capturedCurrentSummary,
-                    newSummary: pass.summaryText ?? "",
-                    onKeep: handleReorganizeKeep,
-                    onReorganizeAgain: handleReorganizeAgain,
-                    onDismiss: { showReorganizeSheet = false }
-                )
-                .presentationDetents([.large])
-            }
-        }
-        .sheet(isPresented: $showPricing) {
-            PricingView()
-        }
+    /// The previously-accepted summary string (or empty if no accept
+    /// ever happened). Non-empty iff this entry has lived through at
+    /// least one initial-Organize commit — so a fresh draft on top of
+    /// this means the user is in the Reorganize lifecycle.
+    private var acceptedSummary: String {
+        entry?.summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
-    // MARK: - Organized view
+    /// Single source of truth for what to render. Every branch in the
+    /// body reads `aiState`; nothing else mirrors the model.
+    private var aiState: AIState {
+        guard let entry else { return .missing }
+        guard let pass else { return .idle }
+        if pass.isReviewed {
+            return .organized(pass: pass, entry: entry, stale: isStale)
+        }
+        let kind: DraftKind = acceptedSummary.isEmpty ? .initial : .reorganize
+        return .draftReviewing(pass: pass, entry: entry, kind: kind)
+    }
 
+    // MARK: - Body
+
+    var body: some View {
+        Group {
+            switch aiState {
+            case .missing:
+                EmptyView()
+            case .idle:
+                OrganizeMemoryCard(state: .idle, onOrganize: onOrganize, isProcessing: isProcessing)
+            case .draftReviewing(let pass, _, _):
+                organizedRow(pass: pass)
+            case .organized(let pass, let entry, let stale):
+                organizedRow(pass: pass, entry: entry, stale: stale)
+            }
+        }
+        // NO `.fullScreenCover(item:)` or `.sheet(item:)` here —
+        // those modifiers fire `present()` twice on iOS 26 during the
+        // binding-flip body re-evaluation cycle (see `presentedHost`
+        // doc for the full diagnosis). All review-sheet presentations
+        // go through manual UIKit via `presentInitialReview()`,
+        // `presentReorganizeReview()`, and `presentPricing()`.
+        .onAppear { attemptOrganizingTutorial() }
+    }
+
+    // MARK: - Organized row (chip + action button + nudge + stale)
+
+    /// Status chip + the one primary action of the moment. Per the
+    /// June 8 2026 affordance lock: one button per surface, ochre = you,
+    /// blue = the AI. Reorganize is blue (rank-3 bordered) only on the
+    /// reviewed state; Review draft is blue (rank-1 filled) only on
+    /// the unreviewed state.
     @ViewBuilder
-    private func organizedView(pass: OrganizePass, entry: JournalEntry) -> some View {
-        // The summary and topic chips are rendered at the *top* of the
-        // page by `EntryExpandedView.summarySection` / `topicChipsRow`
-        // per `AI Organize · spec.md` §7.A. This section is just the
-        // chip, the Reorganize affordance, and the review/stale/C1
-        // hooks — no body content. Rendering body content here too
-        // produced the duplicate summary + topic chip Tom flagged
-        // 2026-06-06.
-        VStack(alignment: .leading, spacing: 10) {
+    private func organizedRow(pass: OrganizePass, entry: JournalEntry? = nil, stale: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 9) {
-                Button {
-                    if !pass.isReviewed { showReviewSheet = true }
-                } label: {
-                    OrganizedChip(pass: pass)
-                }
-                .buttonStyle(.plain)
-                .disabled(pass.isReviewed)
-
-                if !pass.isReviewed {
-                    Circle()
-                        .stroke(Crucible.Color.aiBlue, lineWidth: 1.5)
-                        .frame(width: 7, height: 7)
-                    Text("unreviewed")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Crucible.Color.ink3)
-                }
+                OrganizedChip(pass: pass)
                 Spacer(minLength: 0)
-                if pass.isReviewed {
+                if pass.isReviewed, let entry {
                     reorganizeButton(entry: entry)
                 }
             }
-
             if !pass.isReviewed {
-                Button {
-                    showReviewSheet = true
-                } label: {
-                    Text("Tap to review & keep →")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.aiBlue)
-                }
-                .buttonStyle(.plain)
+                reviewDraftButton
             }
-
-            if pass.isReviewed && isStale {
+            if pass.isReviewed, stale, let entry {
                 staleBanner(newClips: entry.clipsAddedSinceLastOrganize)
             }
-
-            // C1 · After-a-glance nudge. Shown once-ever to Free
-            // users right after they review their first draft —
-            // never again inline. Per pricing-screens-upgrade.jsx.
-            if pass.isReviewed && !entitlement.isPlus && !c1HasShown {
-                AfterAGlanceNudge(
-                    onSeePlus: handleSeePlus,
-                    onNotNow: handleNudgeDismiss
-                )
-                .onAppear {
-                    // Reading the nudge counts as "shown"; the flag
-                    // sticks across launches via UserDefaults.
-                    UpgradeNudgeFlags.markC1Shown()
-                }
-                Text("Shown once. Never again inline.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(Crucible.Color.ink3)
-                    .frame(maxWidth: .infinity)
+            if pass.isReviewed, !entitlement.isPlus, !c1HasShown {
+                AfterAGlanceNudge(onSeePlus: handleSeePlus, onNotNow: handleNudgeDismiss)
+                    .onAppear { UpgradeNudgeFlags.markC1Shown() }
             }
         }
     }
 
-    // MARK: - Reorganize affordance
+    // MARK: - Manual UIKit presentation (Path B)
 
+    /// Walks every active scene's key window down to the deepest
+    /// presented controller, returning the controller that any new
+    /// modal should be presented from.
+    private static func topPresentingController() -> UIViewController? {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene,
+                  windowScene.activationState == .foregroundActive else { continue }
+            for window in windowScene.windows where window.isKeyWindow {
+                guard let root = window.rootViewController else { continue }
+                var top = root
+                while let presented = top.presentedViewController { top = presented }
+                return top
+            }
+        }
+        return nil
+    }
+
+    /// Presents `DraftReviewSheet` for the initial-organize draft.
+    /// The host's `onDismiss` is captured into the sheet so explicit
+    /// dismiss paths ("Looks good", "Edit", swipe-down) route through
+    /// UIKit's `dismiss(animated:)` — exactly one `present()`, exactly
+    /// one `dismiss()`, no SwiftUI modifier in between.
+    private func presentInitialReview() {
+        guard let entry, let pass else { return }
+        var hostRef: UIHostingController<AnyView>?
+        let dismissHost: () -> Void = { hostRef?.dismiss(animated: true) }
+        let host = UIHostingController(rootView: AnyView(
+            DraftReviewSheet(pass: pass, entry: entry, onDismiss: dismissHost)
+        ))
+        hostRef = host
+        host.modalPresentationStyle = .pageSheet
+        if let sheet = host.sheetPresentationController {
+            sheet.detents = [.large()]
+        }
+        presentedHost = host
+        Self.topPresentingController()?.present(host, animated: true)
+    }
+
+    /// Presents `ReorganizeReviewSheet` for the before/after comparison.
+    /// `onKeep` wraps `handleReorganizeKeep` with a dismiss; the
+    /// commit/dismiss order matters because `commitReorganize` mutates
+    /// the pass's `dismissedAt` (flipping `isReviewed` true) and we
+    /// want the sheet visually gone before the body re-renders the
+    /// `Organized` state.
+    private func presentReorganizeReview() {
+        guard let entry, let pass else { return }
+        var hostRef: UIHostingController<AnyView>?
+        let dismissHost: () -> Void = { hostRef?.dismiss(animated: true) }
+        let host = UIHostingController(rootView: AnyView(
+            ReorganizeReviewSheet(
+                currentTitle: entry.title ?? "",
+                newTitle: pass.suggestedTitle ?? "",
+                currentSummary: acceptedSummary,
+                newSummary: pass.summaryText ?? "",
+                onKeep: { titleChoice, summaryChoice in
+                    handleReorganizeKeep(
+                        titleChoice: titleChoice,
+                        summaryChoice: summaryChoice
+                    )
+                    dismissHost()
+                },
+                onReorganizeAgain: { handleReorganizeAgain(dismissCurrentHost: dismissHost) },
+                onDismiss: dismissHost
+            )
+        ))
+        hostRef = host
+        host.modalPresentationStyle = .pageSheet
+        if let sheet = host.sheetPresentationController {
+            sheet.detents = [.large()]
+        }
+        presentedHost = host
+        Self.topPresentingController()?.present(host, animated: true)
+    }
+
+    /// Presents the Plus upgrade sheet (C1 nudge → See plans).
+    private func presentPricing() {
+        var hostRef: UIHostingController<AnyView>?
+        let dismissHost: () -> Void = { hostRef?.dismiss(animated: true) }
+        _ = dismissHost  // PricingView manages its own dismiss via Environment
+        let host = UIHostingController(rootView: AnyView(PricingView()))
+        hostRef = host
+        host.modalPresentationStyle = .pageSheet
+        if let sheet = host.sheetPresentationController {
+            sheet.detents = [.large()]
+        }
+        presentedHost = host
+        Self.topPresentingController()?.present(host, animated: true)
+    }
+
+    // MARK: - Buttons
+
+    /// Blue rank-1 primary — opens the appropriate review sheet for
+    /// the current draft kind. Same affordance for both initial and
+    /// reorganize drafts (spec §8.0 June 12: "the standard Stage-2
+    /// affordance is present to re-open the same sheet").
+    private var reviewDraftButton: some View {
+        Button(action: openReviewSheet) {
+            HStack(spacing: 7) {
+                Text("Review draft")
+                    .font(.system(size: 15.5, weight: .semibold))
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 50)
+            .background(Crucible.Color.aiBlue)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Review draft")
+        .accessibilityHint("Open the AI organize draft for review")
+    }
+
+    /// Rank-3 tertiary AI button — bordered blue pill. Spinner replaces
+    /// the sparkle while a reorganize pass is in flight.
     @ViewBuilder
     private func reorganizeButton(entry: JournalEntry) -> some View {
         Button {
             handleReorganizeTap(entry: entry)
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
+                Text(isReorganizing ? "Working…" : "Reorganize with AI")
+                    .font(.system(size: 13, weight: .semibold))
                 if isReorganizing {
                     ProgressView()
                         .controlSize(.mini)
                         .tint(Crucible.Color.aiBlue)
                 } else {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .semibold))
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                Text(isReorganizing ? "Working…" : "Reorganize")
-                    .font(.system(size: 12.5, weight: .semibold))
             }
             .foregroundStyle(Crucible.Color.aiBlue)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .frame(minHeight: 44)
+            .overlay(
+                RoundedRectangle(cornerRadius: 22)
+                    .strokeBorder(Crucible.Color.aiBlue, lineWidth: 1.5)
+            )
         }
         .buttonStyle(.plain)
         .disabled(isReorganizing)
-        .accessibilityLabel(isReorganizing ? "Reorganizing" : "Reorganize this memory")
+        .accessibilityLabel(isReorganizing ? "Reorganizing" : "Reorganize with AI")
     }
 
-    private func handleReorganizeTap(entry: JournalEntry) {
-        guard let currentPass = pass else { return }
-        // Capture the visible summary BEFORE the new pass overwrites
-        // `latestOrganizePass`. The Reorganize sheet shows this as
-        // "Current · kept" alongside the new pass's summary.
-        capturedCurrentSummary = currentPass.summaryText ?? ""
-        isReorganizing = true
-        Task { @MainActor in
-            await ProcessingEngine.shared.processReorganize(entry)
-            isReorganizing = false
-            showReorganizeSheet = true
-        }
-    }
-
-    /// Commits the user's per-field choices via
-    /// `OrganizePass.commitReorganize` (the pure value-shuffle) then
-    /// saves. See that method's docstring for the per-field contract.
-    private func handleReorganizeKeep(titleChoice: ReorgFieldChoice, summaryChoice: ReorgFieldChoice) {
-        guard let entry, let pass else { return }
-        let ctx = pass.managedObjectContext ?? StorageService.shared.viewContext
-        ctx.performAndWait {
-            pass.commitReorganize(
-                on: entry,
-                titleChoice: titleChoice,
-                summaryChoice: summaryChoice,
-                previousSummary: capturedCurrentSummary
-            )
-            try? ctx.save()
-        }
-        showReorganizeSheet = false
-    }
-
-    /// "Reorganize again" — fires another reorganize pass. The previous
-    /// "new" pass (the one the user just rejected by tapping again) is
-    /// discarded after the next pass lands, per `AI Organize · spec.md`
-    /// §8.0: *"Reorganize replaces the draft; it never branches. There
-    /// is never a stored v1 vs v2."*
-    ///
-    /// Discard order matters: we let the new pass write *first*, then
-    /// delete the old, so `latestOrganizePass` never falls back to the
-    /// previous committed pass during the transition (which would
-    /// briefly mis-render the sheet's "new" half).
-    private func handleReorganizeAgain() {
-        guard let entry, let pass else { return }
-        // The pass shown as "new" in this round becomes the "current"
-        // for the next round.
-        capturedCurrentSummary = pass.summaryText ?? ""
-        let supersededID = pass.objectID
-        isReorganizing = true
-        Task { @MainActor in
-            await ProcessingEngine.shared.processReorganize(entry)
-            await discardPass(objectID: supersededID)
-            isReorganizing = false
-        }
-    }
-
-    /// Called when the Reorganize sheet finishes presenting. If the
-    /// user committed (Keep this version), `handleReorganizeKeep` will
-    /// have marked the latest pass reviewed before this fires — that
-    /// pass is kept. If the user dismissed without committing (X, swipe
-    /// down, or any other cancel path), the latest pass is an orphan
-    /// draft and gets discarded so the memory returns cleanly to its
-    /// prior Organized state.
-    private func handleReorganizeSheetDismissed() {
-        guard let pass, !pass.isReviewed else { return }
-        let id = pass.objectID
-        Task { @MainActor in
-            await discardPass(objectID: id)
-        }
-    }
-
-    /// Pure discard helper. No-op if the object can't be resolved
-    /// (already deleted, or merged out from under us).
-    private func discardPass(objectID: NSManagedObjectID) async {
-        let ctx = StorageService.shared.viewContext
-        await ctx.perform {
-            if let toDelete = try? ctx.existingObject(with: objectID) {
-                ctx.delete(toDelete)
-                try? ctx.save()
-            }
-        }
-    }
-
-    private func handleSeePlus() {
-        c1HasShown = true
-        UpgradeNudgeFlags.markC1Shown()
-        showPricing = true
-    }
-
-    private func handleNudgeDismiss() {
-        c1HasShown = true
-        UpgradeNudgeFlags.markC1Shown()
-    }
+    // MARK: - Stale banner
 
     @ViewBuilder
     private func staleBanner(newClips: Int) -> some View {
-        Button(action: handleRefresh) {
+        Button(action: onOrganize) {
             HStack(spacing: 10) {
                 Text(staleText(newClips: newClips))
                     .font(.system(size: 12.5))
@@ -319,11 +326,152 @@ struct OrganizeMemorySection: View {
     }
 
     private func staleText(newClips: Int) -> String {
-        if newClips == 1 { return "1 new clip since this was organized" }
-        return "\(newClips) new clips since this was organized"
+        newClips == 1
+            ? "1 new clip since this was organized"
+            : "\(newClips) new clips since this was organized"
     }
 
-    private func handleRefresh() {
-        onOrganize()
+    // MARK: - Actions
+
+    /// Routes the Review-draft tap to the right manual UIKit
+    /// presentation. Single `present()` call → no double-fire race.
+    private func openReviewSheet() {
+        guard case .draftReviewing(_, _, let kind) = aiState else { return }
+        switch kind {
+        case .initial:    presentInitialReview()
+        case .reorganize: presentReorganizeReview()
+        }
     }
+
+    private func handleReorganizeTap(entry: JournalEntry) {
+        isReorganizing = true
+        Task { @MainActor in
+            await ProcessingEngine.shared.processReorganize(entry)
+            isReorganizing = false
+            guard self.entry != nil, self.pass != nil else { return }
+            // Auto-open the comparison sheet per spec §8.0.
+            presentReorganizeReview()
+        }
+    }
+
+    private func handleReorganizeKeep(titleChoice: ReorgFieldChoice, summaryChoice: ReorgFieldChoice) {
+        guard let entry, let pass else { return }
+        // `acceptedSummary` is the live previously-accepted value —
+        // it's what the user has been looking at as the "Current"
+        // column. Passing it as `previousSummary` lets
+        // `commitReorganize` write it back to `pass.summaryText` if
+        // the user kept the current summary.
+        let previousSummary = acceptedSummary
+        let ctx = pass.managedObjectContext ?? StorageService.shared.viewContext
+        ctx.performAndWait {
+            pass.commitReorganize(
+                on: entry,
+                titleChoice: titleChoice,
+                summaryChoice: summaryChoice,
+                previousSummary: previousSummary
+            )
+            try? ctx.save()
+        }
+        // Dismiss handled by the closure-wrapper at the call site
+        // (see `presentReorganizeReview`), not here.
+    }
+
+    /// "Reorganize again" from inside the sheet. The current sheet
+    /// renders frozen at construction time (manual UIKit presentation
+    /// doesn't reactively update its `rootView` like SwiftUI's
+    /// `.sheet(item:)` would), so we explicitly dismiss + re-present
+    /// after the new pass lands so the user sees the fresh
+    /// before/after instead of stale snapshot.
+    ///
+    /// Discard order matters: we let the new pass write *first*, then
+    /// delete the superseded one, so `latestOrganizePass` never falls
+    /// back to a stale pass during the transition.
+    private func handleReorganizeAgain(dismissCurrentHost: @escaping () -> Void) {
+        guard let entry, let pass else { return }
+        let supersededID = pass.objectID
+        isReorganizing = true
+        Task { @MainActor in
+            await ProcessingEngine.shared.processReorganize(entry)
+            await discardPass(objectID: supersededID)
+            isReorganizing = false
+            // Tear down the stale-content host, then re-present with
+            // the fresh values. The brief dismiss-then-present
+            // animation is acceptable for the deliberate
+            // "Reorganize again" path.
+            dismissCurrentHost()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                guard self.entry != nil, self.pass != nil else { return }
+                presentReorganizeReview()
+            }
+        }
+    }
+
+    /// Pure discard helper. Used only by `handleReorganizeAgain` to
+    /// remove the superseded draft after a fresh pass lands. No-op if
+    /// the object can't be resolved (already deleted, or merged out
+    /// from under us).
+    private func discardPass(objectID: NSManagedObjectID) async {
+        let ctx = StorageService.shared.viewContext
+        await ctx.perform {
+            if let toDelete = try? ctx.existingObject(with: objectID) {
+                ctx.delete(toDelete)
+                try? ctx.save()
+            }
+        }
+    }
+
+    private func handleSeePlus() {
+        c1HasShown = true
+        UpgradeNudgeFlags.markC1Shown()
+        presentPricing()
+    }
+
+    private func handleNudgeDismiss() {
+        c1HasShown = true
+        UpgradeNudgeFlags.markC1Shown()
+    }
+
+    // MARK: - Tutorial trigger
+
+    /// Tutorial #2 (Organizing). Currently fires from `.onAppear`
+    /// only — i.e. when the section first lands and the user is
+    /// looking at a `draftReviewing` state. Free path defers (no draft
+    /// at appear time; the orchestrator's once-each guarantee re-fires
+    /// at the next memory that already has a draft on appear).
+    ///
+    /// **Deviation from `Tutorials · triggers spec.md`.** The spec
+    /// says the Free trigger fires after the first Organize tap,
+    /// before the review sheet opens — i.e. the tutorial chains into
+    /// the review. The chain-on-dismiss path is a real product call
+    /// (CD's preference) but requires a completion hook on
+    /// `TutorialOrchestrator` and is not yet built. Until then the
+    /// Free path's first organize is untaught; the orchestrator
+    /// surfaces the lesson on the next memory's appear.
+    ///
+    /// Suppressed if `activeSheet != nil` — never overlap a tutorial
+    /// with a review sheet.
+    private func attemptOrganizingTutorial() {
+        guard case .draftReviewing = aiState else { return }
+        // We no longer guard on a SwiftUI sheet binding since the
+        // manual UIKit presentation path doesn't expose one. The
+        // tutorial only fires from `.onAppear`, which runs before
+        // the user's tap, so there's no race to defend against.
+        TutorialOrchestrator.shared.tryFire(.organizing)
+    }
+
+}
+
+// MARK: - AIState
+
+/// One enum, four cases — the spec's §9 state table in code form.
+private enum AIState {
+    case missing
+    case idle
+    case draftReviewing(pass: OrganizePass, entry: JournalEntry, kind: DraftKind)
+    case organized(pass: OrganizePass, entry: JournalEntry, stale: Bool)
+}
+
+private enum DraftKind {
+    case initial    // first organize on this entry — DraftReviewSheet
+    case reorganize // user has previously accepted a pass — ReorganizeReviewSheet
 }

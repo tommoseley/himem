@@ -32,6 +32,12 @@ function App() {
       title="Voice Composer · on a roll on phone"
       subtitle="Phone capture surface — direct voice + append. Mirrors the Watch canonical recording UI. Mic never pauses across Next."
     >
+      <DCSection id="first-run" title="First-run tutorial (shown once)" subtitle="Before the very first recording. Teaches what capture is, the Next / on-a-roll behavior the button can't explain, and that the Apple Watch records too. Dismissed with Start recording; re-findable in Settings.">
+        <DCArtboard id="vc-tutorial" label="First recording · tutorial overlay" width={340} height={735}>
+          <ScrVCFirstRunTutorial />
+        </DCArtboard>
+      </DCSection>
+
       <DCSection id="proposal" title="Proposal · tight cluster + live transcript (May 25 2026)" subtitle="Pulls REC + timer + waveform into one tight upper-cluster; anchors the on-a-roll state line directly below the waveform; adds a live-transcribed Source Serif italic phrase below — Crucible's audio-as-hero principle made literal. Below sit the existing layouts for comparison.">
         <DCArtboard id="tight-empty" label="Empty · 0:03 · Listening…" width={340} height={735}>
           <ScrVCTightEmpty />

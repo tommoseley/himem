@@ -25,6 +25,7 @@
 <script type="text/babel" src="crucible-primitives.jsx"></script>
 <script type="text/babel" src="screens-projects.jsx"></script>
 <script type="text/babel" src="screens-projects-cards.jsx"></script>
+<script type="text/babel" src="screens-memories.jsx"></script>
 <script type="text/babel" src="screens-projects-views.jsx"></script>
 <script type="text/babel" src="screens-projects-edit.jsx"></script>
 <script type="text/babel" src="screens-projects-spec.jsx"></script>
@@ -34,22 +35,19 @@ function App() {
   return (
     <DesignCanvas
       title="HiMem · Projects — MVP"
-      subtitle="The smallest project system that feels intentional. Four screens: the tab, the detail before and after Project Assist, and the Plus upsell."
+      subtitle="The smallest project system that feels intentional. Four screens: the tab, the detail before and after Project Assist, and the suggested-memories review."
     >
       <DCSection id="mvp" title="MVP project system" subtitle="iPhone · Crucible · May 2026">
         <DCArtboard id="list" label="1. Projects tab" width={340} height={735}>
           <ScrProjectsList />
         </DCArtboard>
-        <DCArtboard id="pre" label="2. Detail · before" width={340} height={735}>
-          <ScrProjectPreCoalesce />
+        <DCArtboard id="pre" label="2. Detail · before Find the thread" width={340} height={735}>
+          <ScrProjectDetail />
         </DCArtboard>
         <DCArtboard id="post" label="3. Detail · summarized" width={340} height={735}>
-          <ScrProjectPostCoalesce />
+          <ScrProjectSummarized />
         </DCArtboard>
-        <DCArtboard id="upsell" label="4. Project Assist · Free upsell" width={340} height={735}>
-          <ScrCoalesceUpsell />
-        </DCArtboard>
-        <DCArtboard id="suggestions" label="5. Suggested memories · review" width={340} height={735}>
+        <DCArtboard id="suggestions" label="4. Suggested memories · review" width={340} height={735}>
           <ScrSuggestionsReview />
         </DCArtboard>
       </DCSection>
@@ -112,7 +110,7 @@ function RulesPanel() {
       <div style={cell}>
         <div style={eyebrow}>Project Assist · “Find the thread”</div>
         <div style={body}>
-          Owner-initiated. One AI assist per pass produces <strong>two outputs</strong>:
+          Owner-initiated. One pass produces <strong>two outputs</strong>:
           (1) a single Honest-Label paragraph in second-person voice — the project summary;
           (2) a short list of <strong>suggested memories</strong> from elsewhere in the library that may belong here.
           Activates at ≥ 1 memory. Suggestions are proposals — nothing auto-adds.
@@ -143,12 +141,14 @@ function RulesPanel() {
       <div style={cell}>
         <div style={eyebrow}>Tier</div>
         <div style={body}>
-          <strong>Free</strong> gets 3 active projects <em>and</em> 1 free Project Assist run — separate
-          from the 3 starter memory assists, so projects don't feel like they're stealing from capture. The
-          starter run is <strong>loud, not silent</strong>: a <em>Starter · free</em> label marks the first
-          <em>Find the thread</em> so the user knows they're spending their one free pass. The upsell fires
-          on the second run. <strong>Plus / Founders</strong> get unlimited projects and assists from
-          the 50/month allowance. Studio (post-MVP) reads raw fragments + cross-project + structured output.
+          Project Assist is the <strong>Connect capability — a Plus feature</strong>: it's how projects
+          <em> grow themselves</em>. <strong>Free</strong> builds up to <strong>3 projects by hand</strong>
+          — create, add/remove memories, title, goal, browse, search-within — all free. <strong>Plus</strong>
+          adds the growing-itself intelligence: Find the thread synthesis, related memories, suggested
+          membership, cross-project. No assists, no quota, no per-run counting — the gate is the
+          intelligence, not a count. (A one-time Free <em>taste</em> of Find the thread, if offered, is a
+          trial flag decided in the pricing doc.) Studio (post-launch) reads raw fragments + cross-project
+          + structured output.
         </div>
       </div>
 

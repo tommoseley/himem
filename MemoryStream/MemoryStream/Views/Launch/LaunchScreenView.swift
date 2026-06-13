@@ -18,6 +18,20 @@ struct LaunchScreenView: View {
     @State private var showFooter = false
     @State private var wordmarkExpanded = false
 
+    /// Wall-clock when the splash first appeared. Used to enforce a
+    /// minimum visible duration for the "Good afternoon, Tom" /
+    /// "HiMem" wordmark moment per Tom's 2026-06-08 note ("we zoom
+    /// right by the welcome screen — keep it visible at least 1
+    /// second"). Storage can load in <100ms on a warm cold-launch,
+    /// which previously made the splash flash by before the user
+    /// could read it.
+    @State private var appearedAt: Date = .distantPast
+    /// Minimum time the splash stays visible after `onAppear`,
+    /// regardless of how fast storage loads. 1.5s per Tom's
+    /// 2026-06-08 note — the bumped value gives the epigraph
+    /// (~470ms after appear) a clean ~1s read window.
+    private let minimumDisplaySeconds: TimeInterval = 1.5
+
     // Design tokens — aliased from the Crucible catalog so launch
     // animations adapt to dark mode automatically when Phase 4
     // exposes it.
@@ -149,7 +163,10 @@ struct LaunchScreenView: View {
             .padding(.horizontal, 28)
             .padding(.bottom, 36)
         }
-        .onAppear { runChoreography() }
+        .onAppear {
+            appearedAt = Date()
+            runChoreography()
+        }
     }
 
     // MARK: - Choreography: ~1500ms sequence
@@ -296,10 +313,21 @@ struct LaunchScreenView: View {
         // rewrite happens off the main queue and re-runs next launch
         // if interrupted. See `MediaReferenceUbiquityMigration`.
         MediaReferenceUbiquityMigration.scheduleIfNeeded(in: StorageService.shared)
-        if FragmentMigration.hasCompleted { return }
+        // Run both Core Data migrations on the same background context.
+        // Each has its own UserDefaults-backed completion flag and is a
+        // cheap no-op when its flag is set, so we don't need an outer
+        // gate any more — the old `FragmentMigration.hasCompleted`
+        // early-exit would have silently skipped `SummaryFieldMigration`
+        // for devices that completed v5 before the new migration shipped.
         let context = StorageService.shared.backgroundContext()
         context.perform {
             FragmentMigration.runIfNeeded(in: context)
+            // Backfill `JournalEntry.summary` from the latest accepted
+            // `OrganizePass.summaryText` so the unified-editing model
+            // has a canonical working value to display + edit (Tom
+            // 2026-06-09). Same context, same CloudKit-import-settled
+            // window.
+            SummaryFieldMigration.runIfNeeded(in: context)
         }
     }
 
@@ -310,20 +338,28 @@ struct LaunchScreenView: View {
         syncDone = true
         withAnimation(.easeInOut(duration: 0.3)) { syncProgress = 1.0 }
 
-        // Cold-launch fix 2026-06-02: dismiss splash immediately rather
-        // than holding for the 1.4s sequential brand moment (0.3s "Ready"
-        // hold + 0.6s wordmark expand + 0.5s "HiMemories!" read pause).
-        // That hold was pure UX delay tacked onto the front of every cold
-        // launch — exactly what poisons the 400ms-to-interactive target.
-        // The wordmark expand still fires so the brand moment plays out
-        // during the fade-out animation; users see "HiMemories!" flash as
-        // the splash dissolves into the feed. See
-        // feedback_cold_launch_target memory.
-        withAnimation(.easeInOut(duration: 0.6)) {
-            wordmarkExpanded = true
-        }
-        withAnimation(.easeInOut(duration: 0.3)) {
-            onComplete()
+        // Cold-launch fix 2026-06-02: dismiss splash immediately
+        // rather than holding for the 1.4s sequential brand moment
+        // ("Ready" hold + wordmark expand + read pause). That hold
+        // was pure UX delay tacked onto the front of every cold
+        // launch — exactly what poisons the 400ms-to-interactive
+        // target.
+        //
+        // 2026-06-08 — Tom flagged the splash flashing by too fast
+        // for users to read "Good afternoon, [name]" + HiMem. We
+        // now enforce a **minimum 1.0s display** so the welcome
+        // is actually visible, while preserving the no-extra-hold
+        // behavior for slow storage loads (storage takes >1s →
+        // dismiss as soon as it's ready, no extra delay).
+        let elapsed = Date().timeIntervalSince(appearedAt)
+        let remaining = max(0, minimumDisplaySeconds - elapsed)
+        DispatchQueue.main.asyncAfter(deadline: .now() + remaining) {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                wordmarkExpanded = true
+            }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                onComplete()
+            }
         }
     }
 }

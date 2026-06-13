@@ -192,6 +192,30 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Writes a user tap-to-edit to `JournalEntry.summary` and flips
+    /// the `summaryUserEdited` marker on. Spec: `Memory Detail · unified
+    /// editing model.md` §"Where an edited summary lives" (Tom 2026-06-09).
+    /// Empty string clears the summary entirely.
+    ///
+    /// The marker is the load-bearing piece: once true, a Plus
+    /// automatic Reorganize pass must not silently overwrite the
+    /// summary (`ProcessingEngine` honors this on the auto path).
+    /// Manual Reorganize is already safe — it routes through the
+    /// review sheet which defaults to current. Editing here never
+    /// reverts the "Organized" chip → "Draft organized"; per spec,
+    /// editing is an improvement, not an un-organizing.
+    func updateSummary(entryId: UUID, summary: String) {
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            entry.summary = trimmed.isEmpty ? nil : trimmed
+            entry.summaryUserEdited = true
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
     /// Updates a voice MediaReference's transcript and regenerates the
     /// parent entry's joined content. Used by per-panel inline editing of
     /// transcripts in the chronological capture stream.
@@ -205,6 +229,71 @@ final class EntryLifecycleService {
             ref.lastEditedAt = Date()
             try storage.save(context: storage.viewContext)
             regenerateContent(forEntryId: entryId)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    /// Removes a single ExtractedEntity by id. Used by the inline
+    /// mention chip's edit state — tap ✕ removes one chip from the
+    /// entry's mention row without going through the legacy global
+    /// edit-mode flush.
+    func removeMention(entityId: UUID, entryId: UUID) {
+        do {
+            let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
+            request.predicate = NSPredicate(format: "id == %@", entityId as CVarArg)
+            request.fetchLimit = 1
+            if let entity = try storage.viewContext.fetch(request).first {
+                storage.viewContext.delete(entity)
+                try storage.save(context: storage.viewContext)
+            }
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    /// Renames an ExtractedEntity in place. Used by the inline
+    /// mention chip's edit state — typing a new label and tapping away
+    /// (or hitting Return) commits via this path. Empty `newValue` is
+    /// treated as a removal (matches the ✕ semantic per the spec's
+    /// empty-commit rule).
+    func renameMention(entityId: UUID, newValue: String, entryId: UUID) {
+        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            removeMention(entityId: entityId, entryId: entryId)
+            return
+        }
+        do {
+            let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
+            request.predicate = NSPredicate(format: "id == %@", entityId as CVarArg)
+            request.fetchLimit = 1
+            guard let entity = try storage.viewContext.fetch(request).first else { return }
+            entity.value = trimmed
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    /// Creates a new ExtractedEntity under the entry. Used by the
+    /// dashed "+ Add" affordance next to the mention chips — the user
+    /// types a label, taps away, and the entity is persisted with the
+    /// default `.idea` type (the catch-all dot color for user-typed
+    /// mentions; the AI-extracted entities own person/project/issue).
+    func addMention(value: String, entryId: UUID) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return }
+            _ = try storage.createEntity(
+                entryId: entryId,
+                type: .idea,
+                value: trimmed,
+                confidence: 1.0,
+                method: "user",
+                entry: entry
+            )
+            try storage.save(context: storage.viewContext)
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }
@@ -308,6 +397,7 @@ final class EntryLifecycleService {
         content: String,
         inputType: JournalEntry.InputType,
         voiceFilename: String? = nil,
+        voiceCapturedAt: Date? = nil,
         mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = [],
         topicName: String? = nil
     ) -> UUID? {
@@ -318,12 +408,16 @@ final class EntryLifecycleService {
 
             // Voice clips from the in-app FAB recorder land as a `.voice`
             // MediaReference — same shape as Contribute Mode + watch
-            // promotions.
+            // promotions. `voiceCapturedAt` is the orchestrator-supplied
+            // per-clip wall-clock (master start + Next-tap offset for
+            // this clip). Falls back to `Date()` for legacy single-clip
+            // callers that don't yet thread it.
             if let voiceFilename, !voiceFilename.isEmpty {
                 _ = try storage.createVoiceFragment(
                     for: entry,
                     audioFilename: voiceFilename,
-                    transcript: content
+                    transcript: content,
+                    createdAt: voiceCapturedAt ?? Date()
                 )
                 // Re-derive `entry.content` from the just-created
                 // voice fragment so it matches the cleaned text. The
@@ -460,6 +554,7 @@ final class EntryLifecycleService {
         entryId: UUID,
         additionalContent: String,
         voiceFilename: String? = nil,
+        voiceCapturedAt: Date? = nil,
         mediaCaptures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
     ) {
         do {
@@ -487,7 +582,8 @@ final class EntryLifecycleService {
                 _ = try storage.createVoiceFragment(
                     for: entry,
                     audioFilename: voiceFilename,
-                    transcript: trimmed
+                    transcript: trimmed,
+                    createdAt: voiceCapturedAt ?? Date()
                 )
             } else if !trimmed.isEmpty {
                 _ = try storage.createNoteFragment(for: entry, text: trimmed)
@@ -650,11 +746,20 @@ final class EntryLifecycleService {
     private func cacheThumbnails(for refs: [MediaReference]) {
         guard !refs.isEmpty else { return }
         let storage = self.storage
+        // Snapshot the (osIdentifier, mediaType) tuples on the main
+        // context before the detached task runs — MediaReference is
+        // not Sendable, so the detached closure can't access the
+        // managed objects directly.
+        let payload: [(osIdentifier: String, mediaType: MediaReference.MediaType, ref: MediaReference)] =
+            refs.map { ($0.osIdentifier, $0.mediaTypeEnum, $0) }
         Task.detached {
-            for ref in refs {
-                let filename = await ThumbnailService.shared.cacheThumbnail(for: ref.osIdentifier)
+            for entry in payload {
+                let filename = await ThumbnailService.shared.cacheThumbnail(
+                    for: entry.osIdentifier,
+                    mediaType: entry.mediaType
+                )
                 if let filename {
-                    try? storage.updateThumbnailFilename(ref, filename: filename)
+                    try? storage.updateThumbnailFilename(entry.ref, filename: filename)
                 }
             }
         }

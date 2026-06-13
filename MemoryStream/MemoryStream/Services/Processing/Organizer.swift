@@ -21,10 +21,12 @@ protocol Organizer {
     ///     wraps this in a per-memory prompt; the server path passes
     ///     it through to `/himem/analyze`.
     ///   - existingTopics: topic names already present in the user's
-    ///     library. The server uses these to prefer existing names
-    ///     over inventing new ones; on-device receives them but the
-    ///     iter-5 prompt doesn't reference them yet (no measurable
-    ///     improvement in the spike).
+    ///     library. Both backends inject these into the prompt and
+    ///     direct the model to prefer one of them over coining a new
+    ///     name — the "palette discipline" rule from AI Organize
+    ///     spec §2c. Returned topics get a post-pass set-diff via
+    ///     `TopicPalette.partition(returned:existing:)` so the
+    ///     review UI can flag genuinely-new ones AI-blue dashed.
     ///   - existingMentions: case-folded-deduped entity values
     ///     already attached to this entry. Empty on first organize;
     ///     populated on re-organize so the model refines instead of

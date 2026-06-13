@@ -64,7 +64,40 @@ final class AuthService: ObservableObject {
     /// some reason the user replays the wizard via the DEBUG reset.
     func markOnboardingWizardComplete() {
         UserDefaults.standard.set(true, forKey: wizardCompletedKey)
+        // Clear the debug "force full wizard" flag if the user just
+        // walked the full path — subsequent normal flows should use
+        // the production auto-skip behavior again.
+        UserDefaults.standard.removeObject(forKey: forceFullWizardKey)
     }
+
+    /// Debug-only UserDefaults flag (set by `debugResetOnboardingState`)
+    /// that disables the wizard's auto-skip-when-already-granted
+    /// behavior on the next run. Lets a developer rehearse every
+    /// permission screen even when iOS has already granted the
+    /// underlying authorization. Cleared on next wizard completion.
+    var debugForceFullWizard: Bool {
+        UserDefaults.standard.bool(forKey: forceFullWizardKey)
+    }
+
+    private var forceFullWizardKey: String { "himem.debug.forceFullWizard" }
+
+    #if DEBUG
+    /// Bumped by `requestOnboardingTestRun()` to signal `MemoryStreamApp`
+    /// to drop back into the wizard mid-session — no force-quit needed.
+    /// Observed via `.onChange(of: auth.onboardingTestRunRequestCount)`.
+    @Published var onboardingTestRunRequestCount: Int = 0
+
+    /// One-tap "rehearse onboarding" entry point — invoked by Settings
+    /// → Debug → Run onboarding test. Wipes auth state, sets the
+    /// force-full-wizard flag, then bumps `onboardingTestRunRequestCount`
+    /// so the App-level view drops back into the wizard immediately
+    /// (no force-quit needed). The wizard's auto-clear on completion
+    /// restores normal behavior afterwards.
+    func requestOnboardingTestRun() {
+        debugResetOnboardingState()
+        onboardingTestRunRequestCount += 1
+    }
+    #endif
 
     /// Re-reads the Keychain into `isAuthenticated` / `userName`.
     /// Called by `MemoryStreamApp` on `scenePhase → .active` so an
@@ -194,6 +227,14 @@ final class AuthService: ObservableObject {
         kvStore.removeObject(forKey: kvUserNameKey)
         kvStore.synchronize()
         UserDefaults.standard.removeObject(forKey: wizardCompletedKey)
+        // Force the next wizard run to show EVERY screen, even
+        // ones whose underlying iOS permission was already granted
+        // (mic, speech, photos, camera, location, notifications).
+        // Without this, the auto-skip in `stepIfShouldSkip` collapses
+        // the wizard to the screens for not-yet-granted permissions
+        // — typically just Apple → Name → Land. The flag is cleared
+        // when the wizard finishes (`markOnboardingWizardComplete`).
+        UserDefaults.standard.set(true, forKey: forceFullWizardKey)
         isAuthenticated = false
         userName = ""
     }

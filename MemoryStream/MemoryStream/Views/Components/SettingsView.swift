@@ -43,6 +43,8 @@ struct SettingsView: View {
     ) private var allProjects: FetchedResults<Project>
     #if DEBUG
     @State private var showResetOnboardingAlert = false
+    @State private var showResetTutorialAlert = false
+    @AppStorage("himem.debug.useLeanOrganizerPrompt") private var useLeanOrganizerPrompt = false
     #endif
 
     var body: some View {
@@ -81,6 +83,18 @@ struct SettingsView: View {
                             Text(appearance.label)
                                 .font(.body)
                                 .foregroundStyle(Crucible.Color.ink2)
+                        }
+                    }
+                    NavigationLink {
+                        TutorialsHubView()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "questionmark.circle")
+                                .frame(width: 22)
+                                .foregroundStyle(Crucible.Color.accent)
+                                .accessibilityHidden(true)
+                            Text("Tutorials")
+                                .foregroundStyle(Crucible.Color.ink)
                         }
                     }
                 } header: {
@@ -225,6 +239,7 @@ struct SettingsView: View {
                 // MARK: - Voice
                 Section {
                     Toggle("Save voice recordings", isOn: $saveVoiceEntries)
+                        .tint(Crucible.Color.accent)
                     Picker("Voice search pace", selection: $voiceSilenceModeRaw) {
                         ForEach(VoiceSilenceMode.allCases) { mode in
                             Text("\(mode.label) · \(mode.subtitle)").tag(mode.rawValue)
@@ -241,6 +256,7 @@ struct SettingsView: View {
                 // MARK: - Privacy
                 Section {
                     Toggle("Tag memories with location", isOn: $tagMemoriesWithLocation)
+                        .tint(Crucible.Color.accent)
                 } header: {
                     Text("Privacy")
                 } footer: {
@@ -251,6 +267,7 @@ struct SettingsView: View {
                 Section {
                     notificationPermissionRow
                     Toggle("Daily nudge", isOn: $notifyDailyNudge)
+                        .tint(Crucible.Color.accent)
                     if notifyDailyNudge {
                         DatePicker(
                             "Nudge time",
@@ -267,19 +284,27 @@ struct SettingsView: View {
                 // MARK: - Handedness
                 Section {
                     Toggle("Left-handed FAB", isOn: $fabHandednessLeft)
+                        .tint(Crucible.Color.accent)
                 } header: {
                     Text("Handedness")
                 } footer: {
                     Text("Anchors the Add button to the bottom-left of the screen instead of the bottom-right. The action stack flips with it.")
                 }
 
-                // MARK: - Captures (Photos library mirror)
+                // MARK: - Captures (Photos library opt-in)
+                // Default off per the data-custody lock: media lives
+                // in HiMem's iCloud Files container, not the Photos
+                // library. When the user opts in, captures land in a
+                // single "HiMem" album in Photos. The previous
+                // per-topic album scheme was retired June 10 2026.
                 Section {
-                    Toggle("Also save HiMem captures to my Photos library", isOn: $alsoSaveToPhotosLibrary)
+                    Toggle("Also save captures to my Photos library",
+                           isOn: $alsoSaveToPhotosLibrary)
+                        .tint(Crucible.Color.accent)
                 } header: {
                     Text("Captures")
                 } footer: {
-                    Text("Captures from HiMem's camera also land in your Photos library, the same way the iPhone Camera app does. Turn this off and HiMem keeps captures only in its own iCloud Drive folder.")
+                    Text("Off by default — your photos and videos live in HiMem's iCloud Drive folder. Turn this on to drop a copy into a **HiMem** album in your Photos library too, so you can share or print from Photos.")
                 }
 
                 // MARK: - About: where memories live
@@ -288,7 +313,7 @@ struct SettingsView: View {
                         Text("Where your memories live")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Crucible.Color.ink)
-                        Text("Your transcripts, titles, summaries, topics, and projects sync via iCloud. Original audio, photos, and videos live in your iCloud Drive under a folder called **HiMem** — visible in the Files app, exportable anywhere, and durable across reinstalls.\n\nWe don't store original recordings on our servers.")
+                        Text("Your transcripts, titles, summaries, topics, and projects sync via iCloud. Original audio, photos, and videos live in your iCloud Drive under a folder called **HiMem** — visible in the Files app, exportable anywhere, and durable across reinstalls.\n\nWe don't store your memories on our servers.")
                             .font(.footnote)
                             .foregroundStyle(Crucible.Color.ink2)
                             .lineSpacing(2)
@@ -301,28 +326,77 @@ struct SettingsView: View {
                 #if DEBUG
                 // MARK: - Debug (stripped from Release builds)
                 Section {
+                    // One-tap rehearsal — wipes state AND drops the
+                    // app back into the splash → wizard sequence
+                    // immediately, no force-quit needed. Dismisses
+                    // this Settings sheet first so the wizard has
+                    // the screen.
+                    Button {
+                        AuthService.shared.requestOnboardingTestRun()
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Image(systemName: "play.circle.fill")
+                                .foregroundStyle(Crucible.Color.accent)
+                            Text("Run onboarding test")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
                     Button {
                         AuthService.shared.debugResetOnboardingState()
                         showResetOnboardingAlert = true
                     } label: {
                         HStack {
                             Image(systemName: "arrow.counterclockwise.circle.fill")
-                                .foregroundStyle(.purple)
-                            Text("Reset onboarding")
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Text("Reset onboarding (next launch)")
                                 .foregroundStyle(Crucible.Color.ink)
                             Spacer()
                         }
                     }
                     .buttonStyle(.plain)
+
+                    Button {
+                        TutorialOrchestrator.shared.debugResetAll()
+                        showResetTutorialAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "mic.circle")
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Text("Reset all tutorial seen flags")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Toggle(isOn: $useLeanOrganizerPrompt) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Use lean organize prompt")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Text("Strips Honest-Label rules so on-device organize uses a minimal prompt — diagnostic for safety-rejected memories.")
+                                .font(.caption2)
+                                .foregroundStyle(Crucible.Color.ink3)
+                        }
+                    }
+                    .tint(Crucible.Color.accent)
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("Developer-only. Compiled out of Release builds — App Store users never see this section.")
+                    Text("Developer-only. Compiled out of Release builds — App Store users never see this section. **Run onboarding test** replays the splash + wizard immediately. **Reset onboarding** clears state for the next cold launch (requires force-quit).")
                 }
                 .alert("Onboarding reset", isPresented: $showResetOnboardingAlert) {
                     Button("OK", role: .cancel) { }
                 } message: {
-                    Text("Cleared Keychain (userID, userName) and the iCloud KV sidecar. Force-quit HiMem from the app switcher and re-launch to see the permission wizard. iOS permission grants (mic, camera, etc.) are NOT reset — those live in Settings → HiMem.")
+                    Text("Cleared Keychain (userID, userName) and the iCloud KV sidecar, and set the force-full-wizard flag so every screen shows on next launch (even ones whose iOS permission is already granted). Force-quit HiMem from the app switcher and re-launch to see it. iOS permission grants themselves are NOT reset — those live in Settings → HiMem and can only be cleared from there.")
+                }
+                .alert("Tutorials reset", isPresented: $showResetTutorialAlert) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text("Cleared every auto-fire tutorial's seen flag plus the session/day caps. Each tutorial will auto-fire on its next natural trigger (Capture on voice-composer open, Organizing on first Draft, Find-the-thread on Plus + ≥3-memory project, Watch story on non-empty Captured Clips, Watch discovery on next Today appearance with WCSession.isPaired && !installed).")
                 }
 
                 // MARK: - Plus override (DEBUG)
@@ -352,14 +426,17 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
+                    // Done is the canonical commit moment in a nav/sheet
+                    // top bar — per the Crucible colour code, top-bar
+                    // confirm actions are explicit ochre. (System tint
+                    // is usually accent already, but make it explicit
+                    // so future tint changes can't drift this label.)
                     Button("Done") {
-                        // Commit any pending name edit before the sheet
-                        // tears down. .onSubmit only fires on Return key;
-                        // most users tap Done to leave Settings, so this
-                        // is the canonical save moment.
                         commitDisplayName()
                         dismiss()
                     }
+                    .foregroundStyle(Crucible.Color.accent)
+                    .fontWeight(.semibold)
                 }
             }
             .onDisappear {
@@ -458,7 +535,6 @@ struct SettingsView: View {
         TopicPaletteStore.shared.set(key: paletteKey, for: name)
         if oldName != name {
             TopicPaletteStore.shared.remove(for: oldName)
-            AlbumSyncService.shared.migrateTopicName(from: oldName, to: name)
         }
 
         do {
@@ -549,12 +625,13 @@ struct SettingsView: View {
 
                 if !entitlement.isPlus {
                     Text("See plans")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
+                        .tracking(-0.2)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
+                        .frame(height: 48)
                         .background(Crucible.Color.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .clipShape(RoundedRectangle(cornerRadius: 13))
                 }
             }
             .padding(15)

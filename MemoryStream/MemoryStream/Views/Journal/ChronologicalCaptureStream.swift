@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AVFoundation
 
 /// Chronological capture stream: emits one List row per capture in
 /// `createdAt` order. The parent view embeds this inside a `List`, which
@@ -9,13 +10,15 @@ import UIKit
 /// horizontal drags reveal the swipe pills.
 ///
 /// Three panel kinds:
-///   - **Voice clip**: timestamp + transcript text. Leading swipe opens the
-///     AudioPlayerSheet (play + transcript editor); trailing swipe deletes.
-///   - **Note** (typed): timestamp + text. Leading swipe opens the
-///     NoteEditorSheet; trailing swipe deletes.
-///   - **Photo grid**: contiguous image/video MediaReferences group into
-///     one row rendered as a 3-wide `LazyVGrid`. Per-tile X buttons handle
-///     delete; the row itself doesn't have swipe actions.
+///   - **Voice clip**: timestamp + transcript text. Tap the transcript to
+///     edit in place; trailing swipe deletes; "Original recording · Play"
+///     footer plays back the audio.
+///   - **Note** (typed): timestamp + text. Tap the body to edit in place;
+///     trailing swipe deletes.
+///   - **Photo / video card**: thumbnail + optional description. Photo
+///     tap consumes (opens description sheet); video play-overlay plays.
+///     Trailing swipe deletes; leading swipe on video opens its description
+///     editor (no tap-to-consume path on video yet).
 ///
 /// Photo grouping rule: walk captures sorted by createdAt, accumulate
 /// consecutive image/video items into the current strip; flush the strip
@@ -25,69 +28,183 @@ struct ChronologicalCaptureStream: View {
     let onDeleteVoice: (UUID) -> Void
     let onDeleteNote: (UUID) -> Void
     let onDeleteMedia: (UUID) -> Void
-    /// Opens the AudioPlayerSheet for a voice clip — fires on leading swipe.
+    /// Opens the AudioPlayerSheet for a voice clip — fires when the
+    /// user taps the quiet "Original recording · Play" footer in the
+    /// transcript-first VoiceClipPanel.
     let onOpenVoice: (MediaDisplayItem) -> Void
-    /// Opens the NoteEditorSheet for a note fragment — fires on leading swipe.
-    let onOpenNote: (MediaDisplayItem) -> Void
-    /// Opens the full-frame photo / video viewer for a photo or video
-    /// item. The viewer hosts read + edit of the
-    /// `MediaDisplayItem.mediaDescription` per
-    /// `docs/design/HiMem · Photo Descriptions.html`.
-    let onTapPhoto: (MediaDisplayItem) -> Void
+    /// Commits an inline transcript edit on a voice clip — fires when
+    /// the user taps the transcript body, types, then taps away. The
+    /// parent routes to `EntryLifecycleService.updateMediaTranscript`.
+    let onCommitVoiceTranscript: (UUID, String) -> Void
+    /// Commits an inline note edit — fires when the user taps a note
+    /// body, types, then taps Done in the EditCommitBar (or another
+    /// editor takes the active edit id). Parent routes to
+    /// `EntryLifecycleService.updateNoteFragment`. Mirrors the
+    /// `onCommitVoiceTranscript` shape.
+    let onCommitNoteText: (UUID, String) -> Void
+    /// Fires when the user taps the play-overlay circle on a video
+    /// card — the quick-play shortcut that skips the description
+    /// editor and goes straight to playback.
+    let onPlayVideo: (MediaDisplayItem) -> Void
+    /// Fires from whole-card tap on a photo or video. Opens the
+    /// description editor (`PhotoDescriptionEditSheet`); the editor
+    /// in turn hosts a tap-to-open larger viewer for the image/video.
+    /// Putting the description on the primary gesture keeps the
+    /// words-belong-to-this-capture promise — the prior whole-card
+    /// → QuickLook/player routing left the description unreachable.
+    let onEditMediaDescription: (MediaDisplayItem) -> Void
+
+    /// View mode for long memories. `.full` is the historical behavior
+    /// (one rich row per clip); `.compact` renders a scannable index of
+    /// voice + note clips and skips photos/videos entirely. Short
+    /// memories pin to `.full` — the toggle that produces `.compact`
+    /// isn't even shown until the threshold is earned. Default keeps
+    /// every existing call site unchanged.
+    var mode: TranscriptMode = .full
+
+    /// When non-nil and `mode == .compact`, the matching row renders in
+    /// its open (expanded) state — header in accent + full transcript
+    /// body below. Single-open accordion semantics: the parent makes
+    /// sure only one row's id is here at a time, so opening one row
+    /// closes any other.
+    var openCompactRowId: UUID? = nil
+
+    /// Fires when the user taps a Compact row's header — the parent
+    /// toggles `openCompactRowId` (same id = close; different id = open
+    /// that row instead).
+    var onToggleCompactRow: ((UUID) -> Void)? = nil
 
     var body: some View {
+        switch mode {
+        case .full:    fullBody
+        case .compact: compactBody
+        }
+    }
+
+    /// Original chronological stream — one rich row per fragment, full
+    /// swipe affordances. Identical to the pre-Compact-toggle behavior.
+    @ViewBuilder
+    private var fullBody: some View {
         ForEach(panels) { panel in
             switch panel.kind {
             case .voice(let item):
-                VoiceClipPanel(item: item)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button { onOpenVoice(item) } label: {
-                            Label("Edit", systemImage: "pencil")
-                        }
-                        .tint(Crucible.Color.accent)
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) { onDeleteVoice(item.id) } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
+                VoiceClipPanel(
+                    item: item,
+                    onPlay: { onOpenVoice(item) },
+                    onCommitTranscript: { newText in
+                        onCommitVoiceTranscript(item.id, newText)
+                    },
+                    onDelete: { onDeleteVoice(item.id) }
+                )
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
             case .note(let item):
-                NotePanel(item: item)
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button { onOpenNote(item) } label: {
-                            Label("Edit", systemImage: "pencil")
-                        }
-                        .tint(Crucible.Color.accent)
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) { onDeleteNote(item.id) } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
+                NotePanel(
+                    item: item,
+                    onCommitText: { newText in
+                        onCommitNoteText(item.id, newText)
+                    },
+                    onDelete: { onDeleteNote(item.id) }
+                )
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
             case .media(let item):
-                MediaCard(item: item, onTap: { onTapPhoto(item) })
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button { onTapPhoto(item) } label: {
-                            Label("Edit", systemImage: "pencil")
-                        }
-                        .tint(Crucible.Color.accent)
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) { onDeleteMedia(item.id) } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
+                // Photo/video has no view-state Delete — the bottom
+                // Delete lives inside `PhotoDescriptionEditSheet`,
+                // which is the edit mode the whole-card tap opens.
+                MediaCard(
+                    item: item,
+                    onPlayVideo: item.mediaType == .video ? { onPlayVideo(item) } : nil,
+                    onTap: (item.mediaType == .image || item.mediaType == .video)
+                        ? { onEditMediaDescription(item) }
+                        : nil
+                )
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
             }
         }
+    }
+
+    /// Compact index — one slim List row per clip. Each row is a
+    /// single-open expander (tap header → reveal the full transcript
+    /// in place). Swipe-to-delete is retired (June 12 2026); a `Delete
+    /// clip` button sits at the bottom of the expanded body — same
+    /// bottom-Delete rule as everywhere else.
+    @ViewBuilder
+    private var compactBody: some View {
+        ForEach(compactItems) { item in
+            CompactClipRow(
+                item: item,
+                isOpen: openCompactRowId == item.id,
+                // Voice/note tap = toggle the single-open accordion.
+                // Photo/video tap = open the description editor
+                // (matches Full-mode card-tap behavior). Media items
+                // never expand-in-place because they have no
+                // transcript to drop in — the chevron stays pointing
+                // right (rotation only triggers on `isOpen`, which
+                // the parent never sets for media).
+                onTap: {
+                    switch item.mediaType {
+                    case .image, .video: onEditMediaDescription(item)
+                    default:              onToggleCompactRow?(item.id)
+                    }
+                },
+                // Voice clips edit inline through the lifecycle service;
+                // notes will get their own path in a later slice (Phase
+                // 3 of the unified-editing surgery).
+                onCommitTranscript: item.mediaType == .voice
+                    ? { newText in onCommitVoiceTranscript(item.id, newText) }
+                    : nil,
+                // Play control on voice rows in both read and edit
+                // (spec rule #8). Same target as Full mode — opens
+                // the AudioPlayerSheet via the parent.
+                onPlay: item.mediaType == .voice
+                    ? { onOpenVoice(item) }
+                    : nil,
+                // Bottom `Delete clip` button rendered inside the
+                // expanded body. Image/video can't be expanded in
+                // Compact, so the callback is unused for those —
+                // tapping a media row opens the description editor,
+                // which carries its own bottom Delete clip button.
+                onDelete: { compactDeleteAction(item) }
+            )
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        }
+    }
+
+    /// Routes a Compact row's bottom `Delete clip` button to the same
+    /// delete callback the Full row would invoke for that media type.
+    private func compactDeleteAction(_ item: MediaDisplayItem) {
+        switch item.mediaType {
+        case .voice: onDeleteVoice(item.id)
+        case .note:  onDeleteNote(item.id)
+        case .image, .video: onDeleteMedia(item.id)
+        }
+    }
+
+    /// All media items in createdAt order — the eligible set for the
+    /// Compact index. Photos and videos render as tap-to-consume
+    /// rows (no expand-in-place since there's no transcript to drop);
+    /// voice and note rows keep the single-open-accordion behavior.
+    /// Spec: `Memory Detail · long-memory navigation.md` — "one row
+    /// per clip" extends to every capture in the memory; the index
+    /// is the memory's table of contents, not a transcript-only
+    /// scan. Earlier behavior filtered to voice + note and left
+    /// photos/videos unreachable from Compact (bug fix 2026-06-11).
+    private var compactItems: [MediaDisplayItem] {
+        Self.compactItems(from: entry.mediaItems)
+    }
+
+    /// Pure helper — sorts the media items by createdAt and includes
+    /// every type. Static + Sendable so `CompactItemsTests` can
+    /// exercise the filter without building a SwiftUI environment.
+    static func compactItems(from items: [MediaDisplayItem]) -> [MediaDisplayItem] {
+        items.sorted { $0.createdAt < $1.createdAt }
     }
 
     /// Walks the entry's fragments in `createdAt` order, grouping contiguous
@@ -138,26 +255,258 @@ struct ChronologicalCaptureStream: View {
 /// just owns the timestamp + transcript layout.
 struct VoiceClipPanel: View {
     let item: MediaDisplayItem
+    /// Fires when the user taps the quiet "Original recording · ▷ Play"
+    /// footer at the bottom of the card. Drives the `AudioPlayerSheet`
+    /// in the parent for playback. Per the unified-editing model
+    /// (Tom 2026-06-09), audio is *evidence* demoted to a secondary
+    /// control — the transcript is the working object. Nil callers
+    /// hide the footer entirely.
+    let onPlay: (() -> Void)?
+    /// Fires when the user commits an inline transcript edit. The
+    /// parent routes to `EntryLifecycleService.updateMediaTranscript`
+    /// so the canonical save path is exercised. Nil callers fall
+    /// back to read-only — the transcript text is shown but not
+    /// tappable.
+    let onCommitTranscript: ((String) -> Void)?
+    /// Fires when the user taps `Delete clip` on the left of the
+    /// active-edit commit bar. Per `Memory Detail · unified editing
+    /// model.md` (June 12 2026): a clip has no Delete in its view
+    /// state; destruction surfaces only while editing the transcript.
+    /// Nil callers hide the affordance entirely (e.g. when the panel
+    /// is rendered read-only).
+    let onDelete: (() -> Void)?
+    /// Lazily-resolved download status of the underlying audio file.
+    /// Only consulted when the transcript is empty — that's the case
+    /// where the user needs to disambiguate "iCloud is still
+    /// delivering this" from "the recognizer ran and heard nothing".
+    /// `nil` until the `.task` block lands the first read.
+    @State private var audioDownloadStatus: UbiquityStore.DownloadStatus? = nil
+    /// Audio duration in seconds, resolved lazily via `AVURLAsset.load`
+    /// once the file is local. Drives the `m:ss` half of the
+    /// "Original recording · 0:48" footer label. `nil` until loaded;
+    /// the footer falls back to "Original recording" alone while we
+    /// wait. Matches the `MediaTile` pattern.
+    @State private var audioDuration: TimeInterval? = nil
+    /// True while the user is inline-editing this clip's transcript.
+    /// Tap the body → flip to a TextField focused inline; commit via
+    /// the inline `EditCommitBar`'s Done. Per spec: "tap text to edit
+    /// in place" — no sheet, no global edit mode.
+    @State private var isEditingTranscript: Bool = false
+    @State private var transcriptDraft: String = ""
+    @FocusState private var transcriptFieldFocused: Bool
+    @ObservedObject private var editCoordinator = TextEditCoordinator.shared
+
+    init(
+        item: MediaDisplayItem,
+        onPlay: (() -> Void)? = nil,
+        onCommitTranscript: ((String) -> Void)? = nil,
+        onDelete: (() -> Void)? = nil
+    ) {
+        self.item = item
+        self.onPlay = onPlay
+        self.onCommitTranscript = onCommitTranscript
+        self.onDelete = onDelete
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             CaptureTimestampLabel(date: item.createdAt, placeName: item.placeName)
-            Text(displayText.attributedWithLinks())
-                .font(.callout)
-                .foregroundStyle(item.transcript == nil || item.transcript?.isEmpty == true
-                                 ? Crucible.Color.ink4 : Crucible.Color.ink)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .multilineTextAlignment(.leading)
+            transcriptArea
+            if let onPlay {
+                Button(action: onPlay) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.circle")
+                            .font(.system(size: 13, weight: .medium))
+                        Text(Self.playFooterLabel(duration: audioDuration))
+                            .font(.caption)
+                    }
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .padding(.top, 2)
+                }
+                .buttonStyle(.plain)
+                .frame(minHeight: 32)
+                .accessibilityLabel(Self.playFooterAccessibilityLabel(duration: audioDuration))
+            }
         }
         .padding(12)
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
+        .task(id: item.id) {
+            await refreshAudioStatusIfNeeded()
+            await loadAudioDurationIfNeeded()
+        }
+        // Rule #6 — one edit at a time. If another editor takes the
+        // active id while we're editing this transcript, commit (not
+        // discard) before they take over.
+        .onChange(of: editCoordinator.activeEditId) { _, newId in
+            if isEditingTranscript && newId != editId {
+                commitInlineTranscriptEdit()
+            }
+        }
     }
 
-    private var displayText: String {
-        if let t = item.transcript, !t.isEmpty { return t }
-        return "(no transcript)"
+    /// Either the read-mode transcript body (tap-to-edit) or an inline
+    /// `TextEditor` for the active edit. Both render the same font /
+    /// padding so the layout doesn't shift on flip.
+    @ViewBuilder
+    private var transcriptArea: some View {
+        if isEditingTranscript, onCommitTranscript != nil {
+            // Edit state in flow per `Memory Detail · unified editing
+            // model.md` §"Editing a clip transcript — exact layout
+            // behavior" rules 1-7. `TextField(axis: .vertical)` is
+            // the iOS 16+ auto-growing field — it expands to fit the
+            // entire transcript at the same font/line-height as the
+            // read view (rule #7), so a 6-line clip edits in a 6-line
+            // field with no internal scrolling.
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("", text: $transcriptDraft, axis: .vertical)
+                    .font(.callout)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .focused($transcriptFieldFocused)
+                    .textFieldStyle(.plain)
+                    .padding(10)
+                    .background(Crucible.Color.paper)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Crucible.Color.accent, lineWidth: 1)
+                    )
+                EditCommitBar(
+                    onCancel: { cancelInlineTranscriptEdit() },
+                    onDone:   { commitInlineTranscriptEdit() },
+                    onDelete: onDelete
+                )
+            }
+        } else {
+            // List-row gesture coordination is finicky: a tap on text
+            // inside a List row can be swallowed by the row's own
+            // gesture machinery (which handles selection and swipe
+            // edges). `Button` inside a row sometimes works, sometimes
+            // gets eaten on the first tap — `simultaneousGesture` is
+            // the reliable answer because it runs alongside whatever
+            // the row is already doing instead of competing with it.
+            // Also drop `.attributedWithLinks()` here: link-detection
+            // ranges intercept taps that fall on URL glyphs, which
+            // would silently bypass edit on a transcript that happens
+            // to contain a URL.
+            Text(Self.displayText(transcript: item.transcript, audioStatus: audioDownloadStatus))
+                .font(.callout)
+                .foregroundStyle(item.transcript == nil || item.transcript?.isEmpty == true
+                                 ? Crucible.Color.ink4 : Crucible.Color.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(.leading)
+                .contentShape(Rectangle())
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        if onCommitTranscript != nil { beginInlineTranscriptEdit() }
+                    }
+                )
+        }
+    }
+
+    private var editId: String { "transcript-\(item.id.uuidString)" }
+
+    private func beginInlineTranscriptEdit() {
+        transcriptDraft = item.transcript ?? ""
+        isEditingTranscript = true
+        TextEditCoordinator.shared.begin(id: editId)
+        DispatchQueue.main.async {
+            transcriptFieldFocused = true
+        }
+    }
+
+    private func commitInlineTranscriptEdit() {
+        let trimmed = transcriptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = (item.transcript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed != current, let onCommitTranscript {
+            onCommitTranscript(trimmed)
+        }
+        transcriptFieldFocused = false
+        isEditingTranscript = false
+        TextEditCoordinator.shared.end(id: editId)
+    }
+
+    private func cancelInlineTranscriptEdit() {
+        transcriptDraft = item.transcript ?? ""
+        transcriptFieldFocused = false
+        isEditingTranscript = false
+        TextEditCoordinator.shared.end(id: editId)
+    }
+
+    /// Asks `UbiquityStore` for the audio's current download status
+    /// ONLY when the row's transcript is empty — the non-empty case
+    /// displays the transcript regardless of audio file state, so a
+    /// per-row file-system metadata read every render is wasteful.
+    private func refreshAudioStatusIfNeeded() async {
+        let isEmpty = item.transcript == nil || item.transcript?.isEmpty == true
+        guard isEmpty else { return }
+        let url = UbiquityStore.shared.audioURL(for: item.localIdentifier)
+        let status = UbiquityStore.shared.downloadStatus(at: url)
+        await MainActor.run {
+            audioDownloadStatus = status
+        }
+    }
+
+    /// Lazily resolves the audio's duration via `AVURLAsset.load` so
+    /// the play footer reads "Original recording · 0:48" instead of
+    /// the generic "Original recording · Play". Skipped when the file
+    /// isn't local yet — the footer falls back to "Original recording"
+    /// and the user gets the duration once the iCloud download
+    /// completes (next render). Mirrors the `MediaTile` pattern.
+    private func loadAudioDurationIfNeeded() async {
+        guard audioDuration == nil else { return }
+        let url = UbiquityStore.shared.audioURL(for: item.localIdentifier)
+        guard UbiquityStore.shared.downloadStatus(at: url) == .downloaded else { return }
+        let asset = AVURLAsset(url: url)
+        if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
+            await MainActor.run { audioDuration = cm.seconds }
+        }
+    }
+
+    /// Play-footer label. Loaded: `"Original recording · 0:48"`. Not
+    /// loaded yet (file still in iCloud, or duration probe pending):
+    /// `"Original recording"` (no duration suffix; drop the redundant
+    /// "Play" word since the play.circle glyph already names the
+    /// action). Spec: voice-clip "Play" footer per `docs/design/
+    /// screens-memory-detail.jsx`.
+    static func playFooterLabel(duration: TimeInterval?) -> String {
+        guard let duration else { return "Original recording" }
+        return "Original recording · \(formatDuration(duration))"
+    }
+
+    static func playFooterAccessibilityLabel(duration: TimeInterval?) -> String {
+        guard let duration else { return "Play original recording" }
+        return "Play original recording, \(formatDuration(duration)) long"
+    }
+
+    /// `m:ss` formatter shared with the accessibility label and the
+    /// visible footer. Matches `MediaTile.formatDuration`.
+    static func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded(.down))
+        let m = total / 60
+        let s = total % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
+    /// Pure decision function: picks the right label given the
+    /// transcript and the audio file's download status. Extracted as
+    /// a static so the seven outcome cells can be exercised without
+    /// a SwiftUI environment. Money tests live in
+    /// `VoiceClipPanelDisplayTextTests`.
+    static func displayText(
+        transcript: String?,
+        audioStatus: UbiquityStore.DownloadStatus?
+    ) -> String {
+        if let t = transcript, !t.isEmpty { return t }
+        switch audioStatus {
+        case .downloading, .notDownloaded:
+            return "Audio downloading from iCloud…"
+        case .missing:
+            return "Audio no longer in iCloud."
+        case .downloaded, .none:
+            return "(no transcript)"
+        }
     }
 }
 
@@ -166,22 +515,112 @@ struct VoiceClipPanel: View {
 private struct NotePanel: View {
     /// Backed by a `.note` MediaReference — `text` carries the body.
     let item: MediaDisplayItem
+    /// Commits a tap-to-edit note edit. Mirrors `VoiceClipPanel.onCommitTranscript`
+    /// shape — parent routes to `EntryLifecycleService.updateNoteFragment`.
+    /// Nil callers stay read-only.
+    let onCommitText: ((String) -> Void)?
+    /// Surfaces `Delete clip` on the active-edit commit bar — same
+    /// rule as `VoiceClipPanel.onDelete`. Nil callers hide the
+    /// affordance.
+    let onDelete: (() -> Void)?
+
+    @State private var isEditingText: Bool = false
+    @State private var textDraft: String = ""
+    @FocusState private var textFieldFocused: Bool
+    @ObservedObject private var editCoordinator = TextEditCoordinator.shared
+
+    init(
+        item: MediaDisplayItem,
+        onCommitText: ((String) -> Void)? = nil,
+        onDelete: (() -> Void)? = nil
+    ) {
+        self.item = item
+        self.onCommitText = onCommitText
+        self.onDelete = onDelete
+    }
 
     private var bodyText: String { item.text ?? "" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             CaptureTimestampLabel(date: item.createdAt, placeName: item.placeName)
-            Text(bodyText.attributedWithLinks())
-                .font(.callout)
-                .foregroundStyle(Crucible.Color.ink)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .multilineTextAlignment(.leading)
+            textArea
         }
         .padding(12)
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.hairline, lineWidth: 1))
+        .onChange(of: editCoordinator.activeEditId) { _, newId in
+            if isEditingText && newId != editId {
+                commitInlineNoteEdit()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var textArea: some View {
+        if isEditingText, onCommitText != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("", text: $textDraft, axis: .vertical)
+                    .font(.callout)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .focused($textFieldFocused)
+                    .textFieldStyle(.plain)
+                    .padding(10)
+                    .background(Crucible.Color.paper)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Crucible.Color.accent, lineWidth: 1)
+                    )
+                EditCommitBar(
+                    onCancel: { cancelInlineNoteEdit() },
+                    onDone:   { commitInlineNoteEdit() },
+                    onDelete: onDelete
+                )
+            }
+        } else {
+            Text(bodyText.attributedWithLinks())
+                .font(.callout)
+                .foregroundStyle(Crucible.Color.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(.leading)
+                .contentShape(Rectangle())
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        if onCommitText != nil { beginInlineNoteEdit() }
+                    }
+                )
+        }
+    }
+
+    private var editId: String { "note-\(item.id.uuidString)" }
+
+    private func beginInlineNoteEdit() {
+        textDraft = item.text ?? ""
+        isEditingText = true
+        TextEditCoordinator.shared.begin(id: editId)
+        DispatchQueue.main.async {
+            textFieldFocused = true
+        }
+    }
+
+    private func commitInlineNoteEdit() {
+        let trimmed = textDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = (item.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed != current, let onCommitText {
+            onCommitText(trimmed)
+        }
+        textFieldFocused = false
+        isEditingText = false
+        TextEditCoordinator.shared.end(id: editId)
+    }
+
+    private func cancelInlineNoteEdit() {
+        textDraft = item.text ?? ""
+        textFieldFocused = false
+        isEditingText = false
+        TextEditCoordinator.shared.end(id: editId)
     }
 }
 
@@ -194,28 +633,45 @@ private struct NotePanel: View {
 /// viewer where the user can read or edit the description.
 struct MediaCard: View {
     let item: MediaDisplayItem
-    let onTap: () -> Void
+    /// Fires when the user taps the play-overlay circle on a video
+    /// thumbnail. Nil for photo items (the overlay isn't drawn) and
+    /// for callers that haven't yet wired playback.
+    var onPlayVideo: (() -> Void)? = nil
+    /// Fires when the user taps the photo card body (excluding the
+    /// video play-overlay). Per the unified editing spec (June 2026)
+    /// "Media · Tap to consume" — photo opens its viewer/description
+    /// surface. Nil for video (which exposes consume via the play
+    /// overlay instead).
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 10) {
-                CaptureTimestampLabel(date: item.createdAt, placeName: item.placeName)
-                MediaCardThumbnail(item: item)
-                if let desc = item.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
-                    MediaDescriptionFilled(text: desc)
-                } else {
-                    MediaDescriptionEmpty()
-                }
+        let card = VStack(alignment: .leading, spacing: 10) {
+            CaptureTimestampLabel(date: item.createdAt, placeName: item.placeName)
+            MediaCardThumbnail(item: item, onPlayVideo: onPlayVideo)
+            if let desc = item.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+                MediaDescriptionFilled(text: desc)
+            } else {
+                MediaDescriptionEmpty()
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 14)
-            .padding(.bottom, 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Crucible.Color.card)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Crucible.Color.hairline, lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Crucible.Color.card)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Crucible.Color.hairline, lineWidth: 1))
+
+        if let onTap {
+            // Whole-card tap = consume. Used for photos (open viewer +
+            // description). Video keeps consume on the play overlay
+            // only so the thumbnail itself isn't a hidden tap target.
+            // `.contentShape` makes the padding tappable too.
+            card.contentShape(Rectangle())
+                .onTapGesture { onTap() }
+        } else {
+            card
+        }
     }
 }
 
@@ -225,6 +681,7 @@ struct MediaCard: View {
 /// `MediaThumb` component.
 private struct MediaCardThumbnail: View {
     let item: MediaDisplayItem
+    let onPlayVideo: (() -> Void)?
     @State private var thumbnail: UIImage?
 
     private let height: CGFloat = 168
@@ -250,14 +707,22 @@ private struct MediaCardThumbnail: View {
                     }
             }
             if item.mediaType == .video {
-                Circle()
-                    .fill(Color.black.opacity(0.5))
-                    .frame(width: 46, height: 46)
-                    .overlay {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.white)
-                    }
+                Button {
+                    onPlayVideo?()
+                } label: {
+                    Circle()
+                        .fill(Color.black.opacity(0.5))
+                        .frame(width: 46, height: 46)
+                        .overlay {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 16))
+                                .foregroundStyle(.white)
+                        }
+                }
+                .buttonStyle(.plain)
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Play video")
+                .disabled(onPlayVideo == nil)
             }
         }
         .overlay(alignment: .bottomLeading) {
@@ -267,7 +732,7 @@ private struct MediaCardThumbnail: View {
         .frame(height: height)
         .task(id: item.id) {
             guard thumbnail == nil else { return }
-            if let cached = await ThumbnailService.shared.cacheThumbnail(for: item.localIdentifier) {
+            if let cached = await ThumbnailService.shared.cacheThumbnail(for: item.localIdentifier, mediaType: item.mediaType) {
                 thumbnail = ThumbnailService.shared.cachedThumbnail(filename: cached)
             }
         }
@@ -407,15 +872,12 @@ struct CaptureTimestampLabel: View {
     }()
 }
 
-// MARK: - Photo grid panel
+// MARK: - Photo grid layout (retained as a pure helper)
 
-/// Pure column-count rule for the chronological capture stream's photo
-/// grid. Exposed for unit tests — runtime callers go through
-/// `PhotoFilmstripPanel`, which reads device + scene orientation.
-///
-/// Column counts pinned 2026-05-11 per Tom: iPhone tilesy stay smaller
-/// for thumb scanning (3 portrait / 5 landscape); iPad tiles are larger
-/// because the tablet is for review, not capture (4 portrait / 6 landscape).
+/// Pure column-count rule used by `PhotoGridLayoutTests`. The runtime
+/// view that used to consume this (`PhotoFilmstripPanel`) was retired
+/// 2026-06-12 when photos/videos moved to per-card `MediaCard` rows
+/// in the chronological stream; the enum stays because the tests do.
 enum PhotoGridLayout {
     static func columnCount(isPad: Bool, isLandscape: Bool) -> Int {
         if isPad {
@@ -423,60 +885,5 @@ enum PhotoGridLayout {
         } else {
             return isLandscape ? 5 : 3
         }
-    }
-}
-
-/// Renders one chronological cluster of `.image` / `.video` MediaReferences
-/// (i.e. captures taken within ~10 minutes of each other) as a responsive
-/// grid: 3 cols on iPhone portrait, 5 on iPhone landscape, 4 on iPad
-/// portrait, 6 on iPad landscape. Each cluster is its own grid; multiple
-/// clusters in an entry stack vertically with the chronological capture
-/// stream's other panels in between, preserving capture-time ordering.
-///
-/// Reactivity: SwiftUI's `horizontalSizeClass` / `verticalSizeClass` don't
-/// distinguish iPad portrait from landscape (both `.regular`), so we read
-/// the active scene's `interfaceOrientation` and refresh on
-/// `UIDevice.orientationDidChangeNotification`.
-private struct PhotoFilmstripPanel: View {
-    let items: [MediaDisplayItem]
-    let onDelete: (UUID) -> Void
-    let onTap: (MediaDisplayItem) -> Void
-
-    @State private var isLandscape: Bool = PhotoFilmstripPanel.currentSceneIsLandscape()
-
-    var body: some View {
-        LazyVGrid(columns: gridColumns, spacing: 8) {
-            ForEach(items) { item in
-                MediaTile(
-                    localIdentifier: item.localIdentifier,
-                    mediaType: item.mediaType,
-                    createdAt: item.createdAt,
-                    onRemove: { onDelete(item.id) },
-                    onTap: { onTap(item) }
-                )
-                .aspectRatio(1, contentMode: .fit)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-            isLandscape = PhotoFilmstripPanel.currentSceneIsLandscape()
-        }
-    }
-
-    private var gridColumns: [GridItem] {
-        let cols = PhotoGridLayout.columnCount(
-            isPad: UIDevice.current.userInterfaceIdiom == .pad,
-            isLandscape: isLandscape
-        )
-        return Array(repeating: GridItem(.flexible(), spacing: 8), count: cols)
-    }
-
-    private static func currentSceneIsLandscape() -> Bool {
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
-            ?? UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .first
-        return scene?.interfaceOrientation.isLandscape ?? false
     }
 }

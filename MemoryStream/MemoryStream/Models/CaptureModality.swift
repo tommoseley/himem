@@ -83,6 +83,17 @@ struct VoiceClipFragment: Equatable {
     let transcript: String
     /// Clip duration in seconds.
     let duration: TimeInterval
+    /// Wall-clock time the clip *started* recording — the moment
+    /// the user tapped the big mic (clip 1) or the Next button
+    /// (subsequent clips). Computed in `VoiceCaptureOrchestrator`
+    /// as `recordingStartedAt + nextTapOffsetForThisClip` and
+    /// threaded all the way to `MediaReference.createdAt` so the
+    /// Memory Detail UI can show one accurate `HH:MM` per row of
+    /// a long roll. Before this field shipped (Tom 2026-06-09)
+    /// every roll clip inherited the save-time `Date()` and the
+    /// Compact transcript view rendered identical timestamps on
+    /// every row.
+    let capturedAt: Date
     /// Latitude captured at recording-session start (one fix per
     /// session, mirrored across every clip in the session). Nil
     /// when the user denies / hasn't granted location, or the fix

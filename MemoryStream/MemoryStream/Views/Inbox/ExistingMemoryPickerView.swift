@@ -46,11 +46,11 @@ struct ExistingMemoryPickerView: View {
                         }
                     }
                 }
-                Rectangle()
-                    .fill(Crucible.Color.hairline)
-                    .frame(height: 0.5)
-                    .padding(.top, 8)
-                searchRow
+                // Search row hidden for v1 — the destination ("global
+                // search prefiltered to memories") isn't wired yet, so
+                // showing the affordance would route the user to a
+                // dismiss-only no-op. Restored once the Search route
+                // lands.
             }
             .background(Crucible.Color.card)
             .clipShape(RoundedRectangle(cornerRadius: 12))

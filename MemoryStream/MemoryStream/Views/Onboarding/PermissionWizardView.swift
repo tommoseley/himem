@@ -214,10 +214,16 @@ struct PermissionWizardView: View {
             return
         }
 
-        if appleSharedName {
+        if appleSharedName || auth.debugForceFullWizard {
             // True first-sign-in to HiMem — Apple just gave us a name to
             // confirm. Run the full wizard: Name → Mic → Speech → Photos
             // → Camera → Location → Notifications → Land.
+            //
+            // Debug branch (`debugForceFullWizard`): also lands here so a
+            // developer can rehearse the fresh path on the same Apple ID
+            // they've used before — without this, iCloud KV would restore
+            // userName, route to the reinstall path, and skip every
+            // permission screen.
             withWizardAnim {
                 editedName = auth.userName
                 step = .name
@@ -346,7 +352,16 @@ struct PermissionWizardView: View {
     /// granted AND the user previously set the Channel B (inactivity
     /// nudge) preference, since the page is the only surface that
     /// captures Channel B opt-in.
+    ///
+    /// **Debug bypass.** When `AuthService.debugForceFullWizard` is set
+    /// (via Settings → Debug → Reset onboarding), this returns nil for
+    /// every step so the developer can rehearse the entire flow even
+    /// when iOS has already granted the underlying permissions. The
+    /// flag clears automatically on next wizard completion.
     private func stepIfShouldSkip(_ current: WizardStep) async -> WizardStep? {
+        if auth.debugForceFullWizard {
+            return nil
+        }
         switch current {
         case .mic:
             return AVAudioApplication.shared.recordPermission == .granted ? .speech : nil
@@ -878,12 +893,12 @@ struct ScrW1Apple: View {
                     .padding(.top, 20)
 
                 VStack(alignment: .leading, spacing: 13) {
-                    bullet(headline: "Capture anything.",
-                           body: "Voice, photo, video — on your phone or your Watch.")
-                    bullet(headline: "Organized quietly.",
-                           body: "HiMem listens for the thread. You stay in control.")
-                    bullet(headline: "Yours, end to end.",
-                           body: "Synced privately through your own iCloud.")
+                    bullet(headline: "Capture first, organize later.",
+                           body: "Voice, photo, video, or a note — on your phone or your Watch.")
+                    bullet(headline: "AI suggests, you decide.",
+                           body: "HiMem drafts a title, summary, and topics. Review, edit, or ignore.")
+                    bullet(headline: "Your memories stay yours.",
+                           body: "Synced privately through your own iCloud. Never our servers.")
                 }
                 .padding(.top, 26)
 
@@ -1084,7 +1099,11 @@ struct ScrW7Notifications: View {
             }
             Toggle("", isOn: on)
                 .labelsHidden()
-                .tint(Crucible.Color.confirmed)
+                // Toggle on-state per CLAUDE.md (June 10 2026, global
+                // rule (e)): ochre, never iOS green. Green is
+                // semantic-only (confirmed/success); an enabled
+                // setting is a user state, not a success.
+                .tint(Crucible.Color.accent)
                 .padding(.top, 1)
         }
         .padding(.horizontal, 14)
@@ -1482,9 +1501,23 @@ struct ScrReinstallRestore: View {
     }
 
     private var restoreGlyph: some View {
-        // Soft cloud + downward return arrow — memories coming home.
-        // Matches the SVG geometry in the spec's RestoreGlyph component.
+        RestoreGlyph()
+    }
+}
+
+/// Cloud outline + slowly-rotating sync arrows. Per the updated
+/// `screens-onboarding-wizard.jsx` `RestoreGlyph` spec
+/// (2026-06-08): the previous static cloud-with-down-arrow read as
+/// the iOS "tap to download" control (a broken button). The new
+/// glyph rotates the inner sync arrows at 2.6s/turn — unambiguously
+/// **status / in-progress**, not action.
+private struct RestoreGlyph: View {
+    @State private var spinAngle: Double = 0
+
+    var body: some View {
         ZStack {
+            // Cloud outline — kept from the previous implementation,
+            // already matches the spec's silhouette closely.
             Path { p in
                 p.move(to: CGPoint(x: 7, y: 18))
                 p.addCurve(to: CGPoint(x: 6.5, y: 10.03),
@@ -1498,16 +1531,21 @@ struct ScrReinstallRestore: View {
                            control2: CGPoint(x: 21, y: 14))
             }
             .stroke(style: StrokeStyle(lineWidth: 1.9, lineCap: .round, lineJoin: .round))
-            Path { p in
-                p.move(to: CGPoint(x: 12, y: 11))
-                p.addLine(to: CGPoint(x: 12, y: 18))
-                p.move(to: CGPoint(x: 9, y: 15))
-                p.addLine(to: CGPoint(x: 12, y: 18))
-                p.addLine(to: CGPoint(x: 15, y: 15))
-            }
-            .stroke(style: StrokeStyle(lineWidth: 1.9, lineCap: .round, lineJoin: .round))
+
+            // Spinning sync arrows centered roughly in the cloud's
+            // belly. SF Symbol `arrow.triangle.2.circlepath` is the
+            // canonical iOS "syncing" glyph and scales cleanly.
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 11, weight: .semibold))
+                .rotationEffect(.degrees(spinAngle))
+                .offset(x: 0, y: 2)
         }
         .frame(width: 32, height: 32)
+        .onAppear {
+            withAnimation(.linear(duration: 2.6).repeatForever(autoreverses: false)) {
+                spinAngle = 360
+            }
+        }
     }
 }
 

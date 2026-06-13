@@ -63,24 +63,42 @@ struct SwipeToDelete<Content: View>: View {
         .animation(.spring(response: 0.28, dampingFraction: 0.85), value: visibleOffset)
     }
 
+    /// Diameter of the red circle button. Matches the iOS-native
+    /// partial-swipe affordance other swipe rows use (`JournalView`,
+    /// `ChronologicalCaptureStream` via `.swipeActions`), so the
+    /// destructive swipe vocabulary reads as one thing whether the
+    /// row's container is a List or a LazyVStack.
+    private let circleDiameter: CGFloat = 52
+
     private var deleteAffordance: some View {
+        // Match the iOS-native swipe-action partial-reveal look used
+        // elsewhere in the app: a red **circle** containing the
+        // glyph, with the text label below the circle on the row's
+        // background. The earlier full-height rectangle stood out
+        // against the rest of the app's destructive swipes — Tom
+        // flagged it 2026-06-08.
         Button(action: {
             onDelete()
             openedRowId = nil
         }) {
             VStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .semibold))
+                ZStack {
+                    Circle()
+                        .fill(Crucible.Color.danger)
+                        .frame(width: circleDiameter, height: circleDiameter)
+                    Image(systemName: systemImage)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
                 Text(label)
                     .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink2)
             }
-            .foregroundStyle(.white)
-            .frame(width: revealWidth)
-            .frame(maxHeight: .infinity)
-            .background(Crucible.Color.danger)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+        .frame(width: revealWidth)
+        .frame(maxHeight: .infinity)
         .opacity(visibleOffset < -4 ? 1.0 : 0)
     }
 

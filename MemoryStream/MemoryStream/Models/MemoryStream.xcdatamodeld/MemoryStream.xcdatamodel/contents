@@ -15,6 +15,8 @@
         <attribute name="longitude" optional="YES" attributeType="Double" usesScalarValueType="NO"/>
         <attribute name="locationName" optional="YES" attributeType="String"/>
         <attribute name="lastOrganizedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="summary" optional="YES" attributeType="String"/>
+        <attribute name="summaryUserEdited" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="titleSourcedFromAI" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <relationship name="extractedEntities" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExtractedEntity" inverseName="entry" inverseEntity="ExtractedEntity"/>
         <relationship name="mediaReferences" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MediaReference" inverseName="entry" inverseEntity="MediaReference"/>

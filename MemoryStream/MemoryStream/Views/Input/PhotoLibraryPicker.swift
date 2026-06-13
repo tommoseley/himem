@@ -117,15 +117,13 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
                     do {
                         // `loadFileRepresentation` requires us to copy
                         // before the closure returns — the OS deletes
-                        // the temp file after the callback.
-                        // `moveIntoStore` won't work here (it would
-                        // require ownership of the temp); we copy
-                        // explicitly.
-                        let fm = FileManager.default
-                        if fm.fileExists(atPath: destination.path) {
-                            try fm.removeItem(at: destination)
-                        }
-                        try fm.copyItem(at: tempURL, to: destination)
+                        // the temp file after the callback. Route the
+                        // copy through `UbiquityStore.copyIntoStore` so
+                        // the destination write is NSFileCoordinator-
+                        // wrapped — otherwise iCloud's file-presenter
+                        // can read mid-write and ship a torn blob to
+                        // other devices.
+                        try UbiquityStore.shared.copyIntoStore(sourceURL: tempURL, destinationURL: destination)
                         continuation.resume(returning: Result(filename: filename, mediaType: mediaType))
                     } catch {
                         NSLog("[HiMem][PHPicker] ubiquity copy failed: \(error.localizedDescription)")

@@ -1,12 +1,11 @@
 import SwiftUI
 import UIKit
+import WatchConnectivity
 
 struct JournalView: View {
     @StateObject private var viewModel = JournalViewModel()
     @StateObject private var speechService = SpeechService()
     @StateObject private var cameraService = CameraService()
-    @ObservedObject private var topicApproval = TopicApprovalService.shared
-    @ObservedObject private var albumSync = AlbumSyncService.shared
     @StateObject private var projectVM = ProjectViewModel()
     @ObservedObject private var errorState = ErrorState.shared
     @EnvironmentObject private var quickAction: QuickActionState
@@ -19,6 +18,11 @@ struct JournalView: View {
     }
     @State private var showSearch = false
     @State private var showSettings = false
+    /// Drives presentation of the Tutorials hub from the `?` toolbar
+    /// glyph. Same `NavigationStack`, so the hub pushes; back-chevron
+    /// returns to the journal. Spec: `docs/design/screens-settings.jsx`
+    /// → `ScrTutorialsHub`.
+    @State private var showTutorials = false
     @State private var showInbox = false
     /// One-shot guard: auto-open Captured Clips on launch only. Prevents
     /// the sheet from re-popping after the user explicitly dismissed it
@@ -32,8 +36,6 @@ struct JournalView: View {
     @ObservedObject private var captureRequests = CaptureRequestBus.shared
     @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
-    @State private var undoEntry: EntryDisplayModel? = nil
-    @State private var showUndo = false
     @State private var activeCaptureModality: CaptureModality? = nil
     @State private var pendingNoteForNewEntry: String? = nil
 
@@ -44,7 +46,8 @@ struct JournalView: View {
             JournalHeaderView(
                 viewMode: $viewMode,
                 onSearchTap: { showSearch = true },
-                onSettingsTap: { showSettings = true }
+                onSettingsTap: { showSettings = true },
+                onHelpTap: { showTutorials = true }
             )
 
             // Inbox banner — appears when there are watch clips waiting to
@@ -90,13 +93,10 @@ struct JournalView: View {
 
         JournalErrorBanner()
 
-        JournalUndoToast(
-            isShown: $showUndo,
-            undoEntry: undoEntry,
-            viewModel: viewModel
-        )
-
         } // ZStack
+        .navigationDestination(isPresented: $showTutorials) {
+            TutorialsHubView()
+        }
         .navigationDestination(isPresented: $showSearch) {
             SearchView(
                 onSelectEntry: { id in
@@ -136,11 +136,18 @@ struct JournalView: View {
         .navigationDestination(item: $selectedEntryId) { entryId in
             entryDetailDestination(for: entryId)
         }
-        .modifier(JournalPromptDialogs(
-            topicApproval: topicApproval,
-            albumSync: albumSync
-        ))
         .onAppear {
+            // Arm the tutorial orchestrator now that the user is
+            // actually looking at the journal (onboarding is done by
+            // construction — this branch only renders when
+            // `splashComplete && onboardingComplete`). Trigger sites
+            // (Capture / Organize / Find-the-thread / Captured Clips /
+            // Today Watch-discovery) become live as of this call. Per
+            // the spec: "Never during onboarding, never on cold
+            // launch" — this is the cold-launch gate flipping.
+            TutorialOrchestrator.shared.armForReadyState()
+            attemptWatchDiscoveryTutorial()
+
             // Cold-launch fix 2026-06-02: removed the pre-fetch of speech +
             // photo-library authorization. On fresh install, these two
             // requestAuthorization calls fired the iOS permission prompts
@@ -226,15 +233,20 @@ struct JournalView: View {
                 allTopics: viewModel.topics,
                 cameraService: cameraService,
                 speechService: speechService,
-                onSave: { entryId, newContent, newTitle, removedTagIds, removedMediaIds, addedTopics, removedTopics in
+                onSave: { entryId, newContent, newTitle in
+                    // Title-only save path from inline tap-to-edit.
+                    // Tag/topic/media deltas have their own dedicated
+                    // lifecycle calls now (ManagedChipEdit, ManageTopicsSheet,
+                    // applyEditsImmediately) — we pass empty sets to
+                    // `editEntry` for the legacy delta args.
                     viewModel.editEntry(
                         entryId: entryId,
                         newContent: newContent,
                         newTitle: newTitle,
-                        removedTagIds: removedTagIds,
-                        removedMediaIds: removedMediaIds,
-                        addedTopicNames: addedTopics,
-                        removedTopicNames: removedTopics
+                        removedTagIds: [],
+                        removedMediaIds: [],
+                        addedTopicNames: [],
+                        removedTopicNames: []
                     )
                 },
                 onFeedback: { entryId, state in
@@ -259,6 +271,20 @@ struct JournalView: View {
                 availableProjects: projectVM.projects
             )
             .onAppear { viewModel.markEntryViewed(entryId) }
+        } else {
+            // Hold the nav frame during the brief window where the
+            // Core Data refresh hasn't repopulated `entries` after a
+            // background save (typical: ProcessingEngine writes a new
+            // OrganizePass → 250ms debounced `loadEntries` re-fetch).
+            // Returning an implicit EmptyView here makes
+            // `.navigationDestination(item:)` interpret the destination
+            // as "no view for this id" and pop the stack — which also
+            // tears down any sheet that was mid-presentation (the
+            // Review-draft rises-then-recedes race the troika diagnosed
+            // 2026-06-12). A placeholder Color keeps the destination
+            // resolver happy until the entry returns.
+            Color(Crucible.Color.paper)
+                .ignoresSafeArea()
         }
     }
 
@@ -312,25 +338,12 @@ struct JournalView: View {
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button {
-                                    viewModel.recycleEntry(entryId: entry.id)
-                                    showUndoToast(for: entry)
-                                } label: {
-                                    Label("Remove", systemImage: "tray.and.arrow.down")
-                                }
-                                .tint(Color(.systemGray))
-                            }
+                            // Swipe-to-delete and swipe-to-view both
+                            // retired per `HiMem · Buttons & Actions §3`
+                            // (June 12 2026). The card is a tap target;
+                            // destruction lives inside the opened memory.
                             .contentShape(Rectangle())
                             .onTapGesture { selectedEntryId = entry.id }
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button {
-                                    selectedEntryId = entry.id
-                                } label: {
-                                    Label("View", systemImage: "eye")
-                                }
-                                .tint(.blue)
-                            }
                         }
                     } header: {
                         // Memories list spec §6 — Source Serif, quiet
@@ -390,13 +403,14 @@ struct JournalView: View {
                     .font(.largeTitle)
                     .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
-                Text("No entries yet")
+                Text("Your Memory Box is empty")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text("Tap + to create a memory, or hold for hands-free voice.")
+                Text("Tap the orange button in the bottom-right to capture your first memory — voice, photo, video, or text.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 40)
@@ -410,18 +424,6 @@ struct JournalView: View {
     //   - Views/Journal/JournalErrorBanner.swift
     //   - Views/Journal/JournalUndoToast.swift
     //   - Views/Journal/JournalInboxBanner.swift
-
-    // MARK: - Undo toast
-
-    private func showUndoToast(for entry: EntryDisplayModel) {
-        undoEntry = entry
-        withAnimation(.spring(response: 0.3)) { showUndo = true }
-        // Auto-dismiss after 5 seconds
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            withAnimation { showUndo = false }
-        }
-    }
 
     // MARK: - Capture handlers (Append spec — capture-new path)
 
@@ -460,49 +462,31 @@ struct JournalView: View {
             }
         }
     }
+
+    /// Tutorial #5 (Watch discovery). App-side gate per spec:
+    /// `WCSession.isPaired && !isWatchAppInstalled && !hasSeen`. No
+    /// permission, no system prompt — entirely the app's own UI on
+    /// the app's own timing. Surfaced once on Today (this is Today,
+    /// since JournalView is the landing surface), after onboarding
+    /// (enforced by the orchestrator's `isArmed` gate which we just
+    /// flipped above).
+    ///
+    /// **Suppression cases per spec:**
+    /// - *Paired and installed* → user already has it. Skip.
+    /// - *No watch paired* → never advertise hardware the user doesn't
+    ///   own. Skip.
+    /// - *Paired but app not installed* → THE discovery moment. Fire.
+    private func attemptWatchDiscoveryTutorial() {
+        let session = WCSession.default
+        guard WCSession.isSupported() else { return }
+        guard session.activationState == .activated else { return }
+        guard session.isPaired else { return }
+        guard !session.isWatchAppInstalled else { return }
+        TutorialOrchestrator.shared.tryFire(.watchDiscovery)
+    }
 }
 
 // MARK: - Body sub-modifiers
-
-/// Stacks the topic-approval sheet and the album-sync alert.
-/// Both are driven by shared services (`TopicApprovalService`,
-/// `AlbumSyncService`) and ride on top of every memories-list
-/// screen. Extracted from `JournalView.body` so the body stops
-/// owning their wiring directly — CRAP audit 2026-06-07.
-private struct JournalPromptDialogs: ViewModifier {
-    @ObservedObject var topicApproval: TopicApprovalService
-    @ObservedObject var albumSync: AlbumSyncService
-
-    func body(content: Content) -> some View {
-        content
-            .sheet(isPresented: Binding(
-                get: { topicApproval.pendingTopic != nil },
-                set: { if !$0 { topicApproval.reject() } }
-            )) {
-                if let pending = topicApproval.pendingTopic {
-                    TopicApprovalSheet(
-                        topicName: pending.name,
-                        onApprove: { paletteKey in topicApproval.approve(paletteKey: paletteKey) },
-                        onReject: { topicApproval.reject() }
-                    )
-                }
-            }
-            .alert(
-                "Photos Album",
-                isPresented: Binding(
-                    get: { albumSync.pendingProposal != nil },
-                    set: { if !$0 { albumSync.reject() } }
-                )
-            ) {
-                Button("Create Album") { albumSync.approve() }
-                Button("Not Now", role: .cancel) { albumSync.reject() }
-            } message: {
-                if let proposal = albumSync.pendingProposal {
-                    Text("Add all media from \"\(proposal.topicName)\" entries to a \"\(proposal.topicName)\" Photos album? Future captures in this topic will be added automatically.")
-                }
-            }
-    }
-}
 
 /// Stacks the two recoverable-error alerts driven by the speech
 /// and camera services. Both share the same "OK / Open Settings"
@@ -515,7 +499,7 @@ private struct JournalServiceErrorAlerts: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .alert("Voice Recording Error", isPresented: Binding(
+            .alert("Couldn't record", isPresented: Binding(
                 get: { speechErrorMessage != nil },
                 set: { if !$0 { speechErrorMessage = nil } }
             )) {
@@ -530,7 +514,7 @@ private struct JournalServiceErrorAlerts: ViewModifier {
             } message: {
                 Text(speechErrorMessage ?? "")
             }
-            .alert("Camera Error", isPresented: Binding(
+            .alert("Couldn't open the camera", isPresented: Binding(
                 get: { cameraService.error != nil },
                 set: { if !$0 { cameraService.error = nil } }
             )) {
@@ -554,6 +538,11 @@ struct JournalHeaderView: View {
     @Binding var viewMode: JournalView.ViewMode
     let onSearchTap: () -> Void
     let onSettingsTap: () -> Void
+    /// Fires when the user taps the `?` glyph between search and
+    /// settings. Routes to `TutorialsHubView` per `docs/design/
+    /// screens-settings.jsx` → `ToolbarHelpDemo`. Defaulted so older
+    /// callers still compile while the host wires it.
+    var onHelpTap: (() -> Void)? = nil
 
     @ObservedObject private var entitlement = Entitlement.shared
 
@@ -593,6 +582,20 @@ struct JournalHeaderView: View {
                         .foregroundStyle(Crucible.Color.ink)
                 }
                 .accessibilityLabel("Search")
+
+                // The `?` opens the Tutorials hub. Warm-ink, never blue
+                // — per spec, status/info glyphs in the toolbar share
+                // the same quiet ink as search and settings; AI blue is
+                // reserved for actions that invoke AI.
+                if let onHelpTap {
+                    Button(action: onHelpTap) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.body)
+                            .foregroundStyle(Crucible.Color.ink)
+                    }
+                    .accessibilityLabel("Tutorials")
+                    .padding(.leading, 12)
+                }
 
                 Button(action: onSettingsTap) {
                     Image(systemName: "gearshape")

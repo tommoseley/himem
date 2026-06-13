@@ -117,6 +117,17 @@ enum AudioCompressor {
     /// Compresses `sourceURL` in place. Writes to a sibling temp file,
     /// then atomically replaces the source. On failure the source is
     /// left untouched.
+    ///
+    /// When the source lives inside the iCloud Drive ubiquity container,
+    /// the replace step MUST run inside `NSFileCoordinator.coordinate(
+    /// writingItemAt:options:.forReplacing)`. Without coordination,
+    /// iCloud's upload daemon can scan the file mid-replace and ship a
+    /// truncated blob to other devices — produces duration=0 on the
+    /// other side (same symptom as the 2026-06-04 phone-side 0:00
+    /// regression, at a different layer). The temp write itself stays
+    /// uncoordinated: dotfile siblings aren't visible to iCloud's
+    /// file-presenters until they're put into final position by the
+    /// replace.
     static func compressInPlace(
         at sourceURL: URL,
         sampleRate: Double = 16_000,
@@ -125,7 +136,19 @@ enum AudioCompressor {
         let tmpURL = sourceURL.deletingLastPathComponent()
             .appendingPathComponent("." + sourceURL.lastPathComponent + ".aac-tmp")
         try await compress(source: sourceURL, destination: tmpURL, sampleRate: sampleRate, bitRate: bitRate)
-        _ = try FileManager.default.replaceItemAt(sourceURL, withItemAt: tmpURL)
+
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        var replaceError: Error?
+        coordinator.coordinate(writingItemAt: sourceURL, options: .forReplacing, error: &coordinationError) { writeURL in
+            do {
+                _ = try FileManager.default.replaceItemAt(writeURL, withItemAt: tmpURL)
+            } catch {
+                replaceError = error
+            }
+        }
+        if let coordinationError { throw coordinationError }
+        if let replaceError { throw replaceError }
     }
 }
 

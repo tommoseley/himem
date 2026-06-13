@@ -144,6 +144,7 @@ struct VoiceCaptureOrchestratorTests {
             offsets: [],
             rollGroupId: rollGroupId,
             liveTranscript: "live test transcript",
+            recordingStartedAt: Date(),
             sessionLatitude: 37.0,
             sessionLongitude: -122.0,
             transcribe: { _ in
@@ -172,6 +173,7 @@ struct VoiceCaptureOrchestratorTests {
             offsets: [30.0, 60.0], // 3 clips
             rollGroupId: rollGroupId,
             liveTranscript: "ignored on multi-clip path",
+            recordingStartedAt: Date(),
             sessionLatitude: nil,
             sessionLongitude: nil,
             transcribe: { _ in
@@ -210,6 +212,7 @@ struct VoiceCaptureOrchestratorTests {
             offsets: [30.0],
             rollGroupId: UUID(),
             liveTranscript: "",
+            recordingStartedAt: Date(),
             sessionLatitude: nil,
             sessionLongitude: nil,
             transcribe: { _ in .modelNotInstalled }
@@ -243,7 +246,7 @@ struct VoiceCaptureOrchestratorTests {
     @Test func shouldDeleteMaster_singleClip_keepsMaster() {
         let master = "abc.caf"
         let fragments = [
-            VoiceClipFragment(audioFilename: master, transcript: "t", duration: 1.0)
+            VoiceClipFragment(audioFilename: master, transcript: "t", duration: 1.0, capturedAt: Date())
         ]
         #expect(
             VoiceCaptureOrchestrator.shouldDeleteMaster(masterFilename: master, fragments: fragments) == false,
@@ -256,7 +259,7 @@ struct VoiceCaptureOrchestratorTests {
         // Split-fallback path also returns the master as the single
         // fragment (after `compressIfPossible` runs in-place).
         let fragments = [
-            VoiceClipFragment(audioFilename: master, transcript: "t", duration: 1.0)
+            VoiceClipFragment(audioFilename: master, transcript: "t", duration: 1.0, capturedAt: Date())
         ]
         #expect(
             VoiceCaptureOrchestrator.shouldDeleteMaster(masterFilename: master, fragments: fragments) == false,
@@ -270,8 +273,8 @@ struct VoiceCaptureOrchestratorTests {
         // none equals the master's filename. The master is now an
         // orphan that should be cleaned up.
         let fragments = [
-            VoiceClipFragment(audioFilename: "split1.caf", transcript: "t", duration: 0.5),
-            VoiceClipFragment(audioFilename: "split2.caf", transcript: "t", duration: 0.5)
+            VoiceClipFragment(audioFilename: "split1.caf", transcript: "t", duration: 0.5, capturedAt: Date()),
+            VoiceClipFragment(audioFilename: "split2.caf", transcript: "t", duration: 0.5, capturedAt: Date())
         ]
         #expect(
             VoiceCaptureOrchestrator.shouldDeleteMaster(masterFilename: master, fragments: fragments) == true,

@@ -278,7 +278,9 @@ struct CreateMemoryFromClipsSheet: View {
                     ForEach(viewModel.topics, id: \.self) { topic in
                         chip(label: topic, topic: topic)
                     }
-                    newTopicChip
+                    // `+ New` topic chip hidden for v1 — the inline
+                    // new-topic flow isn't wired; users can create
+                    // topics from Settings → Topics for now.
                 }
             }
         }
@@ -416,23 +418,27 @@ struct CreateMemoryFromClipsSheet: View {
         newProjectName = ""
     }
 
-    /// Forward-looking "+ New" chip per spec. Tapping today is a
-    /// no-op — when the inline new-topic flow lands, hook the action
-    /// here.
+    /// "+ New" topic affordance per `HiMem · Buttons & Actions §2`:
+    /// dashed ochre — the canonical "add / provisional" shape, same
+    /// vocabulary as the `+ Edit` affordance on Memory Detail's
+    /// topic row. Tapping today is a no-op — when the inline
+    /// new-topic flow lands, hook the action here.
     private var newTopicChip: some View {
         Button { /* TODO: inline new-topic flow */ } label: {
-            HStack(spacing: 3) {
+            HStack(spacing: 4) {
                 Image(systemName: "plus")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 11, weight: .semibold))
                 Text("New")
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 12, weight: .semibold))
             }
-            .foregroundStyle(Crucible.Color.ink3)
+            .foregroundStyle(Crucible.Color.accent)
             .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Crucible.Color.card)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(Crucible.Color.hairline, lineWidth: 1))
+            .padding(.vertical, 6)
+            .frame(minHeight: 28)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            )
         }
         .buttonStyle(.plain)
     }

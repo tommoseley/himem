@@ -24,7 +24,7 @@ final class WatchCaptureRequestBus: ObservableObject {
 /// pending list. A voice command is deliberate, so we auto-start.
 struct StartVoiceRecordingIntent: AppIntent {
     static var title: LocalizedStringResource = "Record a memory in HiMem"
-    static var description: IntentDescription = "Open HiMem on Apple Watch and start recording a voice memory."
+    static var description: IntentDescription = "Open HiMem and start recording a voice memory."
     static var openAppWhenRun: Bool = true
 
     @MainActor

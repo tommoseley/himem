@@ -134,6 +134,64 @@ struct UbiquityStoreTests {
         #expect(String(decoding: bytes, as: UTF8.self) == "second")
     }
 
+    // MARK: - copyIntoStore (NSFileCoordinator-wrapped copy)
+
+    /// Happy path: `copyIntoStore` lays down bytes at the destination
+    /// AND leaves the source intact. Distinguishes copy from move —
+    /// PHPicker / WatchSession / PHAsset sources we don't own.
+    @Test func copyIntoStore_copiesAndLeavesSource() throws {
+        let (root, cleanup) = try scratchSandbox()
+        defer { cleanup() }
+        let store = UbiquityStore(sandboxOverride: root)
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent("copy-src-\(UUID().uuidString).jpg")
+        try Data("photo-bytes".utf8).write(to: source)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let dest = store.photoURL(for: "imported.jpg")
+        let resultURL = try store.copyIntoStore(sourceURL: source, destinationURL: dest)
+        #expect(FileManager.default.fileExists(atPath: resultURL.path))
+        // Source MUST still exist — that's what makes this `copy`
+        // rather than `move`.
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        let bytes = try Data(contentsOf: resultURL)
+        #expect(String(decoding: bytes, as: UTF8.self) == "photo-bytes")
+    }
+
+    /// `copyIntoStore` overwrites an existing destination cleanly.
+    /// Same destination URL → second copy wins. No stale bytes from
+    /// the first attempt.
+    @Test func copyIntoStore_replacesExistingDestination() throws {
+        let (root, cleanup) = try scratchSandbox()
+        defer { cleanup() }
+        let store = UbiquityStore(sandboxOverride: root)
+        let sourceA = FileManager.default.temporaryDirectory.appendingPathComponent("src-a-\(UUID().uuidString).jpg")
+        let sourceB = FileManager.default.temporaryDirectory.appendingPathComponent("src-b-\(UUID().uuidString).jpg")
+        try Data("first".utf8).write(to: sourceA)
+        try Data("second".utf8).write(to: sourceB)
+        defer {
+            try? FileManager.default.removeItem(at: sourceA)
+            try? FileManager.default.removeItem(at: sourceB)
+        }
+        let dest = store.photoURL(for: "overwrite.jpg")
+        try store.copyIntoStore(sourceURL: sourceA, destinationURL: dest)
+        try store.copyIntoStore(sourceURL: sourceB, destinationURL: dest)
+        let bytes = try Data(contentsOf: dest)
+        #expect(String(decoding: bytes, as: UTF8.self) == "second")
+    }
+
+    /// `copyIntoStore` throws when the source doesn't exist. Caller
+    /// must be able to distinguish "I tried, system said no" from
+    /// "silently dropped on the floor".
+    @Test func copyIntoStore_missingSource_throws() throws {
+        let (root, cleanup) = try scratchSandbox()
+        defer { cleanup() }
+        let store = UbiquityStore(sandboxOverride: root)
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent("never-existed-\(UUID().uuidString).jpg")
+        let dest = store.photoURL(for: "noop.jpg")
+        #expect(throws: (any Error).self) {
+            try store.copyIntoStore(sourceURL: source, destinationURL: dest)
+        }
+    }
+
     // MARK: - Sandbox-to-ubiquity migration
 
     /// When the container is unavailable (test environment), the
