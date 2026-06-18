@@ -262,7 +262,10 @@ struct MemoryStreamApp: App {
                 // owns that flip exclusively.
                 if !splashComplete {
                     LaunchScreenView(
-                        onStorageReady: { storageReady = true },
+                        onStorageReady: {
+                            NSLog("[HiMem][LifeDx] storageReady → true")
+                            storageReady = true
+                        },
                         onComplete:     { splashComplete = true }
                     )
                 }
@@ -307,7 +310,21 @@ struct MemoryStreamApp: App {
                 }
             }
             #endif
+            .onChange(of: storageReady) { _, ready in
+                NSLog("[HiMem][LifeDx] storageReady onChange → \(ready)")
+                guard ready else { return }
+                // Money 2026-06-18: cold-launch race — `.onChange(of:
+                // scenePhase)` fires once at the first `.active`
+                // transition, which often beats `LaunchScreenView`'s
+                // async `onStorageReady` callback. When that
+                // happened the scene-active backstop took the
+                // `storageReady=false` exit and the retry path never
+                // ran. The fix: also sweep when storage transitions
+                // ready, regardless of where scenePhase is.
+                Task { await retryPendingInboxTranscriptions() }
+            }
             .onChange(of: scenePhase) { _, newPhase in
+                NSLog("[HiMem][LifeDx] scenePhase → \(newPhase) storageReady=\(storageReady)")
                 guard newPhase == .active else { return }
                 // Refresh auth from Keychain on foreground —
                 // recovers a stale `isAuthenticated=false` if the
@@ -316,7 +333,11 @@ struct MemoryStreamApp: App {
                 // unreadable then). Runs before the storageReady
                 // guard since Keychain is independent of Core Data.
                 auth.refresh()
-                guard storageReady else { return }
+                guard storageReady else {
+                    NSLog("[HiMem][LifeDx] scene-active backstop SKIPPED — storage not ready yet")
+                    return
+                }
+                NSLog("[HiMem][LifeDx] scene-active backstop firing retry path")
                 Task { await refreshDailyNudge() }
                 Task { await retryPendingInboxTranscriptions() }
                 Task { await promptForNotificationsIfFirstTime() }
@@ -356,7 +377,7 @@ struct MemoryStreamApp: App {
     /// idempotent, skips already-attempted clips.
     @MainActor
     private func retryPendingInboxTranscriptions() async {
-        await WatchSessionDelegate.transcribePendingInboxClips()
+        await WatchSessionDelegate.transcribePendingInboxClips(trigger: "scene-active")
     }
 
     /// Fires the iOS notification permission prompt exactly once per

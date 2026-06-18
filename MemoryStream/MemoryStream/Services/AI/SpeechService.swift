@@ -266,7 +266,11 @@ final class SpeechService: ObservableObject {
 
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try session.setCategory(
+                .record,
+                mode: .measurement,
+                options: [.duckOthers, .allowBluetoothHFP]
+            )
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             NSLog("[HiMem][Speech] audio session failed: \(error.localizedDescription)")

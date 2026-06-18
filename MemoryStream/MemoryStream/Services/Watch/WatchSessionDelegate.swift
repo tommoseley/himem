@@ -211,7 +211,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             // session-first inbox (SessionListView) stay stuck on
             // "Transcribing…" until the next scenePhase=.active
             // transition. Money: 2026-05-25 bug.
-            await Self.transcribePendingInboxClips()
+            await Self.transcribePendingInboxClips(trigger: "arrival")
 
             // Re-broadcast acks for ALL inbox clips, not just the one
             // that just arrived. WatchConnectivity acks can be lost
@@ -238,15 +238,19 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// the manifest doesn't take a hard dependency on
     /// `TranscriptionService`.
     @MainActor
-    static func transcribePendingInboxClips() async {
-        let pending = InboxManifest.shared.clips.filter {
+    static func transcribePendingInboxClips(trigger: String = "scene-active") async {
+        let allClips = InboxManifest.shared.clips
+        let pending = allClips.filter {
             $0.transcript.isEmpty && !$0.transcriptionAttempted
         }
+        let pendingIds = pending.map { $0.clipId.uuidString.prefix(8) }.joined(separator: ",")
+        NSLog("[HiMem][InboxDx] sweep trigger=\(trigger) total=\(allClips.count) pending=\(pending.count) ids=[\(pendingIds)]")
         guard !pending.isEmpty else { return }
         NSLog("[HiMem][Inbox] transcribing \(pending.count) pending clip(s)")
         if #available(iOS 26.0, *) {
             for clip in pending {
                 let url = InboxManifest.audioURL(for: clip.audioFilename)
+                logPreflight(clip: clip, url: url)
                 // Surface the "transcribing" phase to the UI so the
                 // user sees a real signal between "audio landed" and
                 // "transcript ready" — addresses the spec's
@@ -269,6 +273,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                     )
                 )
                 let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
+                NSLog("[HiMem][InboxDx] outcome clip=\(clip.clipId.uuidString.prefix(8)) kind=\(outcomeLabel(outcome))")
                 // Only flip `transcriptionAttempted` when the
                 // recognizer ran end-to-end (`.transcribed`).
                 // Model-not-installed, file-unreadable, and
@@ -293,6 +298,105 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 // Started` before its retry.
                 InboxArrivalTracker.shared.clear(clipId: clip.clipId)
             }
+        }
+        // Money 2026-06-17: if any clip remained pending after this
+        // sweep (typically `.modelNotInstalled` while Apple's
+        // on-device speech model is still downloading), schedule a
+        // retry in 30s. Without this, the only sweep triggers are
+        // (a) the next watch arrival and (b) `scenePhase=.active` —
+        // so a user sitting on Captured Clips while the model
+        // installs sees "Transcribing…" indefinitely until they
+        // background+foreground. The retry self-cancels once the
+        // pending queue drains.
+        scheduleRetryIfStillPending()
+    }
+
+    /// In-flight retry timer for `transcribePendingInboxClips`.
+    /// Cancelled and re-armed on every sweep; clears itself when the
+    /// pending queue is empty.
+    @MainActor private static var retryTask: Task<Void, Never>?
+
+    /// Test hook: true iff a retry sleep is currently armed. Used by
+    /// `ColdLaunchTranscriptionRaceTests` to assert that
+    /// `scheduleRetryIfStillPending` correctly self-cancels after the
+    /// pending queue drains.
+    @MainActor
+    static var hasPendingRetry: Bool { retryTask != nil }
+
+    /// Test hook: cancels any in-flight retry timer and clears the
+    /// reference. Tests call this in setup/teardown so prior runs
+    /// don't leak state into the next test.
+    @MainActor
+    static func cancelPendingRetryForTesting() {
+        retryTask?.cancel()
+        retryTask = nil
+    }
+
+    /// Schedules a 30s retry of `transcribePendingInboxClips` iff at
+    /// least one clip is still pending after the just-completed
+    /// sweep. Idempotent — re-arming cancels any prior pending retry
+    /// so we never stack multiple sleeping tasks. Stops when the
+    /// queue drains.
+    @MainActor
+    private static func scheduleRetryIfStillPending() {
+        let stillPendingCount = InboxManifest.shared.clips.filter {
+            $0.transcript.isEmpty && !$0.transcriptionAttempted
+        }.count
+        retryTask?.cancel()
+        guard stillPendingCount > 0 else {
+            NSLog("[HiMem][InboxDx] retry not scheduled — queue drained")
+            retryTask = nil
+            return
+        }
+        NSLog("[HiMem][InboxDx] retry armed in 30s (stillPending=\(stillPendingCount))")
+        retryTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            guard !Task.isCancelled else {
+                NSLog("[HiMem][InboxDx] retry cancelled before wake")
+                return
+            }
+            NSLog("[HiMem][InboxDx] retry timer fired — re-entering sweep")
+            await transcribePendingInboxClips(trigger: "retry")
+        }
+    }
+
+    /// Pre-flight diagnostic: file existence, byte size, and the
+    /// iCloud ubiquity download state for the clip's audio. If the
+    /// file is in ubiquity but not yet downloaded locally,
+    /// `AVAudioFile` open will fail with `.fileUnreadable` and the
+    /// retry will keep looping — visible here.
+    @MainActor
+    private static func logPreflight(clip: InboxClip, url: URL) {
+        let fm = FileManager.default
+        let exists = fm.fileExists(atPath: url.path)
+        let size: Int64 = (try? fm.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? -1
+        var downloadStatus = "n/a"
+        var isUbiquitous = false
+        if let values = try? url.resourceValues(forKeys: [
+            .isUbiquitousItemKey,
+            .ubiquitousItemDownloadingStatusKey,
+        ]) {
+            isUbiquitous = values.isUbiquitousItem ?? false
+            if let status = values.ubiquitousItemDownloadingStatus {
+                downloadStatus = status.rawValue
+            }
+        }
+        NSLog("[HiMem][InboxDx] preflight clip=\(clip.clipId.uuidString.prefix(8)) file=\(url.lastPathComponent) exists=\(exists) bytes=\(size) ubiquitous=\(isUbiquitous) dlStatus=\(downloadStatus)")
+    }
+
+    /// Stringifies an Outcome for log readability.
+    @available(iOS 26.0, *)
+    @MainActor
+    private static func outcomeLabel(_ outcome: TranscriptionService.Outcome) -> String {
+        switch outcome {
+        case .transcribed(let r):
+            return "transcribed(textLen=\(r.text.count) cov=\(Int(r.coverageSeconds))s)"
+        case .modelNotInstalled:
+            return "modelNotInstalled"
+        case .fileUnreadable(let e):
+            return "fileUnreadable(\(e.localizedDescription))"
+        case .transcriberFailed(let e):
+            return "transcriberFailed(\(e.localizedDescription))"
         }
     }
 
