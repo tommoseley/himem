@@ -70,6 +70,38 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         }
     }
 
+    /// Completion observer for outbound `transferUserInfo` transfers
+    /// (iPhone-side acks back to the watch, and any other user-info
+    /// payloads we may add). Before this method existed the
+    /// transfers were fire-and-forget — a permanently-failed ack
+    /// (e.g., watch app uninstalled, queue corrupted) would never
+    /// surface anywhere. Now persistent failures are at least loud
+    /// in the device log so we can diagnose stuck-queue scenarios.
+    /// We do NOT auto-retry from this method: WC's own retry
+    /// behavior is durable across reconnects, and re-queueing on
+    /// error risks duplicate delivery once the original eventually
+    /// lands.
+    nonisolated func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
+        let kind = (userInfoTransfer.userInfo["kind"] as? String) ?? "unknown"
+        let confirmedId = (userInfoTransfer.userInfo["confirmed"] as? String) ?? "n/a"
+        if let error {
+            NSLog("[HiMem][WC] iPhone — transferUserInfo FAILED kind=\(kind) confirmed=\(confirmedId): \(error.localizedDescription)")
+        } else {
+            NSLog("[HiMem][WC] iPhone — transferUserInfo delivered kind=\(kind) confirmed=\(confirmedId)")
+        }
+    }
+
+    /// Completion observer for outbound `transferFile` (iPhone-side
+    /// — not used today, all file transfers originate on the watch).
+    /// Stub here so when we add iPhone→watch file paths in future
+    /// (e.g., recovery/restore) the failure mode is visible from
+    /// day one rather than silent.
+    nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
+        if let error {
+            NSLog("[HiMem][WC] iPhone — transferFile FAILED url=\(fileTransfer.file.fileURL.lastPathComponent): \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Message (pre-announce path)
 
     /// Receives `sendMessage` payloads from the watch. The only
@@ -78,19 +110,38 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// `WatchTransferService.send(clip:)` and the parsing/wiring
     /// in `WatchPreAnnounceParser`.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
-        guard let parsed = WatchPreAnnounceParser.parse(message) else {
-            NSLog("[HiMem][WC] iPhone — didReceiveMessage ignored, keys=\(Array(message.keys))")
+        routePreAnnounceIfPossible(payload: message, transport: "sendMessage")
+    }
+
+    /// Durable backstop for the pre-announce. When the watch is
+    /// unreachable at the moment of `send(clip:)`, it queues the
+    /// announce via `transferUserInfo` instead of `sendMessage`. iOS
+    /// holds the user-info entry and delivers it the next time the
+    /// pair is reachable, so the iPhone gets the IncomingCard signal
+    /// even if reachability was wedged at recording-end. Money
+    /// 2026-06-18: matches the BT-wedge symptom Tom saw — paired
+    /// watch reports unreachable, clip arrives via transferFile
+    /// (durable) but no pre-announce ever lands, so the user sees
+    /// no "Transcribing…" UI between recording-end and arrival.
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        routePreAnnounceIfPossible(payload: userInfo, transport: "transferUserInfo")
+    }
+
+    private func routePreAnnounceIfPossible(payload: [String: Any], transport: String) {
+        guard let parsed = WatchPreAnnounceParser.parse(payload) else {
+            NSLog("[HiMem][WC] iPhone — \(transport) ignored, keys=\(Array(payload.keys))")
             return
         }
-        NSLog("[HiMem][WC] iPhone — pre-announce received for clipId=\(parsed.clipId) duration=\(parsed.durationSeconds)s")
+        NSLog("[HiMem][WC] iPhone — pre-announce (\(transport)) received for clipId=\(parsed.clipId) duration=\(parsed.durationSeconds)s")
         Task { @MainActor in
-            // Gate against the late pre-announce race: if sendMessage
-            // was delayed by a hop through the WC layer while
-            // transferFile delivered + processed quickly, the clip is
-            // already in the manifest by the time we get here. Adding
-            // an InFlightClip entry now would orphan it (the
-            // transcribe sweep already ran). Same for clips the user
-            // already disposed of — pre-announce shouldn't resurrect.
+            // Gate against the late pre-announce race: if the
+            // delivery was delayed by a hop through the WC layer
+            // while transferFile delivered + processed quickly, the
+            // clip is already in the manifest by the time we get
+            // here. Adding an InFlightClip entry now would orphan it
+            // (the transcribe sweep already ran). Same for clips the
+            // user already disposed of — pre-announce shouldn't
+            // resurrect.
             if InboxManifest.shared.clips.contains(where: { $0.clipId == parsed.clipId }) {
                 NSLog("[HiMem][WC] iPhone — pre-announce ignored; clipId=\(parsed.clipId) already in manifest")
                 return

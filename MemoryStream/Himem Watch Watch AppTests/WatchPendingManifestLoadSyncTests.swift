@@ -73,6 +73,85 @@ struct WatchPendingManifestLoadSyncTests {
         #expect(WatchSharedState.pendingCount == 0)
     }
 
+    /// Money test for the 2026-06-18 fix: a corrupt manifest used to
+    /// silently zero `clips`, orphaning every audio file on disk
+    /// forever — total silent data loss for the user's recordings.
+    /// `rescueOrphans()` now scans `audioDirectory` for surviving
+    /// `.caf` files matching the watch's `clipId.uuidString.caf`
+    /// convention and rebuilds best-effort manifest rows from them.
+    @Test
+    func load_corruptManifest_rescuesOrphanAudio() throws {
+        // Arrange
+        cleanPendingDirectory()
+        // Plant a stub `.caf` whose filename is a valid UUID, so the
+        // rescue scanner can recover its clipId. Real audio bytes
+        // not required — AVAudioFile read will fail and duration
+        // falls through to 0, which the rescue tolerates.
+        let orphanId = UUID()
+        let orphanFilename = "\(orphanId.uuidString).caf"
+        FileManager.default.createFile(
+            atPath: WatchPendingManifest.audioURL(for: orphanFilename).path,
+            contents: Data([0x00, 0x01, 0x02])
+        )
+        // Corrupt the manifest.
+        let url = WatchPendingManifest.manifestURL
+        try "{ garbage }".write(to: url, atomically: true, encoding: .utf8)
+        WatchSharedState.pendingCount = 0
+
+        // Act
+        let manifest = makeManifestForTest()
+
+        // Assert
+        #expect(manifest.clips.count == 1,
+                "Orphan rescue must recover the surviving audio file rather than silently zero the manifest")
+        #expect(manifest.clips.first?.clipId == orphanId)
+        #expect(manifest.clips.first?.audioFilename == orphanFilename)
+        #expect(WatchSharedState.pendingCount == 1,
+                "Shared count must follow the rescued clip count")
+    }
+
+    /// Money test for the 2026-06-18 ack-buffer defensive fix: an
+    /// ack arriving for a clipId not currently in the manifest
+    /// (e.g., the load was racing the ack delivery — defensive against
+    /// a future refactor changing init order) must NOT be silently
+    /// lost. Buffer the clipId; when the matching clip lands via
+    /// `append` (or any subsequent mutation), apply the ack.
+    @Test
+    func ackBeforeAppend_replaysOnAppend() throws {
+        // Arrange — empty manifest, clean directory.
+        cleanPendingDirectory()
+        let manifest = makeManifestForTest()
+        #expect(manifest.clips.isEmpty)
+
+        let clipId = UUID()
+        // Ack arrives FIRST — clip not yet in manifest.
+        manifest.remove(clipId: clipId, viaSync: false)
+        // Pre-condition: no clips, no observable change.
+        #expect(manifest.clips.isEmpty)
+
+        // Now append the clip whose ack already arrived. The replay
+        // must fire and immediately remove it.
+        let pendingFilename = "pending-\(clipId).caf"
+        FileManager.default.createFile(
+            atPath: WatchPendingManifest.audioURL(for: pendingFilename).path,
+            contents: Data([0x00])
+        )
+        let clip = WatchPendingClip(
+            clipId: clipId,
+            capturedAt: Date(),
+            duration: 1,
+            transcript: "",
+            latitude: nil,
+            longitude: nil,
+            audioFilename: pendingFilename
+        )
+        manifest.append(clip)
+
+        // Assert — the buffered ack replayed; clip is gone.
+        #expect(manifest.clips.isEmpty,
+                "Buffered ack must replay on append — otherwise a cold-launch race silently strands the clip in the watch's pending list")
+    }
+
     /// Symmetry: when manifest correctly contains one playable clip,
     /// shared count must be 1.
     @Test

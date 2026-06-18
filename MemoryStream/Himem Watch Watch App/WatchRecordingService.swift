@@ -50,6 +50,16 @@ final class WatchRecordingService: NSObject, ObservableObject {
     private var currentClipId: UUID?
     private var currentAudioURL: URL?
     private var currentLocation: CLLocation?
+    /// Keeps the watch app alive (and the audio engine running) when
+    /// the screen blanks mid-recording. Without this, watchOS's
+    /// ~15-second idle timer can suspend the app and kill
+    /// `AVAudioEngine`, producing a truncated `.caf` whose tail just
+    /// ends mid-syllable. Allocated in `start()`, invalidated in
+    /// `stop(save:)` and `cleanupAfterError()`. Reason `.mindfulness`
+    /// — the closest fit watchOS offers for a reflective voice-
+    /// journal session.
+    private var extendedSession: WKExtendedRuntimeSession?
+    private var extendedSessionDelegate: ExtendedRuntimeSessionDelegate?
     /// Serial background queue for AVAudioFile writes. Apple's
     /// guidance is explicit: don't do file I/O on the audio tap
     /// thread. Watch flash write latency drifts up under sustained
@@ -92,7 +102,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
     /// Throwaway audio-session warmup. Run once at app launch from
     /// `WatchAppCoordinator.init`. Per Apple DTS guidance the HAL +
     /// route-negotiation state caches at the process level after a
-    /// setActive cycle, so paying the ~10s `.allowBluetooth` HFP
+    /// setActive cycle, so paying the ~10s `.allowBluetoothHFP`
     /// route-scan cost here (off the record critical path, while the
     /// user is still landing on the home screen) leaves the first
     /// real record hitting a warm HAL.
@@ -109,7 +119,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
             try session.setCategory(
                 .playAndRecord,
                 mode: .measurement,
-                options: [.allowBluetooth, .mixWithOthers]
+                options: [.allowBluetoothHFP, .mixWithOthers]
             )
             try session.setActive(true, options: [])
             try session.setActive(false, options: [])
@@ -130,6 +140,11 @@ final class WatchRecordingService: NSObject, ObservableObject {
     ///
     /// NSLog timings stay in place so we can see the cold-start cost
     /// in the device log on the next first-record.
+    ///
+    /// `.allowBluetoothHFP` (renamed from `.allowBluetooth` in iOS 17)
+    /// enables AirPods + paired Bluetooth headsets as the input
+    /// device. Without it the watch silently uses its built-in mic
+    /// even when the user expects their AirPods.
     func start() async {
         guard !isRecording else { return }
         let startBegin = Date()
@@ -154,13 +169,13 @@ final class WatchRecordingService: NSObject, ObservableObject {
         do {
             let sessionStart = Date()
             let session = AVAudioSession.sharedInstance()
-            // `.allowBluetooth` enables AirPods-as-mic. It also triggers
-            // HFP route negotiation on `setActive(true)` — that's the
-            // 10s cold-start cost Apple DTS confirms. We pay it once
-            // per app launch via `warmAudioSession()` called from
-            // `WatchAppCoordinator.init`, then this setActive hits a
-            // warm HAL.
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetooth])
+            // `.allowBluetoothHFP` enables AirPods-as-mic. It also
+            // triggers HFP route negotiation on `setActive(true)` —
+            // that's the 10s cold-start cost Apple DTS confirms. We
+            // pay it once per app launch via `warmAudioSession()`
+            // called from `WatchAppCoordinator.init`, then this
+            // setActive hits a warm HAL.
+            try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             NSLog("[HiMem][REC] start: AVAudioSession active in \(Int(Date().timeIntervalSince(sessionStart) * 1000))ms")
 
@@ -215,6 +230,14 @@ final class WatchRecordingService: NSObject, ObservableObject {
             NSLog("[HiMem][REC] start: engine prepared+started in \(Int(Date().timeIntervalSince(engineStart) * 1000))ms")
 
             startedAt = Date()
+            // Money 2026-06-18: hold the watch app alive across
+            // screen-off so the AVAudioEngine isn't suspended mid-
+            // recording. Without this, a stationary watch + idle
+            // screen at ~15s kills the engine and truncates the
+            // `.caf`. Best-effort: if the session fails to start
+            // we proceed without it — the most likely outcome is
+            // the same as today (silent truncation), not worse.
+            startExtendedSessionIfPossible()
             elapsed = 0
             transcript = ""
             audioLevel = 0
@@ -275,6 +298,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
         // point the queue has drained and the header is finalized.
         audioFile = nil
         stopTimer()
+        invalidateExtendedSession()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         isRecording = false
         WatchSharedState.isRecording = false
@@ -512,12 +536,86 @@ final class WatchRecordingService: NSObject, ObservableObject {
         }
         currentAudioURL = nil
         currentRollGroupId = nil
+        invalidateExtendedSession()
         isRecording = false
+        // Mirror `stop(save:)`: if `start()` set the shared-state
+        // flag before throwing, the complication shows "REC" forever
+        // until next process launch. Clear it + refresh the widget
+        // timeline on the error path too.
+        WatchSharedState.isRecording = false
+        Task { await WidgetTimelineRefresher.refresh() }
         elapsed = 0
         transcript = ""
         audioLevel = 0
         peakAudioLevel = 0
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    // MARK: - Extended runtime session (screen-off survival)
+
+    private func startExtendedSessionIfPossible() {
+        let session = WKExtendedRuntimeSession()
+        let delegate = ExtendedRuntimeSessionDelegate(
+            onExpire: { [weak self] in
+                NSLog("[HiMem][REC] extended runtime session expiring — stopping recording")
+                // Save the partial recording rather than discard;
+                // an expired session at the system's 1-hour ceiling
+                // is "as much as watchOS will give us," not user
+                // intent to abandon. HiMem's 5-min cap means we'd
+                // hit the cap first anyway, but the safety net is
+                // here in case the cap moves later.
+                Task { @MainActor [weak self] in
+                    _ = self?.stop(save: true)
+                }
+            },
+            onError: { error in
+                NSLog("[HiMem][REC] extended runtime session error: \(error.localizedDescription)")
+            }
+        )
+        extendedSessionDelegate = delegate
+        session.delegate = delegate
+        session.start()
+        extendedSession = session
+        NSLog("[HiMem][REC] extended runtime session started")
+    }
+
+    private func invalidateExtendedSession() {
+        guard let session = extendedSession else { return }
+        session.invalidate()
+        extendedSession = nil
+        extendedSessionDelegate = nil
+        NSLog("[HiMem][REC] extended runtime session invalidated")
+    }
+}
+
+/// Thin delegate adapter for `WKExtendedRuntimeSession`. Held by
+/// `WatchRecordingService` for the lifetime of the session; closures
+/// route the lifecycle events back to the service without making
+/// the service itself conform (keeps the service @MainActor without
+/// the protocol's NSObject requirements bleeding everywhere).
+private final class ExtendedRuntimeSessionDelegate: NSObject, WKExtendedRuntimeSessionDelegate {
+    private let onExpire: () -> Void
+    private let onError: (Error) -> Void
+
+    init(onExpire: @escaping () -> Void, onError: @escaping (Error) -> Void) {
+        self.onExpire = onExpire
+        self.onError = onError
+    }
+
+    func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {}
+
+    func extendedRuntimeSessionWillExpire(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
+        onExpire()
+    }
+
+    func extendedRuntimeSession(
+        _ extendedRuntimeSession: WKExtendedRuntimeSession,
+        didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason,
+        error: Error?
+    ) {
+        if let error {
+            onError(error)
+        }
     }
 }
 

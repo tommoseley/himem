@@ -39,6 +39,17 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         let url = WatchPendingManifest.audioURL(for: clip.audioFilename)
         guard FileManager.default.fileExists(atPath: url.path) else {
             NSLog("[HiMem][WC] watch — file missing at \(url.path), skipping send")
+            // Money 2026-06-18: if the file isn't on disk yet
+            // (recording-end async drain still flushing, or a
+            // sessionReachabilityDidChange fired immediately
+            // post-stop), the original code returned silently and
+            // the only retry path was the next app cold launch.
+            // Schedule a backoff retry so the clip ships once the
+            // write completes. Bounded to 1s + 5s + 15s; if all
+            // three fail the next legitimate retry triggers
+            // (reachability flip, scenePhase=.active, cold launch)
+            // still cover it.
+            scheduleFileMissingRetry(for: clip)
             return
         }
 
@@ -81,16 +92,65 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
             "longitude": clip.longitude as Any
         ]
         if session.isReachable {
-            session.sendMessage(announcePayload, replyHandler: nil) { error in
-                NSLog("[HiMem][WC] watch — pre-announce sendMessage failed for clipId=\(clip.clipId): \(error.localizedDescription) (transferFile will still deliver)")
+            session.sendMessage(announcePayload, replyHandler: nil) { [announcePayload] error in
+                NSLog("[HiMem][WC] watch — pre-announce sendMessage failed for clipId=\(clip.clipId): \(error.localizedDescription) — falling back to transferUserInfo")
+                // sendMessage requires reachable + activated on both
+                // ends. If iOS rejects (e.g., WCErrorCodeNotReachable
+                // when the link flapped mid-call), fall back to the
+                // durable user-info queue so the iPhone still gets
+                // the IncomingCard signal once reachability returns.
+                _ = session.transferUserInfo(announcePayload)
             }
         } else {
-            NSLog("[HiMem][WC] watch — pre-announce skipped, not reachable; file delivery is durable")
+            // Money 2026-06-18: when not reachable, queue the
+            // pre-announce as a durable transferUserInfo so the
+            // iPhone renders "Transcribing…" / IncomingCard as soon
+            // as the link comes back. Without this fallback the
+            // transferFile still delivers (durable) but the user
+            // sees no UI between recording-end and the eventual
+            // arrival — sometimes minutes for a BT wedge.
+            _ = session.transferUserInfo(announcePayload)
+            NSLog("[HiMem][WC] watch — pre-announce queued via transferUserInfo (not reachable); delivers on reconnect")
         }
 
         let metadata = clip.metadata.asWireDict()
         let transfer = session.transferFile(url, metadata: metadata)
         NSLog("[HiMem][WC] watch — transferFile queued for clipId=\(clip.clipId), reachable=\(session.isReachable), transferring=\(transfer.isTransferring)")
+    }
+
+    /// Per-clip in-flight retry counters for the "file not yet on
+    /// disk" race in `send(clip:)`. Capped so a clip whose audio
+    /// genuinely never finishes (recording aborted between manifest
+    /// append and file write) doesn't loop forever.
+    private var fileMissingRetryCounts: [UUID: Int] = [:]
+    private let fileMissingRetryDelays: [UInt64] = [
+        1_000_000_000,   // 1s
+        5_000_000_000,   // 5s
+        15_000_000_000   // 15s
+    ]
+
+    /// Schedules a delayed re-attempt at `send(clip:)` for a clip
+    /// whose audio file wasn't on disk at the original call site.
+    /// Idempotent across multiple triggers: if a retry is already
+    /// scheduled at index N, a new call at the same index will be
+    /// suppressed by the retry-count map. Different clipIds are
+    /// independent.
+    private func scheduleFileMissingRetry(for clip: WatchPendingClip) {
+        let attempt = fileMissingRetryCounts[clip.clipId] ?? 0
+        guard attempt < fileMissingRetryDelays.count else {
+            NSLog("[HiMem][WC] watch — file-missing retries exhausted for clipId=\(clip.clipId); next reachability/scenePhase event will cover it")
+            return
+        }
+        let delay = fileMissingRetryDelays[attempt]
+        fileMissingRetryCounts[clip.clipId] = attempt + 1
+        NSLog("[HiMem][WC] watch — scheduling file-missing retry #\(attempt + 1) for clipId=\(clip.clipId) in \(delay / 1_000_000_000)s")
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard let self else { return }
+            // Re-check existence; if still missing, send() will
+            // schedule the next backoff (or give up at the cap).
+            self.send(clip: clip)
+        }
     }
 
     // MARK: - WCSessionDelegate

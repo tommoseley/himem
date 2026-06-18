@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AVFoundation
 
 /// One row in the watch's pending manifest. The watch holds onto these
 /// until the iPhone confirms receipt of the corresponding clip, then
@@ -153,9 +154,26 @@ final class WatchPendingManifest: ObservableObject {
     /// manifest for `syncFlashDuration` with its id in `syncingClipIds`
     /// so the list can flash a "Synced ✓" badge before the removal
     /// animation fires. User-initiated deletes skip the badge — the swipe
+    /// Acks received for clipIds that weren't in the manifest at the
+    /// moment of arrival. Replayed on the next successful
+    /// `replace(with:)` so a row that gets loaded/added *after* its
+    /// ack lands still gets cleared. Money 2026-06-18: defensive
+    /// guard against the cold-launch race where iOS's WC queue
+    /// could (in principle) deliver acks before
+    /// `WatchPendingManifest.shared`'s lazy init runs. In the
+    /// current code the stored-property init order makes this
+    /// impossible, but the safety net is cheap insurance against
+    /// future refactors moving the load.
+    private var bufferedAckClipIds = Set<UUID>()
+
     /// is the user's own confirmation, no need to celebrate.
     func remove(clipId: UUID, viaSync: Bool = true) {
-        guard clips.contains(where: { $0.clipId == clipId }) else { return }
+        guard clips.contains(where: { $0.clipId == clipId }) else {
+            // Buffer for replay — see `bufferedAckClipIds`.
+            bufferedAckClipIds.insert(clipId)
+            NSLog("[HiMem][WC] watch — remove(clipId:) buffered ack for unknown clipId=\(clipId) (will replay on next manifest mutation)")
+            return
+        }
         if viaSync {
             syncingClipIds.insert(clipId)
             Task { @MainActor [weak self] in
@@ -264,6 +282,11 @@ final class WatchPendingManifest: ObservableObject {
         // so the badge updates without waiting for the next periodic poll.
         WatchSharedState.pendingCount = next.count
         Task { await WidgetTimelineRefresher.refresh() }
+        // Replay any buffered acks against the new state so a clip
+        // that got added/loaded after its ack arrived clears
+        // immediately. Idempotent — replayBufferedAcksIfApplicable
+        // is a no-op when the buffer is empty.
+        replayBufferedAcksIfApplicable()
     }
 
     private func persist() {
@@ -285,8 +308,23 @@ final class WatchPendingManifest: ObservableObject {
     private func load() {
         loadLastConfirmedReceipt()
         let url = Self.manifestURL
-        defer { syncSharedCountAfterLoad() }
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        defer {
+            syncSharedCountAfterLoad()
+            // Replay any acks that may have arrived during the load
+            // window (defensive — current code has no such race, but
+            // future refactors might). Idempotent: clipIds not in
+            // the freshly-loaded `clips` stay buffered for a later
+            // mutation.
+            replayBufferedAcksIfApplicable()
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            // No manifest file. If there are orphan audio files
+            // (fresh install with surviving Documents from prior
+            // version, or post-crash state where manifest was lost
+            // before first write), recover them.
+            clips = Self.rescueOrphans()
+            return
+        }
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
@@ -296,8 +334,62 @@ final class WatchPendingManifest: ObservableObject {
                 .filter { FileManager.default.fileExists(atPath: Self.audioURL(for: $0.audioFilename).path) }
                 .sorted { $0.capturedAt > $1.capturedAt }
         } catch {
-            clips = []
+            // Money 2026-06-18: decode failure (corruption, mid-
+            // write crash, schema drift) previously silently zeroed
+            // `clips`, orphaning every audio file on disk forever —
+            // total silent data loss for the user's captures.
+            // Instead: scan the audio directory and synthesize
+            // best-effort manifest rows from the surviving `.caf`
+            // files. Lost metadata: latitude/longitude (nil),
+            // rollGroupId (split sessions degrade to standalone
+            // clips on iPhone), nextTapOffsets ([] — no further
+            // splitting). Recovered metadata: clipId (from
+            // filename), capturedAt (file creation), duration
+            // (AVAudioFile read).
+            NSLog("[HiMem][WC] watch — manifest decode FAILED: \(error.localizedDescription) — scanning audio dir for orphan recovery")
+            clips = Self.rescueOrphans()
         }
+    }
+
+    /// Scans `audioDirectory` for `.caf` files matching the watch's
+    /// `clipId.uuidString.caf` filename convention. Builds best-
+    /// effort `WatchPendingClip` rows for each so a corrupted
+    /// manifest doesn't silently strand the user's captures.
+    /// Returns rows sorted newest-first (matching the load-success
+    /// ordering).
+    static func rescueOrphans() -> [WatchPendingClip] {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: audioDirectory,
+            includingPropertiesForKeys: [.creationDateKey]
+        ) else { return [] }
+        var rescued: [WatchPendingClip] = []
+        for entry in entries where entry.pathExtension.lowercased() == "caf" {
+            let filename = entry.lastPathComponent
+            let stem = (filename as NSString).deletingPathExtension
+            guard let clipId = UUID(uuidString: stem) else { continue }
+            let capturedAt = ((try? entry.resourceValues(forKeys: [.creationDateKey]))?.creationDate) ?? Date()
+            let duration: TimeInterval = {
+                guard let file = try? AVAudioFile(forReading: entry) else { return 0 }
+                let rate = file.processingFormat.sampleRate
+                return rate > 0 ? Double(file.length) / rate : 0
+            }()
+            rescued.append(WatchPendingClip(
+                clipId: clipId,
+                capturedAt: capturedAt,
+                duration: duration,
+                transcript: "",
+                latitude: nil,
+                longitude: nil,
+                audioFilename: filename,
+                rollGroupId: nil,
+                nextTapOffsets: []
+            ))
+        }
+        if !rescued.isEmpty {
+            NSLog("[HiMem][WC] watch — rescued \(rescued.count) orphan clip(s) from audio directory")
+        }
+        return rescued.sorted { $0.capturedAt > $1.capturedAt }
     }
 
     /// Force-syncs the App Group's `pendingCount` to match `clips.count`
@@ -312,6 +404,22 @@ final class WatchPendingManifest: ObservableObject {
     private func syncSharedCountAfterLoad() {
         WatchSharedState.pendingCount = clips.count
         Task { await WidgetTimelineRefresher.refresh() }
+    }
+
+    /// Drains `bufferedAckClipIds` against the current `clips`.
+    /// Called from `load()` and (separately) from `replace(with:)`
+    /// so any ack that arrived for a clipId not-yet-in-manifest
+    /// gets applied as soon as the manifest catches up.
+    private func replayBufferedAcksIfApplicable() {
+        guard !bufferedAckClipIds.isEmpty else { return }
+        let liveIds = Set(clips.map(\.clipId))
+        let toReplay = bufferedAckClipIds.intersection(liveIds)
+        guard !toReplay.isEmpty else { return }
+        bufferedAckClipIds.subtract(toReplay)
+        NSLog("[HiMem][WC] watch — replaying \(toReplay.count) buffered ack(s) at load")
+        for clipId in toReplay {
+            remove(clipId: clipId, viaSync: false)
+        }
     }
 
     #if DEBUG
