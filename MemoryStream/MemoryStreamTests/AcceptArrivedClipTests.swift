@@ -101,7 +101,9 @@ struct AcceptArrivedClipTests {
 
     // MARK: - InboxManifest.isRollGroupKnown coverage
 
-    @Test @MainActor func isRollGroupKnown_matchInActiveClips_returnsTrue() {
+    @Test @MainActor func isRollGroupKnown_matchInActiveClips_returnsTrue() async {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
         let manifest = InboxManifest.shared
         let prior = manifest.clips
         defer { manifest.debugReplaceClipsForTesting(prior) }
@@ -124,7 +126,9 @@ struct AcceptArrivedClipTests {
         #expect(manifest.isRollGroupKnown(rollGroupId))
     }
 
-    @Test @MainActor func isRollGroupKnown_matchInDisposedTombstone_returnsTrue() {
+    @Test @MainActor func isRollGroupKnown_matchInDisposedTombstone_returnsTrue() async {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
         let manifest = InboxManifest.shared
         let prior = manifest.clips
         defer { manifest.debugReplaceClipsForTesting(prior) }
@@ -147,7 +151,9 @@ struct AcceptArrivedClipTests {
         #expect(manifest.isRollGroupKnown(rollGroupId))
     }
 
-    @Test @MainActor func isRollGroupKnown_noMatch_returnsFalse() {
+    @Test @MainActor func isRollGroupKnown_noMatch_returnsFalse() async {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
         let manifest = InboxManifest.shared
         let prior = manifest.clips
         defer { manifest.debugReplaceClipsForTesting(prior) }

@@ -75,6 +75,9 @@ struct ColdLaunchTranscriptionRaceTests {
     /// the latter is the entire reason a clip whose model was still
     /// installing previously sat forever after the first attempt.
     @Test func deferredOutcome_armsRetry_andLeavesClipPending() async throws {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
+
         WatchSessionDelegate.cancelPendingRetryForTesting()
 
         let clipId = plantUntranscribableClip()
@@ -108,6 +111,9 @@ struct ColdLaunchTranscriptionRaceTests {
     /// timer must NOT remain armed. Otherwise a 30s loop runs forever
     /// re-checking an empty queue.
     @Test func emptyQueue_doesNotArmRetry() async throws {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
+
         WatchSessionDelegate.cancelPendingRetryForTesting()
         defer { WatchSessionDelegate.cancelPendingRetryForTesting() }
 
@@ -140,6 +146,9 @@ struct ColdLaunchTranscriptionRaceTests {
     /// after the second call (a fresh timer is armed), not "two
     /// timers running."
     @Test func multipleSweeps_doNotStackRetries() async throws {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
+
         WatchSessionDelegate.cancelPendingRetryForTesting()
 
         let clipId = plantUntranscribableClip()

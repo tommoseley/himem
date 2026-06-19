@@ -45,6 +45,8 @@ struct InboxManifestBadgeSyncTests {
     /// the right value.
     @Test
     func acceptClip_thenRemove_keepsManifestCountCorrect() async throws {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
         let manifest = InboxManifest.shared
         // Baseline: start clean. Drain any leftover clips from prior
         // tests in this process. `removeBatch` routes through
@@ -79,6 +81,8 @@ struct InboxManifestBadgeSyncTests {
     /// funnel as single remove.
     @Test
     func removeBatch_emptiesManifest() async throws {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
         let manifest = InboxManifest.shared
         let prior = manifest.clips.map(\.clipId)
         if !prior.isEmpty { manifest.removeBatch(clipIds: prior) }

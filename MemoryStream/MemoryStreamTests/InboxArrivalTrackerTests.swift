@@ -266,7 +266,9 @@ struct InboxArrivalTrackerTests {
     /// shouldn't take a fresh pre-announce — that would either
     /// duplicate a known clip or resurrect a tombstone the user
     /// already disposed of.
-    @Test func recordPreAnnounce_skipped_whenManifestHasClipInAnyStatus() {
+    @Test func recordPreAnnounce_skipped_whenManifestHasClipInAnyStatus() async {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
         let t = freshTracker()
         let clipId = UUID()
         // Seed the manifest with a tombstone for this clipId. The
@@ -300,7 +302,9 @@ struct InboxArrivalTrackerTests {
     /// silently drop the stale entry. Without this, the
     /// `IncomingCard` would linger until the next reachability
     /// cycle or app launch.
-    @Test func phase_returnsNil_andDropsEntry_whenManifestDisposesClip() {
+    @Test func phase_returnsNil_andDropsEntry_whenManifestDisposesClip() async {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
         let t = freshTracker()
         let clipId = UUID()
         _ = preAnnounce(t, clipId: clipId)
