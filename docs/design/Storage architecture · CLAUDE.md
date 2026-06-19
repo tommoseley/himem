@@ -184,17 +184,9 @@ This document supersedes (or contradicts) the following earlier framings:
 
 ---
 
-## v2 direction (post-launch)
+## Files-as-source-of-truth — set aside (not locked)
 
-The v1 architecture (this document) splits responsibility cleanly: CloudKit for structured data; iCloud Drive for originals. That's a meaningful resilience win, and it's what ships at launch.
-
-**v2.0 closes the remaining custody surface.** Per the principle locked 2026-06-07 ("HiMem keeps no user data — only indices on the user's device"), the data layer rebuilds so every memory is a JSON (or Markdown+YAML) file under the user's iCloud Drive HiMem folder. Topics and Projects also become files. Local SQLite becomes a derived cache: ephemeral, rebuilt from files on first launch of each device, never synced. CloudKit retires entirely.
-
-**Why this is post-launch, not pre-launch:** it's a data-layer rebuild, not a refactor. The migration from CloudKit-structured-data to file-structured-data is its own multi-day design effort. NSMetadataQuery-based change watching, conflict-copy UX, file-versioning for schema evolution — all real engineering. v1 captures ~90% of the user-facing value of the principle by putting originals in iCloud Drive; v2 captures the rest by retiring CloudKit.
-
-**The v2.0 release pitch:** "Your journal is a folder you own. We just read it." The marketing arc is worth a whole release.
-
-See the memory entry `project_himem_v2_files_as_source_of_truth` for the locked thesis and design constraints.
+A files-as-source-of-truth direction was considered (every memory a JSON/Markdown file in the user's iCloud Drive, CloudKit retires). **Set aside, not locked** — see `docs/design/CLAUDE.md` § Data custody for the reasoning, the costs that haven't been paid, and the agency-not-privacy framing that survives.
 
 ---
 

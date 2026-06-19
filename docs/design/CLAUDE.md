@@ -83,6 +83,20 @@ The project is **Himem**, a memory-keeping app:
 
 ## Architecture decisions (locked)
 
+### Memory perishability (locked first principle, June 17 2026)
+
+**Memories are perishable. Context-triggered memories are even more perishable. Never make the user carry a memory while navigating.**
+
+This is the product's reason to exist, stated as a design constraint — not a UI preference. A thought worth keeping decays by the second, and the decay accelerates when the thing that triggered it (a place, a photo, a conversation, a passing feeling) is still present and about to pass. If capture costs the user even a few seconds of *navigation* — find the app, pick a mode, choose a destination, name a thing — we have asked them to **hold the memory in working memory while they operate the UI**, and that is precisely when it evaporates. The interface is competing with the very thing it's trying to save.
+
+Consequences that bind design everywhere:
+- **Capture is always one action from anywhere it could plausibly be wanted.** The Watch landing page *is* capture; the phone FAB is direct-to-record; "on a roll" keeps the next clip one tap away. Never gate capture behind a mode-picker, a destination prompt, or a naming step — structure is decided *later*, on a reflective surface, never at the moment of catching.
+- **Defer every decision that isn't "record now."** Title, topic, project membership, which-memory-this-joins — all of it waits. The capture moment asks the user for nothing but the thought itself. (This is the spine under the two-capture-paradigms model and the Captured-Clips consolidation seam below.)
+- **Never interrupt a capture to ask a question.** No "where should this go?", no permission prompt mid-record, no "are you sure?". Wrist-off auto-saves; the app never discards a thought the user walked away from.
+- **Navigation is the enemy of the trigger.** Any flow that requires the user to remember *what they were about to capture* while tapping through screens has already failed. When in doubt, capture first and sort later — the consolidation ladder exists exactly so that "catch it now" never has to mean "file it now."
+
+When a design decision trades a few seconds of capture friction for tidier structure, perishability wins. Always.
+
 ### Two capture paradigms
 
 HiMem has *two distinct capture modes*. These are properties of **intent**, not platform — a surface can host either, though each surface has a current default.
@@ -136,6 +150,17 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 **Say it accurately.** "No user data leaves the device" is false and we won't claim it — cross-device sync (phone → Studio) *requires* data to leave the device. The true, stronger claim: **data leaves the device only into the user's own iCloud, never into HiMem's custody.** Apple hosts; the user owns; HiMem holds only an index.
 
 **Why this is buildable now, not a rebuild:** there is no backend holding user content to tear down, because there isn't one. CloudKit private DB already syncs and survives reinstall today; the work is (a) moving media into the iCloud Files container and (b) keeping the structured data in the *private* database (Option A — see chat June 2026). Option B (serialize transcripts/projects as files too, drop CloudKit) was rejected: no privacy gain over A — the private DB was never ours — at the cost of CloudKit's sync + query engine.
+
+**Resolves a conflict with `docs/design/Storage architecture · CLAUDE.md` (flagged June 19 2026).** That doc's "v2 direction" section described retiring CloudKit and making every memory a file as a *locked* next step — i.e. Option B — and justified it as "closing the remaining custody surface." **That justification is false and the locked status is killed:** there is no remaining custody surface to close, because the CloudKit private DB was never in our custody (the whole point of Option A). Option A is the single locked storage answer for v1 and beyond. The files-as-source-of-truth idea survives **only** as an explicitly *not-locked* future bet, and **not on privacy grounds** — its real (and only) value is tangible ownership + portability ("a journal the user can open in Files.app and take elsewhere"), a legibility/marketing direction that trades away CloudKit's sync + query engine and has not been costed. CC action: demote the storage doc's v2 section from "locked" to "candidate, portability-not-privacy," so two docs don't both claim "locked" on opposite verdicts.
+
+**What it would actually cost (so the candidate doesn't get revived as if free).** The agency story is real, but the build isn't a refactor — it's a fresh data-layer with these uncosted obligations:
+- **NSMetadataQuery-based change watching** across devices (CloudKit's free today).
+- **Conflict-copy UX** when two devices edit the same memory file (CloudKit serializes for us today).
+- **File-versioning for schema evolution** — every additive field becomes a forward/backward-compat migration we own (CloudKit's lightweight migration is free today).
+- **Loss of CloudKit's query engine.** The Memories list ranking, topic joins, and mention indices all re-serve from the local SQLite cache exclusively, with full consistency burden on us.
+- **User-mutable structured fields.** The media-bytes rule ("a missing file is a calm honest state") would need to extend to every field — hand-edited, broken, moved-out-from-under-the-app become first-class states for *every* memory attribute, not just the bytes.
+
+If revived seriously, the work begins with a costing pass on those five, **not** with implementation. None of them is a blocker; together they make the agency value the bar the move has to clear, instead of a free upside.
 
 ---
 
@@ -231,6 +256,19 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 
 ### Power and wake lock (locked)
 - **HiMem only prevents sleep during intentional capture.** Recording in progress, photo composer open, video composer active → wake lock on. Browsing, viewing, listening back, editing → wake lock off. The system idle timer is a trust contract we don't override casually.
+
+### In-context capture — "capture where the memory was triggered" (post-v1 consideration, June 17 2026)
+
+*Not v1. Recorded so it isn't lost — a direct consequence of the perishability first principle.*
+
+The insight: a **Project is not a folder you file into — it's a room full of cues.** Once a project exists, browsing it *triggers* recall ("I'm looking at the Naples photo of Dad → oh, the Cozumel sunburn story"). At that moment the fastest path to capture must be **one tap, in place**, because the trigger and the surrounding context are exactly what's about to pass. Forcing the user to leave the project, find global capture, record, then re-file is the canonical perishability violation — it asks them to carry the memory (and often the *associative chain* behind it) while operating the UI.
+
+Three entry points this implies (all preserve "capture first, organize later" — the project association is a *known destination*, not an organizing step):
+- **Global capture** — the main FAB / Watch / Memory Box. No project. Most common. *(ships in v1)*
+- **Project capture** — a "+ New memory" inside a project; the new memory is auto-associated with that project. The point isn't filing — it's that *the project was the trigger*. *(post-v1)*
+- **Artifact capture** — "Remember this" on a photo / video / document; creates a memory linked to that artifact (and its project). The artifact is the memory cue; the workflow is *see → remember → capture*, not *add → annotate*. *(post-v1; connects to the photo-as-cue realization behind the App Store voice-first framing)*
+
+Design caution if/when built: it must feel like *"something else just came back to me while I'm here,"* never *"create memory → choose project"* (task-app behavior). The button protects the memory, it doesn't organize it. Anywhere a memory can be triggered — projects, photos, videos, search results, future collections/publishing surfaces — should support immediate capture. A secondary goal beyond preserving the *memory* is preserving the *momentum*: capture-in-place lets a cascade of associated recollections land one after another without the UI breaking the chain.
 
 ### Out of MVP (v2+)
 - On-device transcription on the watch.
