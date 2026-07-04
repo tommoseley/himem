@@ -230,12 +230,26 @@ struct OnARollTests {
         #expect(ClipSessionGrouper.sameSession(a, b) == true)
     }
 
-    @Test func sameSession_differentRollGroupIds_doNotGroup() {
-        // Even at the same time and place, two different rolls don't merge.
+    @Test func sameSession_differentRollGroupIds_withinIdleGap_group() {
+        // v3 revised (July 4 2026): different rollGroupIds within
+        // the idle-gap window ARE the same sitting. Two wrist-
+        // raises 1 s apart each carry their own auto-generated
+        // rollGroupId; they're obviously one sitting.
         let a = clip(captured: Date(timeIntervalSinceReferenceDate: 0),
                      latitude: 33.0, longitude: -117.0, rollGroupId: UUID())
         let b = clip(captured: Date(timeIntervalSinceReferenceDate: 1),
                      latitude: 33.0, longitude: -117.0, rollGroupId: UUID())
+
+        #expect(ClipSessionGrouper.sameSession(a, b) == true)
+    }
+
+    @Test func sameSession_differentRollGroupIds_outsideIdleGap_split() {
+        // Silence still closes the session — 11 min gap splits
+        // even when rollGroupIds are present.
+        let a = clip(captured: Date(timeIntervalSinceReferenceDate: 0),
+                     latitude: nil, longitude: nil, rollGroupId: UUID())
+        let b = clip(captured: Date(timeIntervalSinceReferenceDate: 11 * 60),
+                     latitude: nil, longitude: nil, rollGroupId: UUID())
 
         #expect(ClipSessionGrouper.sameSession(a, b) == false)
     }
@@ -260,67 +274,60 @@ struct OnARollTests {
         #expect(ClipSessionGrouper.sameSession(a, b) == false)
     }
 
-    @Test func sameSession_mixedNilAndNonNilRollGroupIds_doNotGroup() {
-        // One clip has a rollId, the other doesn't. By the
-        // rollGroupId invariant (every clip in one Record→Stop cycle
-        // shares the id), they CANNOT be from the same recording.
-        // Pre-2026-05-27 this fell back to time+location and merged
-        // nearby clips — that produced Tom's "5.5 min apart, merged"
-        // screenshot. Now mixed-nil always splits.
+    /// Under the v3 idle-gap rule (July 4 2026, revised same day),
+    /// mixed nil/non-nil rollGroupIds within the 10-min window
+    /// belong to the same sitting. The spec's key reframe: "a
+    /// session is a sitting, not a wrist-raise." Each wrist-raise
+    /// gets its own auto-generated rollGroupId, but silence — not
+    /// the rollGroupId boundary — is what closes a session.
+    @Test func sameSession_mixedNilAndNonNilRollGroupIds_withinIdleGap_group() {
         let near = Date(timeIntervalSinceReferenceDate: 0)
         let later = near.addingTimeInterval(30)
         let a = clip(captured: near, latitude: 33.0, longitude: -117.0, rollGroupId: UUID())
         let b = clip(captured: later, latitude: 33.0, longitude: -117.0, rollGroupId: nil)
 
+        #expect(ClipSessionGrouper.sameSession(a, b) == true)
+    }
+
+    /// Mixed nil/non-nil at 11 min apart — outside the idle-gap
+    /// window — still splits. Silence closes the session
+    /// regardless of rollGroupId presence.
+    @Test func sameSession_mixedNilAndNonNilRollGroupIds_outsideIdleGap_split() {
+        let near = Date(timeIntervalSinceReferenceDate: 0)
+        let later = near.addingTimeInterval(11 * 60)
+        let a = clip(captured: near, latitude: nil, longitude: nil, rollGroupId: UUID())
+        let b = clip(captured: later, latitude: nil, longitude: nil, rollGroupId: nil)
+
         #expect(ClipSessionGrouper.sameSession(a, b) == false)
     }
 
-    /// Money test for the 2026-05-27 stacking bug. Reproduces Tom's
-    /// screenshot exactly: two separate Record→Stop recordings ~5.5
-    /// min apart, no location data. Before the fix: merged into one
-    /// session card via the 10-min time window + mixed-nil fallback.
-    /// After: split into two cards.
-    @Test func sameSession_twoSeparateRecordings_doNotGroup_perScreenshotBug() {
+    /// **Money test for the July 4 v3 revision** — the CIA-dinner
+    /// dogfood pattern: five wrist-raises 4-9 min apart, each
+    /// carrying its own auto-generated rollGroupId (that's how
+    /// the modern watch works). Under the pre-revision rule they
+    /// split into five separate cards. Under v3 revised they merge
+    /// into one sitting because silence is the boundary and
+    /// different-rollGroupId no longer forces a split.
+    @Test func sameSession_wristRaises_withinIdleGap_group_perCIADinner() {
         let firstStart = Date(timeIntervalSinceReferenceDate: 0)
-        // 5 min 29 s — matches the "+329s" offset shown in the
-        // grouped-session card.
+        // 5 min 29 s — well inside 10 min.
         let secondStart = firstStart.addingTimeInterval(329)
 
-        // Both clips carry their own (different) rollGroupIds — the
-        // normal case when the watch generates a fresh UUID per
-        // start(). Pre-fix this already split (different non-nil
-        // ids), but Tom's data shows they were merging anyway, so
-        // also covering the mixed-nil regression below.
         let a = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: UUID())
         let b = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: UUID())
-        #expect(ClipSessionGrouper.sameSession(a, b) == false)
+        #expect(ClipSessionGrouper.sameSession(a, b) == true,
+                "v3 revised: different rollGroupIds within idle-gap must merge — spec calls this the CIA-dinner pattern")
 
-        // Also verify the mixed-nil regression case: one clip has a
-        // rollGroupId, the other doesn't (e.g. one came in via a
-        // legacy code path). Before 2026-05-27 this merged via the
-        // 10-min window even at 5.5 min apart.
-        let c = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: UUID())
-        let d = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: nil)
-        #expect(ClipSessionGrouper.sameSession(c, d) == false)
-
-        // Both-nil-rollGroupId: under v3 idle-gap (10 min), 5.5 min
-        // IS same sitting. This test used to expect a split under the
-        // 3-min lock; the v3 lock intentionally trades the occasional
-        // over-merge here against the frequent under-merge that hurt
-        // the dinner-at-the-CIA dogfood. If two truly-separate
-        // recordings without rollGroupIds land 5.5 min apart, they
-        // now merge — acceptable because the modern watch always
-        // stamps a rollGroupId, so both-nil is a legacy-data path.
+        // Both-nil-rollGroupId at 5.5 min apart also merges.
         let e = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: nil)
         let f = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: nil)
         #expect(ClipSessionGrouper.sameSession(e, f) == true)
 
-        // But both-nil-rollGroupId at 11 min apart — outside the
-        // idle-gap window — still splits, proving the clock still
-        // closes sessions.
+        // But at 11 min apart — outside the idle-gap — even two
+        // different-rollGroupId clips split. Silence closes it.
         let elevenMinLater = firstStart.addingTimeInterval(11 * 60)
-        let g = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: nil)
-        let h = clip(captured: elevenMinLater, latitude: nil, longitude: nil, rollGroupId: nil)
+        let g = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: UUID())
+        let h = clip(captured: elevenMinLater, latitude: nil, longitude: nil, rollGroupId: UUID())
         #expect(ClipSessionGrouper.sameSession(g, h) == false)
     }
 

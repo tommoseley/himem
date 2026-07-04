@@ -120,6 +120,53 @@ struct SessionListView: View {
         )
     }
 
+    // MARK: - Workbench + Sort layer (v3, July 4 2026)
+
+    /// The current cluster proposals — the Sort layer's confident
+    /// groupings, rendered as `ClusterCardStack` above the loose
+    /// session list. Recomputed from sessions + dismissed set on
+    /// every render; the proposer is pure and cheap, and this is
+    /// how spec § "Sort is the bench's resting state" says to do
+    /// it ("Sort is what Captured Clips looks like now").
+    private var proposals: [ClusterProposal] {
+        ClipClusterProposer.propose(
+            sessions: sessions,
+            dismissed: inbox.dismissedClusterFingerprints
+        )
+    }
+
+    /// Sessions NOT currently in a cluster proposal — the loose
+    /// pile below the cluster stack. Spec § "Lead with signal,
+    /// never bury the rest": the loose pile is always in plain
+    /// sight, not subtracted or hidden by the Sort layer.
+    private var looseSessions: [ClipGroup] {
+        let clusteredClipIds = Set(proposals.flatMap(\.clipIds))
+        guard !clusteredClipIds.isEmpty else { return sessions }
+        return sessions.filter { session in
+            !session.clips.contains(where: { clusteredClipIds.contains($0.clipId) })
+        }
+    }
+
+    /// "Not together" tap — record the dismissal and let the manifest
+    /// prune-on-write logic keep the store clean.
+    private func handleClusterDismiss(_ proposal: ClusterProposal) {
+        InboxManifest.shared.dismissCluster(proposal)
+    }
+
+    /// "Keep these · N memories" tap — resolve each proposal to its
+    /// live clips, batch commit via `SortBatchCommit`. Clips leave
+    /// the manifest on success; the ClusterCardStack disappears
+    /// naturally because the proposer no longer sees the placed
+    /// clipIds.
+    private func handleClusterBatchCommit() {
+        let byClipId: [UUID: InboxClip] = Dictionary(uniqueKeysWithValues: inbox.clips.map { ($0.clipId, $0) })
+        let resolved: [(proposal: ClusterProposal, clips: [InboxClip])] = proposals.map { p in
+            let clips = p.clipIds.compactMap { byClipId[$0] }
+            return (p, clips)
+        }
+        SortBatchCommit.commit(resolved, viewModel: viewModel, storage: StorageService.shared)
+    }
+
     // MARK: - Empty state
 
     private var emptyState: some View {
@@ -169,8 +216,13 @@ struct SessionListView: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 12)
                 }
+                ClusterCardStack(
+                    proposals: proposals,
+                    onDismiss: handleClusterDismiss,
+                    onCommitAll: handleClusterBatchCommit
+                )
                 LazyVStack(spacing: 12) {
-                    ForEach(sessions) { session in
+                    ForEach(looseSessions) { session in
                         sessionCard(session)
                     }
                 }

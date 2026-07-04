@@ -51,34 +51,46 @@ enum ClipSessionGrouper {
 
     /// True when two clips belong to the same capture session.
     ///
-    /// **v3 (July 4 2026) idle-gap rule.** `rollGroupId` always
-    /// overrides — an On-a-roll roll is one session regardless of
-    /// gaps because the user already declared it as continuous. For
-    /// everything else, silence is the boundary: two consecutive
-    /// clips separated by less than `sessionTimeWindowSeconds`
-    /// belong to the same sitting. Location is intentionally not
-    /// part of the base rule — the spec allows it as a tiebreaker
-    /// only when two rolls overlap in time (a rare edge; not
-    /// implemented here). Determinism is the point: a clock, not a
-    /// classifier.
+    /// **v3 (July 4 2026, revised same day) idle-gap rule.**
     ///
-    /// **Mixed-nil-rollGroupId split remains.** If one clip has a
-    /// rollGroupId and the other doesn't, they belong to different
-    /// recordings by the rollGroupId invariant — the one clip
-    /// explicitly knows its session and the other doesn't. This
-    /// remains stricter than pure idle-gap on purpose.
+    /// - **Same rollGroupId** → always one session. Spec § 39:
+    ///   "rollGroupId always overrides — an On-a-roll roll is one
+    ///   session regardless of gaps." A long pause inside a
+    ///   declared roll doesn't split it because the user already
+    ///   declared it continuous.
+    ///
+    /// - **Any other case** (both nil, mixed nil/some, or two
+    ///   different non-nil rollGroupIds) → apply the idle-gap.
+    ///   Silence is the boundary. Two wrist-raises 4 min apart
+    ///   are one sitting even though each carries its own auto-
+    ///   generated rollGroupId — that's the CIA dinner dogfood
+    ///   pattern (July 4). Two recordings 30 min apart split
+    ///   even if they share nil rollGroupIds — the silence closed
+    ///   the session.
+    ///
+    /// **This intentionally supersedes the 2026-05-27 "mixed-nil
+    /// splits" and "different-rollGroupIds split" rules.** Those
+    /// were written when each Record→Stop cycle was thought of as
+    /// its own session; the v3 spec redefines a session as *a
+    /// sitting*, which is a clock property, not a recording
+    /// property. rollGroupId still binds a declared roll together;
+    /// it no longer separates otherwise-close-in-time captures.
+    ///
+    /// Location isn't part of the base rule — the spec allows it
+    /// as a tiebreaker only when two rolls overlap in time (rare
+    /// edge; not implemented here).
     static func sameSession(_ a: InboxClip, _ b: InboxClip) -> Bool {
-        switch (a.rollGroupId, b.rollGroupId) {
-        case let (.some(aRoll), .some(bRoll)):
-            return aRoll == bRoll
-        case (.some, .none), (.none, .some):
-            // One clip knows its session, the other doesn't — by the
-            // rollGroupId invariant they're from different sessions.
-            return false
-        case (.none, .none):
-            // Idle-gap rule: clocked silence closes a session.
-            return abs(a.capturedAt.timeIntervalSince(b.capturedAt)) <= sessionTimeWindowSeconds
+        // Same-roll short-circuit: user-declared continuity beats
+        // the clock in both directions.
+        if let aRoll = a.rollGroupId,
+           let bRoll = b.rollGroupId,
+           aRoll == bRoll {
+            return true
         }
+        // Everything else falls through to the idle-gap. Different
+        // rollGroupIds (auto-generated per wrist-raise) don't split
+        // clips that would otherwise be one sitting by the clock.
+        return abs(a.capturedAt.timeIntervalSince(b.capturedAt)) <= sessionTimeWindowSeconds
     }
 }
 
