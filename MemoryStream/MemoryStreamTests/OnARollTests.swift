@@ -240,10 +240,11 @@ struct OnARollTests {
         #expect(ClipSessionGrouper.sameSession(a, b) == false)
     }
 
-    @Test func sameSession_bothNilRollGroupIds_fallsBackToTimeLocation() {
+    @Test func sameSession_bothNilRollGroupIds_withinIdleGap_group() {
         let near = Date(timeIntervalSinceReferenceDate: 0)
         let later = near.addingTimeInterval(60)
-        // Same place, within time window → groups.
+        // v3 idle-gap: silence < 10 min → same sitting. Location is
+        // not part of the base rule.
         let a = clip(captured: near, latitude: 33.0, longitude: -117.0)
         let b = clip(captured: later, latitude: 33.0, longitude: -117.0)
 
@@ -302,12 +303,25 @@ struct OnARollTests {
         let d = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: nil)
         #expect(ClipSessionGrouper.sameSession(c, d) == false)
 
-        // And both-nil at 5.5 min apart: previously inside the 10-min
-        // window so merged; now outside the tightened 3-min window so
-        // splits.
+        // Both-nil-rollGroupId: under v3 idle-gap (10 min), 5.5 min
+        // IS same sitting. This test used to expect a split under the
+        // 3-min lock; the v3 lock intentionally trades the occasional
+        // over-merge here against the frequent under-merge that hurt
+        // the dinner-at-the-CIA dogfood. If two truly-separate
+        // recordings without rollGroupIds land 5.5 min apart, they
+        // now merge — acceptable because the modern watch always
+        // stamps a rollGroupId, so both-nil is a legacy-data path.
         let e = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: nil)
         let f = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: nil)
-        #expect(ClipSessionGrouper.sameSession(e, f) == false)
+        #expect(ClipSessionGrouper.sameSession(e, f) == true)
+
+        // But both-nil-rollGroupId at 11 min apart — outside the
+        // idle-gap window — still splits, proving the clock still
+        // closes sessions.
+        let elevenMinLater = firstStart.addingTimeInterval(11 * 60)
+        let g = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: nil)
+        let h = clip(captured: elevenMinLater, latitude: nil, longitude: nil, rollGroupId: nil)
+        #expect(ClipSessionGrouper.sameSession(g, h) == false)
     }
 
     // MARK: - VoiceClipSplitter offset math (PR 4)

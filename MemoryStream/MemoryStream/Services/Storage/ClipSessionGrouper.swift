@@ -14,18 +14,25 @@ import Foundation
 /// `OnARollTests` (rollGroupId precedence) and worth adding more
 /// coverage as the session-first redesign lands.
 enum ClipSessionGrouper {
-    /// Time gap above which two consecutive clips can't be the same
-    /// session under the legacy (no-rollGroupId) heuristic. Tightened
-    /// from 10 min → 3 min on 2026-05-27 after a 5.5-min-apart pair
-    /// merged into one card per Tom's screenshot. 3 min covers "I
-    /// paused to think but kept going"; anything longer reads as a
-    /// fresh sitting.
-    static let sessionTimeWindowSeconds: TimeInterval = 3 * 60
-
-    /// Distance threshold (meters) for legacy time+location
-    /// sessioning. Two clips both with coordinates further apart
-    /// than this don't merge.
-    static let sessionProximityMeters: Double = 50
+    /// Idle-gap threshold (v3, locked July 4 2026 per `Captured
+    /// Clips · session-first · spec.md` § "Idle-gap sessioning"):
+    /// clips separated by less than this belong to the same session;
+    /// a longer gap closes it. Silence is the boundary. Default 10
+    /// minutes covers the dinner-at-the-CIA dogfood case where five
+    /// wrist-raises across 9 minutes are obviously *one sitting*.
+    ///
+    /// Provisional. A real dinner has 10-min+ lulls between courses
+    /// which the strict rule wrongly splits; the post-v1 "hold a
+    /// block open" affordance is what closes that gap (spec § 3.2).
+    ///
+    /// **History note:** was 3 min from 2026-05-27 → 2026-07-04
+    /// (over-tightened during the wrist-raise-per-session era, when
+    /// a 5.5-min-apart pair merged wrongly). The July 4 v3 lock
+    /// intentionally trades the occasional over-merge (a dinner
+    /// across a very long lull) against the frequent under-merge
+    /// (every 4-minute pause splits a real sitting) — the latter
+    /// was the dogfood pain.
+    static let sessionTimeWindowSeconds: TimeInterval = 10 * 60
 
     /// Groups newest-first.
     static func group(_ clips: [InboxClip]) -> [ClipGroup] {
@@ -44,18 +51,22 @@ enum ClipSessionGrouper {
 
     /// True when two clips belong to the same capture session.
     ///
-    /// `rollGroupId` is the deterministic per-recording signal: every
-    /// clip in one Record→Stop cycle (including all Next-tap splits)
-    /// shares the id, by construction. Mixed-nil therefore CANNOT be
-    /// from the same recording — one clip explicitly knows which
-    /// session it belongs to and the other doesn't. Pre-2026-05-27
-    /// the mixed-nil case fell back to time+location and merged
-    /// nearby clips; that produced one card for two distinct 5.5-min-
-    /// apart recordings in Tom's screenshot. Now: mixed-nil splits.
+    /// **v3 (July 4 2026) idle-gap rule.** `rollGroupId` always
+    /// overrides — an On-a-roll roll is one session regardless of
+    /// gaps because the user already declared it as continuous. For
+    /// everything else, silence is the boundary: two consecutive
+    /// clips separated by less than `sessionTimeWindowSeconds`
+    /// belong to the same sitting. Location is intentionally not
+    /// part of the base rule — the spec allows it as a tiebreaker
+    /// only when two rolls overlap in time (a rare edge; not
+    /// implemented here). Determinism is the point: a clock, not a
+    /// classifier.
     ///
-    /// The time+location legacy heuristic only runs when BOTH clips
-    /// lack a rollGroupId — i.e. truly old data captured before the
-    /// roll feature shipped.
+    /// **Mixed-nil-rollGroupId split remains.** If one clip has a
+    /// rollGroupId and the other doesn't, they belong to different
+    /// recordings by the rollGroupId invariant — the one clip
+    /// explicitly knows its session and the other doesn't. This
+    /// remains stricter than pure idle-gap on purpose.
     static func sameSession(_ a: InboxClip, _ b: InboxClip) -> Bool {
         switch (a.rollGroupId, b.rollGroupId) {
         case let (.some(aRoll), .some(bRoll)):
@@ -65,33 +76,9 @@ enum ClipSessionGrouper {
             // rollGroupId invariant they're from different sessions.
             return false
         case (.none, .none):
-            // Legacy time+location fallback.
-            guard abs(a.capturedAt.timeIntervalSince(b.capturedAt)) <= sessionTimeWindowSeconds else {
-                return false
-            }
-            guard let aLat = a.latitude, let aLon = a.longitude,
-                  let bLat = b.latitude, let bLon = b.longitude
-            else {
-                return true
-            }
-            return haversineMeters(lat1: aLat, lon1: aLon, lat2: bLat, lon2: bLon)
-                <= sessionProximityMeters
+            // Idle-gap rule: clocked silence closes a session.
+            return abs(a.capturedAt.timeIntervalSince(b.capturedAt)) <= sessionTimeWindowSeconds
         }
-    }
-
-    /// Great-circle distance via the haversine formula. Sufficient
-    /// precision for the ~50 m session threshold; no CoreLocation
-    /// dependency so callable from the static grouping path.
-    static func haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Double {
-        let earthR = 6_371_000.0
-        let toRad = Double.pi / 180
-        let dLat = (lat2 - lat1) * toRad
-        let dLon = (lon2 - lon1) * toRad
-        let a = sin(dLat / 2) * sin(dLat / 2)
-            + cos(lat1 * toRad) * cos(lat2 * toRad)
-            * sin(dLon / 2) * sin(dLon / 2)
-        let c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return earthR * c
     }
 }
 

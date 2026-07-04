@@ -289,11 +289,12 @@ struct SessionListView: View {
             } else {
                 collapsedBody(session)
             }
-            Rectangle()
-                .fill(Crucible.Color.hairline)
-                .frame(height: 0.5)
-                .padding(.vertical, 12)
-            sessionActionRow(session, isExpanded: isExpanded)
+            // v3 (July 4 2026): the "Make a Memory" pill is folded
+            // into the expander — it appears only when the card is
+            // expanded, right above the delete zone. Collapsed cards
+            // carry no ochre; the transcript is the loudest thing on
+            // them. Tapping the collapsed card body → expands →
+            // reveals the pill as the primary action.
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -328,8 +329,16 @@ struct SessionListView: View {
         }
     }
 
-    // Meta row: time (bold) · clip count · duration. No amber badge —
-    // accidentals (when present) get a quieter inline line below.
+    // Meta rows (per JSX mock v3): top row is time · clips · duration
+    // (SF Pro 13 semi ink for time; 12 medium ink2 for the rest); a
+    // sub-row below carries the date (SF Pro 11.5 ink3). Location
+    // parked for the workbench+Sort phase where a resolved placeName
+    // would sit next to the date.
+    //
+    // Dates are always shown because the workbench spans multiple
+    // days — "Today" for today, "Yesterday" for yesterday, short
+    // "Wed Jul 2" for older. Removes the ambiguity of a 3-day-old
+    // road-trip clip reading like today's.
     private func sessionMetaRow(_ session: ClipGroup) -> some View {
         let timeStr: String = {
             let f = DateFormatter(); f.dateFormat = "h:mm a"
@@ -337,19 +346,38 @@ struct SessionListView: View {
         }()
         let clipPart = session.clipCount == 1 ? "1 clip" : "\(session.clipCount) clips"
         let durStr = formatDuration(session.totalDuration)
-        return HStack(spacing: 6) {
-            Text(timeStr)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Crucible.Color.ink)
-                .monospacedDigit()
-            Text("·").foregroundStyle(Crucible.Color.ink3)
-            Text(clipPart)
-            Text("·").foregroundStyle(Crucible.Color.ink3)
-            Text(durStr).monospacedDigit()
-            Spacer()
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(timeStr)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink)
+                    .monospacedDigit()
+                Text("·").foregroundStyle(Crucible.Color.ink3)
+                Text(clipPart)
+                Text("·").foregroundStyle(Crucible.Color.ink3)
+                Text(durStr).monospacedDigit()
+                Spacer()
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Crucible.Color.ink2)
+            Text(sessionDateLabel(session.capturedAt))
+                .font(.system(size: 11.5))
+                .foregroundStyle(Crucible.Color.ink3)
         }
-        .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(Crucible.Color.ink2)
+    }
+
+    /// Human-friendly date label for a session's `capturedAt`.
+    /// Today → "Today"; yesterday → "Yesterday"; older → weekday +
+    /// short month + day (e.g. "Wed Jul 2"). Same-year assumption
+    /// holds for MVP; year suffix can be added when clips regularly
+    /// linger past year-end.
+    private func sessionDateLabel(_ date: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(date) { return "Today" }
+        if cal.isDateInYesterday(date) { return "Yesterday" }
+        let f = DateFormatter()
+        f.dateFormat = "EEE MMM d"
+        return f.string(from: date)
     }
 
     // MARK: - Collapsed body
@@ -412,6 +440,10 @@ struct SessionListView: View {
                     isLast: idx == ordered.count - 1
                 )
             }
+            // v3 (July 4 2026): the "Make a Memory" pill lives here,
+            // folded into the expander. One primary verb, one tap.
+            sessionActionRow(session, isExpanded: true)
+                .padding(.top, 18)
             // Bottom `Delete session` — the session is the opened item
             // on Captured Clips per `Memory Detail · unified editing
             // model.md` (June 12 2026). Swipe-to-discard and long-press
