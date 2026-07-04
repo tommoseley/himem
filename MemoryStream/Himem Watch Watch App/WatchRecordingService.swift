@@ -94,9 +94,31 @@ final class WatchRecordingService: NSObject, ObservableObject {
     /// this same id. Cleared on `stop(save:)`.
     private(set) var currentRollGroupId: UUID?
 
-    // Speech recognition isn't available on watchOS — Speech.framework isn't
-    // in the watchOS SDK. Clips ship with empty transcripts; the iPhone runs
-    // SFSpeechRecognizer once the file lands and updates the inbox row.
+    // No speech-to-text on the watch — deliberate, not a temporary SDK gap.
+    //
+    // `Speech.framework` (`SFSpeechRecognizer`, `SpeechAnalyzer`,
+    // `SpeechTranscriber`) is genuinely absent from the watchOS SDK as of
+    // watchOS 26 — `import Speech` fails at compile time. What Reminders /
+    // Messages show as "live dictation" is `presentTextInputController`'s
+    // system-managed dictation sheet: the OS owns the recording, the OS
+    // does the recognition (its own private path, not one exposed to
+    // third-party apps), and the API hands us back only the FINAL string
+    // when the sheet dismisses. There is no streaming-recognizer API we
+    // could feed our own AVAudioEngine buffers into. Wrong shape for
+    // HiMem's capture UI regardless — we own the recording and the waveform.
+    //
+    // Even if Apple exposed a streaming recognizer on watchOS tomorrow, we
+    // would still ship empty transcripts here: the iPhone's `SpeechTranscriber`
+    // is faster, has larger models, and transcribes on arrival. Doubling
+    // that work on the watch burns battery + thermals during capture, and
+    // the memories-are-perishable principle (docs/design/CLAUDE.md
+    // "Memory perishability") argues against showing the user their words
+    // on a 42mm screen mid-thought — the watch's job is to catch, not to
+    // show its work.
+    //
+    // Clips therefore ship with empty transcripts; the iPhone fills them
+    // in via `TranscriptionService.transcribe(audioURL:)` after
+    // `WCSession.transferFile` delivery.
     private let locationProvider = WatchLocationProvider()
 
     /// Throwaway audio-session warmup. Run once at app launch from
@@ -269,9 +291,11 @@ final class WatchRecordingService: NSObject, ObservableObject {
 
     /// Stops the recording. `save: true` builds a `WatchPendingClip` and
     /// hands it to the manifest; `save: false` discards both audio file
-    /// and transcript. Sync — watchOS has no on-device speech recognizer
-    /// (Speech.framework isn't in the watchOS SDK), so the clip ships with
-    /// an empty transcript and the iPhone fills it in after transfer.
+    /// and transcript. Sync — clips always ship with an empty transcript;
+    /// the iPhone runs `SpeechTranscriber` on arrival. See the header
+    /// comment above `locationProvider` for the full rationale (both the
+    /// SDK gap and the product reasons that would keep this off even if
+    /// the SDK gap closed).
     @discardableResult
     func stop(save: Bool, nextTapOffsets: [TimeInterval] = []) -> WatchPendingClip? {
         guard isRecording, let clipId = currentClipId, let audioURL = currentAudioURL else {

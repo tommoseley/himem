@@ -128,6 +128,21 @@ final class TranscriptionService {
         }
     }
 
+    // MARK: - Contextual vocabulary
+
+    /// Phrases seeded into the analyzer's `AnalysisContext.contextualStrings`
+    /// under the `.general` tag on every transcribe call. Biases the en-US
+    /// model toward brand/product terms it doesn't know natively. Keep the
+    /// list short — over-seeding tips the model toward false positives
+    /// (recognizing "HiMem" in audio that actually said "hymn," etc.).
+    ///
+    /// Money 2026-07-04: "HiMem" was being transcribed as "iMem" / "hi mem"
+    /// / "i, mem." Adding "HiMem" as a contextual string fixed the specific
+    /// mishearing; leaving the list as a single-purpose surface for now.
+    fileprivate static let contextualVocabulary: [String] = [
+        "HiMem"
+    ]
+
     // MARK: - Transcription
 
     /// Transcribes an audio file at `audioURL`. Returns an `Outcome`
@@ -182,7 +197,25 @@ final class TranscriptionService {
         // provides the input. Passing the file to BOTH init and start
         // trips the "Cannot simultaneously analyze multiple input
         // sequences" precondition.
+        //
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        // Seed the analyzer's `AnalysisContext` with product-specific
+        // vocabulary so the transcriber recognizes brand/UI words the
+        // en-US model doesn't know natively. Money 2026-07-04: users
+        // saying "HiMem" get "iMem" / "hi mem" / "i, mem" in
+        // transcripts otherwise. `.general` biases scoring toward
+        // these phrases without hard-locking them, so unrelated
+        // audio still transcribes normally. Best-effort: if the
+        // context setter throws we log and continue — a missing
+        // vocab hint degrades to the "iMem" transcript, not a
+        // failed transcription.
+        do {
+            let context = AnalysisContext()
+            context.contextualStrings = [.general: Self.contextualVocabulary]
+            try await analyzer.setContext(context)
+        } catch {
+            NSLog("[HiMem][Transcribe] setContext failed (continuing without vocab hint): \(error.localizedDescription)")
+        }
 
         // Drain the result stream concurrently with the analyzer's
         // run. `finishAfterFile: true` on `start` guarantees the
