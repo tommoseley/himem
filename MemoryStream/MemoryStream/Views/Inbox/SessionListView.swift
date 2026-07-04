@@ -289,14 +289,11 @@ struct SessionListView: View {
             } else {
                 collapsedBody(session)
             }
-            // v3 (July 4 2026): the per-card "Make or Add To a
-            // memory" pill was retired from the collapsed card
-            // (wall-of-ochre problem — the pill was over half the
-            // card, squeezing the transcript on a surface whose
-            // whole job is "read this, decide"). The ochre `Create
-            // memory` action moved inside the expanded body,
-            // rendered by `expandedBody` above the delete zone —
-            // the one moment where commit belongs.
+            Rectangle()
+                .fill(Crucible.Color.hairline)
+                .frame(height: 0.5)
+                .padding(.vertical, 12)
+            sessionActionRow(session, isExpanded: isExpanded)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -326,7 +323,7 @@ struct SessionListView: View {
                 guard !clips.isEmpty else { return }
                 bundleSession = BundleRequest(session: session, clipsToBundle: clips)
             } label: {
-                Label("Create memory", systemImage: "sparkles")
+                Label("Make a Memory", systemImage: "sparkles")
             }
         }
     }
@@ -350,14 +347,6 @@ struct SessionListView: View {
             Text("·").foregroundStyle(Crucible.Color.ink3)
             Text(durStr).monospacedDigit()
             Spacer()
-            // Trailing chevron signals "the whole card is the tap
-            // target." Locked v3 (July 4 2026): the per-card ochre
-            // pill retired from the scan view; the transcript
-            // reclaims the space. Ochre returns only inside the
-            // expanded body on `Create memory`.
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Crucible.Color.ink4)
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(Crucible.Color.ink2)
@@ -423,12 +412,6 @@ struct SessionListView: View {
                     isLast: idx == ordered.count - 1
                 )
             }
-            // v3 "ochre returns once, on Create, in the commit
-            // moment." The collapsed-card pill is retired; the
-            // commit lives here, inside the expanded body, where
-            // the user has already reviewed clip inclusion.
-            createMemoryPill(session)
-                .padding(.top, 18)
             // Bottom `Delete session` — the session is the opened item
             // on Captured Clips per `Memory Detail · unified editing
             // model.md` (June 12 2026). Swipe-to-discard and long-press
@@ -604,22 +587,33 @@ struct SessionListView: View {
     /// Make a Memory pill is the only action-row affordance. The
     /// session's own destruction lives at the bottom of the expanded
     /// body — same bottom-Delete rule as everywhere else; swipe and
-    /// v3 (July 4 2026) "Create memory" pill — the one ochre moment on
-    /// the workbench, per the recognition-over-generation principle.
-    /// Rendered inside `expandedBody`, right above the delete zone.
-    /// The collapsed card carries no ochre; the transcript is the
-    /// loudest thing on it. Full capsule (height 40, radius 20),
-    /// 14pt semibold paper-color text, trailing chevron.
+    /// Action row rendered under both collapsed and expanded bodies.
+    /// Per `Captured Clips · session-first · spec.md` v3 § "Session card
+    /// anatomy": one full-width `Make a Memory` pill, one primary verb,
+    /// one tap. Line 172 explicitly rejects "Create memory" /
+    /// "Bundle" / "Save as memory" / "Bundle as memory" — do not drift.
     @ViewBuilder
-    private func createMemoryPill(_ session: ClipGroup) -> some View {
+    private func sessionActionRow(_ session: ClipGroup, isExpanded: Bool) -> some View {
         let selected = selectionFor(session)
         let selectedClips = session.clips.filter { selected.contains($0.clipId) }
         let isDisabled = selectedClips.isEmpty
+        HStack(spacing: 12) {
+            makeAMemoryPill(session, selectedClips: selectedClips, isDisabled: isDisabled)
+        }
+    }
+
+    /// Make a Memory pill — full capsule (height 40, radius 20),
+    /// 14pt semibold paper-color text, trailing chevron arrow.
+    /// Matches `MakeAMemoryPill` in the JSX exactly. Disabled state
+    /// drops the ochre to 35% alpha so it reads as inert rather than
+    /// dimmed (per JSX: `rgba(198,74,28,0.35)`).
+    @ViewBuilder
+    private func makeAMemoryPill(_ session: ClipGroup, selectedClips: [InboxClip], isDisabled: Bool) -> some View {
         Button {
             bundleSession = BundleRequest(session: session, clipsToBundle: selectedClips)
         } label: {
             HStack(spacing: 8) {
-                Text("Create memory")
+                Text("Make a Memory")
                     .font(.system(size: 14, weight: .semibold))
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .bold))
