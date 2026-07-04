@@ -184,6 +184,26 @@ final class InboxManifest: ObservableObject {
     /// out on load via `pruned(_:olderThan:now:)`.
     private var disposedClips: [InboxClip] = []
 
+    /// User-dismissed cluster proposals per spec § "Sort is the
+    /// bench's resting state" + Tom's Q3 answer (July 4 2026).
+    /// Tapping *Not together* on a cluster stores it here so Sort
+    /// won't re-propose the same grouping. Persisted to a separate
+    /// JSON file (`dismissed-clusters.json`) alongside
+    /// `manifest.json` — no schema break on the inbox format.
+    ///
+    /// **Prune-on-write:** after any inbox mutation, entries whose
+    /// clipIds no longer all exist in the inbox are dropped. The
+    /// fingerprint referencing a missing clipId is dead anyway —
+    /// the proposer only ever produces fingerprints from current
+    /// clipIds, so a dismissed record with a placed clipId can
+    /// never match a future proposal.
+    ///
+    /// Not `@Published` — the workbench reads it directly through
+    /// `dismissedClusterFingerprints` when it recomputes proposals
+    /// after a manifest change, so a `@Published` clips update
+    /// already drives the refresh.
+    private(set) var dismissedClusters: [DismissedCluster] = []
+
     /// Folders. Created lazily on first access. Marked `nonisolated` so the
     /// WatchSessionDelegate can resolve paths off the main actor — the
     /// delegate's `didReceive` callback runs on a background queue, and we
@@ -214,6 +234,12 @@ final class InboxManifest: ObservableObject {
         UbiquityStore.shared.inboxDirectory
     }
     nonisolated static var manifestURL: URL { inboxRoot.appendingPathComponent("manifest.json") }
+    /// Companion file to `manifestURL` holding the Sort dismissal
+    /// store (spec § "Sort is the bench's resting state"). Separate
+    /// file so the manifest's own JSON schema stays unchanged.
+    nonisolated static var dismissedClustersURL: URL {
+        inboxRoot.appendingPathComponent("dismissed-clusters.json")
+    }
     nonisolated static func audioURL(for filename: String) -> URL {
         UbiquityStore.shared.inboxURL(for: filename)
     }
@@ -492,6 +518,14 @@ final class InboxManifest: ObservableObject {
 
     private func replace(with next: [InboxClip]) {
         clips = next
+        // Prune-on-write hook: any dismissed-cluster record whose
+        // clipIds are no longer all in the inbox becomes dead
+        // weight (the fingerprint referencing a placed clipId
+        // can never match a future proposal since the proposer
+        // only produces fingerprints from current clipIds). Drop
+        // those records before persisting. Spec § "Sort is the
+        // bench's resting state" + Tom's Q3 answer.
+        pruneDeadDismissedClusters()
         persist()
         // Keep the iOS home-screen badge in lockstep with the inbox.
         // Push payloads from `WatchInboxNotificationCoordinator` set
@@ -529,6 +563,86 @@ final class InboxManifest: ObservableObject {
             // correct, we'll retry on the next mutation. Log and move on.
             ErrorState.shared.report(.saveFailed("Inbox manifest persist failed: \(error.localizedDescription)"))
         }
+        // Also persist the dismissed-clusters companion file. Cheap
+        // even when empty — the set is bounded by the number of
+        // clusters the user has ever declined, and the JSON is a
+        // small array.
+        persistDismissedClusters()
+    }
+
+    /// Persists the dismissed-clusters companion file. Called from
+    /// the same `persist()` path as the manifest so a single
+    /// mutation writes both files.
+    private func persistDismissedClusters() {
+        let url = Self.dismissedClustersURL
+        let tmp = url.appendingPathExtension("tmp")
+        do {
+            let data = try JSONEncoder.iso8601.encode(dismissedClusters)
+            try data.write(to: tmp, options: .atomic)
+            _ = try? FileManager.default.replaceItemAt(url, withItemAt: tmp)
+        } catch {
+            ErrorState.shared.report(.saveFailed("Dismissed clusters persist failed: \(error.localizedDescription)"))
+        }
+    }
+
+    /// Loads the dismissed-clusters companion file. Called from
+    /// `load()`. Missing file → empty set (fresh install / never
+    /// used Sort). Corrupt file → empty set (rare; user re-earns
+    /// their dismissals).
+    private func loadDismissedClusters() {
+        let url = Self.dismissedClustersURL
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            dismissedClusters = []
+            return
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            dismissedClusters = try JSONDecoder.iso8601.decode([DismissedCluster].self, from: data)
+        } catch {
+            dismissedClusters = []
+        }
+    }
+
+    // MARK: - Sort dismissal (spec § "Sort is the bench's resting state")
+
+    /// Fingerprints the workbench's Sort proposer should suppress.
+    /// Computed from `dismissedClusters` — the persisted store keeps
+    /// the source clipIds + rule so prune-on-write can detect dead
+    /// records. The proposer only needs the fingerprint set.
+    var dismissedClusterFingerprints: Set<ClusterFingerprint> {
+        Set(dismissedClusters.map(\.fingerprint))
+    }
+
+    /// Records a user's *Not together* dismissal for a cluster.
+    /// Idempotent — the same proposal can't dismiss twice (dedup
+    /// on the derived fingerprint). Persists immediately.
+    func dismissCluster(_ proposal: ClusterProposal) {
+        let record = DismissedCluster(
+            clipIds: Set(proposal.clipIds),
+            ruleTag: proposal.ruleTag
+        )
+        let fp = record.fingerprint
+        // Idempotent — no-op if already dismissed.
+        guard !dismissedClusters.contains(where: { $0.fingerprint == fp }) else { return }
+        dismissedClusters.append(record)
+        persistDismissedClusters()
+    }
+
+    /// Prunes dismissed-cluster records whose member clipIds are
+    /// no longer all present in the current inbox. Called from
+    /// every mutation path via `replace(with:)`. A dismissed
+    /// fingerprint referencing a placed (missing) clipId is dead
+    /// weight — the proposer only ever produces fingerprints from
+    /// current clipIds, so the record can never match a future
+    /// proposal.
+    private func pruneDeadDismissedClusters() {
+        let liveIds = Set(clips.map(\.clipId))
+        let filtered = dismissedClusters.filter { record in
+            record.clipIds.isSubset(of: liveIds)
+        }
+        guard filtered.count != dismissedClusters.count else { return }
+        dismissedClusters = filtered
+        persistDismissedClusters()
     }
 
     private func load() {
@@ -553,7 +667,12 @@ final class InboxManifest: ObservableObject {
         // launch (migration already inert) was clean; fresh install
         // (no legacy file → no migration) was clean.
         let url = Self.manifestURL
-        defer { syncIconBadge(to: clips.count) }
+        defer {
+            syncIconBadge(to: clips.count)
+            // Load the companion Sort-dismissals file. Missing file
+            // → empty set, safe on fresh install.
+            loadDismissedClusters()
+        }
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             let data = try Data(contentsOf: url)
@@ -680,6 +799,14 @@ final class InboxManifest: ObservableObject {
         let (active, disposed) = partition(next)
         clips = active.sorted { $0.capturedAt > $1.capturedAt }
         disposedClips = disposed
+    }
+
+    /// Test seam for the Sort dismissal store — replaces
+    /// `dismissedClusters` in place, without going through disk.
+    /// Lets tests reset state between runs cleanly. Never call
+    /// from production code.
+    func debugReplaceDismissedForTesting(_ next: [DismissedCluster]) {
+        dismissedClusters = next
     }
     #endif
 }

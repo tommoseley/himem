@@ -73,6 +73,25 @@ struct ClusterProposal: Equatable, Hashable, Codable {
     }
 }
 
+/// One user-dismissed cluster, stored on `InboxManifest`. Kept as
+/// `clipIds + ruleTag` (not just the fingerprint) so the manifest
+/// can prune-on-write: when a clipId leaves the inbox (placed into
+/// a Memory), the fingerprint referencing it is dead — the proposer
+/// only ever sees current clipIds and can never re-propose a cluster
+/// with a missing member. Storing the source clipIds lets us detect
+/// that dead-ness and drop the record.
+///
+/// Spec § "Sort is the bench's resting state" + Tom's Q3 answer:
+/// prune-on-write, exact-set suppression only. Never fuzzy.
+struct DismissedCluster: Equatable, Hashable, Codable {
+    let clipIds: Set<UUID>
+    let ruleTag: ClusterProposal.RuleTag
+
+    var fingerprint: ClusterFingerprint {
+        ClusterFingerprint.derive(clipIds: Array(clipIds), ruleTag: ruleTag)
+    }
+}
+
 /// SHA-256-derived deterministic identifier for a cluster
 /// proposal. Wraps a hex string so it's `Codable`/`Hashable` cleanly
 /// for `Set<ClusterFingerprint>` persistence on `InboxManifest`.
