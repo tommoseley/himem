@@ -39,6 +39,11 @@ enum ClipClusterProposer {
     /// matches; loose enough that "walking around a market" does.
     static let timePlaceProximityMeters: Double = 200
 
+    /// Minimum length of an "interesting" token for the word-match
+    /// rule. Below this and we're into function-word territory
+    /// where stopwords + short function words dominate.
+    static let wordMatchMinTokenLength: Int = 4
+
     // MARK: - Entry point
 
     /// Emits ordered cluster proposals for the current inbox.
@@ -52,7 +57,8 @@ enum ClipClusterProposer {
     ///     "Not together." These are filtered out silently.
     static func propose(
         sessions: [ClipGroup],
-        dismissed: Set<ClusterFingerprint>
+        dismissed: Set<ClusterFingerprint>,
+        entityExtractor: EntityExtractor = LocalEntityExtractor.shared
     ) -> [ClusterProposal] {
         // Only run Sort when there's material to sort — a single
         // session on the bench can never cluster with anything.
@@ -60,6 +66,21 @@ enum ClipClusterProposer {
 
         var proposals: [ClusterProposal] = []
         proposals.append(contentsOf: proposeTimePlace(sessions: sessions))
+        proposals.append(contentsOf: proposeWordMatch(
+            sessions: sessions,
+            entityExtractor: entityExtractor
+        ))
+        // Dedup clusters that both rules surfaced — first-writer
+        // wins (time+place appended first, so its fingerprint
+        // sticks over a word-match dup on the same clipId set).
+        var seenClipIdSets = Set<String>()
+        proposals = proposals.filter { proposal in
+            let key = proposal.clipIds
+                .map(\.uuidString)
+                .sorted()
+                .joined(separator: ",")
+            return seenClipIdSets.insert(key).inserted
+        }
 
         // Filter dismissed. Exact-set suppression only per spec.
         proposals = proposals.filter { !dismissed.contains($0.fingerprint) }
@@ -144,6 +165,107 @@ enum ClipClusterProposer {
         }
     }
 
+    // MARK: - Word-match rule
+
+    /// Distinctive-token clustering per spec § 82. Under-suggest
+    /// discipline: the shared token must be **either** a proper
+    /// noun (NLTagger-detected personalName / placeName /
+    /// organizationName) **or** a bigram (inherently distinctive)
+    /// **or** a single content word that is TF-rare across the
+    /// user's own inbox corpus. Common content words like
+    /// "restaurant" / "town" / "lovely" — the spec's named
+    /// failure mode — are explicitly excluded.
+    ///
+    /// The gate is deliberately conservative: a missed match is
+    /// invisible, a false one erodes trust in every card. Prefer
+    /// silence.
+    static func proposeWordMatch(
+        sessions: [ClipGroup],
+        entityExtractor: EntityExtractor
+    ) -> [ClusterProposal] {
+        // Extract candidate tokens per session and build inverse
+        // indexes: token → session indices it appears in.
+        var tokenToSessions: [String: Set<Int>] = [:]
+        // For "why" line and cluster naming: original casing per token.
+        var tokenDisplay: [String: String] = [:]
+
+        // Corpus-wide TF map: token → number of DISTINCT sessions
+        // it appears in. Content words above the rarity ceiling
+        // don't cluster.
+        var sessionAppearances: [String: Int] = [:]
+
+        // Set of tokens known to be proper nouns (NLTagger flagged
+        // them). Two-session appearance is enough; TF ceiling is
+        // waived for proper nouns.
+        var properNouns: Set<String> = []
+
+        // Bigrams get their own set (always distinctive; no TF gate).
+        var bigrams: Set<String> = []
+
+        for (idx, session) in sessions.enumerated() {
+            let joinedTranscript = session.clips
+                .map(\.transcript)
+                .joined(separator: " ")
+            let tokens = distinctiveTokens(
+                from: joinedTranscript,
+                entityExtractor: entityExtractor,
+                properNouns: &properNouns,
+                bigrams: &bigrams,
+                displayForms: &tokenDisplay
+            )
+            for token in tokens {
+                tokenToSessions[token, default: []].insert(idx)
+                sessionAppearances[token, default: 0] += 1
+            }
+        }
+
+        // For each token appearing in ≥2 sessions, decide whether
+        // it's distinctive enough to propose. **Under-suggest**
+        // discipline per spec § 82 + Tom's July 4 watch item: only
+        // proper nouns and bigrams qualify. A single content word,
+        // even if TF-rare across the current inbox, is not a
+        // strong enough signal to cluster on its own — "restaurant"
+        // appearing in 2 of 5 sessions is 40% of the corpus, not
+        // "rare user jargon," and clustering on it would be
+        // exactly the failure mode the spec names. Truly rare
+        // user-specific single words are the edge case; bigrams
+        // + proper nouns cover the common cases (Hosta Hideaway,
+        // Machu Picchu, farm-to-table) without the false-positive
+        // risk. If dogfood shows we're missing important cases,
+        // reintroduce a TF-rarity gate with proper corpus-size
+        // gating.
+        _ = sessionAppearances  // Kept in case a later TF-rarity gate wants it.
+        var clustersByTokenKey: [String: (sessionIndices: Set<Int>, token: String)] = [:]
+        for (token, indices) in tokenToSessions where indices.count >= 2 {
+            let isProperNoun = properNouns.contains(token)
+            let isBigram = bigrams.contains(token)
+            let distinctive = isProperNoun || isBigram
+            guard distinctive else { continue }
+            // Group cluster proposals by their session index set —
+            // "Hosta Hideaway" (bigram) and "Hideaway" (proper noun)
+            // both surfacing the same session pair should not double.
+            let key = indices.sorted().map(String.init).joined(separator: ",")
+            // First-writer wins. Proper-noun match beats bigram
+            // beats rare content word for the "why" text, since
+            // proper nouns produce the clearest reason string.
+            if clustersByTokenKey[key] == nil ||
+                (isProperNoun && !properNouns.contains(clustersByTokenKey[key]!.token)) {
+                clustersByTokenKey[key] = (indices, token)
+            }
+        }
+
+        return clustersByTokenKey.values.map { entry in
+            let sessionsInCluster = entry.sessionIndices
+                .sorted()
+                .map { sessions[$0] }
+            let display = tokenDisplay[entry.token] ?? entry.token
+            return makeWordMatchProposal(
+                sessions: sessionsInCluster,
+                sharedToken: display
+            )
+        }
+    }
+
     // MARK: - Proposal construction
 
     /// Builds a `ClusterProposal` from a time+place cluster's
@@ -201,6 +323,146 @@ enum ClipClusterProposer {
             previewLines: previewLines
         )
     }
+
+    /// Word-match proposal construction. Templated per spec § 80.
+    private static func makeWordMatchProposal(
+        sessions: [ClipGroup],
+        sharedToken: String
+    ) -> ClusterProposal {
+        let allClips = sessions.flatMap(\.clips)
+        let clipIds = allClips.map(\.clipId)
+        let sessionsWord = sessions.count == 1 ? "clip" : "clips"
+        // Preserve casing of the surface form the corpus produced.
+        let whyText = "\(sessions.count) \(sessionsWord) mention \"\(sharedToken)\""
+        // Proposed cluster name uses the shared token — cheap and
+        // honest. A later Plus semantic pass can produce better
+        // names.
+        let proposedName = sharedToken
+        let previewLines: [ClusterProposal.PreviewLine] = allClips
+            .sorted { $0.capturedAt < $1.capturedAt }
+            .prefix(3)
+            .map { clip in
+                let timeF = DateFormatter()
+                timeF.dateFormat = "h:mm"
+                let snippet = clip.transcript
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .isEmpty ? "(transcribing)" : String(clip.transcript.prefix(72))
+                return ClusterProposal.PreviewLine(
+                    timeLabel: timeF.string(from: clip.capturedAt),
+                    transcriptSnippet: snippet
+                )
+            }
+        return ClusterProposal(
+            clipIds: clipIds,
+            ruleTag: .wordMatch,
+            whyText: whyText,
+            proposedName: proposedName,
+            previewLines: previewLines
+        )
+    }
+
+    // MARK: - Token extraction
+
+    /// Extracts distinctive candidate tokens from one session's
+    /// transcript. Returns a set of **lowercased** tokens for
+    /// TF/inverse-index comparison; the `displayForms` out-parameter
+    /// captures the original casing so the "why" string can quote
+    /// the actual word the user said. Also populates `properNouns`
+    /// (NLTagger-detected personalName / placeName / organizationName)
+    /// and `bigrams` (adjacent ≥4-char alphabetic pairs).
+    private static func distinctiveTokens(
+        from text: String,
+        entityExtractor: EntityExtractor,
+        properNouns: inout Set<String>,
+        bigrams: inout Set<String>,
+        displayForms: inout [String: String]
+    ) -> Set<String> {
+        var candidates: Set<String> = []
+
+        // Proper nouns via the entity extractor. NLTagger's
+        // unreliable on the iOS 26 simulator (per memory), so
+        // real device coverage is the source of truth; simulator
+        // tests should inject a stub extractor.
+        let result = entityExtractor.extractEntities(from: text)
+        for entity in result.entities {
+            let key = entity.value.lowercased()
+            if displayForms[key] == nil {
+                displayForms[key] = entity.value
+            }
+            candidates.insert(key)
+            properNouns.insert(key)
+        }
+
+        // Simple word tokenization for bigrams + rare-content-word
+        // candidates. Split on whitespace + punctuation; keep
+        // alphabetic tokens of `wordMatchMinTokenLength` or longer;
+        // filter stopwords.
+        let words = text
+            .lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+        let originalWords = text
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+
+        // Track (index → original-cased word) for display recovery.
+        var display: [String: String] = [:]
+        for (i, w) in words.enumerated() where i < originalWords.count {
+            if display[w] == nil { display[w] = originalWords[i] }
+        }
+
+        // Rare content words: keep tokens that survive the length
+        // + stopword filter. TF ceiling is applied at the corpus
+        // level in `proposeWordMatch`.
+        for w in words where w.count >= Self.wordMatchMinTokenLength && !Self.stopwords.contains(w) {
+            candidates.insert(w)
+            if displayForms[w] == nil, let d = display[w] {
+                displayForms[w] = d
+            }
+        }
+
+        // Bigrams: adjacent word pairs, both ≥4 chars, both non-
+        // stopword. Bigrams are inherently distinctive — a
+        // matching bigram across two sessions is a much stronger
+        // signal than a single content word.
+        for i in 0..<max(0, words.count - 1) {
+            let a = words[i]
+            let b = words[i + 1]
+            guard a.count >= Self.wordMatchMinTokenLength,
+                  b.count >= Self.wordMatchMinTokenLength,
+                  !Self.stopwords.contains(a),
+                  !Self.stopwords.contains(b) else { continue }
+            let bigram = "\(a) \(b)"
+            candidates.insert(bigram)
+            bigrams.insert(bigram)
+            if displayForms[bigram] == nil,
+               i < originalWords.count - 1 {
+                displayForms[bigram] = "\(originalWords[i]) \(originalWords[i + 1])"
+            }
+        }
+
+        return candidates
+    }
+
+    /// Minimal English stopword list for the ≥4-char band. Adding
+    /// only stopwords the ≥4-char filter doesn't already remove —
+    /// no "the"/"and" here because those are already too short.
+    /// Kept small on purpose; over-filtering common phrases
+    /// weakens the bigram signal (a bigram of "still lovely" is
+    /// weak, but the pair-level filter is enforced elsewhere).
+    private static let stopwords: Set<String> = [
+        "this", "that", "with", "from", "your", "have", "were",
+        "there", "their", "which", "would", "could", "should",
+        "about", "into", "over", "under", "again", "just", "some",
+        "like", "when", "then", "them", "than", "what", "where",
+        "yeah", "okay", "gonna", "wanna", "kinda", "sort", "kind",
+        "very", "really", "actually", "basically", "pretty",
+        "well", "still", "even", "also", "only", "such", "much",
+        "many", "most", "each", "every", "these", "those",
+        "being", "does", "doing", "done", "going", "make", "made",
+        "know", "knew", "think", "thought", "say", "said", "here",
+        "back", "come", "came", "want", "wanted",
+    ]
 
     // MARK: - Coordinate helpers
 
