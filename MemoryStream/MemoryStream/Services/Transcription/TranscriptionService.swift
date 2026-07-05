@@ -173,9 +173,9 @@ final class TranscriptionService {
             return .modelNotInstalled
         }
 
-        let audioFile: AVAudioFile
+        let originalFile: AVAudioFile
         do {
-            audioFile = try AVAudioFile(forReading: audioURL)
+            originalFile = try AVAudioFile(forReading: audioURL)
         } catch {
             NSLog("[HiMem][Transcribe] file unreadable: \(error.localizedDescription)")
             return .fileUnreadable(error)
@@ -186,12 +186,44 @@ final class TranscriptionService {
         // the line that tells us whether SpeechTranscriber even got
         // a format it could handle. Common failure modes look like:
         //   - 8 kHz sample rate (no — needs 16+ kHz)
-        //   - 2 channels with no mixdown (transcriber wants mono)
+        //   - 2+ channels with no mixdown (transcriber wants mono)
         //   - integer PCM where Float32 was expected
-        let fileFmt = audioFile.fileFormat
-        let procFmt = audioFile.processingFormat
+        let fileFmt = originalFile.fileFormat
+        let procFmt = originalFile.processingFormat
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? Int) ?? -1
-        NSLog("[HiMem][Transcribe] file open ok bytes=\(fileSize) frames=\(audioFile.length) fileFmt=\(fileFmt) procFmt=\(procFmt)")
+        NSLog("[HiMem][Transcribe] file open ok bytes=\(fileSize) frames=\(originalFile.length) fileFmt=\(fileFmt) procFmt=\(procFmt)")
+
+        // Transcode if the source isn't already mono 16 kHz Float32.
+        // Money 2026-07-05: Tom's 3-ch 48 kHz Float32 recording (raw
+        // uncompressed audio that skipped the compression pass on
+        // arrival) got `[DIAG=rejected]` — SpeechAnalyzer.start()
+        // bailed before scanning a single sample because the input
+        // format didn't match the transcriber's expectations. The
+        // transcoder pipes source frames through AVAudioConverter
+        // into a temp CAF with the canonical mono/16k/Float32
+        // shape, then hands THAT to the analyzer. Any weird format
+        // that survives file open is now recoverable.
+        var audioFile = originalFile
+        var transcodedTempURL: URL? = nil
+        defer {
+            if let transcodedTempURL {
+                try? FileManager.default.removeItem(at: transcodedTempURL)
+            }
+        }
+        if !Self.isRecognizerCompatibleFormat(procFmt) {
+            do {
+                let (tmpURL, tmpFile) = try Self.transcodeToRecognizerFormat(sourceFile: originalFile)
+                audioFile = tmpFile
+                transcodedTempURL = tmpURL
+                NSLog("[HiMem][Transcribe] transcoded to recognizer format procFmt=\(tmpFile.processingFormat) frames=\(tmpFile.length)")
+            } catch {
+                NSLog("[HiMem][Transcribe] transcode failed: \(error.localizedDescription) — trying analyzer on the raw file")
+                // Fall through with `originalFile`. The analyzer
+                // will likely still reject, but the failure will
+                // land as `.transcriberFailed` with a clear
+                // message rather than silent empty.
+            }
+        }
 
         // Init with modules only — no input. `start(inputAudioFile:)`
         // provides the input. Passing the file to BOTH init and start
@@ -283,5 +315,105 @@ final class TranscriptionService {
         let frames = Double(file.length)
         let rate = file.fileFormat.sampleRate
         return rate > 0 ? frames / rate : 0
+    }
+
+    // MARK: - Format compatibility + transcode
+
+    /// The canonical audio format `SpeechTranscriber` accepts on iOS
+    /// 26: mono, 16 kHz, Float32, non-interleaved. Values outside
+    /// this cause `SpeechAnalyzer.start()` to silently reject the
+    /// input — you get `[DIAG=rejected]` (0 segments, 0 coverage).
+    static let recognizerTargetFormat: AVAudioFormat = {
+        AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        )!
+    }()
+
+    /// True when the file's processing format matches what
+    /// `SpeechTranscriber` will accept without conversion. We're
+    /// deliberately strict — a file that's *almost* right (say 44.1
+    /// kHz mono) may still work, but transcoding the outliers is
+    /// cheap and consistent.
+    static func isRecognizerCompatibleFormat(_ format: AVAudioFormat) -> Bool {
+        format.channelCount == 1
+            && format.sampleRate == 16_000
+            && format.commonFormat == .pcmFormatFloat32
+    }
+
+    /// Transcodes `sourceFile` into a temp CAF at the recognizer's
+    /// target format. Returns `(tempURL, openedFile)` — caller is
+    /// responsible for deleting `tempURL` after use.
+    ///
+    /// Uses `AVAudioConverter`. Reads the source in ~1s blocks
+    /// (16k frames at target rate) and writes converted frames to
+    /// the destination. Multi-channel input gets automatic
+    /// downmix; sample-rate conversion uses AVAudioConverter's
+    /// built-in resampler.
+    static func transcodeToRecognizerFormat(sourceFile: AVAudioFile) throws -> (URL, AVAudioFile) {
+        let sourceFormat = sourceFile.processingFormat
+        let targetFormat = recognizerTargetFormat
+
+        guard let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
+            throw NSError(
+                domain: "TranscriptionService.transcode",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Couldn't create converter from \(sourceFormat) to \(targetFormat)"]
+            )
+        }
+
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("himem-transcribe-\(UUID().uuidString).caf")
+        let destFile = try AVAudioFile(
+            forWriting: tempURL,
+            settings: targetFormat.settings,
+            commonFormat: targetFormat.commonFormat,
+            interleaved: false
+        )
+
+        // Read in blocks. Source block size in target frames, back-
+        // computed against source rate so we grab ~1s per iteration.
+        let secondsPerBlock: Double = 1.0
+        let sourceBlockFrames = AVAudioFrameCount(sourceFormat.sampleRate * secondsPerBlock)
+        let targetBlockFrames = AVAudioFrameCount(targetFormat.sampleRate * secondsPerBlock)
+
+        sourceFile.framePosition = 0
+        while sourceFile.framePosition < sourceFile.length {
+            guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: sourceBlockFrames) else {
+                break
+            }
+            try sourceFile.read(into: inputBuffer)
+            if inputBuffer.frameLength == 0 { break }
+
+            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: targetBlockFrames * 2) else {
+                break
+            }
+
+            var errorOut: NSError?
+            var didConsume = false
+            let inputProvider: AVAudioConverterInputBlock = { _, outStatus in
+                if didConsume {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                didConsume = true
+                outStatus.pointee = .haveData
+                return inputBuffer
+            }
+            _ = converter.convert(to: outputBuffer, error: &errorOut, withInputFrom: inputProvider)
+            if let errorOut {
+                throw errorOut
+            }
+            if outputBuffer.frameLength > 0 {
+                try destFile.write(from: outputBuffer)
+            }
+        }
+
+        // Reopen for reading — writer file's `framePosition` is at
+        // the end, and SpeechAnalyzer wants a fresh reader.
+        let readerFile = try AVAudioFile(forReading: tempURL)
+        return (tempURL, readerFile)
     }
 }
