@@ -364,6 +364,30 @@ final class TranscriptionService {
             )
         }
 
+        // When downmixing from multi-channel, EXTRACT channel 0
+        // instead of averaging. Money 2026-07-05: legacy watch
+        // recordings on disk have real audio in channel 0 and
+        // uninitialized-memory garbage in channels 1+ (the old
+        // tap code copied only floatChannelData[0] into a buffer
+        // whose format claimed multi-channel; channels 1+ were
+        // whatever the allocation gave). Averaging those channels
+        // into the mono mixdown drowns the signal in noise, which
+        // is why SpeechAnalyzer still rejects the transcoded file
+        // even though the format looks right. `channelMap = [0]`
+        // makes the converter treat input as "grab source channel
+        // 0 → target channel 0" — pure signal extraction, no
+        // averaging.
+        //
+        // Safe for future recordings too: modern watch recordings
+        // will be mono at the tap layer (WatchRecordingService
+        // fix, 76499ab) and never enter this branch. This path
+        // exists specifically to rescue legacy multi-channel
+        // files still on disk.
+        if sourceFormat.channelCount > 1 {
+            converter.channelMap = [NSNumber(value: 0)]
+            NSLog("[HiMem][Transcribe] multi-channel input (\(sourceFormat.channelCount) ch) → extracting channel 0 only")
+        }
+
         let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("himem-transcribe-\(UUID().uuidString).caf")
         let destFile = try AVAudioFile(
