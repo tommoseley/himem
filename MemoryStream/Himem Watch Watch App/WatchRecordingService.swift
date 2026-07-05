@@ -219,25 +219,72 @@ final class WatchRecordingService: NSObject, ObservableObject {
             let engine = AVAudioEngine()
             let inputNode = engine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
-            let file = try AVAudioFile(forWriting: url, settings: recordingFormat.settings)
+            NSLog("[HiMem][REC] input node format: \(recordingFormat)")
+
+            // Money 2026-07-05: the tap-format must match what the
+            // engine provides (hardware format), but the FILE we
+            // write to should be mono 16 kHz Float32 — the shape
+            // SpeechTranscriber expects and what AudioCompressor
+            // would produce anyway. Writing the hardware format
+            // verbatim can produce a 3-channel 48 kHz Float32 file
+            // on newer watches (voice-processing pipeline emits
+            // reference channels alongside the processed mono
+            // signal), which SpeechAnalyzer.start() rejects with
+            // [DIAG=rejected]. The AVAudioConverter transcodes
+            // each tap buffer inline before write.
+            //
+            // Also correctly emits mono audio on disk — the
+            // previous code copied only channel 0 into a buffer
+            // whose format was multi-channel, so channels 1+ were
+            // undefined memory. Playback and downstream analysis
+            // were both fed a malformed shape.
+            let targetFileFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 16_000,
+                channels: 1,
+                interleaved: false
+            )!
+            let file = try AVAudioFile(forWriting: url, settings: targetFileFormat.settings)
+            let converter = AVAudioConverter(from: recordingFormat, to: targetFileFormat)
+
             // Copy the buffer's audio data before dispatching the
             // write — AVAudioPCMBuffer's storage is reused by the
             // engine after the tap callback returns, so retaining
             // the buffer across the async boundary would race the
-            // next callback. The copy is cheap (a few KB at this
-            // sample rate) and stays on the audio thread for level
-            // peak scanning before being handed off.
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self, file] buffer, _ in
+            // next callback. Level peaks read from the pre-convert
+            // buffer (the raw shape is fine for RMS/peak scanning).
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self, file, converter] buffer, _ in
                 self?.publishAudioLevelIfDue(from: buffer)
-                let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength)
-                if let copy {
-                    copy.frameLength = buffer.frameLength
-                    if let src = buffer.floatChannelData?[0], let dst = copy.floatChannelData?[0] {
-                        memcpy(dst, src, Int(buffer.frameLength) * MemoryLayout<Float>.size)
+                guard let converter else {
+                    // If the converter couldn't be created, we fell
+                    // back to a passthrough. Write raw. Should never
+                    // happen for typical formats.
+                    self?.fileWriteQueue.async { try? file.write(from: buffer) }
+                    return
+                }
+                // Target frame count for the converted buffer =
+                // buffer.frameLength * (targetRate / sourceRate).
+                let ratio = targetFileFormat.sampleRate / buffer.format.sampleRate
+                let targetFrames = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+                guard targetFrames > 0,
+                      let converted = AVAudioPCMBuffer(pcmFormat: targetFileFormat, frameCapacity: targetFrames * 2) else {
+                    return
+                }
+                var didConsume = false
+                var conversionError: NSError?
+                let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
+                    if didConsume {
+                        outStatus.pointee = .noDataNow
+                        return nil
                     }
-                    self?.fileWriteQueue.async {
-                        try? file.write(from: copy)
-                    }
+                    didConsume = true
+                    outStatus.pointee = .haveData
+                    return buffer
+                }
+                _ = converter.convert(to: converted, error: &conversionError, withInputFrom: inputBlock)
+                if conversionError != nil || converted.frameLength == 0 { return }
+                self?.fileWriteQueue.async {
+                    try? file.write(from: converted)
                 }
             }
 
