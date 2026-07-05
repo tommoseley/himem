@@ -744,10 +744,28 @@ struct SessionListView: View {
         clipRetryStatus[clipId] = nil
         Task {
             let url = InboxManifest.audioURL(for: clip.audioFilename)
+            // Label the console line so a user-triggered retry is
+            // easy to spot next to auto-sweep transcribes. Filter
+            // "[HiMem][Retry]" in Console to see just these.
+            NSLog("[HiMem][Retry] user tapped clip=\(clipId.uuidString.prefix(8)) file=\(clip.audioFilename)")
             let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
+            NSLog("[HiMem][Retry] outcome clip=\(clipId.uuidString.prefix(8)) kind=\(retryOutcomeLabel(outcome))")
             await MainActor.run {
                 applyClipRetryOutcome(clipId: clipId, outcome: outcome)
             }
+        }
+    }
+
+    /// Stringifies a `TranscriptionService.Outcome` for the retry
+    /// console line. Mirrors the shape of `InboxTranscriptionDispatcher`'s
+    /// diagnostic logs so the two are easy to compare.
+    private nonisolated func retryOutcomeLabel(_ outcome: TranscriptionService.Outcome) -> String {
+        switch outcome {
+        case .transcribed(let result):
+            return "transcribed(text=\(result.text.count)ch segments=\(result.segmentCount) cov=\(String(format: "%.2f", result.coverageSeconds))s)"
+        case .modelNotInstalled: return "modelNotInstalled"
+        case .fileUnreadable(let e): return "fileUnreadable(\(e.localizedDescription))"
+        case .transcriberFailed(let e): return "transcriberFailed(\(e.localizedDescription))"
         }
     }
 
