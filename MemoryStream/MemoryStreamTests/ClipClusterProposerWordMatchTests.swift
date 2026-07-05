@@ -147,16 +147,15 @@ struct ClipClusterProposerWordMatchTests {
 
     // MARK: - Positive: bigram
 
-    /// A shared bigram is a strong distinctiveness signal even
-    /// without proper-noun detection. "farm-to-table" across two
-    /// dinner clips should cluster.
+    /// A shared bigram of two distinctive components is a strong
+    /// signal even without proper-noun detection.
     @Test
-    func sharedBigram_clusters() {
+    func sharedBigram_distinctiveComponents_clusters() {
         let base = Date(timeIntervalSinceReferenceDate: 0)
         let s1 = session(at: base,
-                         transcript: "the concept here is farm table sourced")
+                         transcript: "vintage guitars everywhere at the shop")
         let s2 = session(at: base.addingTimeInterval(3600),
-                         transcript: "we discussed farm table sourcing this week")
+                         transcript: "quite a collection of vintage guitars")
 
         let stub = StubEntityExtractor()
 
@@ -165,8 +164,61 @@ struct ClipClusterProposerWordMatchTests {
             entityExtractor: stub
         )
 
-        #expect(proposals.count == 1, "Shared bigram must cluster")
+        #expect(proposals.count == 1, "Shared distinctive bigram must cluster")
         #expect(proposals.first?.ruleTag == .wordMatch)
+    }
+
+    /// **Money test for the July 4 revision** — the exact "little
+    /// town" case from Tom's dogfood screenshot. Both components
+    /// are common content words; the bigram must be rejected as a
+    /// generic-content false positive. Spec § "Clustering is
+    /// Honest-Label" explicitly names this pattern.
+    @Test
+    func bigramOfCommonContentWords_littleTown_doesNotCluster() {
+        let base = Date(timeIntervalSinceReferenceDate: 0)
+        let s1 = session(at: base,
+                         transcript: "Milford is a little town that looks nice")
+        let s2 = session(at: base.addingTimeInterval(3600),
+                         transcript: "Nazareth is a little town too")
+
+        let stub = StubEntityExtractor()
+        // No proper-noun signal on the shared bigram components.
+
+        let proposals = ClipClusterProposer.proposeWordMatch(
+            sessions: [s1, s2],
+            entityExtractor: stub
+        )
+
+        for p in proposals {
+            #expect(!p.proposedName.lowercased().contains("little town"),
+                    "\"little town\" must not surface as a cluster proposal — both components are common content words")
+        }
+    }
+
+    /// A bigram with a proper-noun component still passes even if
+    /// the OTHER component is a common content word. This is the
+    /// escape hatch for cases like "Machu town" where the proper
+    /// noun confers distinctness on the pair.
+    @Test
+    func bigramWithProperNounComponent_survivesFilter() {
+        let base = Date(timeIntervalSinceReferenceDate: 0)
+        let s1 = session(at: base,
+                         transcript: "the Nazareth restaurant was great tonight")
+        let s2 = session(at: base.addingTimeInterval(3600),
+                         transcript: "Nazareth restaurant recommended by friends")
+
+        let stub = StubEntityExtractor()
+        stub.entitiesForText["the Nazareth restaurant was great tonight"] = [entity("Nazareth")]
+        stub.entitiesForText["Nazareth restaurant recommended by friends"] = [entity("Nazareth")]
+
+        let proposals = ClipClusterProposer.proposeWordMatch(
+            sessions: [s1, s2],
+            entityExtractor: stub
+        )
+
+        // Either the proper-noun "Nazareth" or the bigram
+        // "Nazareth restaurant" should cluster.
+        #expect(!proposals.isEmpty, "Bigram containing a proper noun must still cluster even if other component is common")
     }
 
     // MARK: - Guards

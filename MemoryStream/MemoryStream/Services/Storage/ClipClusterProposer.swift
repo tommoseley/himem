@@ -70,17 +70,13 @@ enum ClipClusterProposer {
             sessions: sessions,
             entityExtractor: entityExtractor
         ))
-        // Dedup clusters that both rules surfaced — first-writer
-        // wins (time+place appended first, so its fingerprint
-        // sticks over a word-match dup on the same clipId set).
-        var seenClipIdSets = Set<String>()
-        proposals = proposals.filter { proposal in
-            let key = proposal.clipIds
-                .map(\.uuidString)
-                .sorted()
-                .joined(separator: ",")
-            return seenClipIdSets.insert(key).inserted
-        }
+        // Overlap dedup per spec § "Clustering is Honest-Label" —
+        // locked July 4 2026: a clip may appear in at most one
+        // rendered candidate. Order by signal strength and greedily
+        // drop any proposal whose clipIds are ≥ 50% already claimed
+        // by a stronger one. This subsumes exact-set, subset, and
+        // substantial-overlap cases in one pass.
+        proposals = dedupByOverlap(proposals)
 
         // Filter dismissed. Exact-set suppression only per spec.
         proposals = proposals.filter { !dismissed.contains($0.fingerprint) }
@@ -162,6 +158,65 @@ enum ClipClusterProposer {
             let sessionsInCluster = component.map { located[$0].session }
                 .sorted { $0.capturedAt < $1.capturedAt }
             return makeTimePlaceProposal(sessions: sessionsInCluster)
+        }
+    }
+
+    // MARK: - Overlap dedup
+
+    /// Spec § "One clip set = one candidate" (locked July 4 2026).
+    /// A clip may appear in at most one rendered candidate. Multiple
+    /// signals routinely point at the same clips (Pennsylvania
+    /// clips also share "little town"; a dinner matches on both
+    /// time+place *and* a shared word). Rendering both is
+    /// double-filing — the exact mess Sort exists to prevent.
+    ///
+    /// Greedy claim in signal-strength order: strongest first
+    /// claims its clipIds; each subsequent proposal is dropped if
+    /// ≥ 50% of its clipIds are already claimed. This subsumes
+    /// exact-set duplicates, subset/superset relations, and
+    /// substantial-overlap cases in one pass. Minor-overlap-per-
+    /// clip reassignment (< 50%) preserves both candidates as-is;
+    /// a full per-clip reassignment is post-v1.
+    ///
+    /// Signal strength (spec § 86):
+    /// - **Tier 2 (strongest):** proper-noun word-match, time+place
+    /// - **Tier 1 (weaker):** distinctive bigram word-match
+    /// Bigrams are identified by a space in the proposedName
+    /// (which is the shared token itself for word-match clusters).
+    static func dedupByOverlap(_ proposals: [ClusterProposal]) -> [ClusterProposal] {
+        let sorted = proposals.sorted { a, b in
+            let sa = signalStrength(a)
+            let sb = signalStrength(b)
+            if sa != sb { return sa > sb }
+            // Stable tiebreak on fingerprint so ordering is
+            // deterministic across runs.
+            return a.fingerprint.rawValue < b.fingerprint.rawValue
+        }
+        var kept: [ClusterProposal] = []
+        var claimedClipIds: Set<UUID> = []
+        for proposal in sorted {
+            let clipIdSet = Set(proposal.clipIds)
+            let intersection = clipIdSet.intersection(claimedClipIds)
+            // Overlap ratio against THIS proposal's clipIds so a
+            // small proposal fully-inside a big one (subset) is
+            // dropped, and a small proposal with modest overlap of
+            // its own clipIds stays.
+            let overlapRatio = clipIdSet.isEmpty ? 0 :
+                Double(intersection.count) / Double(clipIdSet.count)
+            if overlapRatio >= 0.5 { continue }
+            kept.append(proposal)
+            claimedClipIds.formUnion(clipIdSet)
+        }
+        return kept
+    }
+
+    private static func signalStrength(_ proposal: ClusterProposal) -> Int {
+        switch proposal.ruleTag {
+        case .timePlace: return 2
+        case .wordMatch:
+            // Bigrams have a space in the proposedName (which is
+            // the shared token). Proper-noun single tokens don't.
+            return proposal.proposedName.contains(" ") ? 1 : 2
         }
     }
 
@@ -422,9 +477,22 @@ enum ClipClusterProposer {
         }
 
         // Bigrams: adjacent word pairs, both ≥4 chars, both non-
-        // stopword. Bigrams are inherently distinctive — a
-        // matching bigram across two sessions is a much stronger
-        // signal than a single content word.
+        // stopword. Bigrams are a stronger signal than single
+        // content words — but ONLY when both components are
+        // distinctive.
+        //
+        // Spec § "Clustering is Honest-Label" (July 4 revision):
+        // reject bigrams composed of common content words. "little
+        // town," "great restaurant," "quiet morning" all read as
+        // random — they're the exact false-positive pattern the
+        // distinctness gate must reject. If EITHER component is
+        // in `commonContentWordsForBigrams`, the bigram is skipped.
+        //
+        // Escape hatch: if either component was independently
+        // detected as a proper noun by the entity extractor
+        // (already in `properNouns`), the bigram passes — that's
+        // the "Hosta Hideaway" / "Machu Picchu" case where the
+        // proper-noun component confers distinctness on the pair.
         for i in 0..<max(0, words.count - 1) {
             let a = words[i]
             let b = words[i + 1]
@@ -432,6 +500,12 @@ enum ClipClusterProposer {
                   b.count >= Self.wordMatchMinTokenLength,
                   !Self.stopwords.contains(a),
                   !Self.stopwords.contains(b) else { continue }
+            let aIsCommon = Self.commonContentWordsForBigrams.contains(a)
+            let bIsCommon = Self.commonContentWordsForBigrams.contains(b)
+            let hasProperNounComponent = properNouns.contains(a) || properNouns.contains(b)
+            if (aIsCommon || bIsCommon) && !hasProperNounComponent {
+                continue
+            }
             let bigram = "\(a) \(b)"
             candidates.insert(bigram)
             bigrams.insert(bigram)
@@ -462,6 +536,38 @@ enum ClipClusterProposer {
         "being", "does", "doing", "done", "going", "make", "made",
         "know", "knew", "think", "thought", "say", "said", "here",
         "back", "come", "came", "want", "wanted",
+    ]
+
+    /// Common content words that must NOT appear in a bigram
+    /// (unless the bigram's other component is a proper noun).
+    /// Spec § "Clustering is Honest-Label" July 4 revision
+    /// explicitly names "restaurant," "town," "lovely" as the
+    /// generic-bigram false-positive class ("little town" from
+    /// Tom's July 4 dogfood surfaced as a cluster — exactly this
+    /// gate's target). Kept moderate — over-filtering starves
+    /// the bigram signal.
+    ///
+    /// Distinct from `stopwords` because these are content words
+    /// (nouns/adjectives with real meaning), not function words.
+    /// Bigrams *composed of* these are the failure mode; bigrams
+    /// that just contain one alongside a proper noun still pass.
+    private static let commonContentWordsForBigrams: Set<String> = [
+        // Places / generic locations
+        "town", "city", "place", "area", "spot", "part", "side",
+        "home", "house", "room", "street", "road", "building",
+        // Meals / establishments
+        "restaurant", "meal", "dinner", "lunch", "breakfast",
+        "coffee", "food", "menu", "table", "drink",
+        // Common qualifiers
+        "little", "great", "good", "nice", "lovely", "beautiful",
+        "quiet", "small", "large", "tiny", "huge", "long", "short",
+        // Time-of-day / duration
+        "morning", "afternoon", "evening", "night", "today",
+        "yesterday", "tomorrow", "moment", "minute", "hour", "week",
+        // Generic nouns
+        "thing", "stuff", "kind", "type", "sort", "part", "piece",
+        "way", "point", "case", "time", "year", "day",
+        "people", "person", "someone", "everyone",
     ]
 
     // MARK: - Coordinate helpers
