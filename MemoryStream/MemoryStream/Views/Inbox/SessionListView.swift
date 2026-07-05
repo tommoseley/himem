@@ -33,6 +33,19 @@ struct SessionListView: View {
     /// when the user expands a session for the first time; once they
     /// toggle a ring, manual selection takes over.
     @State private var sessionSelections: [UUID: Set<UUID>] = [:]
+    /// Per-clip retry-transcription state — populated while a
+    /// retry is in flight so the row's link shows a "Retrying…"
+    /// spinner and disables to prevent double-taps. Cleared when
+    /// the outcome lands.
+    @State private var retryingClipIds: Set<UUID> = []
+    /// Per-clip inline status shown right after a retry that
+    /// didn't overwrite the transcript (empty result, model
+    /// installing, file unreadable, transcriber failed). Auto-
+    /// clears after 4s so it doesn't linger. Draft protection:
+    /// we never overwrite the existing transcript on failure —
+    /// the message is the only user-visible signal that the retry
+    /// happened but didn't land new text.
+    @State private var clipRetryStatus: [UUID: String] = [:]
 
     /// Wraps the bundle action with the chosen clip subset so the
     /// confirm sheet bundles exactly what's checked, not a re-derived
@@ -552,6 +565,7 @@ struct SessionListView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     clipMetaRow(clip, indexInSession: indexInSession, session: session)
                     clipBody(clip, accidental: accidental, included: isSelected)
+                    clipRetryLink(clip)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -668,6 +682,100 @@ struct SessionListView: View {
                 .italic()
                 .foregroundStyle(Crucible.Color.ink3)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// Inline "Retry transcription" link under each clip row.
+    /// Small blue text-link per HiMem · Buttons & Actions §2
+    /// (retry is an AI action → AI-blue). Only shows when a
+    /// transcription has already been attempted — pending clips
+    /// have "Transcribing…" as the body and don't need a retry
+    /// affordance yet.
+    ///
+    /// Simultaneous-tap gesture is used so the tap doesn't fall
+    /// through to the row's `onTapGesture` selection toggle above.
+    @ViewBuilder
+    private func clipRetryLink(_ clip: InboxClip) -> some View {
+        let isRetrying = retryingClipIds.contains(clip.clipId)
+        if clip.transcriptionAttempted {
+            HStack(spacing: 6) {
+                Button {
+                    retryClipTranscription(clip)
+                } label: {
+                    HStack(spacing: 4) {
+                        if isRetrying {
+                            ProgressView().controlSize(.mini)
+                            Text("Retrying…")
+                                .font(.system(size: 11, weight: .medium))
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Retry transcription")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                    }
+                    .foregroundStyle(Crucible.Color.aiBlue)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isRetrying)
+                .simultaneousGesture(TapGesture().onEnded {})
+                if let status = clipRetryStatus[clip.clipId] {
+                    Text("· \(status)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    /// Kicks off a re-run of `TranscriptionService` against the
+    /// clip's audio in the inbox directory. On a successful
+    /// non-empty result, overwrites the manifest row's transcript
+    /// via `recordTranscriptionAttempt`. On failure or empty
+    /// result, leaves the transcript untouched (draft protection)
+    /// and surfaces a brief inline status that auto-clears after
+    /// 4s.
+    private func retryClipTranscription(_ clip: InboxClip) {
+        let clipId = clip.clipId
+        retryingClipIds.insert(clipId)
+        clipRetryStatus[clipId] = nil
+        Task {
+            let url = InboxManifest.audioURL(for: clip.audioFilename)
+            let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
+            await MainActor.run {
+                applyClipRetryOutcome(clipId: clipId, outcome: outcome)
+            }
+        }
+    }
+
+    private func applyClipRetryOutcome(clipId: UUID, outcome: TranscriptionService.Outcome) {
+        retryingClipIds.remove(clipId)
+        switch outcome {
+        case .transcribed(let result) where !result.text.isEmpty:
+            InboxManifest.shared.recordTranscriptionAttempt(clipId: clipId, transcript: result.text)
+            clipRetryStatus[clipId] = nil
+            return
+        case .transcribed:
+            clipRetryStatus[clipId] = "Nothing recognized"
+        case .modelNotInstalled:
+            clipRetryStatus[clipId] = "Speech model still installing"
+        case .fileUnreadable:
+            clipRetryStatus[clipId] = "Couldn't read the audio"
+        case .transcriberFailed:
+            clipRetryStatus[clipId] = "Recognizer had trouble"
+        }
+        // Auto-clear the status line after 4s so it doesn't
+        // linger. Same pattern as `AudioPlayerSheet`'s
+        // `applyRetryOutcome` on Memory Detail.
+        let statusSnapshot = clipRetryStatus[clipId]
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if clipRetryStatus[clipId] == statusSnapshot {
+                clipRetryStatus.removeValue(forKey: clipId)
+            }
         }
     }
 

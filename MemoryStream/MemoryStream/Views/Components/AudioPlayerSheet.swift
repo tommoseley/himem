@@ -231,8 +231,7 @@ struct AudioPlayerSheet: View {
             .foregroundStyle(Crucible.Color.aiBlue)
             .frame(minHeight: 44, alignment: .leading)
             .buttonStyle(.plain)
-            .disabled(isRetryingTranscription || mediaState != .ready)
-            .opacity(mediaState == .ready ? 1.0 : 0.4)
+            .disabled(isRetryingTranscription)
 
             // Honest-label retry status. Shown ONLY when a retry
             // landed on `.keepDraft` (failure or empty recognition);
