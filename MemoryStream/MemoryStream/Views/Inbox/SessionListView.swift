@@ -158,13 +158,31 @@ struct SessionListView: View {
     /// the manifest on success; the ClusterCardStack disappears
     /// naturally because the proposer no longer sees the placed
     /// clipIds.
+    ///
+    /// **Deferred to the next runloop tick.** The commit shrinks
+    /// `proposals` to empty (all clips placed), which causes
+    /// `ClusterCardStack` to render `EmptyView`. If we mutate
+    /// `InboxManifest.shared` synchronously inside the button's
+    /// tap closure, SwiftUI can tear down the button's parent view
+    /// mid-callback and render the whole ScrollView blank until
+    /// the next tick — the "went dark with just the back button"
+    /// symptom Tom reported after committing 8 clips into one
+    /// memory (July 4 2026). Deferring lets the button action
+    /// return before the view hierarchy churns.
+    ///
+    /// Also forces `sessions` to recompute at the end as belt-and-
+    /// braces against the `.onChange(of: inbox.clips)` observer
+    /// firing on a beat that misses the render window.
     private func handleClusterBatchCommit() {
         let byClipId: [UUID: InboxClip] = Dictionary(uniqueKeysWithValues: inbox.clips.map { ($0.clipId, $0) })
         let resolved: [(proposal: ClusterProposal, clips: [InboxClip])] = proposals.map { p in
             let clips = p.clipIds.compactMap { byClipId[$0] }
             return (p, clips)
         }
-        SortBatchCommit.commit(resolved, viewModel: viewModel, storage: StorageService.shared)
+        DispatchQueue.main.async {
+            SortBatchCommit.commit(resolved, viewModel: viewModel, storage: StorageService.shared)
+            self.sessions = self.computeSessions()
+        }
     }
 
     // MARK: - Empty state
