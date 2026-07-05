@@ -758,8 +758,20 @@ struct SessionListView: View {
             InboxManifest.shared.recordTranscriptionAttempt(clipId: clipId, transcript: result.text)
             clipRetryStatus[clipId] = nil
             return
-        case .transcribed:
-            clipRetryStatus[clipId] = "Nothing recognized"
+        case .transcribed(let result):
+            // Cross-tabulate segments × coverage to distinguish
+            // real-world empty-result modes. Matches the DIAG tags
+            // in `TranscriptionService.transcribe`. Actionable
+            // language beats a bare "Nothing recognized" — the user
+            // needs to know whether to try again, re-record, or
+            // dig into settings.
+            if result.segmentCount == 0 && result.coverageSeconds < 0.1 {
+                clipRetryStatus[clipId] = "Recognizer couldn't process this file"
+            } else if result.segmentCount == 0 {
+                clipRetryStatus[clipId] = "Scanned, heard no recognizable speech"
+            } else {
+                clipRetryStatus[clipId] = "Segments returned empty"
+            }
         case .modelNotInstalled:
             clipRetryStatus[clipId] = "Speech model still installing"
         case .fileUnreadable:
