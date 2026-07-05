@@ -173,6 +173,21 @@ final class TranscriptionService {
             return .modelNotInstalled
         }
 
+        // **Ask the recognizer what format it wants.** Don't guess.
+        // Troika reviewer 2 (July 5): hardcoding `Float32 16 kHz`
+        // was wrong — `SpeechAnalyzer` may want `Int16`. The sibling
+        // `SpeechService` class doc names this exact gotcha and
+        // uses `bestAvailableAudioFormat` to negotiate. Mirror it.
+        guard let bestFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
+            NSLog("[HiMem][Transcribe] SpeechAnalyzer.bestAvailableAudioFormat returned nil for locale=\(locale.identifier)")
+            return .transcriberFailed(NSError(
+                domain: "TranscriptionService",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Recognizer wouldn't advertise a compatible format"]
+            ))
+        }
+        NSLog("[HiMem][Transcribe] recognizer target format: \(bestFormat)")
+
         let originalFile: AVAudioFile
         do {
             originalFile = try AVAudioFile(forReading: audioURL)
@@ -184,69 +199,65 @@ final class TranscriptionService {
         // Detailed format log. When a transcribe ends with empty text
         // and the user reports the audio is clearly speech, this is
         // the line that tells us whether SpeechTranscriber even got
-        // a format it could handle. Common failure modes look like:
-        //   - 8 kHz sample rate (no — needs 16+ kHz)
-        //   - 2+ channels with no mixdown (transcriber wants mono)
-        //   - integer PCM where Float32 was expected
+        // a format it could handle.
         let fileFmt = originalFile.fileFormat
         let procFmt = originalFile.processingFormat
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? Int) ?? -1
         NSLog("[HiMem][Transcribe] file open ok bytes=\(fileSize) frames=\(originalFile.length) fileFmt=\(fileFmt) procFmt=\(procFmt)")
 
-        // Transcode if the source isn't already mono 16 kHz Float32.
-        // Money 2026-07-05: Tom's 3-ch 48 kHz Float32 recording (raw
-        // uncompressed audio that skipped the compression pass on
-        // arrival) got `[DIAG=rejected]` — SpeechAnalyzer.start()
-        // bailed before scanning a single sample because the input
-        // format didn't match the transcriber's expectations. The
-        // transcoder pipes source frames through AVAudioConverter
-        // into a temp CAF with the canonical mono/16k/Float32
-        // shape, then hands THAT to the analyzer. Any weird format
-        // that survives file open is now recoverable.
-        var audioFile = originalFile
+        // Transcode to the negotiated target format. We ALWAYS
+        // transcode (not just when the source shape looks wrong),
+        // because the check-and-skip optimization was a source of
+        // subtle bugs. The transcode is cheap and produces exactly
+        // what the recognizer asked for.
+        //
+        // Multi-channel input downmixes via AVAudioConverter's
+        // default channel-mixing (not `channelMap = [0]` — Troika
+        // reviewer 3 showed that with Voice Processing on, channel
+        // 0 was the reference/downlink channel, so we were
+        // extracting silence). Once the watch has VPIO disabled
+        // (WatchRecordingService fix #1), future recordings are
+        // mono at capture and this downmix is a no-op; for legacy
+        // multi-channel files on disk, averaging all channels is
+        // safer than picking one blind.
+        let audioFile: AVAudioFile
         var transcodedTempURL: URL? = nil
         defer {
             if let transcodedTempURL {
                 try? FileManager.default.removeItem(at: transcodedTempURL)
             }
         }
-        if !Self.isRecognizerCompatibleFormat(procFmt) {
-            do {
-                let (tmpURL, tmpFile) = try Self.transcodeToRecognizerFormat(sourceFile: originalFile)
-                audioFile = tmpFile
-                transcodedTempURL = tmpURL
-                NSLog("[HiMem][Transcribe] transcoded to recognizer format procFmt=\(tmpFile.processingFormat) frames=\(tmpFile.length)")
-            } catch {
-                NSLog("[HiMem][Transcribe] transcode failed: \(error.localizedDescription) — trying analyzer on the raw file")
-                // Fall through with `originalFile`. The analyzer
-                // will likely still reject, but the failure will
-                // land as `.transcriberFailed` with a clear
-                // message rather than silent empty.
-            }
+        do {
+            let (tmpURL, tmpFile) = try Self.transcodeToFormat(sourceFile: originalFile, target: bestFormat)
+            audioFile = tmpFile
+            transcodedTempURL = tmpURL
+            NSLog("[HiMem][Transcribe] transcoded procFmt=\(tmpFile.processingFormat) frames=\(tmpFile.length)")
+        } catch {
+            NSLog("[HiMem][Transcribe] transcode failed: \(error.localizedDescription)")
+            return .transcriberFailed(error)
         }
 
-        // Init with modules only — no input. `start(inputAudioFile:)`
-        // provides the input. Passing the file to BOTH init and start
-        // trips the "Cannot simultaneously analyze multiple input
-        // sequences" precondition.
-        //
+        // Init the analyzer, seed the vocab context, and — CRITICALLY
+        // — call `prepareToAnalyze(in:)`. Troika reviewer 2 named
+        // this as the likely root cause of the 0-segment, 0-coverage
+        // symptom: the sibling `SpeechService` class doc says
+        // `prepareToAnalyze` MUST be called before the first
+        // `start(inputSequence:)`, otherwise start returns
+        // immediately without processing. Undocumented for the
+        // file-input variant but the "returns immediately" signature
+        // matches.
         let analyzer = SpeechAnalyzer(modules: [transcriber])
-        // Seed the analyzer's `AnalysisContext` with product-specific
-        // vocabulary so the transcriber recognizes brand/UI words the
-        // en-US model doesn't know natively. Money 2026-07-04: users
-        // saying "HiMem" get "iMem" / "hi mem" / "i, mem" in
-        // transcripts otherwise. `.general` biases scoring toward
-        // these phrases without hard-locking them, so unrelated
-        // audio still transcribes normally. Best-effort: if the
-        // context setter throws we log and continue — a missing
-        // vocab hint degrades to the "iMem" transcript, not a
-        // failed transcription.
         do {
             let context = AnalysisContext()
             context.contextualStrings = [.general: Self.contextualVocabulary]
             try await analyzer.setContext(context)
         } catch {
             NSLog("[HiMem][Transcribe] setContext failed (continuing without vocab hint): \(error.localizedDescription)")
+        }
+        do {
+            try await analyzer.prepareToAnalyze(in: bestFormat)
+        } catch {
+            NSLog("[HiMem][Transcribe] prepareToAnalyze failed: \(error.localizedDescription) — trying start anyway")
         }
 
         // Drain the result stream concurrently with the analyzer's
@@ -275,9 +286,6 @@ final class TranscriptionService {
             try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
         } catch {
             NSLog("[HiMem][Transcribe] analyzer.start failed: \(error.localizedDescription)")
-            // Cancel the collector so we don't leak. The collector
-            // only stops cleanly when the results stream finishes,
-            // which it won't if start() never produced input.
             return .transcriberFailed(error)
         }
         let (text, coverage, count) = await collected
@@ -317,126 +325,130 @@ final class TranscriptionService {
         return rate > 0 ? frames / rate : 0
     }
 
-    // MARK: - Format compatibility + transcode
+    // MARK: - Transcode
 
-    /// The canonical audio format `SpeechTranscriber` accepts on iOS
-    /// 26: mono, 16 kHz, Float32, non-interleaved. Values outside
-    /// this cause `SpeechAnalyzer.start()` to silently reject the
-    /// input — you get `[DIAG=rejected]` (0 segments, 0 coverage).
-    static let recognizerTargetFormat: AVAudioFormat = {
-        AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 16_000,
-            channels: 1,
-            interleaved: false
-        )!
-    }()
-
-    /// True when the file's processing format matches what
-    /// `SpeechTranscriber` will accept without conversion. We're
-    /// deliberately strict — a file that's *almost* right (say 44.1
-    /// kHz mono) may still work, but transcoding the outliers is
-    /// cheap and consistent.
-    static func isRecognizerCompatibleFormat(_ format: AVAudioFormat) -> Bool {
-        format.channelCount == 1
-            && format.sampleRate == 16_000
-            && format.commonFormat == .pcmFormatFloat32
-    }
-
-    /// Transcodes `sourceFile` into a temp CAF at the recognizer's
-    /// target format. Returns `(tempURL, openedFile)` — caller is
+    /// Transcodes `sourceFile` into a temp CAF at `target` format.
+    /// Returns `(tempURL, openedReaderFile)` — caller is
     /// responsible for deleting `tempURL` after use.
     ///
-    /// Uses `AVAudioConverter`. Reads the source in ~1s blocks
-    /// (16k frames at target rate) and writes converted frames to
-    /// the destination. Multi-channel input gets automatic
-    /// downmix; sample-rate conversion uses AVAudioConverter's
-    /// built-in resampler.
-    static func transcodeToRecognizerFormat(sourceFile: AVAudioFile) throws -> (URL, AVAudioFile) {
+    /// **Single `AVAudioConverter.convert()` call.** Troika reviewer
+    /// 1 (July 5) named the per-block `didConsume/noDataNow` loop
+    /// as the resampler-starving pattern that produced silence at
+    /// block seams. Fix: one convert call whose input block reads
+    /// chunks directly from the source file and signals
+    /// `.endOfStream` at EOF, preserving the resampler's filter
+    /// state across the whole file.
+    ///
+    /// Multi-channel input downmixes via AVAudioConverter's default
+    /// channel-mixing (average across channels). We do NOT set
+    /// `converter.channelMap`. Troika reviewer 3 showed that with
+    /// Voice Processing enabled on the watch (now fixed at source),
+    /// channel 0 was the reference/downlink channel — extracting it
+    /// via `channelMap = [0]` gave us silence. Averaging is the
+    /// safe default for legacy multi-channel files on disk; new
+    /// recordings will be mono at capture and this is a no-op.
+    static func transcodeToFormat(sourceFile: AVAudioFile, target: AVAudioFormat) throws -> (URL, AVAudioFile) {
         let sourceFormat = sourceFile.processingFormat
-        let targetFormat = recognizerTargetFormat
 
-        guard let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
+        guard let converter = AVAudioConverter(from: sourceFormat, to: target) else {
             throw NSError(
                 domain: "TranscriptionService.transcode",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Couldn't create converter from \(sourceFormat) to \(targetFormat)"]
+                userInfo: [NSLocalizedDescriptionKey: "Couldn't create converter from \(sourceFormat) to \(target)"]
             )
-        }
-
-        // When downmixing from multi-channel, EXTRACT channel 0
-        // instead of averaging. Money 2026-07-05: legacy watch
-        // recordings on disk have real audio in channel 0 and
-        // uninitialized-memory garbage in channels 1+ (the old
-        // tap code copied only floatChannelData[0] into a buffer
-        // whose format claimed multi-channel; channels 1+ were
-        // whatever the allocation gave). Averaging those channels
-        // into the mono mixdown drowns the signal in noise, which
-        // is why SpeechAnalyzer still rejects the transcoded file
-        // even though the format looks right. `channelMap = [0]`
-        // makes the converter treat input as "grab source channel
-        // 0 → target channel 0" — pure signal extraction, no
-        // averaging.
-        //
-        // Safe for future recordings too: modern watch recordings
-        // will be mono at the tap layer (WatchRecordingService
-        // fix, 76499ab) and never enter this branch. This path
-        // exists specifically to rescue legacy multi-channel
-        // files still on disk.
-        if sourceFormat.channelCount > 1 {
-            converter.channelMap = [NSNumber(value: 0)]
-            NSLog("[HiMem][Transcribe] multi-channel input (\(sourceFormat.channelCount) ch) → extracting channel 0 only")
         }
 
         let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("himem-transcribe-\(UUID().uuidString).caf")
         let destFile = try AVAudioFile(
             forWriting: tempURL,
-            settings: targetFormat.settings,
-            commonFormat: targetFormat.commonFormat,
-            interleaved: false
+            settings: target.settings,
+            commonFormat: target.commonFormat,
+            interleaved: target.isInterleaved
         )
 
-        // Read in blocks. Source block size in target frames, back-
-        // computed against source rate so we grab ~1s per iteration.
-        let secondsPerBlock: Double = 1.0
-        let sourceBlockFrames = AVAudioFrameCount(sourceFormat.sampleRate * secondsPerBlock)
-        let targetBlockFrames = AVAudioFrameCount(targetFormat.sampleRate * secondsPerBlock)
-
-        sourceFile.framePosition = 0
-        while sourceFile.framePosition < sourceFile.length {
-            guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: sourceBlockFrames) else {
-                break
-            }
-            try sourceFile.read(into: inputBuffer)
-            if inputBuffer.frameLength == 0 { break }
-
-            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: targetBlockFrames * 2) else {
-                break
-            }
-
-            var errorOut: NSError?
-            var didConsume = false
-            let inputProvider: AVAudioConverterInputBlock = { _, outStatus in
-                if didConsume {
-                    outStatus.pointee = .noDataNow
-                    return nil
-                }
-                didConsume = true
-                outStatus.pointee = .haveData
-                return inputBuffer
-            }
-            _ = converter.convert(to: outputBuffer, error: &errorOut, withInputFrom: inputProvider)
-            if let errorOut {
-                throw errorOut
-            }
-            if outputBuffer.frameLength > 0 {
-                try destFile.write(from: outputBuffer)
-            }
+        // Output capacity: source length × (target rate / source
+        // rate), plus slack for edge frames the resampler emits.
+        let expectedFrames = AVAudioFrameCount(
+            (Double(sourceFile.length) * target.sampleRate / sourceFormat.sampleRate).rounded(.up)
+        )
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: target,
+            frameCapacity: expectedFrames + 4096
+        ) else {
+            throw NSError(
+                domain: "TranscriptionService.transcode",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: "Couldn't allocate output buffer at \(expectedFrames + 4096) frames"]
+            )
         }
 
-        // Reopen for reading — writer file's `framePosition` is at
-        // the end, and SpeechAnalyzer wants a fresh reader.
+        // Stateful input block reads ~1s of source at a time. The
+        // block is called repeatedly by convert() until it signals
+        // `.endOfStream` at EOF, so the resampler's internal filter
+        // maintains continuity across the whole file.
+        sourceFile.framePosition = 0
+        let sourceChunkFrames = AVAudioFrameCount(sourceFormat.sampleRate)  // ~1s
+        var reachedEOF = false
+        let inputProvider: AVAudioConverterInputBlock = { requested, outStatus in
+            if reachedEOF {
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+            let remaining = sourceFile.length - sourceFile.framePosition
+            guard remaining > 0 else {
+                reachedEOF = true
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+            let take = AVAudioFrameCount(min(Int64(sourceChunkFrames), remaining))
+            guard let chunk = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: take) else {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            do {
+                try sourceFile.read(into: chunk, frameCount: take)
+            } catch {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            if chunk.frameLength == 0 {
+                reachedEOF = true
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+            outStatus.pointee = .haveData
+            return chunk
+        }
+
+        var conversionError: NSError?
+        let status = converter.convert(to: outputBuffer, error: &conversionError, withInputFrom: inputProvider)
+        if let conversionError {
+            throw conversionError
+        }
+        NSLog("[HiMem][Transcribe] convert status=\(status.rawValue) frames=\(outputBuffer.frameLength)")
+
+        if outputBuffer.frameLength > 0 {
+            try destFile.write(from: outputBuffer)
+        }
+
+        // Quick amplitude probe on the transcoded output. If this
+        // reports near-zero peak, the recognizer will see silence
+        // and we know the transcode itself is the failure — even
+        // though the format math looks right (Troika reviewer 1
+        // F5).
+        if let channelData = outputBuffer.floatChannelData?[0] {
+            var peak: Float = 0
+            let n = Int(outputBuffer.frameLength)
+            for i in 0..<n {
+                let v = abs(channelData[i])
+                if v > peak { peak = v }
+            }
+            NSLog("[HiMem][Transcribe] transcoded output peak amplitude=\(peak)")
+        }
+
+        // Reopen for reading — writer's `framePosition` is at the
+        // end, and SpeechAnalyzer wants a fresh reader.
         let readerFile = try AVAudioFile(forReading: tempURL)
         return (tempURL, readerFile)
     }

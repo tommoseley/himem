@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import WatchConnectivity
 
 /// iPhone-side WatchConnectivity bridge. Handles incoming `transferFile`
@@ -634,16 +635,82 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
 
     /// Compress `url` in place to AAC. Failure is logged and swallowed
     /// — losing the size win is better than losing the clip.
+    /// Logs the RMS energy of each channel in the file at `url`.
+    /// Nonisolated + purely file-reading so it's safe to call from
+    /// the acceptance path. Reads up to the first 5 seconds so a
+    /// long file doesn't stall the arrival log. Speech will read
+    /// ~0.01–0.1 RMS; silence reads near 0.
+    private static func probeChannelEnergy(at url: URL, label: String) {
+        guard let file = try? AVAudioFile(forReading: url) else { return }
+        let format = file.processingFormat
+        let sampleCap = AVAudioFrameCount(format.sampleRate * 5)  // ~5s
+        let readFrames = min(sampleCap, AVAudioFrameCount(file.length))
+        guard readFrames > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: readFrames) else {
+            return
+        }
+        do {
+            try file.read(into: buffer, frameCount: readFrames)
+        } catch {
+            NSLog("[HiMem][ChanProbe] \(label) read failed: \(error.localizedDescription)")
+            return
+        }
+        guard let channelPointers = buffer.floatChannelData else {
+            NSLog("[HiMem][ChanProbe] \(label) floatChannelData nil")
+            return
+        }
+        let channelCount = Int(format.channelCount)
+        let frameCount = Int(buffer.frameLength)
+        var out: [String] = []
+        for ch in 0..<channelCount {
+            let data: UnsafeMutablePointer<Float> = channelPointers[ch]
+            var sumSquares: Float = 0
+            var peak: Float = 0
+            for i in 0..<frameCount {
+                let v: Float = data[i]
+                sumSquares += v * v
+                let absv: Float = abs(v)
+                if absv > peak { peak = absv }
+            }
+            let rms: Float = sqrt(sumSquares / Float(max(frameCount, 1)))
+            out.append("ch\(ch) rms=\(String(format: "%.4f", rms)) peak=\(String(format: "%.4f", peak))")
+        }
+        NSLog("[HiMem][ChanProbe] \(label) \(out.joined(separator: ", "))")
+    }
+
     private static func compressIfPossible(at url: URL, label: String) async {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let before = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+        // Snapshot the source format for diagnostics. Compressor
+        // failures previously logged only the error text; the
+        // format is what tells us WHY (e.g. multi-channel input
+        // that AVAssetReader can't track-load per Troika reviewer
+        // 3, July 5).
+        let sourceFmt: String
+        if let file = try? AVAudioFile(forReading: url) {
+            let f = file.fileFormat
+            sourceFmt = "\(f.channelCount)ch \(Int(f.sampleRate))Hz \(f.commonFormat.rawValue)"
+        } else {
+            sourceFmt = "unreadable"
+        }
+        // Per-channel RMS probe — turns "which channel has the mic
+        // signal" from a guess into a measurement. Troika reviewer
+        // 3 (July 5): with Voice Processing on, channel 0 is the
+        // downlink reference (silence when nothing plays); the mic
+        // is on a later channel. This log tells us which is which.
+        // Keep for one TF round; strip if the pipeline stabilizes.
+        probeChannelEnergy(at: url, label: label)
         do {
             try await AudioCompressor.compressInPlace(at: url)
             let after = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
             let ratio = before > 0 && after > 0 ? Double(before) / Double(after) : 0
-            NSLog("[HiMem][WC] compressed \(label): \(before)→\(after) bytes (\(String(format: "%.1fx", ratio)))")
+            NSLog("[HiMem][WC] compressed \(label): \(before)→\(after) bytes (\(String(format: "%.1fx", ratio))) sourceFmt=\(sourceFmt)")
         } catch {
-            NSLog("[HiMem][WC] compress failed for \(label): \(error.localizedDescription) — keeping raw PCM")
+            // Prominent tag so a busy console still surfaces this.
+            // Compression failure leaves raw PCM on disk, which is
+            // playable and transcribable (with the transcode fix)
+            // but 15-30× larger over iCloud than intended.
+            NSLog("[HiMem][WC][Compress][FAIL] \(label): \(error.localizedDescription) sourceFmt=\(sourceFmt) beforeBytes=\(before) — keeping raw PCM")
         }
     }
 

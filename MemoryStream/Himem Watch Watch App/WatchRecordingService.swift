@@ -218,6 +218,28 @@ final class WatchRecordingService: NSObject, ObservableObject {
             let engineStart = Date()
             let engine = AVAudioEngine()
             let inputNode = engine.inputNode
+            // Disable Voice-Processing I/O — the ROOT CAUSE of the
+            // July 5 "clear audio, no transcript" saga (Troika
+            // reviewer 3, cited to Apple forum thread 710151).
+            // With VPIO on, the input node emits a 3-channel
+            // 48 kHz Float32 stream: channel 0 is the downlink
+            // reference for echo cancellation (silence when
+            // nothing is playing), channels 1+ carry raw + processed
+            // mic. The receiver sees 3-ch audio with silence on
+            // channel 0, and every downstream "extract channel 0"
+            // heuristic ends up transcribing silence.
+            //
+            // Voice processing is inappropriate for a journal
+            // recorder anyway — it aggressively suppresses room
+            // ambience which is part of what memories capture.
+            // Disable it and the tap format collapses back to
+            // mono, killing the whole channel-map problem.
+            do {
+                try inputNode.setVoiceProcessingEnabled(false)
+                NSLog("[HiMem][REC] voice processing disabled")
+            } catch {
+                NSLog("[HiMem][REC] setVoiceProcessingEnabled(false) failed: \(error.localizedDescription)")
+            }
             let recordingFormat = inputNode.outputFormat(forBus: 0)
             NSLog("[HiMem][REC] input node format: \(recordingFormat)")
 
