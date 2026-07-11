@@ -191,7 +191,7 @@ struct CreateMemoryFromClipsSheet: View {
                 RoundedRectangle(cornerRadius: 7)
                     .fill(Crucible.Color.accentTint)
                     .frame(width: 28, height: 28)
-                Image(systemName: "mic.fill")
+                Image(systemName: "waveform")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Crucible.Color.accent)
             }

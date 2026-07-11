@@ -341,20 +341,6 @@ struct CompactClipRow: View {
 
     // MARK: - Pure formatting helpers
 
-    /// Leading media-type glyph per Compact row. Spec update
-    /// June 11 2026 — every row carries one so the index reads as
-    /// `mic / camera / video / doc` at a glance. Matches the
-    /// `MDClipMediaIcon` JSX component in `screens-memory-detail.jsx`.
-    static func mediaSymbol(for mediaType: MediaReference.MediaType) -> String {
-        switch mediaType {
-        case .voice: return "mic"
-        case .image: return "camera"
-        case .video: return "video"
-        case .note:  return "doc.text"
-        @unknown default: return "circle"
-        }
-    }
-
     /// 12-hour `HH:MM AM/PM` matching the design comp (e.g. "6:22 PM").
     /// Cached formatter — DateFormatter init is expensive enough that a
     /// long memory's worth of rows can add measurable overhead without it.

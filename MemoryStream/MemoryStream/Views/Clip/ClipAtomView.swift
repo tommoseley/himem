@@ -233,11 +233,15 @@ struct ClipAtomView: View {
         }
     }
 
+    /// Canonical media glyphs — matches
+    /// `EntryCardView.MediaGlyphRow` on the memory-card side and
+    /// `MediaRow.sfSymbol(for:)` in `ClipComposition.swift`.
+    /// Sync 2026-07-11 per Tom's ask.
     private func mediaSFSymbol(_ media: ClipDisplayModel.Media) -> String {
         switch media {
-        case .voice: return "mic.fill"
-        case .photo: return "camera.fill"
-        case .video: return "video.fill"
+        case .voice: return "waveform"
+        case .photo: return "camera"
+        case .video: return "video"
         case .note:  return "text.alignleft"
         }
     }

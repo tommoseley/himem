@@ -489,9 +489,13 @@ struct LooseClipRow: View {
         }
     }
 
+    /// Canonical media glyphs — matches
+    /// `EntryCardView.MediaGlyphRow` on the memory-card side.
+    /// Sync 2026-07-11 per Tom's ask "these are all supposed to
+    /// be identical."
     private var iconName: String {
         switch ref.mediaTypeEnum {
-        case .voice: return "mic"
+        case .voice: return "waveform"
         case .note:  return "text.alignleft"
         default:     return "questionmark"
         }

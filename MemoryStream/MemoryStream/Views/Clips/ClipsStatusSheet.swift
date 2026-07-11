@@ -85,8 +85,11 @@ struct ClipsStatusSheet: View {
             // Videos / Notes get their own presence rows so the
             // sheet reads the same media vocabulary the mixed
             // session card uses (`MediaRow`). Count = loose refs
-            // of that kind (unattached to any memory).
-            statusLine(systemImage: "photo", label: "Photos", value: data.photoArrivals)
+            // of that kind (unattached to any memory). Glyphs
+            // match the memory-card canon (`camera` / `video` /
+            // `text.alignleft`) — same 2026-07-11 sync as
+            // `MediaRow.sfSymbol(for:)`.
+            statusLine(systemImage: "camera", label: "Photos", value: data.photoArrivals)
             statusLine(systemImage: "video", label: "Videos", value: data.videoArrivals)
             statusLine(systemImage: "text.alignleft", label: "Notes", value: data.noteArrivals)
         }

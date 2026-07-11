@@ -226,11 +226,20 @@ struct MediaRow: View {
         }
     }
 
+    /// Canonical media glyphs — matches
+    /// `EntryCardView.MediaGlyphRow` on the memory-card side.
+    /// Voice reads as a waveform (evidence-of-a-recording), not
+    /// a microphone (`mic.*` = the input-mode affordance
+    /// elsewhere in the app: search's voice button, the
+    /// PermissionWizard's mic-permission cell). Same discipline
+    /// for photo/video/note — unfilled, matching the memory
+    /// side. Sync 2026-07-11 per Tom's ask "these are all
+    /// supposed to be identical."
     private func sfSymbol(for kind: ClipDisplayModel.Media) -> String {
         switch kind {
-        case .voice: return "mic.fill"
-        case .photo: return "camera.fill"
-        case .video: return "video.fill"
+        case .voice: return "waveform"
+        case .photo: return "camera"
+        case .video: return "video"
         case .note:  return "text.alignleft"
         }
     }
