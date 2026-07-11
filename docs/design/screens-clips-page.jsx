@@ -456,8 +456,11 @@ function ScrClipsStatusSheet() {
 // Mixed session card — idle-gap sessioning is MEDIA-AGNOSTIC.
 // A photo captured within the idle window of the surrounding voice
 // clips folds INTO the session as a third clip (a thumbnail row),
-// NOT a separate top-level "Photo" row above it. The card reads
-// "3 clips", and Create one memory yields ONE memory holding all
+// NOT a separate top-level "Photo" row above it. The card's
+// composition reads as per-media glyphs + counts — 2 voice · 1
+// photo — the shared ClipComposition line (identical to the memory
+// card, register-styled), never a flat "3 clips". Create one memory
+// yields ONE memory holding all
 // three. Fixes the July 11 dogfood bug: a photo at 10:34 floated
 // above the voice-only "2 clips" session it belonged to by time.
 //   • Every clip in the session carries the ochre inclusion ring.
@@ -504,7 +507,10 @@ function ScrMixedSession() {
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
             <span style={{ fontSize: 15, fontWeight: 700, color: PX.ink, fontVariantNumeric: 'tabular-nums' }}>10:32 AM</span>
             <span style={{ color: PX.ink4 }}>·</span>
-            <span style={{ fontSize: 13.5, color: PX.ink2, fontWeight: 600 }}>3 clips</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, color: PX.ink2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}><span style={{ color: PX.accent, display: 'inline-flex' }}>{MIC}</span>2</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, color: PX.ink2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}><span style={{ color: PX.ink3, display: 'inline-flex' }}>{CAM}</span>1</span>
+            </span>
             <span style={{ color: PX.ink4 }}>·</span>
             <span style={{ fontSize: 13.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums' }}>0:05</span>
           </div>

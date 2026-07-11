@@ -34,7 +34,10 @@ struct ClipsStatusDataSourceTests {
         let data = ClipsStatusDataSource.compute(
             clips: clips,
             organizing: 0,
-            looseClips: 0
+            looseClips: 0,
+            photoArrivals: 0,
+            videoArrivals: 0,
+            noteArrivals: 0
         )
         #expect(data.watchArrivals == 2)
     }
@@ -54,7 +57,10 @@ struct ClipsStatusDataSourceTests {
         let data = ClipsStatusDataSource.compute(
             clips: clips,
             organizing: 0,
-            looseClips: 0
+            looseClips: 0,
+            photoArrivals: 0,
+            videoArrivals: 0,
+            noteArrivals: 0
         )
         #expect(data.phoneArrivals == 2,
                 "Phone-source clips must be counted as phone arrivals — Slice D added phone captures to the inbox bench, so the sheet must report them")
@@ -71,7 +77,10 @@ struct ClipsStatusDataSourceTests {
         let data = ClipsStatusDataSource.compute(
             clips: clips,
             organizing: 0,
-            looseClips: 0
+            looseClips: 0,
+            photoArrivals: 0,
+            videoArrivals: 0,
+            noteArrivals: 0
         )
         #expect(data.siriArrivals == 0)
     }
@@ -88,7 +97,10 @@ struct ClipsStatusDataSourceTests {
         let data = ClipsStatusDataSource.compute(
             clips: clips,
             organizing: 0,
-            looseClips: 0
+            looseClips: 0,
+            photoArrivals: 0,
+            videoArrivals: 0,
+            noteArrivals: 0
         )
         #expect(data.downloading == 2,
                 "Only .announced and .received should count as downloading — .transcribing is post-file, .transcribed and .disposed are terminal")
@@ -100,10 +112,38 @@ struct ClipsStatusDataSourceTests {
         let data = ClipsStatusDataSource.compute(
             clips: [],
             organizing: 7,
-            looseClips: 12
+            looseClips: 12,
+            photoArrivals: 0,
+            videoArrivals: 0,
+            noteArrivals: 0
         )
         #expect(data.organizing == 7)
         #expect(data.looseClips == 12)
+    }
+
+    // MARK: - Media-type arrivals (Tom 2026-07-11)
+
+    /// Photos / Videos / Notes get their own rows under
+    /// **New arrivals** so the sheet reads the same media
+    /// vocabulary as the mixed session card (`MediaRow`).
+    /// `compute` plumbs the caller-supplied counts through — the
+    /// loose-by-kind Core Data fetch lives on `snapshot()`.
+    @Test func mediaTypeArrivals_areHandedThroughUnchanged() {
+        let data = ClipsStatusDataSource.compute(
+            clips: [],
+            organizing: 0,
+            looseClips: 6,
+            photoArrivals: 3,
+            videoArrivals: 2,
+            noteArrivals: 1
+        )
+        #expect(data.photoArrivals == 3)
+        #expect(data.videoArrivals == 2)
+        #expect(data.noteArrivals == 1)
+        // The aggregate `looseClips` stays honest — the sheet's
+        // "Available to shape" line reads the total; the per-
+        // kind rows read the breakdown.
+        #expect(data.looseClips == 6)
     }
 
     // MARK: - Field-observed scenario
@@ -120,18 +160,26 @@ struct ClipsStatusDataSourceTests {
         let data = ClipsStatusDataSource.compute(
             clips: clips,
             organizing: 0,
-            looseClips: 1
+            looseClips: 1,
+            photoArrivals: 1,
+            videoArrivals: 0,
+            noteArrivals: 0
         )
         // Two voice clips visible in the session → phoneArrivals.
         #expect(data.phoneArrivals == 2)
-        // One photo visible in the session (loose) → looseClips.
+        // One photo visible → photoArrivals row (per Tom 2026-07-11)
+        // and folded into the aggregate `looseClips` total.
+        #expect(data.photoArrivals == 1)
         #expect(data.looseClips == 1)
-        // Sum of everything the sheet reports = every clip in the
-        // session. Before the fix this was 1 (only the photo);
-        // after the fix it's 3.
-        let sheetTotal = data.watchArrivals + data.phoneArrivals + data.siriArrivals + data.looseClips
-        #expect(sheetTotal == 3,
-                "The sheet's counters must together account for every clip the user sees on the bench — silent undercount broke the honesty contract")
+        // Sum of the per-source + per-media-type arrivals =
+        // every clip the user sees on the bench. Before the phone-
+        // source fix this was 1 (only the photo, via looseClips);
+        // after both fixes it's 3.
+        let arrivalsTotal =
+            data.watchArrivals + data.phoneArrivals + data.siriArrivals
+            + data.photoArrivals + data.videoArrivals + data.noteArrivals
+        #expect(arrivalsTotal == 3,
+                "The sheet's arrival counters must together account for every clip the user sees on the bench — silent undercount broke the honesty contract")
     }
 
     // MARK: - Helpers

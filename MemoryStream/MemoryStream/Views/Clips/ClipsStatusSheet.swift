@@ -81,6 +81,14 @@ struct ClipsStatusSheet: View {
             )
             statusLine(systemImage: "iphone", label: "iPhone", value: data.phoneArrivals)
             statusLine(systemImage: "waveform", label: "Siri", value: data.siriArrivals)
+            // Media-type breakdown per Tom 2026-07-11: Photos /
+            // Videos / Notes get their own presence rows so the
+            // sheet reads the same media vocabulary the mixed
+            // session card uses (`MediaRow`). Count = loose refs
+            // of that kind (unattached to any memory).
+            statusLine(systemImage: "photo", label: "Photos", value: data.photoArrivals)
+            statusLine(systemImage: "video", label: "Videos", value: data.videoArrivals)
+            statusLine(systemImage: "text.alignleft", label: "Notes", value: data.noteArrivals)
         }
     }
 
@@ -201,6 +209,16 @@ struct ClipsStatusData: Equatable {
     let watchArrivals: Int
     let phoneArrivals: Int
     let siriArrivals: Int
+    /// Loose photo `MediaReference` count — photos not yet
+    /// attached to any memory. Added 2026-07-11 per Tom's ask
+    /// so Photos gets its own row under **New arrivals**,
+    /// matching the media vocabulary the mixed session card
+    /// uses (`MediaRow`).
+    let photoArrivals: Int
+    /// Loose video count — same rationale as `photoArrivals`.
+    let videoArrivals: Int
+    /// Loose note count — same rationale as `photoArrivals`.
+    let noteArrivals: Int
     let downloading: Int
     let organizing: Int
     let looseClips: Int
@@ -209,6 +227,9 @@ struct ClipsStatusData: Equatable {
         watchArrivals: 0,
         phoneArrivals: 0,
         siriArrivals: 0,
+        photoArrivals: 0,
+        videoArrivals: 0,
+        noteArrivals: 0,
         downloading: 0,
         organizing: 0,
         looseClips: 0
@@ -222,10 +243,14 @@ enum ClipsStatusDataSource {
 
     @MainActor
     static func snapshot() -> ClipsStatusData {
-        Self.compute(
+        let byKind = looseRefCountsByKind()
+        return Self.compute(
             clips: InboxManifest.shared.clips,
             organizing: processingTaskCount(),
-            looseClips: looseRefCount()
+            looseClips: byKind.total,
+            photoArrivals: byKind.photo,
+            videoArrivals: byKind.video,
+            noteArrivals: byKind.note
         )
     }
 
@@ -242,6 +267,11 @@ enum ClipsStatusDataSource {
     ///     it)
     ///   - `siriArrivals` = 0 (Siri captures still land as
     ///     memories directly, not on the bench)
+    ///   - `photoArrivals` / `videoArrivals` / `noteArrivals` =
+    ///     caller-supplied loose-`MediaReference` counts by
+    ///     media type. Added 2026-07-11 so the sheet reports
+    ///     Photos / Videos / Notes presence under **New
+    ///     arrivals** alongside the source-based rows.
     ///   - `downloading` = clips with `.announced` or `.received`
     ///     status
     ///   - The passed-through `organizing` and `looseClips` are
@@ -249,7 +279,10 @@ enum ClipsStatusDataSource {
     static func compute(
         clips: [InboxClip],
         organizing: Int,
-        looseClips: Int
+        looseClips: Int,
+        photoArrivals: Int,
+        videoArrivals: Int,
+        noteArrivals: Int
     ) -> ClipsStatusData {
         let watchArrivals = clips.filter { $0.source == "watch" }.count
         let phoneArrivals = clips.filter { $0.source == "phone" }.count
@@ -264,6 +297,9 @@ enum ClipsStatusDataSource {
             watchArrivals: watchArrivals,
             phoneArrivals: phoneArrivals,
             siriArrivals: siriArrivals,
+            photoArrivals: photoArrivals,
+            videoArrivals: videoArrivals,
+            noteArrivals: noteArrivals,
             downloading: downloading,
             organizing: organizing,
             looseClips: looseClips
@@ -284,6 +320,31 @@ enum ClipsStatusDataSource {
         let ctx = StorageService.shared.viewContext
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
         req.predicate = NSPredicate(format: "edges.@count == 0")
+        req.resultType = .countResultType
+        return (try? ctx.count(for: req)) ?? 0
+    }
+
+    /// Loose `MediaReference` counts split by `mediaType`. One
+    /// count-only fetch per kind — a single fetch + partition
+    /// on the returned rows would work too but at more memory
+    /// cost, and the sheet renders infrequently. `total` is the
+    /// aggregate, used for the "Available to shape · Loose
+    /// clips" line so it stays honest even when the new per-
+    /// kind rows report values.
+    @MainActor
+    private static func looseRefCountsByKind() -> (photo: Int, video: Int, note: Int, voice: Int, total: Int) {
+        let photo = looseCount(mediaType: "image")
+        let video = looseCount(mediaType: "video")
+        let note = looseCount(mediaType: "note")
+        let voice = looseCount(mediaType: "voice")
+        return (photo, video, note, voice, photo + video + note + voice)
+    }
+
+    @MainActor
+    private static func looseCount(mediaType: String) -> Int {
+        let ctx = StorageService.shared.viewContext
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(format: "edges.@count == 0 AND mediaType == %@", mediaType)
         req.resultType = .countResultType
         return (try? ctx.count(for: req)) ?? 0
     }

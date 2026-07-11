@@ -480,15 +480,13 @@ struct SessionListView: View {
     // days — "Today" for today, "Yesterday" for yesterday, short
     // "Wed Jul 2" for older. Removes the ambiguity of a 3-day-old
     // road-trip clip reading like today's.
-    /// Slice 8 (Sessions bench convergence): summary line derives
-    /// from `CompositionModel.from(clips:)` — the same primitive
-    /// every collection surface (memory cards, transcript header)
-    /// reads. Session card retains its bespoke chrome
-    /// (`time · count · duration` then date-label below) because
-    /// the shape doesn't match `ClipComposition`'s default (which
-    /// renders timespan + count, no duration); a future
-    /// convergence can extend `CompositionModel` with a total
-    /// duration and swap this for the shared component.
+    /// Summary line per the July 11 mixed-session spec update
+    /// (`docs/design/screens-clips-page.jsx` §ScrMixedSession):
+    /// **per-media glyphs + counts** via `MediaRow`, never a flat
+    /// `"N clips"` label. Two voice + one photo reads as
+    /// `mic 2 · camera 1`, not `3 clips` — matches how the memory
+    /// card composition line reads elsewhere, so the count
+    /// vocabulary stays consistent across surfaces.
     private func sessionMetaRow(_ session: ClipGroup) -> some View {
         let voiceClips = session.clips.map {
             ClipDisplayModel(inboxClip: $0, sessionStart: session.capturedAt)
@@ -501,8 +499,6 @@ struct SessionListView: View {
             let f = DateFormatter(); f.dateFormat = "h:mm a"
             return f.string(from: session.capturedAt)
         }()
-        let totalCount = composition.mediaCounts.total
-        let clipPart = totalCount == 1 ? "1 clip" : "\(totalCount) clips"
         let durStr = formatDuration(session.totalDuration)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
@@ -511,7 +507,7 @@ struct SessionListView: View {
                     .foregroundStyle(Crucible.Color.ink)
                     .monospacedDigit()
                 Text("·").foregroundStyle(Crucible.Color.ink3)
-                Text(clipPart)
+                MediaRow(counts: composition.mediaCounts, iconSize: 12, textSize: 13.5)
                 Text("·").foregroundStyle(Crucible.Color.ink3)
                 Text(durStr).monospacedDigit()
                 Spacer()
