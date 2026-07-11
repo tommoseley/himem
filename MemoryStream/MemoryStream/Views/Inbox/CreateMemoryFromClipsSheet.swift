@@ -123,7 +123,11 @@ struct CreateMemoryFromClipsSheet: View {
     // MARK: - Header / commit (mode-aware)
 
     private var headerTitle: String {
-        destination == .newMemory ? "New memory" : "Add to memory"
+        // Kingfisher Language.md §Vocabulary: "Idle-gap session (already
+        // grouped) | *What should this become?* | 'Create one memory' /
+        // *Review clips · Add to existing · Not yet.*" — the session
+        // pill verb is "Create one memory" (see SessionListView).
+        destination == .newMemory ? "Create one memory" : "Add to a memory"
     }
 
     private var commitLabel: String {
@@ -146,12 +150,13 @@ struct CreateMemoryFromClipsSheet: View {
 
     // MARK: - Destination toggle (segmented control)
 
-    /// Two-option segmented control. Per spec: `Make a new memory`
-    /// (default) and `Add to existing memory`. Picking either swaps the
-    /// body without changing the sheet's presentation.
+    /// Two-option segmented control. Kingfisher Language.md bans "Make"
+    /// — the segments are `New memory` and `Add to existing memory`
+    /// (2026-07-09 rename). Picking either swaps the body without
+    /// changing the sheet's presentation.
     private var destinationToggle: some View {
         Picker("Destination", selection: $destination) {
-            Text("Make a new memory").tag(Destination.newMemory)
+            Text("New memory").tag(Destination.newMemory)
             Text("Add to existing memory").tag(Destination.existingMemory)
         }
         .pickerStyle(.segmented)
@@ -455,18 +460,13 @@ struct CreateMemoryFromClipsSheet: View {
     // MARK: - Promotion
 
     /// Moves each clip's audio from Documents/Inbox/audio/ into the
-    /// standard voice store at Documents/VoiceEntries/, builds a single
-    /// JournalEntry through lifecycle.save with all clips attached, then
-    /// drops the inbox manifest rows.
+    /// standard voice store at Documents/VoiceEntries/, creates a
+    /// single JournalEntry, then writes each clip as a `.voice`
+    /// MediaReference via `storage.createVoiceFragment(createdAt:)`.
+    /// The write path creates the edge atomically (Phase 2+3 —
+    /// see `docs/architecture/2026-07-08-evidence-context-ontology-plan.md`).
     private func createMemory() {
-        // Build the joined transcript for entry.content. Empty transcripts
-        // contribute nothing; AI will summarize from whatever's there.
-        let joinedTranscript = clips
-            .map { $0.transcript }
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n\n")
-
-        var captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
+        var movedClips: [InboxClip] = []
         for clip in clips {
             let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
             let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
@@ -475,7 +475,7 @@ struct CreateMemoryFromClipsSheet: View {
                     try FileManager.default.removeItem(at: voiceURL)
                 }
                 try FileManager.default.moveItem(at: inboxURL, to: voiceURL)
-                captures.append((clip.audioFilename, .voice))
+                movedClips.append(clip)
             } catch {
                 // If the move fails, skip that clip — its inbox row stays
                 // for retry on the next attempt.
@@ -483,36 +483,38 @@ struct CreateMemoryFromClipsSheet: View {
             }
         }
 
-        let inputType: JournalEntry.InputType = .voiceInApp
+        let joinedTranscript = movedClips
+            .map { $0.transcript }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Create the entry with no `mediaCaptures` — voice fragments
+        // are written explicitly below so each carries its own
+        // per-clip capturedAt at creation time and creates its edge
+        // atomically.
         let newId = viewModel.saveEntry(
             content: joinedTranscript,
-            inputType: inputType,
-            mediaCaptures: captures,
+            inputType: .voiceInApp,
             topicName: selectedTopic
         )
 
-        // Post-save fixups: copy per-clip transcripts onto each new
-        // MediaReference (lifecycle.save's `mediaCaptures` tuple doesn't
-        // carry transcripts), and apply the user-supplied title if any.
-        // Fetch the MediaReferences by `osIdentifier` directly rather than
-        // traversing `entry.mediaReferences` — the relationship can hold a
-        // snapshot from before lifecycle.save linked the new refs in.
         if let newId {
             let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
             request.predicate = NSPredicate(format: "id == %@", newId as CVarArg)
             request.fetchLimit = 1
-            if let entry = try? storage.viewContext.fetch(request).first,
-               !trimmedTitle.isEmpty {
-                entry.title = trimmedTitle
-            }
-            for clip in clips where !clip.transcript.isEmpty {
-                let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-                req.predicate = NSPredicate(format: "osIdentifier == %@", clip.audioFilename)
-                req.fetchLimit = 1
-                if let ref = try? storage.viewContext.fetch(req).first {
-                    ref.transcript = clip.transcript
+            if let entry = try? storage.viewContext.fetch(request).first {
+                if !trimmedTitle.isEmpty {
+                    entry.title = trimmedTitle
+                }
+                for clip in movedClips.sorted(by: { $0.capturedAt < $1.capturedAt }) {
+                    _ = try? storage.createVoiceFragment(
+                        for: entry,
+                        audioFilename: clip.audioFilename,
+                        transcript: clip.transcript,
+                        createdAt: clip.capturedAt
+                    )
                 }
             }
             try? storage.save(context: storage.viewContext)
@@ -523,7 +525,7 @@ struct CreateMemoryFromClipsSheet: View {
             // alongside the date + time. No-op when the watch
             // captured without a fix (location permission off, no
             // signal, etc.).
-            for clip in clips {
+            for clip in movedClips {
                 ClipLocationResolver.stamp(
                     osIdentifier: clip.audioFilename,
                     latitude: clip.latitude,
@@ -541,7 +543,7 @@ struct CreateMemoryFromClipsSheet: View {
         }
 
         // Drop manifest rows — audio files were already moved out.
-        InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
+        InboxManifest.shared.removeBatch(clipIds: movedClips.map { $0.clipId })
         dismiss()
     }
 

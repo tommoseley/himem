@@ -16,13 +16,11 @@ struct SettingsView: View {
     @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
     @AppStorage("tagMemoriesWithLocation") private var tagMemoriesWithLocation = true
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
-    @AppStorage(CameraService.alsoSaveToPhotosLibraryKey) private var alsoSaveToPhotosLibrary = true
     @AppStorage("appearance") private var appearanceRaw: String = Appearance.system.rawValue
     private var appearance: Appearance {
         Appearance(rawValue: appearanceRaw) ?? .system
     }
-    @AppStorage(NotificationService.Keys.notifyDailyNudge) private var notifyDailyNudge = false
-    @AppStorage(NotificationService.Keys.nudgeTimeMinutes) private var nudgeTimeMinutes = 1200
+    // Channel B (daily nudge) storage retired 2026-07-07.
     @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
     // autoSaveDelay removed — Composer uses explicit commit
 
@@ -31,7 +29,6 @@ struct SettingsView: View {
     @State private var displayName: String = AuthService.shared.userName
     @ObservedObject private var inbox = InboxManifest.shared
     @ObservedObject private var entitlement = Entitlement.shared
-    @State private var showInbox = false
     @State private var showPricing = false
     /// Live project count for the C3 "AI & Organizing" row. Backed
     /// by a Core Data fetch so the displayed "N of 3" stays honest
@@ -93,7 +90,7 @@ struct SettingsView: View {
                                 .frame(width: 22)
                                 .foregroundStyle(Crucible.Color.accent)
                                 .accessibilityHidden(true)
-                            Text("Tutorials")
+                            Text("Learn")
                                 .foregroundStyle(Crucible.Color.ink)
                         }
                     }
@@ -212,31 +209,11 @@ struct SettingsView: View {
                     Text("AI & Organizing")
                 }
 
-                // MARK: - Captured Clips (Inbox)
-                Section {
-                    Button {
-                        showInbox = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "applewatch")
-                                .foregroundStyle(Crucible.Color.accent)
-                            Text("Captured Clips")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                            Text("\(inbox.count) pending")
-                                .font(.subheadline)
-                                .foregroundStyle(inbox.isEmpty ? Crucible.Color.ink4 : Crucible.Color.ink2)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(Crucible.Color.ink4)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                } footer: {
-                    Text("Voice clips from Apple Watch land here. Review them, then create a new memory or add them to an existing one.")
-                }
-
                 // MARK: - Voice
+                // Note (2026-07-09): the "Captured Clips" Settings row was
+                // retired per `Captured Clips · session-first · spec.md`
+                // v4 — "there is no 'Settings → Captured Clips' entry —
+                // the page is a tab." The Clips tab is the surface now.
                 Section {
                     Toggle("Save voice recordings", isOn: $saveVoiceEntries)
                         .tint(Crucible.Color.accent)
@@ -264,17 +241,14 @@ struct SettingsView: View {
                 }
 
                 // MARK: - Notifications
+                // Channel B (daily nudge / inactivity) retired 2026-07-07
+                // per `CLAUDE.md` §Notifications — Kingfisher constitution
+                // forbids the app raising the skipped thing. Only the
+                // passive Captured Clips arrival channel remains, and it
+                // has no user-visible toggle (arrivals ping so long as
+                // the OS permission is granted).
                 Section {
                     notificationPermissionRow
-                    Toggle("Daily nudge", isOn: $notifyDailyNudge)
-                        .tint(Crucible.Color.accent)
-                    if notifyDailyNudge {
-                        DatePicker(
-                            "Nudge time",
-                            selection: nudgeTimeBinding,
-                            displayedComponents: .hourAndMinute
-                        )
-                    }
                 } header: {
                     Text("Notifications")
                 } footer: {
@@ -291,21 +265,13 @@ struct SettingsView: View {
                     Text("Anchors the Add button to the bottom-left of the screen instead of the bottom-right. The action stack flips with it.")
                 }
 
-                // MARK: - Captures (Photos library opt-in)
-                // Default off per the data-custody lock: media lives
-                // in HiMem's iCloud Files container, not the Photos
-                // library. When the user opts in, captures land in a
-                // single "HiMem" album in Photos. The previous
-                // per-topic album scheme was retired June 10 2026.
-                Section {
-                    Toggle("Also save captures to my Photos library",
-                           isOn: $alsoSaveToPhotosLibrary)
-                        .tint(Crucible.Color.accent)
-                } header: {
-                    Text("Captures")
-                } footer: {
-                    Text("Off by default — your photos and videos live in HiMem's iCloud Drive folder. Turn this on to drop a copy into a **HiMem** album in your Photos library too, so you can share or print from Photos.")
-                }
+                // "Also save captures to my Photos library" retired
+                // 2026-07-10 per `screens-settings.jsx` lines 5-9,
+                // 231-234: the toggle contradicted the locked data-
+                // custody decision (media lives in HiMem's iCloud
+                // Files container, never the Photos library). The
+                // "Where your memories live" section below now carries
+                // the whole storage story on its own.
 
                 // MARK: - About: where memories live
                 Section {
@@ -444,11 +410,6 @@ struct SettingsView: View {
                 // that bypasses the Done button.
                 commitDisplayName()
             }
-            .navigationDestination(isPresented: $showInbox) {
-                if let viewModel {
-                    SessionListView(viewModel: viewModel)
-                }
-            }
             .sheet(isPresented: $showPricing) {
                 PricingView()
             }
@@ -458,19 +419,7 @@ struct SettingsView: View {
                     notificationAuthStatus = await NotificationService.shared.authorizationStatus()
                 }
             }
-            .onChange(of: notifyDailyNudge) { _, isOn in
-                Task {
-                    if isOn { await ensurePermissionAndRefresh() }
-                    let lastCapture = StorageService.shared.mostRecentEntryAt()
-                    await NotificationService.shared.refreshDailyNudge(lastCaptureAt: lastCapture)
-                }
-            }
-            .onChange(of: nudgeTimeMinutes) { _, _ in
-                Task {
-                    let lastCapture = StorageService.shared.mostRecentEntryAt()
-                    await NotificationService.shared.refreshDailyNudge(lastCaptureAt: lastCapture)
-                }
-            }
+            // Channel B onChange handlers retired 2026-07-07.
             .sheet(isPresented: $showRecycleBin) {
                 if let viewModel {
                     RecycleBinView(viewModel: viewModel)
@@ -570,26 +519,6 @@ struct SettingsView: View {
     }
 
     // MARK: - Notifications helpers
-
-    /// Bridges the Int "minutes since midnight" stored in UserDefaults to
-    /// the `Date` type the SwiftUI DatePicker expects. Only the time portion
-    /// of the Date matters; the calendar day is whatever today is at read.
-    private var nudgeTimeBinding: Binding<Date> {
-        Binding(
-            get: {
-                let h = nudgeTimeMinutes / 60
-                let m = nudgeTimeMinutes % 60
-                return Calendar.current.date(
-                    bySettingHour: h, minute: m, second: 0, of: Date()
-                ) ?? Date()
-            },
-            set: { newDate in
-                let cal = Calendar.current
-                nudgeTimeMinutes = cal.component(.hour, from: newDate) * 60
-                                 + cal.component(.minute, from: newDate)
-            }
-        )
-    }
 
     // MARK: - C3 Plus card
 
@@ -711,7 +640,7 @@ struct SettingsView: View {
         case .denied:
             return "Notifications are turned off for HiMem at the system level. Tap above or open iOS Settings → Notifications → HiMem to enable."
         case .authorized, .provisional, .ephemeral:
-            return "Watch clips ping when they land on the iPhone. The daily nudge is an optional reminder if you haven't captured anything by your chosen time."
+            return "Watch clips ping when they land on the iPhone. No streaks, no nudges — HiMem doesn't raise the skipped thing."
         case .notDetermined:
             return "Notifications haven't been requested yet. Tap above to enable banner pings for watch-clip arrivals."
         @unknown default:
@@ -730,7 +659,7 @@ struct SettingsView: View {
         switch notificationAuthStatus {
         case .notDetermined:
             Button {
-                Task { await ensurePermissionAndRefresh() }
+                Task { await ensurePermission() }
             } label: {
                 HStack {
                     Text("Allow Notifications")
@@ -767,7 +696,7 @@ struct SettingsView: View {
         }
     }
 
-    private func ensurePermissionAndRefresh() async {
+    private func ensurePermission() async {
         _ = await NotificationService.shared.requestPermissionIfNeeded()
         notificationAuthStatus = await NotificationService.shared.authorizationStatus()
     }

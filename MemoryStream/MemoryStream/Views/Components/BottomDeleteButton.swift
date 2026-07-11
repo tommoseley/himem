@@ -32,14 +32,14 @@ struct BottomDeleteButton: View {
 
         var systemImage: String {
             switch self {
-            case .delete:           return "trash"
+            case .delete:            return "trash"
             case .removeFromProject: return "arrow.triangle.2.circlepath"
             }
         }
 
         var footnote: String {
             switch self {
-            case .delete:           return "Moves to Recently Deleted · kept for 30 days."
+            case .delete:            return "Moves to Recently Deleted · kept for 30 days."
             case .removeFromProject: return "The memory stays in your library."
             }
         }

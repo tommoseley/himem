@@ -3,7 +3,20 @@ import CoreData
 import CloudKit
 
 final class StorageService {
-    static let shared = StorageService()
+    /// Production singleton. Under XCTest / Swift Testing this returns
+    /// an in-memory container instead of the CloudKit-backed one — any
+    /// test code that touches `.shared` (SwiftUI View bodies during
+    /// test snapshots, `JournalEntry.latestProcessingTask` fallbacks,
+    /// `CrucibleTheme.loadFromCoreData` and other init-time paths) is
+    /// safe. Tests that need a fresh isolated store still use
+    /// `StorageService(inMemory: true)` — this only guards accidental
+    /// touches. See troika review 2026-07-09.
+    static let shared: StorageService = {
+        if StorageService.isRunningTests {
+            return StorageService(inMemory: true)
+        }
+        return StorageService()
+    }()
 
     /// Base type so the test path can use a plain `NSPersistentContainer`
     /// (no CloudKit). Production assigns an `NSPersistentCloudKitContainer`
@@ -35,7 +48,16 @@ final class StorageService {
     }()
 
     private init() {
-        let cloudKitContainer = NSPersistentCloudKitContainer(name: "MemoryStream")
+        // Pass `cachedModel` explicitly so the shared container uses the
+        // SAME `NSManagedObjectModel` instance as the in-memory test
+        // containers. Otherwise `NSPersistentCloudKitContainer(name:)`
+        // auto-loads a fresh model from the bundle, and every
+        // `NSManagedObject` subclass (JournalEntry, MediaReference, ...)
+        // ends up "claimed" by two models — Core Data's `+entity` then
+        // fails with "Failed to find a unique match" errors during any
+        // test that also loads a fresh in-memory store. See troika
+        // review 2026-07-09.
+        let cloudKitContainer = NSPersistentCloudKitContainer(name: "MemoryStream", managedObjectModel: Self.cachedModel)
         container = cloudKitContainer
 
         // ALL store-description options must be set before
@@ -146,6 +168,9 @@ final class StorageService {
         try? viewContext.setQueryGenerationFrom(.current)
 
         #if DEBUG
+        // Also skip under XCTest — schema discovery holds a CKDatabase
+        // singleton and multiple parallel test hosts collide on it.
+        if !Self.isRunningTests {
         // Schema discovery is a CloudKit chatter bomb (multiple round
         // trips, dozens of log lines) and only needs to run once per
         // schema version per device. The flag is debug-only so a
@@ -171,7 +196,13 @@ final class StorageService {
         //         photo/video description feature (#53). Folds into
         //         the same dashboard deploy as V2 since V2 has not
         //         shipped to Production yet.
-        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV3"
+        // V5 — Phase 4 clean-cut: v3 model is the ONLY model version
+        //       (v1 and v2 deleted from disk). Legacy `entry`/`entryId`/
+        //       `mediaReferences` fields gone. Migration code removed
+        //       entirely — Tom exported his data and starts fresh.
+        //       Bumped so his device republishes v3 to Dev after Dev
+        //       is reset via CloudKit Dashboard.
+        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV5"
         if !UserDefaults.standard.bool(forKey: schemaInitKey) {
             // Only mark the version flag set on actual success. If we
             // failed silently (e.g. account daemon temporarily refused
@@ -188,6 +219,7 @@ final class StorageService {
                 }
             }
         }
+        } // end !isRunningTests guard
         #endif
 
         // Listen for remote changes from other devices. With
@@ -232,6 +264,25 @@ final class StorageService {
     func save(context: NSManagedObjectContext) throws {
         guard context.hasChanges else { return }
         try context.save()
+    }
+    // The temporary v1 invariant (`assertNoZeroEdgeMediaReferences`) was
+    // retired in Phase 6 alongside the delete-verb split. Removing a
+    // clip from its last memory legitimately creates a zero-edge
+    // MediaReference (the "returned to Clips tab" state), which the
+    // Clips tab default view now reads. See
+    // `docs/architecture/2026-07-08-evidence-context-ontology-plan.md`
+    // § Temporary v1 invariant.
+
+    /// True inside the XCTest / Swift Testing test host process. Static
+    /// so callers outside `StorageService` (e.g. `MemoryStreamApp.init`)
+    /// can use it to skip the launch pre-warm — under parallel Swift-Testing
+    /// runs the pre-warm makes N test hosts race the persistent-store lock
+    /// during any Core Data lightweight migration, and the losers get
+    /// killed for preflight timeout.
+    static var isRunningTests: Bool {
+        NSClassFromString("XCTestCase") != nil
+            || NSClassFromString("Testing.Test") != nil
+            || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     // MARK: - Journal Entry Operations
@@ -323,16 +374,25 @@ final class StorageService {
 
     // MARK: - Media Reference Operations
 
-    func createMediaReference(for entry: JournalEntry, localIdentifier: String, mediaType: MediaReference.MediaType, context: NSManagedObjectContext? = nil) throws -> MediaReference {
+    /// Creates a MediaReference (evidence) attached to `entry` via a
+    /// `MemoryClipEdge` (the v1 ontology's associative entity).
+    /// `capturedAt` overrides the default `Date()` for `ref.createdAt`.
+    func createMediaReference(
+        for entry: JournalEntry,
+        localIdentifier: String,
+        mediaType: MediaReference.MediaType,
+        capturedAt: Date? = nil,
+        context: NSManagedObjectContext? = nil
+    ) throws -> MediaReference {
         let ctx = context ?? viewContext
         let ref = MediaReference(context: ctx)
         ref.id = UUID()
-        ref.entryId = entry.id
         ref.osIdentifier = localIdentifier
         ref.mediaType = mediaType.rawValue
         ref.isAccessible = true
-        ref.createdAt = Date()
-        ref.entry = entry
+        let refCreatedAt = capturedAt ?? Date()
+        ref.createdAt = refCreatedAt
+        try Self.createEdge(from: entry, to: ref, linkedAt: refCreatedAt, in: ctx)
         try save(context: ctx)
         return ref
     }
@@ -340,17 +400,21 @@ final class StorageService {
     /// Creates a `.note` fragment — a MediaReference whose body lives in
     /// the `text` field rather than referencing an external asset. Replaces
     /// the legacy `TextSegment` entity.
-    func createNoteFragment(for entry: JournalEntry, text: String, createdAt: Date = Date(), context: NSManagedObjectContext? = nil) throws -> MediaReference {
+    func createNoteFragment(
+        for entry: JournalEntry,
+        text: String,
+        createdAt: Date = Date(),
+        context: NSManagedObjectContext? = nil
+    ) throws -> MediaReference {
         let ctx = context ?? viewContext
         let ref = MediaReference(context: ctx)
         ref.id = UUID()
-        ref.entryId = entry.id
         ref.osIdentifier = ""
         ref.mediaType = MediaReference.MediaType.note.rawValue
         ref.isAccessible = true
         ref.createdAt = createdAt
         ref.text = text
-        ref.entry = entry
+        try Self.createEdge(from: entry, to: ref, linkedAt: createdAt, in: ctx)
         try save(context: ctx)
         return ref
     }
@@ -359,11 +423,16 @@ final class StorageService {
     /// `osIdentifier` and the speech transcript on the ref. Replaces the
     /// legacy `JournalEntry.audioFilePath` slot for in-app voice
     /// captures.
-    func createVoiceFragment(for entry: JournalEntry, audioFilename: String, transcript: String, createdAt: Date = Date(), context: NSManagedObjectContext? = nil) throws -> MediaReference {
+    func createVoiceFragment(
+        for entry: JournalEntry,
+        audioFilename: String,
+        transcript: String,
+        createdAt: Date = Date(),
+        context: NSManagedObjectContext? = nil
+    ) throws -> MediaReference {
         let ctx = context ?? viewContext
         let ref = MediaReference(context: ctx)
         ref.id = UUID()
-        ref.entryId = entry.id
         ref.osIdentifier = audioFilename
         ref.mediaType = MediaReference.MediaType.voice.rawValue
         ref.isAccessible = true
@@ -373,9 +442,46 @@ final class StorageService {
         // entry.content, AI prompt, card snippet, full-detail body)
         // — sees clean text. Per Tom's 2026-05-27 screenshots.
         ref.transcript = JournalEntry.cleanedTranscript(transcript)
-        ref.entry = entry
+        try Self.createEdge(from: entry, to: ref, linkedAt: createdAt, in: ctx)
         try save(context: ctx)
         return ref
+    }
+
+    /// Creates a single `MemoryClipEdge` connecting `entry` to `ref` in
+    /// `ctx`. `orderInMemory` is derived from the memory's current
+    /// edge count — for new memories with N clips inserted sequentially,
+    /// this yields 0..N-1 in insertion order. Never called directly by
+    /// higher layers — flows through `createMediaReference` /
+    /// `createVoiceFragment` / `createNoteFragment` so every
+    /// MediaReference lands with at least one edge (the temporary
+    /// v1 invariant enforced through Phase 6).
+    ///
+    /// **Idempotent per (memoryId, clipId).** If an edge already exists
+    /// for the pair, this is a no-op — the pre-existing edge is
+    /// preserved (its `linkedAt` / `orderInMemory` / `annotation` are
+    /// not overwritten). The `MemoryClipEdge` docstring names this
+    /// invariant; without the guard, a re-invoked Sort commit /
+    /// OrganizePass / hostile CloudKit merge could double a memory's
+    /// clip list, which surfaced as the "duplicate transcript rows on
+    /// Memory Detail" defect (CD 2026-07-09).
+    static func createEdge(
+        from entry: JournalEntry,
+        to ref: MediaReference,
+        linkedAt: Date,
+        in ctx: NSManagedObjectContext
+    ) throws {
+        if entry.edgesArray.contains(where: { $0.clipId == ref.id }) {
+            return
+        }
+        let edge = MemoryClipEdge(context: ctx)
+        edge.id = UUID()
+        edge.clipId = ref.id
+        edge.memoryId = entry.id
+        edge.clip = ref
+        edge.memory = entry
+        edge.orderInMemory = Int16(entry.edgesArray.count)
+        edge.linkedAt = linkedAt
+        edge.annotation = nil
     }
 
     func updateThumbnailFilename(_ ref: MediaReference, filename: String, context: NSManagedObjectContext? = nil) throws {

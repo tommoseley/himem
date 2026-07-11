@@ -763,12 +763,20 @@ function MDClipV2({ day, date, year, time, location, transcript, editing }) {
             </span>
             <span style={{ fontSize: 12, letterSpacing: -0.05 }}>Original recording · 0:48</span>
           </div>
-          {/* commit bar — Delete clip (left) · Cancel / Done (right). */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, marginTop: 2 }}>
+          {/* clip-fate management row (Delete clip · Move to…) — sits above the
+              text-edit commit row so four actions never crowd one line. */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, marginTop: 2, paddingTop: 10, borderTop: '1px solid ' + PX.divider }}>
             <span style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600, color: PX.danger, letterSpacing: -0.1 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
               Delete clip
             </span>
+            <span style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600, color: PX.ink2, letterSpacing: -0.1 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17v-3a4 4 0 014-4h11"/><path d="M16 5l5 5-5 5"/></svg>
+              Move to…
+            </span>
+          </div>
+          {/* text-edit commit row — Cancel / Done (right). */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 14, marginTop: 2 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
               <span style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', fontSize: 14.5, fontWeight: 600, color: PX.ink2, letterSpacing: -0.1 }}>Cancel</span>
               <span style={{
@@ -935,11 +943,143 @@ function ScrMentionEditState() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// CLIP RELOCATION — "Move to…" (covers move AND remove)
+//   A clip always lives somewhere: inside a memory, or loose on the
+//   Captured Clips bench. So one primitive covers both asks —
+//   move to another memory, pull into a new memory, or "Remove from
+//   this memory" = move back to the bench (the clip survives).
+//   Parallel to Projects' Delete vs Remove-from-project.
+// ─────────────────────────────────────────────────────────────
+function MoveDestRow({ title, meta, glyph, tone = 'ink', sub }) {
+  const color = tone === 'accent' ? PX.accent : PX.ink;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12, minHeight: 56, boxSizing: 'border-box',
+      padding: '9px 4px',
+    }}>
+      <span style={{
+        width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+        background: tone === 'accent' ? PX.accentTint : PX.wash1,
+        color: color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        border: tone === 'accent' ? '1px dashed ' + PX.accent : '1px solid ' + PX.hairline,
+      }}>{glyph}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color, letterSpacing: -0.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
+        {(meta || sub) && <span style={{ display: 'block', fontSize: 12, color: PX.ink3, letterSpacing: -0.05, marginTop: 1 }}>{meta || sub}</span>}
+      </span>
+      {tone !== 'accent' && (
+        <svg width="8" height="13" viewBox="0 0 10 14" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 1l6 6-6 6"/></svg>
+      )}
+    </div>
+  );
+}
+
+function ScrClipMoveSheet() {
+  return (
+    <div style={{ width: 340, height: 735, position: 'relative', background: PX.paper, fontFamily: PX.sans, overflow: 'hidden' }}>
+      {/* dimmed memory behind */}
+      <div style={{ position: 'absolute', inset: 0, filter: 'saturate(0.9)', opacity: 0.5, pointerEvents: 'none' }}>
+        <ScrMemoryUnifiedRest/>
+      </div>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(26,22,18,0.28)' }}/>
+
+      {/* sheet */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        background: PX.paper, borderRadius: '20px 20px 0 0',
+        boxShadow: '0 -10px 40px rgba(0,0,0,0.18)', padding: '10px 18px 22px',
+        display: 'flex', flexDirection: 'column', maxHeight: '86%',
+      }}>
+        <div style={{ width: 38, height: 5, borderRadius: 3, background: PX.hairline, alignSelf: 'center', margin: '2px 0 12px' }}/>
+
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontFamily: PX.serif, fontSize: 21, fontWeight: 500, color: PX.ink, letterSpacing: -0.4 }}>Where does this belong?</span>
+          <span style={{ flex: 1 }}/>
+          <span style={{ fontSize: 15, color: PX.ink2, letterSpacing: -0.1 }}>Cancel</span>
+        </div>
+        <div style={{ fontSize: 12.5, color: PX.ink3, letterSpacing: -0.05, marginBottom: 12 }}>
+          “They’re hard to find because of citrus import rules…”
+        </div>
+
+        {/* search */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px',
+          background: PX.wash1, borderRadius: 11, border: '1px solid ' + PX.hairline, marginBottom: 6,
+        }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={PX.ink3} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <span style={{ fontSize: 14, color: PX.ink4, letterSpacing: -0.1 }}>Search memories</span>
+        </div>
+
+        <MoveDestRow tone="accent" title="New memory" sub="Pull this clip out on its own"
+          glyph={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>}/>
+
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: PX.ink3, letterSpacing: 1.4, textTransform: 'uppercase', margin: '10px 4px 2px' }}>Recent memories</div>
+        <div style={{ overflow: 'hidden' }}>
+          <MoveDestRow title="Ordering replacement lemon trees" meta="3 clips · May 13–17"
+            glyph={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5"/></svg>}/>
+          <MoveDestRow title="Garden plans for spring" meta="5 clips · May 2"
+            glyph={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5"/></svg>}/>
+          <MoveDestRow title="Citrus care notes" meta="2 clips · Apr 28"
+            glyph={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5"/></svg>}/>
+        </div>
+
+        {/* the unfile / remove case — visually distinct, the clip survives */}
+        <div style={{ borderTop: '1px solid ' + PX.divider, marginTop: 8, paddingTop: 4 }}>
+          <MoveDestRow title="Remove from this memory" sub="Returns to Captured Clips, unfiled"
+            glyph={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// After moving out a memory's LAST clip, the memory is empty. Decision (a):
+// offer to delete the now-empty memory (recoverable via Recently Deleted).
+function ScrClipEmptyAfterMove() {
+  return (
+    <div style={{ width: 340, height: 735, position: 'relative', background: PX.paper, fontFamily: PX.sans, overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', inset: 0, opacity: 0.4, pointerEvents: 'none' }}>
+        <ScrMemoryUnifiedRest/>
+      </div>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(26,22,18,0.32)' }}/>
+
+      <div style={{
+        position: 'absolute', left: 18, right: 18, top: '50%', transform: 'translateY(-50%)',
+        background: PX.paper, borderRadius: 18, padding: '22px 20px 18px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ fontFamily: PX.serif, fontSize: 21, fontWeight: 500, color: PX.ink, letterSpacing: -0.4, marginBottom: 8 }}>
+          Nothing left in this memory
+        </div>
+        <div style={{ fontSize: 14, lineHeight: 1.5, color: PX.ink2, letterSpacing: -0.1, marginBottom: 20 }}>
+          You moved the last clip out. Delete this now-empty memory? You can restore it from Recently Deleted for 30 days.
+        </div>
+        <div style={{
+          height: 50, borderRadius: 13, background: PX.dangerTint || 'rgba(184,49,30,0.08)',
+          border: '1px solid ' + PX.danger, color: PX.danger,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          fontSize: 15.5, fontWeight: 600, letterSpacing: -0.1, marginBottom: 8,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
+          Delete empty memory
+        </div>
+        <div style={{
+          height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 15, fontWeight: 600, color: PX.ink2, letterSpacing: -0.1,
+        }}>
+          Keep it empty
+        </div>
+      </div>
+    </div>
+  );
+}
+
 Object.assign(window, {
   ScrMemoryDetailFull, MDChangesCard, MDDeleteButton,
   ScrMemoryLectureFull, ScrMemoryLectureCompact, ScrMemoryLectureCompactEditing,
   defaultTranscriptMode, transcriptOpensCompact,
   ScrMemoryUnifiedRest, ScrMemoryUnifiedEditing,
+  ScrClipMoveSheet, ScrClipEmptyAfterMove, MoveDestRow,
   MDNavV2, MDEditField, MDAddChip, MDClipV2,
   MDMentionChip, ScrMentionEditState,
 });

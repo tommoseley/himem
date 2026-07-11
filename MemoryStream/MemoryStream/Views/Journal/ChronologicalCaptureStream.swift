@@ -28,6 +28,9 @@ struct ChronologicalCaptureStream: View {
     let onDeleteVoice: (UUID) -> Void
     let onDeleteNote: (UUID) -> Void
     let onDeleteMedia: (UUID) -> Void
+    /// Called when the user taps `Where does this belong?` on a
+    /// clip's fate row. Parent presents `PlaceClipSheet`.
+    let onRelocateClip: (UUID) -> Void
     /// Opens the AudioPlayerSheet for a voice clip — fires when the
     /// user taps the quiet "Original recording · Play" footer in the
     /// transcript-first VoiceClipPanel.
@@ -94,7 +97,8 @@ struct ChronologicalCaptureStream: View {
                     onCommitTranscript: { newText in
                         onCommitVoiceTranscript(item.id, newText)
                     },
-                    onDelete: { onDeleteVoice(item.id) }
+                    onDelete: { onDeleteVoice(item.id) },
+                    onRelocate: { onRelocateClip(item.id) }
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -105,7 +109,8 @@ struct ChronologicalCaptureStream: View {
                     onCommitText: { newText in
                         onCommitNoteText(item.id, newText)
                     },
-                    onDelete: { onDeleteNote(item.id) }
+                    onDelete: { onDeleteNote(item.id) },
+                    onRelocate: { onRelocateClip(item.id) }
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -169,7 +174,10 @@ struct ChronologicalCaptureStream: View {
                 // Compact, so the callback is unused for those —
                 // tapping a media row opens the description editor,
                 // which carries its own bottom Delete clip button.
-                onDelete: { compactDeleteAction(item) }
+                onDelete: { compactDeleteAction(item) },
+                onRelocate: item.mediaType == .voice || item.mediaType == .note
+                    ? { onRelocateClip(item.id) }
+                    : nil
             )
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
@@ -268,13 +276,17 @@ struct VoiceClipPanel: View {
     /// back to read-only — the transcript text is shown but not
     /// tappable.
     let onCommitTranscript: ((String) -> Void)?
-    /// Fires when the user taps `Delete clip` on the left of the
-    /// active-edit commit bar. Per `Memory Detail · unified editing
-    /// model.md` (June 12 2026): a clip has no Delete in its view
-    /// state; destruction surfaces only while editing the transcript.
-    /// Nil callers hide the affordance entirely (e.g. when the panel
-    /// is rendered read-only).
+    /// Fires when the user taps `Delete clip` on the clip-fate row.
+    /// Delete always destroys per `Memory Detail · unified editing
+    /// model.md:66` (July 5 2026); the remove-from-memory semantics
+    /// live on the placement sheet. Nil callers hide the fate row.
     let onDelete: (() -> Void)?
+    /// Fires when the user taps `Where does this belong?` on the
+    /// clip-fate row. Parent opens `PlaceClipSheet` with the current
+    /// memory context so the user can move to another memory, into a
+    /// new memory, or remove from this memory. Nil callers hide the
+    /// affordance.
+    let onRelocate: (() -> Void)?
     /// Lazily-resolved download status of the underlying audio file.
     /// Only consulted when the transcript is empty — that's the case
     /// where the user needs to disambiguate "iCloud is still
@@ -300,12 +312,14 @@ struct VoiceClipPanel: View {
         item: MediaDisplayItem,
         onPlay: (() -> Void)? = nil,
         onCommitTranscript: ((String) -> Void)? = nil,
-        onDelete: (() -> Void)? = nil
+        onDelete: (() -> Void)? = nil,
+        onRelocate: (() -> Void)? = nil
     ) {
         self.item = item
         self.onPlay = onPlay
         self.onCommitTranscript = onCommitTranscript
         self.onDelete = onDelete
+        self.onRelocate = onRelocate
     }
 
     var body: some View {
@@ -372,10 +386,16 @@ struct VoiceClipPanel: View {
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Crucible.Color.accent, lineWidth: 1)
                     )
+                // Per `Memory Detail · unified editing model.md:66`
+                // (July 5 2026), the edit-state bottom is TWO rows:
+                // fate row above, commit row below. Four actions never
+                // share one line (44px floor).
+                if let onDelete, let onRelocate {
+                    ClipFateRow(onDelete: onDelete, onRelocate: onRelocate)
+                }
                 EditCommitBar(
                     onCancel: { cancelInlineTranscriptEdit() },
-                    onDone:   { commitInlineTranscriptEdit() },
-                    onDelete: onDelete
+                    onDone:   { commitInlineTranscriptEdit() }
                 )
             }
         } else {
@@ -519,10 +539,12 @@ private struct NotePanel: View {
     /// shape — parent routes to `EntryLifecycleService.updateNoteFragment`.
     /// Nil callers stay read-only.
     let onCommitText: ((String) -> Void)?
-    /// Surfaces `Delete clip` on the active-edit commit bar — same
-    /// rule as `VoiceClipPanel.onDelete`. Nil callers hide the
-    /// affordance.
+    /// Delete clip on the fate row — always destroys. Nil callers
+    /// hide the fate row.
     let onDelete: (() -> Void)?
+    /// Where does this belong? on the fate row — opens the placement
+    /// sheet. Nil callers hide the affordance.
+    let onRelocate: (() -> Void)?
 
     @State private var isEditingText: Bool = false
     @State private var textDraft: String = ""
@@ -532,11 +554,13 @@ private struct NotePanel: View {
     init(
         item: MediaDisplayItem,
         onCommitText: ((String) -> Void)? = nil,
-        onDelete: (() -> Void)? = nil
+        onDelete: (() -> Void)? = nil,
+        onRelocate: (() -> Void)? = nil
     ) {
         self.item = item
         self.onCommitText = onCommitText
         self.onDelete = onDelete
+        self.onRelocate = onRelocate
     }
 
     private var bodyText: String { item.text ?? "" }
@@ -573,10 +597,12 @@ private struct NotePanel: View {
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Crucible.Color.accent, lineWidth: 1)
                     )
+                if let onDelete, let onRelocate {
+                    ClipFateRow(onDelete: onDelete, onRelocate: onRelocate)
+                }
                 EditCommitBar(
                     onCancel: { cancelInlineNoteEdit() },
-                    onDone:   { commitInlineNoteEdit() },
-                    onDelete: onDelete
+                    onDone:   { commitInlineNoteEdit() }
                 )
             }
         } else {

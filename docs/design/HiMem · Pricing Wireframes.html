@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HiMem · Pricing & Organize — Wireframes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Kalam:wght@300;400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #F4F1EA;
+    --ink: #2A2723;
+    --ink2: #6B6358;
+    --line: #2A2723;
+    --fill1: #E2DDD2;
+    --fill2: #D2CCBE;
+    --fill3: #C2BBAA;
+    --ochre: #C64A1C;     /* primary action */
+    --blue: #1E5C8E;      /* AI / organize moments */
+    --note: #B0421A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: 'Kalam', cursive; line-height: 1.4;
+    padding: 0 0 80px;
+  }
+  .page-head {
+    padding: 30px 40px 18px; border-bottom: 2px dashed var(--ink);
+    position: sticky; top: 0; background: var(--paper); z-index: 20;
+  }
+  .page-head h1 { font-family: 'Caveat', cursive; font-size: 38px; margin: 0 0 4px; font-weight: 700; }
+  .page-head p { margin: 0; color: var(--ink2); font-size: 15px; max-width: 760px; }
+  .legend { display: flex; gap: 18px; margin-top: 12px; flex-wrap: wrap; font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 14px; height: 14px; border: 1.5px solid var(--ink); border-radius: 3px; display: inline-block; }
+
+  .band { padding: 34px 40px 10px; }
+  .band-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 6px; flex-wrap: wrap; }
+  .band-head h2 { font-family: 'Caveat', cursive; font-size: 30px; margin: 0; font-weight: 700; flex-shrink: 0; }
+  .band-head .sub { color: var(--ink2); font-size: 14px; }
+  .note {
+    font-family: 'Caveat', cursive; color: var(--note); font-size: 19px;
+    transform: rotate(-1.2deg); margin: 6px 0 18px; font-weight: 600;
+  }
+  .note::before { content: "✎ "; }
+
+  .row { display: flex; gap: 30px; flex-wrap: wrap; align-items: flex-start; }
+
+  /* phone wireframe */
+  .phone {
+    width: 290px; background: #fff; border: 2.5px solid var(--line);
+    border-radius: 26px; padding: 14px 13px 16px; position: relative;
+    box-shadow: 4px 5px 0 rgba(42,39,35,0.13);
+  }
+  .phone.tall { min-height: 600px; }
+  .opt-tag {
+    position: absolute; top: -14px; left: 16px; background: var(--ink); color: var(--paper);
+    font-family: 'Caveat', cursive; font-weight: 700; font-size: 17px; padding: 1px 12px;
+    border-radius: 10px; transform: rotate(-1.5deg); white-space: nowrap;
+  }
+  .opt-cap { width: 290px; font-size: 13px; color: var(--ink2); margin-top: 10px; }
+  .opt-cap b { color: var(--ink); }
+  .notch { width: 70px; height: 6px; background: var(--fill3); border-radius: 4px; margin: 0 auto 12px; }
+
+  /* primitives */
+  .bar { background: var(--fill2); border-radius: 4px; height: 10px; }
+  .bar.sm { height: 8px; }
+  .bar.dk { background: var(--fill3); }
+  .bar.lt { background: var(--fill1); }
+  .block { background: var(--fill1); border: 1.5px solid var(--fill3); border-radius: 8px; }
+  .h-title { font-weight: 700; font-size: 18px; line-height: 1.15; }
+  .h-sub { color: var(--ink2); font-size: 13px; }
+  .stack { display: flex; flex-direction: column; gap: 7px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; border: 1.5px solid var(--ink);
+    border-radius: 20px; padding: 3px 10px; font-size: 12px; background: #fff;
+  }
+  .btn {
+    border: 2px solid var(--ink); border-radius: 22px; text-align: center;
+    padding: 9px 0; font-weight: 700; font-size: 14px; background: #fff;
+  }
+  .btn.primary { background: var(--ochre); color: #fff; border-color: var(--ochre); }
+  .btn.ghost { background: #fff; color: var(--ink); }
+  .btn.sm { padding: 6px 14px; font-size: 12px; border-radius: 16px; display: inline-block; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700;
+    padding: 3px 9px; border-radius: 14px;
+  }
+  .chip.draft { background: #E2ECF4; color: var(--blue); border: 1.5px dashed var(--blue); }
+  .chip.done { background: #E2ECF4; color: var(--blue); border: 1.5px solid var(--blue); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); display: inline-block; }
+  .dot.hollow { background: #fff; border: 1.5px solid var(--blue); }
+  .tier-card { border: 2px solid var(--line); border-radius: 14px; padding: 12px; }
+  .tier-card.free { background: #fff; }
+  .tier-card.plus { background: #FBF6F3; border-color: var(--ochre); }
+  .tier-card.ghost { background: var(--fill1); border-style: dashed; opacity: 0.7; }
+  .price { font-family: 'Caveat', cursive; font-weight: 700; font-size: 26px; line-height: 1; }
+  .feat { display: flex; gap: 7px; font-size: 12.5px; align-items: flex-start; }
+  .feat .k { color: var(--ochre); font-weight: 700; }
+  .feat .kb { color: var(--blue); font-weight: 700; }
+  .divider { border: none; border-top: 1.5px dashed var(--fill3); margin: 9px 0; }
+  .clip { display: flex; gap: 8px; align-items: flex-start; }
+  .wave { flex: 1; height: 22px; background: repeating-linear-gradient(90deg, var(--fill3) 0 2px, transparent 2px 5px); border-radius: 4px; align-self: center; }
+  .arrow-step { display: flex; align-items: center; gap: 8px; }
+  .arrow { font-family: 'Caveat', cursive; font-size: 30px; color: var(--note); font-weight: 700; align-self: center; }
+  .flowlabel { font-family: 'Caveat', cursive; font-size: 16px; color: var(--ink2); text-align: center; margin-bottom: 4px; font-weight: 600; }
+  .mini { width: 200px; }
+  .mini .h-title { font-size: 15px; }
+  .banner { border-radius: 10px; padding: 9px 10px; font-size: 12.5px; }
+  .banner.draft { background: #E8F0F6; border: 1.5px dashed var(--blue); }
+  .small { font-size: 11.5px; color: var(--ink2); }
+  .tiny { font-size: 10.5px; color: var(--ink2); }
+  .gear { float: right; font-size: 15px; color: var(--ink2); }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>HiMem — Pricing &amp; Organize · Wireframes</h1>
+  <p>Lo-fi options for the new <b>Capture · Connect · Create</b> model. Three areas, several options each. Pick what feels right per area (mix &amp; match) and I'll take the winners to hi-fi. Real copy on the decision points; grey bars = "words go here." Nothing here is the final look.</p>
+  <div class="legend">
+    <span><span class="sw" style="background:var(--ochre);border-color:var(--ochre)"></span> Ochre = primary action</span>
+    <span><span class="sw" style="background:#E2ECF4;border-color:var(--blue)"></span> Blue = AI / organize moment</span>
+    <span><span class="sw"></span> Grey = placeholder copy</span>
+    <span>✎ red = my notes to you</span>
+  </div>
+</div>
+
+<!-- ============ AREA 1 · PRICING PAGE ============ -->
+<div class="band">
+  <div class="band-head">
+    <h2>1 · The pricing page</h2>
+    <span class="sub">What a user sees when they tap "Upgrade." Same locked content, three structures.</span>
+  </div>
+  <p class="note">The headline is the inversion: Free is the private/offline tier — paying buys reach, not privacy. Which structure lands that best?</p>
+
+  <div class="row">
+
+    <!-- A1 — vertical story -->
+    <div>
+      <div class="phone tall">
+        <div class="opt-tag">A1 · Story</div>
+        <div class="notch"></div>
+        <div class="stack" style="gap:11px">
+          <div class="h-title" style="font-size:21px">Your memories stay<br/>yours. Even offline.</div>
+          <div class="h-sub">Private on your device. No account needed to keep a thought.</div>
+          <hr class="divider" />
+          <div class="stack" style="gap:3px">
+            <div style="font-family:'Caveat';font-size:20px;font-weight:700">Capture <span class="small">· free, forever</span></div>
+            <div class="feat"><span class="k">→</span> Capture & keep everything</div>
+            <div class="feat"><span class="k">→</span> Organize by hand, on-device</div>
+            <div class="feat"><span class="k">→</span> 3 projects · search · fully offline</div>
+          </div>
+          <div class="stack" style="gap:3px">
+            <div style="font-family:'Caveat';font-size:20px;font-weight:700;color:var(--ochre)">Connect <span class="small" style="color:var(--ink2)">· Plus</span></div>
+            <div class="feat"><span class="kb">✦</span> Memories organize themselves</div>
+            <div class="feat"><span class="kb">✦</span> "8 memories may belong here"</div>
+            <div class="feat"><span class="kb">✦</span> Unlimited projects</div>
+          </div>
+          <div class="tiny">Create · synthesis & generation — <i>coming later</i></div>
+          <hr class="divider" />
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><span class="price">$6.99</span><span class="small">/mo</span></div>
+            <div class="small">or $69.99/yr</div>
+          </div>
+          <div class="btn primary">Try Plus free for a week</div>
+          <div class="tiny" style="text-align:center">Keep using Free as long as you like.</div>
+        </div>
+      </div>
+      <div class="opt-cap"><b>Scrolling narrative.</b> The three verbs as a top-to-bottom story; the offline headline leads. Reads like a manifesto, sells the philosophy.</div>
+    </div>
+
+    <!-- A2 — two-card compare -->
+    <div>
+      <div class="phone tall">
+        <div class="opt-tag">A2 · Compare</div>
+        <div class="notch"></div>
+        <div class="stack" style="gap:10px">
+          <div class="h-title">Free does a lot.<br/>Plus does it for you.</div>
+          <div class="tier-card free stack" style="gap:5px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <b>Capture</b><span class="small">Free</span>
+            </div>
+            <div class="feat"><span class="k">✓</span> Organize <b>by hand</b>, on-device</div>
+            <div class="feat"><span class="k">✓</span> 3 projects · offline · private</div>
+          </div>
+          <div class="tier-card plus stack" style="gap:5px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <b style="color:var(--ochre)">Connect</b><span><span class="price" style="font-size:20px">$6.99</span><span class="small">/mo</span></span>
+            </div>
+            <div class="feat"><span class="kb">✦</span> Organizes <b>automatically</b></div>
+            <div class="feat"><span class="kb">✦</span> Memories connect themselves</div>
+            <div class="feat"><span class="kb">✦</span> Unlimited projects</div>
+          </div>
+          <div class="tier-card ghost stack" style="gap:3px">
+            <div style="display:flex;justify-content:space-between"><b>Create</b><span class="tiny">coming later</span></div>
+            <div class="tiny">Turn memories into something.</div>
+          </div>
+          <div class="btn primary">Get Plus</div>
+          <div class="btn ghost">Stay on Free</div>
+        </div>
+      </div>
+      <div class="opt-cap"><b>Side-by-side cards.</b> Classic compare. The "by hand vs for you" line does the selling; Studio is a faint ghost row. Fastest to grok.</div>
+    </div>
+
+    <!-- A3 — hero plus -->
+    <div>
+      <div class="phone tall">
+        <div class="opt-tag">A3 · Hero</div>
+        <div class="notch"></div>
+        <div class="stack" style="gap:11px">
+          <div class="chip done" style="align-self:flex-start">✦ The magic moment</div>
+          <div class="block" style="height:120px;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;background:#EEF4F9;border-color:var(--blue)">
+            <div><b style="color:var(--blue);font-size:15px">"8 memories may<br/>belong here."</b><div class="tiny" style="margin-top:6px">[ preview of Plus finding connections ]</div></div>
+          </div>
+          <div class="h-title" style="font-size:19px">Plus connects what<br/>you've already captured.</div>
+          <div class="h-sub">Automatic organizing. Related memories surface themselves. Your library starts thinking with you.</div>
+          <hr class="divider" />
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><span class="price">$6.99</span><span class="small">/mo · or $69.99/yr</span></div>
+          </div>
+          <div class="btn primary">Try Plus</div>
+          <div class="small" style="text-align:center;text-decoration:underline">What's included in Free?</div>
+        </div>
+      </div>
+      <div class="opt-cap"><b>Lead with the magic moment.</b> Shows the single best Plus feature up top, defers the full Free/Plus breakdown to a tap. Most "show don't tell."</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ AREA 2 · ORGANIZE LIFECYCLE ============ -->
+<div class="band">
+  <div class="band-head">
+    <h2>2 · Memory-Detail · the organize lifecycle</h2>
+    <span class="sub">The "Draft organized → Organized" chip. A label tracks <i>review state, not tier.</i></span>
+  </div>
+  <p class="note">The whole flow first, then two ways to render the "draft, give it a glance" moment. This is the most novel decision — look here closely.</p>
+
+  <div class="flowlabel">The lifecycle (Free shown — Plus is identical but auto-runs step 1→2)</div>
+  <div class="row" style="align-items:stretch;margin-bottom:26px">
+
+    <div class="arrow-step">
+      <div class="phone mini stack" style="gap:8px">
+        <div class="tiny" style="color:var(--ink2)">Wed May 27 · 1:56 PM ⚙</div>
+        <div class="clip"><span class="dot" style="background:var(--ochre)"></span><div class="wave"></div></div>
+        <div class="bar sm" style="width:90%"></div>
+        <div class="bar sm" style="width:70%"></div>
+        <hr class="divider" />
+        <div class="btn primary sm" style="align-self:flex-start">✦ Organize</div>
+        <div class="tiny">On-device · private · free</div>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="arrow-step">
+      <div class="phone mini stack" style="gap:8px">
+        <div class="tiny" style="color:var(--ink2)">Wed May 27 · 1:56 PM ⚙</div>
+        <div class="chip draft" style="align-self:flex-start">✦ Draft organized</div>
+        <div class="h-title">On integrity &amp;<br/>moral courage</div>
+        <div class="bar sm" style="width:95%"></div>
+        <div class="bar sm" style="width:80%"></div>
+        <div class="banner draft">Give this a glance — <b>Looks good</b> · Edit</div>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="arrow-step">
+      <div class="phone mini stack" style="gap:8px">
+        <div class="tiny" style="color:var(--ink2)">Wed May 27 · 1:56 PM ⚙</div>
+        <div class="chip done" style="align-self:flex-start">✓ Organized</div>
+        <div class="h-title">On integrity &amp;<br/>moral courage</div>
+        <div class="bar sm" style="width:95%"></div>
+        <div class="bar sm" style="width:80%"></div>
+        <div class="bar sm" style="width:88%"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="note" style="font-size:17px">Two treatments for the unreviewed "draft" state:</p>
+  <div class="row">
+
+    <!-- B1 banner -->
+    <div>
+      <div class="phone" style="min-height:380px">
+        <div class="opt-tag">B1 · Banner</div>
+        <div class="notch"></div>
+        <div class="stack" style="gap:9px">
+          <div class="tiny" style="color:var(--ink2)">Wed May 27 · 1:56 PM <span class="gear">⚙</span></div>
+          <div class="chip draft" style="align-self:flex-start">✦ Draft organized</div>
+          <div class="h-title">On integrity &amp; moral courage</div>
+          <div class="bar sm" style="width:95%"></div>
+          <div class="bar sm" style="width:85%"></div>
+          <div class="banner draft stack" style="gap:7px">
+            <div><b style="color:var(--blue)">Give this a glance.</b><br/><span class="tiny">A draft from your device — make sure it sounds like you.</span></div>
+            <div style="display:flex;gap:8px">
+              <div class="btn primary sm" style="flex:1">Looks good</div>
+              <div class="btn ghost sm" style="flex:1">Edit</div>
+            </div>
+          </div>
+          <hr class="divider" />
+          <div class="clip"><span class="dot" style="background:var(--ochre)"></span><div class="wave"></div></div>
+        </div>
+      </div>
+      <div class="opt-cap"><b>Explicit banner.</b> A soft blue strip states the draft is unreviewed + offers Looks good / Edit. Hard to miss; most honest. Costs vertical space.</div>
+    </div>
+
+    <!-- B2 chip + dot -->
+    <div>
+      <div class="phone" style="min-height:380px">
+        <div class="opt-tag">B2 · Quiet chip</div>
+        <div class="notch"></div>
+        <div class="stack" style="gap:9px">
+          <div class="tiny" style="color:var(--ink2)">Wed May 27 · 1:56 PM <span class="gear">⚙</span></div>
+          <div style="display:flex;align-items:center;gap:7px">
+            <span class="chip draft">✦ Draft organized</span>
+            <span class="dot hollow"></span><span class="tiny">unreviewed</span>
+          </div>
+          <div class="h-title">On integrity &amp; moral courage</div>
+          <div class="bar sm" style="width:95%"></div>
+          <div class="bar sm" style="width:85%"></div>
+          <div class="bar sm" style="width:70%"></div>
+          <div class="small" style="text-decoration:underline;color:var(--blue)">Tap to review &amp; keep →</div>
+          <hr class="divider" />
+          <div class="clip"><span class="dot" style="background:var(--ochre)"></span><div class="wave"></div></div>
+        </div>
+      </div>
+      <div class="opt-cap"><b>Minimal chip + dot.</b> The dashed chip and a hollow "unreviewed" dot carry it; review is one tap. Calmer, less nagging — but easier to ignore a bad draft.</div>
+    </div>
+
+    <!-- reference: organized + stale -->
+    <div>
+      <div class="phone" style="min-height:380px">
+        <div class="opt-tag" style="background:var(--blue)">ref · Organized + stale</div>
+        <div class="notch"></div>
+        <div class="stack" style="gap:9px">
+          <div class="tiny" style="color:var(--ink2)">Wed May 27 · 1:56 PM <span class="gear">⚙</span></div>
+          <div class="chip done" style="align-self:flex-start">✓ Organized</div>
+          <div class="h-title">On integrity &amp; moral courage</div>
+          <div class="bar sm" style="width:95%"></div>
+          <div class="bar sm" style="width:85%"></div>
+          <div class="banner" style="background:#F6ECD9;border:1.5px solid #B87322">
+            <span style="color:#8A5410">2 new clips since organized — <b>Refresh</b></span>
+          </div>
+          <hr class="divider" />
+          <div class="clip"><span class="dot" style="background:var(--ochre)"></span><div class="wave"></div></div>
+        </div>
+      </div>
+      <div class="opt-cap"><b>For reference</b> — the settled "Organized" state + the amber "stale / refresh" footer (carried over from prior spec, unchanged). Not a decision, just context.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ AREA 3 · SOFT UPGRADE MOMENT ============ -->
+<div class="band">
+  <div class="band-head">
+    <h2>3 · The upgrade moment</h2>
+    <span class="sub">An offer, never a wall. Where does it surface?</span>
+  </div>
+  <p class="note">No counters, no "out of assists." The nudge is a recognition of a habit, not a block. Two trigger ideas:</p>
+
+  <div class="row">
+
+    <!-- C1 after-draft -->
+    <div>
+      <div class="phone" style="min-height:340px">
+        <div class="opt-tag">C1 · After a glance</div>
+        <div class="notch"></div>
+        <div class="stack" style="gap:9px">
+          <div class="chip done" style="align-self:flex-start">✓ Organized</div>
+          <div class="h-title">On integrity &amp; moral courage</div>
+          <div class="bar sm" style="width:90%"></div>
+          <hr class="divider" />
+          <div class="block stack" style="padding:11px;gap:7px;background:#EEF4F9;border-color:var(--blue)">
+            <b style="color:var(--blue)">Want this to just happen?</b>
+            <span class="small">Plus organizes every memory the moment you capture it — and connects them across your library.</span>
+            <div class="btn primary sm" style="align-self:flex-start">See Plus</div>
+          </div>
+        </div>
+      </div>
+      <div class="opt-cap"><b>Right after they keep a draft.</b> They've just felt the value → offer to automate it. Contextual, low-pressure.</div>
+    </div>
+
+    <!-- C2 habit -->
+    <div>
+      <div class="phone" style="min-height:340px">
+        <div class="opt-tag">C2 · After a habit</div>
+        <div class="notch"></div>
+        <div class="stack" style="gap:9px">
+          <div class="tiny" style="color:var(--ink2)">Today <span class="gear">⚙</span></div>
+          <div class="block stack" style="padding:13px;gap:8px;background:#FBF6F3;border-color:var(--ochre)">
+            <div style="font-family:'Caveat';font-size:22px;font-weight:700;color:var(--ochre)">You've organized 12<br/>memories by hand.</div>
+            <span class="small">Nice rhythm. Plus does this automatically — and starts connecting them for you.</span>
+            <div style="display:flex;gap:8px">
+              <div class="btn primary sm" style="flex:1">Try Plus</div>
+              <div class="btn ghost sm" style="flex:1">Not now</div>
+            </div>
+          </div>
+          <div class="tiny" style="text-align:center">Shows once. Never nags.</div>
+        </div>
+      </div>
+      <div class="opt-cap"><b>After N manual organizes.</b> Names the effort they've put in → offers to lift it. Risk: feels earned, or feels like being watched. Use sparingly.</div>
+    </div>
+
+    <!-- C3 settings only -->
+    <div>
+      <div class="phone" style="min-height:340px">
+        <div class="opt-tag">C3 · Settings only</div>
+        <div class="notch"></div>
+        <div class="stack" style="gap:9px">
+          <div class="tiny" style="color:var(--ink2)">Settings <span class="gear">⚙</span></div>
+          <div class="bar" style="width:60%"></div>
+          <hr class="divider" />
+          <div class="tier-card plus stack" style="gap:6px">
+            <b style="color:var(--ochre)">HiMem Plus</b>
+            <span class="small">Automatic organizing · connections · unlimited projects</span>
+            <div class="btn primary sm" style="align-self:flex-start">See plans</div>
+          </div>
+          <div class="bar sm" style="width:80%"></div>
+          <div class="bar sm" style="width:70%"></div>
+        </div>
+      </div>
+      <div class="opt-cap"><b>No inline nudges at all.</b> Upgrade lives only in Settings. Purest "never a wall" — but may under-convert. The quiet baseline.</div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

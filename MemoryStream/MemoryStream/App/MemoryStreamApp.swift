@@ -117,8 +117,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         switch NotificationService.Category(rawValue: rawCategory) {
         case .inboxArrival:
             NotificationCenter.default.post(name: NotificationService.openInboxNotification, object: nil)
-        case .dailyNudge:
-            NotificationCenter.default.post(name: NotificationService.dailyNudgeTappedNotification, object: nil)
         case .none:
             break
         }
@@ -190,7 +188,8 @@ struct MemoryStreamApp: App {
         WatchSessionDelegate.shared.start()
         // Seed UserDefaults with notification setting defaults (toggles off,
         // 8pm nudge time) before any @AppStorage in SettingsView reads them.
-        NotificationService.registerDefaults()
+        // NotificationService.registerDefaults() retired 2026-07-07 with
+        // Channel B. Only Channel A remains and has no persisted defaults.
         // Entitlement / StoreKitService / WatchInboxNotificationCoordinator
         // bootstrap moved to LaunchScreenView.onStorageLoaded so cold
         // launches don't block on a sync loadPersistentStores. See
@@ -208,8 +207,15 @@ struct MemoryStreamApp: App {
         // use their own StorageService(inMemory:) instance; the lazy
         // static `.shared` instance loading in the background doesn't
         // collide with their fixtures.
-        Task.detached(priority: .userInitiated) {
-            _ = StorageService.shared
+        // Under XCTest / Swift Testing the shared production container
+        // races the test hosts' persistent-store lock during Core Data
+        // lightweight migration and Xcode kills the losers as preflight
+        // timeouts. Tests never touch `.shared` directly — they use
+        // `StorageService(inMemory: true)`. See troika review 2026-07-09.
+        if !StorageService.isRunningTests {
+            Task.detached(priority: .userInitiated) {
+                _ = StorageService.shared
+            }
         }
         // Resolve the iCloud Drive ubiquity container off-main during
         // launch. Apple's docs (FileManager.url(forUbiquityContainerIdentifier:))
@@ -238,7 +244,7 @@ struct MemoryStreamApp: App {
         WindowGroup {
             ZStack {
                 if storageReady && onboardingComplete {
-                    JournalView()
+                    HiMemTabView()
                         .environment(\.managedObjectContext, StorageService.shared.viewContext)
                         .environmentObject(QuickActionState.shared)
                         // Mount the auto-fire tutorial overlay here, on
@@ -338,7 +344,6 @@ struct MemoryStreamApp: App {
                     return
                 }
                 NSLog("[HiMem][LifeDx] scene-active backstop firing retry path")
-                Task { await refreshDailyNudge() }
                 Task { await retryPendingInboxTranscriptions() }
                 Task { await promptForNotificationsIfFirstTime() }
                 // Re-assert inbox clips to the watch so any ack that was
@@ -357,15 +362,6 @@ struct MemoryStreamApp: App {
                 InboxManifest.shared.syncBadgeNow()
             }
         }
-    }
-
-    /// Asks NotificationService to schedule or cancel today's daily nudge
-    /// based on whether the user has created an entry today. Called on every
-    /// scene activation so the nudge stays in sync with the user's day.
-    @MainActor
-    private func refreshDailyNudge() async {
-        let lastCapture = StorageService.shared.mostRecentEntryAt()
-        await NotificationService.shared.refreshDailyNudge(lastCaptureAt: lastCapture)
     }
 
     /// Scene-active backstop for inbox transcription. Picks up rows

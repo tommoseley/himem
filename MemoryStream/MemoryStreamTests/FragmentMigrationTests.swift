@@ -38,7 +38,7 @@ struct FragmentMigrationTests {
 
         FragmentMigration.runIfNeeded(in: storage.viewContext, force: true)
 
-        let refs = (fetchEntry(entryId, in: storage)?.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = fetchEntry(entryId, in: storage)?.mediaReferencesArray ?? []
         #expect(refs.filter { $0.mediaTypeEnum == .note }.isEmpty)
         // Entry.content stays put — the plain-text fallback renders it.
         #expect(fetchEntry(entryId, in: storage)?.content == "consolidated text")
@@ -58,7 +58,7 @@ struct FragmentMigrationTests {
 
         FragmentMigration.runIfNeeded(in: storage.viewContext, force: true)
 
-        let refs = (fetchEntry(entryId, in: storage)?.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = fetchEntry(entryId, in: storage)?.mediaReferencesArray ?? []
         let notes = refs.filter { $0.mediaTypeEnum == .note }
         // Path 3 must skip when the entry already has any MediaReference —
         // promotion of orphan content happens via the detail-view

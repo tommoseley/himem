@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HiMem · App Store screenshots v2</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="crucible.css">
+<script src="crucible-theme.js"></script>
+<style>
+  :root {
+    /* Standard Crucible tokens come from crucible.css.
+       Below are file-local aliases for App Store screenshot styling. */
+    --ochre:      var(--accent);
+    --green:      var(--confirmed);
+    --amber:      var(--warn);
+    --ai-blue:    var(--ai);
+    --line:       var(--hairline);
+    --line-2:     var(--wash-2);
+    --sf:         var(--sans);
+    --sf-display: -apple-system, "SF Pro Display", "SF Pro", "Inter", system-ui, sans-serif;
+  }
+  /* App Store stage uses a deliberately dark backdrop to make the
+     screenshot frames pop. Not Crucible; not theme-aware. */
+  html, body { background:#171410; color:var(--ink); margin:0; font-family:var(--sf); }
+  /* Each artboard takes a deliberate canvas; the design_canvas wraps it. */
+  .frame {
+    width:600px; height:1300px; position:relative; overflow:hidden;
+    /* Fixed light — marketing frames are intentionally NOT theme-aware.
+       (Hardcoded hex so the theme switcher / system dark mode can't flip
+       paper→black. The drawn phone content hardcodes its palette too.) */
+    background:#EFECE5;
+    font-family:var(--sf);
+    color:#1A1612;
+  }
+  .frame.dark { background:#000; color:#fff; }
+  .frame.ochre { background:var(--ochre); color:#F7F1E8; }
+
+  .headline {
+    font-family:var(--serif);
+    font-weight:500;
+    letter-spacing:-0.018em;
+    line-height:1.04;
+    text-wrap:balance;
+  }
+  .eyebrow {
+    font-family:var(--sf);
+    font-size:13px; font-weight:600;
+    letter-spacing:0.14em; text-transform:uppercase;
+    opacity:0.55;
+  }
+  .frame.ochre .eyebrow { opacity:0.7; color:#F7F1E8; }
+
+  /* Phone shell — simplified iPhone 15 Pro shape, scaled */
+  .phone {
+    position:absolute;
+    width:380px; height:790px;
+    background:#000;
+    border-radius:52px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.35), 0 8px 20px rgba(0,0,0,0.18);
+    padding:8px;
+    box-sizing:border-box;
+  }
+  .phone .screen {
+    width:100%; height:100%;
+    background:var(--paper);
+    border-radius:44px;
+    overflow:hidden;
+    position:relative;
+  }
+  .phone.dark .screen { background:#000; color:#fff; }
+  .phone .notch {
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    width:104px; height:30px; background:#000; border-radius:18px; z-index:5;
+  }
+  .status {
+    position:relative; z-index:6;
+    height:50px; display:flex; align-items:center; justify-content:space-between;
+    padding: 18px 28px 0; font-family:var(--sf);
+    font-size:15px; font-weight:600;
+  }
+  .status .right { display:flex; gap:6px; align-items:center; }
+  .phone.dark .status { color:#fff; }
+  .status svg { display:block; }
+
+  /* Watch shell */
+  .watch {
+    position:absolute;
+    width:320px; height:380px;
+    background:#1c1c1c;
+    border-radius:64px;
+    padding:14px;
+    box-sizing:border-box;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.45), 0 8px 20px rgba(0,0,0,0.2);
+  }
+  .watch::before, .watch::after {
+    content:""; position:absolute; left:50%; transform:translateX(-50%);
+    width:160px; height:30px; background:#1c1c1c; border-radius:0 0 16px 16px;
+  }
+  .watch::before { top:-22px; border-radius:16px 16px 4px 4px; }
+  .watch::after { bottom:-22px; border-radius:4px 4px 16px 16px; }
+  .watch .screen {
+    width:100%; height:100%; background:#000; color:#fff;
+    border-radius:50px; overflow:hidden; position:relative;
+  }
+
+  /* Headline blocks anchored top/bottom */
+  .top-text {
+    position:absolute; top:80px; left:48px; right:48px; z-index:2;
+  }
+  .bot-text {
+    position:absolute; bottom:90px; left:48px; right:48px; z-index:2;
+  }
+
+  /* Misc UI primitives */
+  .row { display:flex; align-items:center; gap:10px; }
+  .pill {
+    display:inline-flex; align-items:center; gap:6px;
+    height:28px; padding: 0 12px;
+    border-radius:9999px;
+    background: rgba(26,22,18,0.06);
+    color:#1A1612; font-size:13px; font-weight:500;
+  }
+  .pill.ochre { background:var(--ochre); color:#F7F1E8; }
+  .pill.ai { background: rgba(30,92,142,0.10); color:var(--ai-blue); }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--ink); }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="frames/appstore-frames-v2.jsx"></script>
+<script type="text/babel">
+  // Wait until babel has finished transpiling sibling babel <script> tags before mounting.
+  function tryMount() {
+    if (!window.Frame1 || !window.DesignCanvas) { return setTimeout(tryMount, 40); }
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(
+      <DesignCanvas title="HiMem · App Store screenshots v2" subtitle="Voice-first memory-preservation positioning. Lead with the problem (a thought, gone if you don't catch it), not a feature. Install-sheet trio = Why → How → Result. Three-phase model: every caption promises only what ships today; Studio stays off the launch page; the close is data custody.">
+        <DCSection id="installsheet" title="Install-sheet trio (1–3)" subtitle="Only these 3 show on the install sheet — they ARE the ad: the problem → the value → the payoff">
+          <DCArtboard id="f1" label="01 · Catch the thought before it's gone (Watch · the problem)" width={600} height={1300}><Frame1/></DCArtboard>
+          <DCArtboard id="f2" label="02 · Save it now, keep it for good (Memory · the value)" width={600} height={1300}><Frame2/></DCArtboard>
+          <DCArtboard id="f3" label="03 · Find it again, years from now (Memories · the payoff)" width={600} height={1300}><Frame3/></DCArtboard>
+        </DCSection>
+        <DCSection id="evaluators" title="For the swipers (4–8)" subtitle="Proof frames — story, Plus, privacy, search, zero-friction">
+          <DCArtboard id="f4" label="04 · The story behind the moment (voice + photo)" width={600} height={1300}><Frame4/></DCArtboard>
+          <DCArtboard id="f5" label="05 · Rediscover what connects (Plus)" width={600} height={1300}><Frame5/></DCArtboard>
+          <DCArtboard id="f6" label="06 · Yours, in your iCloud (privacy)" width={600} height={1300}><Frame6/></DCArtboard>
+          <DCArtboard id="f7" label="07 · Remember more than the moment (Search)" width={600} height={1300}><Frame7/></DCArtboard>
+          <DCArtboard id="f8" label="08 · No account, no password (Onboarding)" width={600} height={1300}><Frame8/></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+  tryMount();
+</script>
+</body>
+</html>

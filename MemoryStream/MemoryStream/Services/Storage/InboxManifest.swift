@@ -517,6 +517,16 @@ final class InboxManifest: ObservableObject {
     // MARK: - Atomic persistence
 
     private func replace(with next: [InboxClip]) {
+        let previousIds = Set(clips.map(\.clipId))
+        let nextIds = Set(next.map(\.clipId))
+        // New arrivals = ids in `next` that weren't there before.
+        // Presence, not count — per `CLAUDE.md` §Phone (July 10 2026)
+        // "the dot represents new, unseen arrivals and clears when
+        // the user opens Clips."
+        if !nextIds.subtracting(previousIds).isEmpty {
+            hasUnseenArrivals = true
+            UserDefaults.standard.set(true, forKey: Self.unseenArrivalsKey)
+        }
         clips = next
         // Prune-on-write hook: any dismissed-cluster record whose
         // clipIds are no longer all in the inbox becomes dead
@@ -527,22 +537,21 @@ final class InboxManifest: ObservableObject {
         // bench's resting state" + Tom's Q3 answer.
         pruneDeadDismissedClusters()
         persist()
-        // Keep the iOS home-screen badge in lockstep with the inbox.
-        // Push payloads from `WatchInboxNotificationCoordinator` set
-        // the badge to whatever the count was when the push fired,
-        // but the system doesn't lower the badge when the user
-        // reviews clips in-app — we have to do that ourselves.
-        // Money-tested in `InboxManifestBadgeSyncTests`.
-        syncIconBadge(to: next.count)
+        // Home-screen numeric badge retired 2026-07-10 per `CLAUDE.md`
+        // §Phone ("App-icon badge: none. iOS only supports a numeric
+        // app-icon badge, and a number reintroduces counting"). Force
+        // it to 0 so any lingering push payload can't leave a stale
+        // number on the icon.
+        syncIconBadge(to: 0)
     }
 
-    /// Sets the home-screen icon badge to `count` via the modern
-    /// `UNUserNotificationCenter.setBadgeCount` API (iOS 17+, replaces
-    /// the deprecated `UIApplication.applicationIconBadgeNumber`).
-    /// Errors are swallowed — a transient permission/HAL hiccup
-    /// shouldn't cascade into a manifest-persist failure.
+    /// Zeroes the home-screen icon badge unconditionally — the
+    /// numeric-badge policy is now "never," per `CLAUDE.md` §Phone
+    /// July 10 2026. Kept as a defensive zeroing call so push
+    /// payloads (which iOS still processes) can't leave a stale
+    /// number on the icon.
     private func syncIconBadge(to count: Int) {
-        UNUserNotificationCenter.current().setBadgeCount(count) { _ in }
+        UNUserNotificationCenter.current().setBadgeCount(0) { _ in }
     }
 
     private func persist() {
@@ -668,7 +677,8 @@ final class InboxManifest: ObservableObject {
         // (no legacy file → no migration) was clean.
         let url = Self.manifestURL
         defer {
-            syncIconBadge(to: clips.count)
+            // Numeric badge retired 2026-07-10; force to zero on load.
+            syncIconBadge(to: 0)
             // Load the companion Sort-dismissals file. Missing file
             // → empty set, safe on fresh install.
             loadDismissedClusters()
@@ -678,16 +688,36 @@ final class InboxManifest: ObservableObject {
             let data = try Data(contentsOf: url)
             let loaded = try JSONDecoder.iso8601.decode([InboxClip].self, from: data)
             let (active, disposed) = partition(loaded)
-            // Drop active rows whose audio file is gone — defensive
-            // against partial states from older crashes. Tombstones
-            // never had audio (we cleared `audioFilename` on disposal),
-            // so the file check doesn't apply.
-            let activeWithFiles = active.filter { clip in
-                FileManager.default.fileExists(atPath: Self.audioURL(for: clip.audioFilename).path)
+            // **Don't drop rows whose audio file is temporarily
+            // absent** (fix 2026-07-11 for Tom's "clips vanished after
+            // update" repro). Watch-clip audio lives in the iCloud
+            // ubiquity container — after an app update or fresh
+            // sign-in, iCloud may not have finished downloading the
+            // audio bytes by the moment `load()` runs. The old filter
+            // (`activeWithFiles`) treated a missing file as evidence
+            // of a partial-state crash and silently dropped the row;
+            // the manifest kept the clip on disk but the UI never saw
+            // it again until we somehow re-added it. That failure
+            // mode is invisible to the user and violates
+            // `CLAUDE.md` §Media specifics ("A missing file is a
+            // calm, honest state, never an error or a blame") — the
+            // authoritative metadata is safe in the manifest JSON
+            // regardless of whether the bytes have landed yet.
+            //
+            // Log missing-audio rows so the console still surfaces
+            // partial states; the UI treats them as normal clips
+            // (audio playback will report "downloading from iCloud"
+            // when the user hits play — that path already exists via
+            // `UbiquityStore.downloadStatus`).
+            let missingCount = active.filter { clip in
+                !FileManager.default.fileExists(atPath: Self.audioURL(for: clip.audioFilename).path)
+            }.count
+            if missingCount > 0 {
+                NSLog("[HiMem][Inbox] load() — \(missingCount) of \(active.count) active clip(s) have no local audio yet; keeping them so iCloud can catch up")
             }
             // Age out old tombstones. Active rows pass through.
             let agedDisposed = Self.pruned(disposed, olderThan: Self.defaultPruneDays, now: Date())
-            clips = activeWithFiles.sorted { $0.capturedAt > $1.capturedAt }
+            clips = active.sorted { $0.capturedAt > $1.capturedAt }
             disposedClips = agedDisposed
         } catch {
             // Corrupt manifest — start fresh rather than block the user.
@@ -778,15 +808,33 @@ final class InboxManifest: ObservableObject {
         }
     }
 
-    /// Public hook so app launch and scene-active can force the
-    /// icon badge to match the current inbox count. Defensive against
-    /// state drift from notifications that fired while the app was
-    /// killed: the push set the badge to N when delivered, but if the
-    /// user reviewed clips in-app and then quit, the next launch
-    /// might find the manifest empty while the badge still shows N.
-    /// Calling this on scene-active resolves the gap immediately.
+    /// Public hook so app launch and scene-active can force the icon
+    /// badge to zero. Numeric badges retired 2026-07-10; this remains
+    /// as a defensive zeroing call because iOS may have set a number
+    /// via a push payload while the app was killed.
     func syncBadgeNow() {
-        syncIconBadge(to: clips.count)
+        syncIconBadge(to: 0)
+    }
+
+    // MARK: - Unseen-arrivals dot (presence, not count)
+
+    /// Persistent key for the "there are new arrivals the user hasn't
+    /// seen yet" flag.
+    private static let unseenArrivalsKey = "himem.inbox.hasUnseenArrivals"
+
+    /// User has arrivals they haven't reviewed since the last time
+    /// they opened the Clips tab. Drives the presence dot on the
+    /// Clips tab item per `CLAUDE.md` §Phone (July 10 2026) — never
+    /// a count.
+    @Published var hasUnseenArrivals: Bool = UserDefaults.standard.bool(forKey: InboxManifest.unseenArrivalsKey)
+
+    /// Clears the presence-dot flag. HiMemTabView calls this when the
+    /// user selects the Clips tab. Persistent so a re-launch remembers
+    /// the "seen" state.
+    func markAllSeen() {
+        guard hasUnseenArrivals else { return }
+        hasUnseenArrivals = false
+        UserDefaults.standard.set(false, forKey: Self.unseenArrivalsKey)
     }
 
     #if DEBUG

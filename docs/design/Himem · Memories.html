@@ -24,7 +24,9 @@
 <script type="text/babel" src="design-canvas.jsx"></script>
 <script type="text/babel" src="crucible-primitives.jsx"></script>
 <script type="text/babel" src="screens-projects.jsx"></script>
+<script type="text/babel" src="screens-clips-page.jsx"></script>
 <script type="text/babel" src="screens-memories.jsx"></script>
+<script type="text/babel" src="screens-coachmark.jsx"></script>
 
 <script type="text/babel">
 function App() {
@@ -57,6 +59,21 @@ function App() {
         </DCArtboard>
         <DCArtboard id="select" label="Project add · concise selection rows" width={340} height={735}>
           <ScrSelectContext />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="coachmark" title="First-run coachmark tour (offered, not forced)" subtitle="Two tutorial formats: the full-pager explains WHAT A PAGE IS; the coachmark explains WHAT THE CONTROLS DO — dim the screen, box the real element in an ochre ring, one-line caption in place. It's the right tool for an empty first-run home that has no content to anchor understanding. Reconciled with 'hand-off, not handhold': first launch stays the calm empty prompt + FAB arrow (capture is never gated); the tour is OFFERED via 'Show me around' and always lives in the ? hub. Skip dismisses the whole tour.">
+        <DCArtboard id="coach-home" label="0. Empty home · hand-off + 'Show me around'" width={340} height={735}>
+          <ScrCoachHomeEmpty />
+        </DCArtboard>
+        <DCArtboard id="coach-1" label="1. Spotlight · Memories / Projects" width={340} height={735}>
+          <ScrCoachStep1 />
+        </DCArtboard>
+        <DCArtboard id="coach-2" label="2. Spotlight · the capture FAB" width={340} height={735}>
+          <ScrCoachStep2 />
+        </DCArtboard>
+        <DCArtboard id="coach-3" label="3. Spotlight · search" width={340} height={735}>
+          <ScrCoachStep3 />
         </DCArtboard>
       </DCSection>
 

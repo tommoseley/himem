@@ -24,6 +24,7 @@
 <script type="text/babel" src="design-canvas.jsx"></script>
 <script type="text/babel" src="crucible-primitives.jsx"></script>
 <script type="text/babel" src="screens-projects.jsx"></script>
+<script type="text/babel" src="screens-clips-page.jsx"></script>
 <script type="text/babel" src="screens-projects-cards.jsx"></script>
 <script type="text/babel" src="screens-memories.jsx"></script>
 <script type="text/babel" src="screens-projects-views.jsx"></script>
@@ -49,6 +50,9 @@ function App() {
         </DCArtboard>
         <DCArtboard id="suggestions" label="4. Suggested memories · review" width={340} height={735}>
           <ScrSuggestionsReview />
+        </DCArtboard>
+        <DCArtboard id="member" label="5. Member opened · tap a memory → Remove from project / Delete" width={340} height={735}>
+          <ScrProjectMemberOpen />
         </DCArtboard>
       </DCSection>
 

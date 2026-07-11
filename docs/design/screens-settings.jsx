@@ -378,8 +378,8 @@ function ScrCapturedClipsEmpty() {
         <span style={{ fontSize: 16, fontWeight: 600, color: PX.accent }}>Done</span>
       </div>
       <div style={{ padding: '14px 22px' }}>
-        <div style={{ fontFamily: PX.serif, fontSize: 27, fontWeight: 400, color: PX.ink, letterSpacing: -0.5, lineHeight: 1.15 }}>Nothing new from your Watch</div>
-        <div style={{ fontSize: 14, color: PX.ink3, marginTop: 8, lineHeight: 1.5 }}>Audio you record on your Apple Watch lands here.</div>
+        <div style={{ fontFamily: PX.serif, fontSize: 27, fontWeight: 400, color: PX.ink, letterSpacing: -0.5, lineHeight: 1.15 }}>Nothing new yet</div>
+        <div style={{ fontSize: 14, color: PX.ink3, marginTop: 8, lineHeight: 1.5 }}>Thoughts you catch on your Watch or with the + button land here.</div>
       </div>
     </div>
   );
@@ -413,19 +413,26 @@ function ScrTutorialsHub() {
   const dot = <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>;
   const watch = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M8 6l1-3h6l1 3M8 18l1 3h6l1-3"/></svg>;
   const shield = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg>;
+  const compass = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>;
   return (
     <div style={{ width: 360, minHeight: 720, background: PX.sunk, fontFamily: PX.sans, color: PX.ink, display: 'flex', flexDirection: 'column' }}>
-      <SettingsBar title="Tutorials" back />
+      <SettingsBar title="Learn" back />
       <div style={{ padding: '4px 16px 40px' }}>
         <div style={{ fontSize: 13, color: PX.ink3, lineHeight: 1.5, padding: '4px 6px 14px' }}>
           Short walkthroughs you can replay any time. Opened from the <strong style={{ color: PX.ink2, fontWeight: 600 }}>?</strong> in the toolbar.
         </div>
+        {/* Anchored screen tour — the coachmark format, set apart from the
+            concept one-pagers below. "Show me around" launches this too. */}
+        <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
+          <TutorialRow accent glyph={compass} title="Take a tour of the screen" sub="What each button and area does" last />
+        </div>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.4, textTransform: 'uppercase', color: PX.ink3, padding: '2px 6px 8px' }}>By feature</div>
         <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 16, overflow: 'hidden' }}>
           <TutorialRow accent glyph={mic} title="Capturing a memory" sub="Recording, Next, and your Watch" />
           <TutorialRow glyph={spark} title="Organizing with AI" sub="Draft, review, and keep" />
           <TutorialRow accent glyph={folder} title="Projects" sub="Group memories and find the thread" />
           <TutorialRow accent glyph={dot} title="Topics" sub="Your top-level categories" />
-          <TutorialRow accent glyph={watch} title="Captured Clips" sub="From your Watch to a memory" />
+          <TutorialRow accent glyph={watch} title="Captured Clips" sub="Catch a thought, shape it later" />
           <TutorialRow glyph={shield} title="Where your memories live" sub="Private by default, in your iCloud" last />
         </div>
       </div>

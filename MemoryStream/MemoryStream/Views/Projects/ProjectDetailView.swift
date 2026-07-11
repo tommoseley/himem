@@ -285,6 +285,14 @@ struct ProjectDetailView: View {
             loadProjectEntries()
             suggestionsVM.reload(projectId: projectId)
             attemptFindTheThreadTutorial()
+            // Publish the current project id so `HiMemTabView`'s FAB
+            // knows we're inside a project detail — routes the +
+            // to "new memory in this project" per the July 10 lock
+            // (`CLAUDE.md:142`). Cleared in `.onDisappear`.
+            ProjectsNavigationContext.shared.enter(projectId: projectId)
+        }
+        .onDisappear {
+            ProjectsNavigationContext.shared.exit(projectId: projectId)
         }
     }
 

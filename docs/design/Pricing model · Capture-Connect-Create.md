@@ -1,6 +1,6 @@
 # Pricing model · Capture · Connect · Create
 
-**Status:** proposal / direction. Drafted June 4 2026. Supersedes the assist-quota framing in `archive/assist-model/Open work · pricing flow.md` and parts of CLAUDE.md § AI Organize once ratified. **Not yet locked** — three assumptions need verification (see §7).
+**Status:** proposal / direction. Drafted June 4 2026. Supersedes the assist-quota framing in `Open work · pricing flow.md` and parts of CLAUDE.md § AI Organize once ratified. **Not yet locked** — three assumptions need verification (see §7).
 
 This reframes HiMem's pricing from *metered AI assists* to *life-stages of a memory*. The thesis: nobody wants to buy assists; people buy outcomes. The tiers are named for what the user gets, not what we count.
 

@@ -59,12 +59,15 @@ function OrganizedBody({ draft }) {
       <div style={{ fontSize: 13, color: PX.ink2, lineHeight: 1.5 }}>
         You return to a standard you hold yourself to — staying true to what is right over what merely succeeds, and standing with people only while they stand right.
       </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 7, marginTop: 10, flexWrap: 'wrap' }}>
         {['How We Work', 'Integrity'].map(t => (
           <span key={t} style={{
-            fontSize: 11.5, color: PX.ink2, background: PX.wash1,
-            border: '1px solid ' + PX.hairline, borderRadius: 10, padding: '3px 9px',
-          }}>{t}</span>
+            display: 'inline-flex', alignItems: 'center', gap: 7, minHeight: 38, boxSizing: 'border-box',
+            fontSize: 13.5, color: PX.ink, background: PX.wash1,
+            border: '1px solid transparent', borderRadius: 11, padding: '0 14px',
+          }}>
+            <span style={{ width: 7, height: 7, borderRadius: 4, background: PX.accent, flexShrink: 0 }} />{t}
+          </span>
         ))}
       </div>
     </div>
@@ -94,21 +97,35 @@ function ScrLifeUnorganized() {
   );
 }
 
-// Stage 2 · Draft organized (B2 quiet chip) ---------------------------------
+// Stage 2 · Draft organized (B2) --------------------------------------------
+// Affordance vocabulary (June 2026): status is NEVER a button. The
+// "Draft organized · unreviewed" state is a quiet label (no pill, no dashed
+// costume) — it informs. The review ACTION is one full-width AI-blue button,
+// 48px+, impossible to miss or mis-tap. Three weak fragments → one clear pair.
 function ScrLifeDraft() {
   return (
     <PhoneScreen>
       <MemHeader />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 13, paddingTop: 6 }}>
-        <div style={{ margin: '0 14px', display: 'flex', alignItems: 'center', gap: 9 }}>
-          <OrganizeChip variant="draft" />
-          <span style={{ width: 7, height: 7, borderRadius: 4, border: '1.5px solid ' + PX.ai, flexShrink: 0 }} />
-          <span style={{ fontSize: 11.5, color: PX.ink3 }}>unreviewed</span>
+        {/* status — a quiet label, not a button */}
+        <div style={{ margin: '0 14px', display: 'flex', alignItems: 'center', gap: 7 }}>
+          <Spark size={14} color={PX.ai} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: PX.ai, letterSpacing: -0.05 }}>Draft organized</span>
+          <span style={{ width: 3, height: 3, borderRadius: 2, background: PX.ink4, flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: PX.ink3 }}>unreviewed</span>
         </div>
         <OrganizedBody draft />
-        <div style={{ margin: '0 14px' }}>
-          <span style={{ fontSize: 13, color: PX.ai, fontWeight: 600 }}>Tap to review &amp; keep →</span>
-        </div>
+        {/* review — one real button, the primary action */}
+        <button style={{
+          margin: '0 14px', height: 50, width: 'calc(100% - 28px)', boxSizing: 'border-box',
+          background: PX.aiTint, border: '1.5px solid ' + PX.ai, borderRadius: 14, cursor: 'pointer',
+          color: PX.ai, fontSize: 15.5, fontWeight: 600, letterSpacing: -0.1,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}>
+          <Spark size={16} color={PX.ai} />
+          Review this draft
+          <svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke={PX.ai} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 2 }}><path d="M1 1l6 6-6 6" /></svg>
+        </button>
         <div style={{ borderTop: '1px solid ' + PX.divider, margin: '2px 14px 0', paddingTop: 13 }}>
           <ClipRow />
         </div>

@@ -29,6 +29,7 @@ Audio landed at the **bottom** — not because it's unimportant, but because it'
 | **Text** | Title, Summary, **Transcript** | **Tap to edit in place.** |
 | **Media** | Photo, Video, Audio | **Tap to consume** (photo opens, video/audio play). **Every clip that has an original recording shows a quiet "Original recording · m:ss" play control beneath its transcript — always, in read state, not just on tap.** This is the load-bearing reason tapping transcript text can mean *edit* (Play is its own visible control). |
 | **Deletion** | Clip, memory, project | **Open the item, scroll past all content, full-width Delete button at the bottom.** No swipe, no confirm dialog — opening + scrolling *is* the deliberation; Recently Deleted (30 days) is the safety net. |
+| **Relocation** | Clip | **"Where does this belong?"** from the clip's edit state — move to another memory, pull into a new memory, or **"Remove from this memory"** (= move to the Captured Clips bench; the clip survives). Same placement primitive and wording as the workbench (`Kingfisher Language.md`). *survives*). Parallel to a project's Remove-from-project. Distinct from Delete clip (which destroys). |
 | **The memory itself** | — | The same bottom Delete button — no toolbar trash, no list-row swipe. |
 | **Metadata** | Topics | **Tap any chip → topic management sheet.** Dashed **+ Add** to add. |
 | | Mentions | **Lightweight inline** manage. Dashed **+ Add** to add. |
@@ -50,13 +51,32 @@ Audio landed at the **bottom** — not because it's unimportant, but because it'
 ### Discoverability
 No pen, no visible "Edit" affordance on text. We **trust the consistency** — the same single rule (tap text → edit) across title, summary, and transcript means it's learned once. One tap reveals the keyboard; users adapt fast. (The rule's uniformity *is* the discoverability.)
 
+## Moving clips between memories (locked July 5 2026)
+
+Dogfood surfaced the need: a clip lands in the wrong memory (mis-clustered by Sort, or the user reconsiders), and they need to move it — or at least get it *out* without destroying it.
+
+**One primitive, because a clip always lives somewhere.** A clip is either inside a memory or loose on the Captured Clips bench. So a single placement action — the sheet titled **"Where does this belong?"** (the same question the workbench asks a loose clip; one primitive, one wording per `Kingfisher Language.md`) — covers every case:
+
+- **Move to another memory** — pick from recent/searched memories; the clip leaves this memory and joins that one.
+- **New memory** — pull the clip out on its own.
+- **Remove from this memory** — the plain-language name for *move to Captured Clips*. The clip returns to the bench, unfiled, and **survives**. This is the direct answer to "at the very least, remove a clip from a memory."
+
+**This is the clip-level analog of Projects' Delete vs Remove-from-project** — the same "unlinks; the thing survives" pattern, one level down. Delete clip *destroys* (→ Recently Deleted); "Where does this belong?" *relocates* (the clip lives on).ove *relocates* (the clip lives on).
+
+- **Where it lives:** the clip's **edit state**, beside Delete clip — not in the calm read view (consistent with clip-delete placement). The edit-state bottom is **two rows**: a *clip-fate management row* — **Delete clip** (destroy) and **Where does this belong?** (relocate/remove) — above the *text commit row* (Cancel / Done). Four actions never share one line (44px floor).ement row* (`🗑 Delete clip` · `↪ Move to…`) above the *text-edit commit row* (`Cancel` · `✓ Done`). Four actions never share one line — they'd fail the 44px touch floor. *(This evolves the earlier single `Delete clip … Cancel Done` bar; the management actions split onto their own row.)*
+- **Staleness reuses the existing mechanism.** Moving a clip *out* changes this memory's content; moving one *in* changes the destination's. **Both memories go stale and offer Reorganize** — identical to new clips arriving. No new concept.
+- **Empty memory after the last clip leaves (decision a):** moving out a memory's final clip offers to **delete the now-empty memory** ("Nothing left in this memory — delete it?", recoverable via Recently Deleted). *Keep it empty* is the quiet secondary. No orphaned empty memories by accident, but the user can keep a shell they've titled.
+- **Reuses the existing "add clips to a memory" path** (the Captured Clips bundle flow already targets new *or* existing memories). Move is that same reassignment, initiated from the clip instead of the bench.
+
+*Specimen: `Himem · Memory Detail.html` § "Moving clips between memories" → `clip-move-sheet` + `clip-empty-after-move`.*
+
 ## Committing an edit (accept / cancel) — by weight
 
 The commit model **scales with how much an edit can change**, so a person never wonders "does this one have a Cancel?":
 
 | Edit | Enter | Accept & leave | Cancel | Remove |
 |---|---|---|---|---|
-| **Title, Summary, Clip transcript** | tap the text | **Done** (ochre, anchored below the field) | **Cancel** (plain ink, beside Done) — discards changes, exits | (delete the clip = swipe Trash; title/summary aren't removable) |
+| **Title, Summary, Clip transcript** | tap the text | **Done** (ochre, anchored below the field) | **Cancel** (plain ink, beside Done) — discards changes, exits | Clip transcript's edit state carries a **clip-fate row** above the commit row: **Delete clip** (destroy) and **Move to…** (relocate/remove). Title/summary aren't removable. |
 | **Edit Project (sheet)** | tap title/goal | **Save** (nav, ochre) | **Cancel** (nav) | — |
 | **Mention chip (inline)** | tap the chip | Return or tap-away (commit-on-exit) | none — commit-on-exit is the accept; re-tap to fix | tap ✕, or clear + tap-away |
 

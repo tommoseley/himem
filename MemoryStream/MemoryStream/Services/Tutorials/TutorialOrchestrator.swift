@@ -36,6 +36,7 @@ final class TutorialOrchestrator: ObservableObject {
         case findTheThread     // #3 — Plus, project detail ≥3 memories, unrun
         case watchStory        // #4 — Captured Clips opened non-empty
         case watchDiscovery    // #5 — WCSession.isPaired && !isWatchAppInstalled
+        case siri              // #6 — Today, memoryCount >= 3, both tiers
 
         var id: String { rawValue }
 
@@ -175,6 +176,7 @@ struct TutorialAutoFireOverlay: ViewModifier {
             case .findTheThread:  FindTheThreadTutorialView()
             case .watchStory:     WatchStoryTutorialView()
             case .watchDiscovery: WatchDiscoveryTutorialView()
+            case .siri:           SiriTutorialView()
             }
         }
         .onDisappear {

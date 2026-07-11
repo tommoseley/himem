@@ -38,7 +38,6 @@ function ScrUpgradeC1() {
             <Btn kind="ghost" size="md" full={false} style={{ flex: '0 0 auto' }}>Not now</Btn>
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: PX.ink3, textAlign: 'center' }}>Shown once. Never again inline.</div>
         <div style={{ flex: 1 }} />
       </div>
     </PhoneScreen>

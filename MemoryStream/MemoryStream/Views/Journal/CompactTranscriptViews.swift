@@ -122,13 +122,14 @@ struct CompactClipRow: View {
     /// precisely what users do while fixing a transcript. Nil for
     /// non-voice items (the footer isn't drawn).
     let onPlay: (() -> Void)?
-    /// Fires when the user taps `Delete clip` on the left of the
-    /// active-edit commit bar. Per `Memory Detail · unified editing
-    /// model.md` (June 12 2026 update): a clip has no Delete in its
-    /// view state — destruction surfaces only inside the transcript
-    /// editor's Cancel/Done bar. Image/video rows tap into the
-    /// description editor; this callback is unused for those.
+    /// Delete clip on the fate row — always destroys. Image/video
+    /// rows tap into the description editor; this callback is unused
+    /// for those.
     let onDelete: () -> Void
+    /// Where does this belong? on the fate row — opens the placement
+    /// sheet. Nil for image/video (they use the description editor's
+    /// own delete affordance).
+    let onRelocate: (() -> Void)?
     @State private var isEditingTranscript: Bool = false
     @State private var transcriptDraft: String = ""
     @FocusState private var transcriptFieldFocused: Bool
@@ -144,7 +145,8 @@ struct CompactClipRow: View {
         onTap: @escaping () -> Void,
         onCommitTranscript: ((String) -> Void)? = nil,
         onPlay: (() -> Void)? = nil,
-        onDelete: @escaping () -> Void
+        onDelete: @escaping () -> Void,
+        onRelocate: (() -> Void)? = nil
     ) {
         self.item = item
         self.isOpen = isOpen
@@ -152,6 +154,7 @@ struct CompactClipRow: View {
         self.onCommitTranscript = onCommitTranscript
         self.onPlay = onPlay
         self.onDelete = onDelete
+        self.onRelocate = onRelocate
     }
 
     var body: some View {
@@ -240,10 +243,14 @@ struct CompactClipRow: View {
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Crucible.Color.accent, lineWidth: 1)
                     )
+                // Two-row edit state per `Memory Detail · unified
+                // editing model.md:66` (July 5 2026).
+                if let onRelocate {
+                    ClipFateRow(onDelete: onDelete, onRelocate: onRelocate)
+                }
                 EditCommitBar(
                     onCancel: { cancelInlineTranscriptEdit() },
-                    onDone:   { commitInlineTranscriptEdit() },
-                    onDelete: onDelete
+                    onDone:   { commitInlineTranscriptEdit() }
                 )
             }
             .padding(.top, 2)

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Memory Organization · Sequence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#EFECE5; --card:#FBF9F4; --ink:#1A1612; --ink2:#46413A; --ink3:#857E72;
+    --line:#D9D3C7; --accent:#C64A1C; --accentT:#F4E1D7; --ai:#1E5C8E; --aiT:#E0EAF2;
+    --danger:#B8311E; --dangerT:#F2DBD7; --ok:#3E7C5A;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+    --mono:"SF Mono",ui-monospace,Menlo,monospace; --serif:"Source Serif 4",Georgia,serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);}
+  .wrap{max-width:1180px;margin:0 auto;padding:44px 40px 90px;}
+  .kick{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--ink3);}
+  h1{font-family:var(--serif);font-weight:400;font-size:40px;letter-spacing:-0.6px;margin:10px 0 6px;}
+  .lede{font-size:15px;line-height:1.6;color:var(--ink2);max-width:760px;margin-bottom:6px;}
+  .lede b{color:var(--ink);font-weight:600;}
+
+  /* lifelines */
+  .diagram{margin-top:30px;border:1px solid var(--line);border-radius:16px;background:var(--card);padding:0;overflow:hidden;}
+  .actors{display:grid;grid-template-columns:150px 1fr;}
+  .actorhead{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--line);background:#F3EFE7;}
+  .actorhead .spacer{}
+  .ah{padding:12px 10px;text-align:center;border-left:1px solid var(--line);}
+  .ah .nm{font-size:12.5px;font-weight:700;color:var(--ink);letter-spacing:-0.1px;}
+  .ah .ty{font-size:10px;color:var(--ink3);font-family:var(--mono);margin-top:3px;line-height:1.3;}
+
+  .rows{}
+  .row{display:grid;grid-template-columns:150px 1fr;border-bottom:1px solid #EEE9DF;}
+  .row:last-child{border-bottom:none;}
+  .step{padding:13px 14px;font-size:12.5px;color:var(--ink2);line-height:1.45;border-right:1px solid var(--line);background:#F6F2EA;}
+  .step .n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:10px;background:var(--ink);color:var(--paper);font-size:11px;font-weight:700;margin-right:7px;vertical-align:1px;}
+  .step.bug{background:var(--dangerT);}
+  .step.bug .n{background:var(--danger);}
+  .step.ok{background:#E4EFE8;}
+  .step.ok .n{background:var(--ok);}
+
+  .lane{position:relative;display:grid;grid-template-columns:repeat(5,1fr);}
+  .lane::before,.lane::before{}
+  /* vertical lifelines */
+  .lane .ll{border-left:1px dashed #CFC8BB;}
+  .lane .ll:first-child{border-left:none;}
+
+  /* message arrows sit absolutely in a lane via flex cells */
+  .msg{grid-column:var(--c);align-self:center;margin:9px 0;position:relative;}
+  .bar{height:30px;display:flex;align-items:center;font-size:11.5px;font-weight:600;letter-spacing:-0.1px;padding:0 10px;border-radius:7px;}
+  .bar.call{background:var(--ink);color:var(--paper);}
+  .bar.ai{background:var(--ai);color:#fff;}
+  .bar.react{background:var(--accentT);color:var(--accent);border:1px solid var(--accent);}
+  .bar.fail{background:var(--danger);color:#fff;}
+  .bar.note{background:#fff;color:var(--ink2);border:1px dashed var(--line);font-weight:500;}
+  .dir{font-family:var(--mono);font-size:10px;opacity:.8;margin-left:6px;}
+
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:22px;font-size:12px;color:var(--ink2);}
+  .legend .it{display:flex;align-items:center;gap:7px;}
+  .sw{width:22px;height:13px;border-radius:4px;}
+
+  .callout{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .box{border-radius:14px;padding:16px 18px;font-size:13px;line-height:1.55;}
+  .box h3{margin:0 0 8px;font-size:13px;letter-spacing:.4px;text-transform:uppercase;}
+  .box.bug{background:var(--dangerT);}.box.bug h3{color:var(--danger);}
+  .box.fix{background:var(--aiT);}.box.fix h3{color:var(--ai);}
+  .box ul{margin:6px 0 0;padding-left:18px;} .box li{margin:5px 0;color:var(--ink2);}
+  .box code{font-family:var(--mono);font-size:11.5px;background:#fff;padding:1px 5px;border-radius:4px;}
+  .box b{color:var(--ink);font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kick">Himem · diagnostic</div>
+  <h1>Memory organization — the present/dismiss sequence</h1>
+  <p class="lede">New memory → <b>Organize</b> → AI pass → <b>Draft organized</b> → tap <b>Review draft</b> → the review sheet rises and immediately falls. <b>Empirically confirmed (June 13):</b> one tap produces <b>two <code>present()</code> calls from the same <code>NavigationStackHostingController</code></b> — the first succeeds and occupies the slot (that’s “Z”), a stray <code>dismiss()</code> fires between them, and the second (“X”) is refused. <b>We are Z.</b> It’s our own cover double-firing, not a foreign host. The fall is SwiftUI reverting the refused second present.</p>
+
+  <div class="diagram">
+    <div class="actorhead">
+      <div class="spacer step" style="background:#F3EFE7;border-right:1px solid var(--line);"></div>
+      <div class="lane">
+        <div class="ah"><div class="nm">User</div><div class="ty">taps</div></div>
+        <div class="ah"><div class="nm">OrganizeSection</div><div class="ty">SwiftUI view<br/>@State activeSheet</div></div>
+        <div class="ah"><div class="nm">ProcessingEngine</div><div class="ty">bg Task →<br/>Core Data</div></div>
+        <div class="ah"><div class="nm">SwiftUI runtime</div><div class="ty">.fullScreenCover<br/>reconciler</div></div>
+        <div class="ah"><div class="nm">UIKit</div><div class="ty">root VC<br/>1 present slot</div></div>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- 1 -->
+      <div class="row">
+        <div class="step"><span class="n">1</span>Tap “Organize this memory.”</div>
+        <div class="lane">
+          <div class="ll msg" style="--c:1/3"><div class="bar call">onOrganize() → processEntry()<span class="dir">▶</span></div></div>
+          <div class="ll"></div><div class="ll"></div><div class="ll"></div>
+        </div>
+      </div>
+      <!-- 2 -->
+      <div class="row">
+        <div class="step"><span class="n">2</span>Background AI pass runs; card shows “Working…”.</div>
+        <div class="lane">
+          <div class="ll"></div><div class="ll"></div>
+          <div class="ll msg" style="--c:3/4"><div class="bar ai">analyze ✦</div></div>
+          <div class="ll"></div><div class="ll"></div>
+        </div>
+      </div>
+      <!-- 3 -->
+      <div class="row">
+        <div class="step"><span class="n">3</span>New OrganizePass saved → context merge → <code>@FetchRequest</code> re-emits → <b>aiState: idle → draftReviewing</b>. “Review draft” button appears.</div>
+        <div class="lane">
+          <div class="ll"></div>
+          <div class="ll msg" style="--c:2/4"><div class="bar react">state → draftReviewing<span class="dir">◀ merge</span></div></div>
+          <div class="ll"></div><div class="ll"></div><div class="ll"></div>
+        </div>
+      </div>
+      <!-- 4 -->
+      <div class="row">
+        <div class="step"><span class="n">4</span>Tap <b>Review draft</b>. <code>openReviewSheet()</code> does one thing: <code>activeSheet = .initialReview</code>.</div>
+        <div class="lane">
+          <div class="ll msg" style="--c:1/3"><div class="bar call">activeSheet = .initialReview<span class="dir">▶</span></div></div>
+          <div class="ll"></div><div class="ll"></div><div class="ll"></div>
+        </div>
+      </div>
+      <!-- 5 -->
+      <div class="row">
+        <div class="step"><span class="n">5</span>SwiftUI sees the <code>@State</code> flip and calls <code>sheetContent</code> <b>once</b> — but its internal machinery fires <code>present()</code> <b>twice</b>. <b>Present #1</b> builds <code>PHC@…300</code> (“Z”), slot is empty, <b>succeeds</b>.</div>
+        <div class="lane">
+          <div class="ll"></div><div class="ll"></div><div class="ll"></div>
+          <div class="ll msg" style="--c:4/6"><div class="bar note" style="color:var(--ok);border-color:var(--ok)">present #1 → Z ✓ (slot empty)<span class="dir">▲</span></div></div>
+          <div class="ll"></div>
+        </div>
+      </div>
+      <!-- 6 -->
+      <div class="row">
+        <div class="step bug"><span class="n">6</span>A stray <code>dismiss()</code> fires on the same <code>NavigationStackHostingController</code> between the two presents (presenter already nil → <b>no-op</b>). <b>This is the loose thread</b> — who calls it?</div>
+        <div class="lane">
+          <div class="ll"></div><div class="ll"></div><div class="ll"></div>
+          <div class="ll msg" style="--c:4/6"><div class="bar fail">stray dismiss() · no-op<span class="dir">?</span></div></div>
+          <div class="ll"></div>
+        </div>
+      </div>
+      <!-- 7 -->
+      <div class="row">
+        <div class="step bug"><span class="n">7</span><b>Present #2</b> builds <code>PHC@…500</code> (“X”) for the <i>same</i> <code>activeSheet</code> value — but the slot now holds Z, so UIKit logs <i>“already presenting Z”</i> and <b>refuses</b>. SwiftUI then dismisses the rejected X → the visible “fall.”</div>
+        <div class="lane">
+          <div class="ll"></div><div class="ll"></div><div class="ll"></div>
+          <div class="ll msg" style="--c:4/6"><div class="bar fail">present #2 → X refused (slot = Z) ▼<span class="dir">✕</span></div></div>
+          <div class="ll"></div>
+        </div>
+      </div>
+      <!-- 8 -->
+      <div class="row">
+        <div class="step ok"><span class="n">8</span>Second user tap usually works: Z has cleared the slot by then, so a single <code>present()</code> lands.</div>
+        <div class="lane">
+          <div class="ll msg" style="--c:1/3"><div class="bar call">tap again<span class="dir">▶</span></div></div>
+          <div class="ll"></div><div class="ll"></div>
+          <div class="ll msg" style="--c:4/6"><div class="bar note" style="color:var(--ok);border-color:var(--ok)">present(X) ✓ slot empty</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="it"><span class="sw" style="background:var(--ink)"></span>call / state write (our code)</div>
+    <div class="it"><span class="sw" style="background:var(--ai)"></span>AI pass</div>
+    <div class="it"><span class="sw" style="background:var(--accentT);border:1px solid var(--accent)"></span>reactive state change</div>
+    <div class="it"><span class="sw" style="background:var(--danger)"></span>the failure</div>
+  </div>
+
+  <div class="callout">
+    <div class="box bug">
+      <h3>Where it breaks — confirmed</h3>
+      <ul>
+        <li><b>One tap → two <code>present()</code> calls</b> from the same <code>NavigationStackHostingController</code>, though <code>sheetContent</code> fired only once. SwiftUI’s internal machinery double-fired.</li>
+        <li><b>Present #1 (Z) succeeds and becomes the blocker for present #2 (X).</b> Both are ours — same <code>.fullScreenCover(item: $activeSheet)</code>. We are Z.</li>
+        <li><b>The loose thread is the stray <code>dismiss()</code></b> between the two presents. Find who calls it and the double-fire’s source is named.</li>
+      </ul>
+    </div>
+    <div class="box fix">
+      <h3>Fix paths</h3>
+      <ul>
+        <li><b>A — backtrace the dismiss (do first, ~5 min).</b> Symbolicate who calls <code>dismiss()</code> on the nav host between the presents. If it’s <i>our</i> code (a reactive <code>@Environment(\.dismiss)</code>, a binding in BottomDelete / back / onRemoveFromProject) → suppress it and the second present never happens.</li>
+        <li><b>B — manual present (robust fallback, ~10 min).</b> Present <code>UIHostingController(DraftReviewSheet)</code> once, ourselves; sync dismissal back to <code>activeSheet</code>. Exactly one present call, no SwiftUI double-fire. Keep swipe-down via the presentation controller (§8.0 needs it).</li>
+        <li><b>C — lift owner to EntryExpandedView (last).</b> Speculative: if the cause is identity churn / a reactive dismiss, moving the owner may not help. Don’t lead with it.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

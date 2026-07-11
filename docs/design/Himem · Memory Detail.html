@@ -50,6 +50,15 @@ function App() {
         </DCArtboard>
       </DCSection>
 
+      <DCSection id="relocate" title="Moving clips between memories" subtitle="A clip always lives somewhere — inside a memory or loose on the Captured Clips bench — so one 'Move to…' primitive covers both 'move to another memory' and 'remove from this memory' (= move to the bench, clip survives). Parallel to Projects' Delete vs Remove-from-project. Entered from the clip's edit state, beside Delete clip. Moving the last clip out offers to delete the now-empty memory (decision a).">
+        <DCArtboard id="clip-move-sheet" label="Where does this belong? · memory · new · or back to the bench" width={340} height={735}>
+          <ScrClipMoveSheet />
+        </DCArtboard>
+        <DCArtboard id="clip-empty-after-move" label="Last clip moved out · offer to delete empty memory" width={340} height={735}>
+          <ScrClipEmptyAfterMove />
+        </DCArtboard>
+      </DCSection>
+
       <DCSection id="diff" title="Changes" subtitle="Exactly what moved.">
         <DCArtboard id="changes" label="What changed" width={520} height={360}>
           <MDChangesCard />

@@ -10,7 +10,18 @@ struct JournalView: View {
     @ObservedObject private var errorState = ErrorState.shared
     @EnvironmentObject private var quickAction: QuickActionState
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
-    @State private var viewMode: ViewMode = .memories
+    @State private var viewMode: ViewMode
+
+    /// When true, `JournalHeaderView` hides its Memories/Projects
+    /// segmented control — used by `HiMemTabView` where the tab bar
+    /// is the mode switcher. Defaults to false so any pre-Phase-5
+    /// callsite still shows the picker.
+    private let hidesModeToggle: Bool
+
+    init(initialMode: ViewMode = .memories, hidesModeToggle: Bool = false) {
+        self._viewMode = State(initialValue: initialMode)
+        self.hidesModeToggle = hidesModeToggle
+    }
 
     enum ViewMode: String, CaseIterable {
         case memories = "Memories"
@@ -23,11 +34,6 @@ struct JournalView: View {
     /// returns to the journal. Spec: `docs/design/screens-settings.jsx`
     /// → `ScrTutorialsHub`.
     @State private var showTutorials = false
-    @State private var showInbox = false
-    /// One-shot guard: auto-open Captured Clips on launch only. Prevents
-    /// the sheet from re-popping after the user explicitly dismissed it
-    /// (and prevents in-session arrivals from triggering it — those go
-    /// through notifications instead).
     @ObservedObject private var inbox = InboxManifest.shared
     /// Set by `StartVoiceRecordingIntent` when Siri ("Record in
     /// HiMem") fires. Observed below to present the voice composer
@@ -45,20 +51,19 @@ struct JournalView: View {
         VStack(spacing: 0) {
             JournalHeaderView(
                 viewMode: $viewMode,
+                hidesModeToggle: hidesModeToggle,
                 onSearchTap: { showSearch = true },
                 onSettingsTap: { showSettings = true },
                 onHelpTap: { showTutorials = true }
             )
 
-            // Inbox banner — appears when there are watch clips waiting to
-            // be organized. Per the Append-Watch design rule: calm by
-            // default, but when the inbox is non-empty surface a single
-            // banner-only nag.
-            if !inbox.isEmpty && viewMode == .memories {
-                JournalInboxBanner(count: inbox.count, onTap: { showInbox = true })
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-            }
+            // Arrival banner retired 2026-07-10 per `CLAUDE.md` §Phone:
+            // "banner retired — it predated the three-tab model, when
+            // Captured Clips was a hidden window; now Clips is an
+            // always-visible tab, so a banner pointing at it is
+            // redundant chrome on the reflective Memories surface."
+            // Arrival status now lives on the Clips tab bar item as
+            // an ochre presence dot (see `HiMemTabView`).
 
             // Topic bar (shared across both modes)
             TopicTabBar(
@@ -78,18 +83,10 @@ struct JournalView: View {
         }
         .background(Crucible.Color.paper)
 
-        // Append-spec FAB — tap opens the action stack; pick a modality and
-        // the corresponding capture surface presents. The result lands as a
-        // new memory. Hidden in Projects tab — the inline "+ New project"
-        // row is the create affordance there (per Projects MVP design).
-        if viewMode == .memories {
-            AppendFAB(
-                onSelect: { modality in
-                    activeCaptureModality = modality
-                },
-                accessibilityLabel: "Add memory"
-            )
-        }
+        // Capture FAB moved to HiMemTabView (2026-07-10 per
+        // `HiMem · evidence and context.md:143` — capture floats on
+        // every tab, in the same position). The tab-level host owns
+        // the composer sheet and routes commits back to Clips.
 
         JournalErrorBanner()
 
@@ -115,11 +112,11 @@ struct JournalView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
         }
-        .navigationDestination(isPresented: $showInbox) {
-            SessionListView(viewModel: viewModel)
-        }
+        // Captured Clips notification tap routes to the Clips tab per
+        // spec v4 (no standalone modal). Same rule as the arrival
+        // banner: deep-link into the tab, don't push a sheet.
         .onReceive(NotificationCenter.default.publisher(for: NotificationService.openInboxNotification)) { _ in
-            showInbox = true
+            CaptureLandingBus.shared.pendingReturnToClips = true
         }
         // Per the Watch → Memory flow spec (2026-05-14): the iPhone app
         // always lands on Today. No auto-open of the inbox; the
@@ -147,6 +144,7 @@ struct JournalView: View {
             // launch" — this is the cold-launch gate flipping.
             TutorialOrchestrator.shared.armForReadyState()
             attemptWatchDiscoveryTutorial()
+            attemptSiriTutorial()
 
             // Cold-launch fix 2026-06-02: removed the pre-fetch of speech +
             // photo-library authorization. On fresh install, these two
@@ -168,7 +166,9 @@ struct JournalView: View {
             // (cached auth status returns instantly with no prompt), so
             // this change is a pure win for the fresh-install experience
             // and a no-op for everyone else.
-            handlePendingVoiceRecordRequest()
+            //
+            // Cold-launch Siri drain moved to HiMemTabView (owns the
+            // tab-level capture flow now).
         }
         // Cold-launch fix 2026-06-02: both view-model initial loads
         // run here via `.task` after first paint. Previously their
@@ -183,9 +183,8 @@ struct JournalView: View {
             await viewModel.loadInitial()
             await projectVM.loadInitial()
         }
-        .onChange(of: captureRequests.pendingVoiceRecord) { _, pending in
-            if pending { handlePendingVoiceRecordRequest() }
-        }
+        // Siri `pendingVoiceRecord` observer moved to HiMemTabView
+        // (owns the tab-level capture flow now).
         .onChange(of: speechService.error) { _, error in
             speechErrorMessage = error?.localizedDescription
         }
@@ -207,13 +206,15 @@ struct JournalView: View {
     /// guard. Returns immediately for unrecognized actions.
     private func handleQuickAction(_ action: String) {
         quickAction.pendingAction = nil
+        // Route shortcut modalities through the shared bus so the
+        // tab-level HiMemTabView captureFlowHost presents them — that
+        // way a shortcut invoked from any tab honors the "capture
+        // returns to Clips" rule uniformly.
         switch action {
         case "com.himem.app.voice-capture":
-            activeCaptureModality = .voice
+            CaptureRequestBus.shared.pendingModality = .voice
         case "com.himem.app.new-entry":
-            // No specific modality — fall back to the typed-note path
-            // as the safe default.
-            activeCaptureModality = .note
+            CaptureRequestBus.shared.pendingModality = .note
         default:
             break
         }
@@ -311,15 +312,8 @@ struct JournalView: View {
     /// (cold-launch path: Siri fires the intent, app opens, the bus
     /// already has the flag set) and on `.onChange` of the flag
     /// (warm path: app is already foreground, Siri flips the flag).
-    private func handlePendingVoiceRecordRequest() {
-        guard captureRequests.pendingVoiceRecord else { return }
-        captureRequests.pendingVoiceRecord = false
-        // Defer one tick so any in-flight sheet/cover dismiss can
-        // settle before we present the voice composer.
-        DispatchQueue.main.async {
-            activeCaptureModality = .voice
-        }
-    }
+    // handlePendingVoiceRecordRequest retired 2026-07-10 — HiMemTabView
+    // owns the Siri drain (tab-level capture flow).
 
     // MARK: - Memories list
 
@@ -452,14 +446,13 @@ struct JournalView: View {
         if case .note = item, newId != nil {
             pendingNoteForNewEntry = nil
         }
-        // Navigate into the new memory so the captured contribution
-        // lands as the top item rather than dropping the user back
-        // on Today. The slight dispatch lets the capture sheet
-        // finish its dismiss animation first.
-        if let newId {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                selectedEntryId = newId
-            }
+        // Per `HiMem · evidence and context.md:143` (July 10 2026):
+        // "capture returns to Clips … never to Memories and never
+        // into a forced memory." So we do NOT navigate to the new
+        // memory's detail; we surface the Clips tab so the user
+        // sees where their thought landed.
+        if newId != nil {
+            CaptureLandingBus.shared.pendingReturnToClips = true
         }
     }
 
@@ -483,6 +476,19 @@ struct JournalView: View {
         guard session.isPaired else { return }
         guard !session.isWatchAppInstalled else { return }
         TutorialOrchestrator.shared.tryFire(.watchDiscovery)
+    }
+
+    /// Siri capture tutorial (#6) — discovery-triggered per
+    /// `Tutorials · triggers spec.md` (July 5 2026): fires once on
+    /// Today, after `memoryCount >= 3`, so the faster path only
+    /// surfaces after the capture habit is established. Firing on
+    /// day zero wastes the one-time fire. If both this and Watch
+    /// discovery (#5) would collide, the orchestrator's
+    /// one-per-session flag defers whichever loses to the next
+    /// natural trigger.
+    private func attemptSiriTutorial() {
+        guard viewModel.entries.count >= 3 else { return }
+        TutorialOrchestrator.shared.tryFire(.siri)
     }
 }
 
@@ -536,6 +542,7 @@ private struct JournalServiceErrorAlerts: ViewModifier {
 
 struct JournalHeaderView: View {
     @Binding var viewMode: JournalView.ViewMode
+    var hidesModeToggle: Bool = false
     let onSearchTap: () -> Void
     let onSettingsTap: () -> Void
     /// Fires when the user taps the `?` glyph between search and
@@ -548,14 +555,18 @@ struct JournalHeaderView: View {
 
     var body: some View {
         ZStack {
-            // Center: segmented toggle
-            Picker("", selection: $viewMode) {
-                ForEach(JournalView.ViewMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
+            // Center: segmented toggle. Retired in HiMemTabView (Phase 5)
+            // where the OS tab bar is the mode switcher; the segmented
+            // control lives on for any legacy embed of JournalView.
+            if !hidesModeToggle {
+                Picker("", selection: $viewMode) {
+                    ForEach(JournalView.ViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 180)
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 180)
 
             // Left: HI MEM + tier mark
             HStack(spacing: 6) {
@@ -583,17 +594,19 @@ struct JournalHeaderView: View {
                 }
                 .accessibilityLabel("Search")
 
-                // The `?` opens the Tutorials hub. Warm-ink, never blue
+                // The `?` opens the Learn hub. Warm-ink, never blue
                 // — per spec, status/info glyphs in the toolbar share
                 // the same quiet ink as search and settings; AI blue is
-                // reserved for actions that invoke AI.
+                // reserved for actions that invoke AI. "Learn, not Help"
+                // per Kingfisher · North Star — the label reads
+                // "want to understand this?" not "something's wrong."
                 if let onHelpTap {
                     Button(action: onHelpTap) {
                         Image(systemName: "questionmark.circle")
                             .font(.body)
                             .foregroundStyle(Crucible.Color.ink)
                     }
-                    .accessibilityLabel("Tutorials")
+                    .accessibilityLabel("Learn")
                     .padding(.leading, 12)
                 }
 

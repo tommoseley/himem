@@ -328,6 +328,11 @@ struct LaunchScreenView: View {
             // 2026-06-09). Same context, same CloudKit-import-settled
             // window.
             SummaryFieldMigration.runIfNeeded(in: context)
+            // EvidenceEdgeMigration retired 2026-07-09 — v3 is the only
+            // model version, no legacy relationship to convert. Tom
+            // exported his v2 data and starts fresh; new installs write
+            // directly through `StorageService.createX` which creates
+            // the edge atomically.
         }
     }
 

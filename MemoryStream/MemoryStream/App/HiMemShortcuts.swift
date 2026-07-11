@@ -16,7 +16,16 @@ import Combine
 @MainActor
 final class CaptureRequestBus: ObservableObject {
     static let shared = CaptureRequestBus()
+    /// Legacy Siri flag — kept for the `StartVoiceRecordingIntent`
+    /// backward-compat path. New code should prefer `pendingModality`
+    /// which carries the modality explicitly.
     @Published var pendingVoiceRecord: Bool = false
+    /// Any modality request from a shared surface (the tab-level
+    /// AppendFAB, Siri, App Shortcuts). The HiMemTabView owns the
+    /// capture flow now — per the July 10 2026 lock in
+    /// `HiMem · evidence and context.md:143`, capture floats on
+    /// every tab and returns to Clips on commit.
+    @Published var pendingModality: CaptureModality? = nil
     private init() {}
 }
 

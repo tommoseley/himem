@@ -161,7 +161,27 @@ This means **the same chip CSS adapts to mode automatically** because `--paper` 
 
 Browser floor: `color-mix(in oklab, …)` requires Safari 16.4+ / Chrome 111+. Within shipping iOS target.
 
-### Why derived, not pre-baked
+### When a topic name appears, show its dot
+
+**Rule:** wherever a topic's name is rendered, its colored dot renders immediately to the left. No exceptions in the product surface.
+
+This applies to:
+
+- Filter pills at the top of Today and any list view (the trigger for this rule — shipping iOS used to omit the dot here and Code patched it in May 2026).
+- Topic chips on a memory card.
+- Topic chips in the topic picker grid (dot inside the swatch ring).
+- Mention chips in Memory Detail.
+- Project membership rows when listing a project's topics.
+- The Topics section in Settings.
+- Anywhere else a topic surfaces by name.
+
+The dot is 6×6px on chips and mention rows, 7×7px on memory-card primary chips, and the swatch fill itself in the picker. Color is `var(--topic-<slug>)` per this spec — never a one-off override.
+
+**Why:** color is faster to recognize than text once a user has a handful of topics. A user with five topics gets to "Garden" by glancing at the green dot, not by reading. Stripping the dot anywhere forces a re-read on that surface, breaking the recognition shortcut on every other surface.
+
+**The single exception** is the topic name appearing inside its own dedicated context — e.g. the title bar of a topic-filtered view ("Garden · 14 memories") may omit the dot because the entire page is already that topic. Use sparingly; when in doubt, include the dot.
+
+## Why derived, not pre-baked
 
 The previous design-system bundle stored each swatch as `{ bg, fg }` pairs — pre-baked pastel backgrounds tuned to cream paper. That approach predates `color-mix()` and required 32 values per mode (so 64 to support dark). Derivation cuts that to 16 + automatic mode adaptation, at the cost of slightly different bgs than the original pre-bakes. If we ever need to honor a specific pre-baked bg, override it inline; the rule is the default, not a law.
 

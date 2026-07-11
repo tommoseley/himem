@@ -9,15 +9,46 @@ import CoreLocation
 final class LocationService: NSObject, ObservableObject {
     static let shared = LocationService()
 
+    /// Signature of the underlying reverse-geocode primitive. Default
+    /// wraps `CLGeocoder.reverseGeocodeLocation`; tests inject a stub
+    /// so `SortBatchCommit`'s bulk-stamp behavior can be exercised
+    /// without hitting Apple's rate limiter.
+    typealias Resolver = (CLLocation) async -> String?
+
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
     private let manager = CLLocationManager()
     private let geocoder = CLGeocoder()
+    private let resolver: Resolver?
 
     private var pendingFix: CheckedContinuation<CLLocation?, Never>?
     private var fixDeadline: Task<Void, Never>?
     private var pendingAuth: CheckedContinuation<Bool, Never>?
 
-    override init() {
+    /// Resolved-name cache keyed by ~100m coordinate bucket. Bulk
+    /// imports (Sort batch commit, single-session promote) can stamp
+    /// 20+ clips all at the same restaurant — with an empty cache
+    /// that's 20 CLGeocoder calls in one tick, and Apple's cross-
+    /// instance rate limiter drops most of them. The cache reduces
+    /// same-place batches to one geocode invocation. Lives for the
+    /// process lifetime; no eviction needed at these volumes.
+    private var placeNameCache: [String: String] = [:]
+
+    /// In-flight geocode tasks by bucket, so concurrent calls for
+    /// the same coord coalesce onto the same task instead of racing.
+    /// The cache alone is not enough — if two calls arrive before
+    /// either has resolved, both would hit the resolver. Coalescing
+    /// guarantees exactly one call per bucket in a batch.
+    private var inflightGeocode: [String: Task<String?, Never>] = [:]
+
+    override convenience init() {
+        self.init(resolver: nil)
+    }
+
+    /// Test seam. Production callers use `LocationService.shared`
+    /// (which uses the default CLGeocoder path); tests pass a stub
+    /// `resolver` to exercise the cache/coalesce logic deterministically.
+    init(resolver: Resolver?) {
+        self.resolver = resolver
         self.authorizationStatus = manager.authorizationStatus
         super.init()
         manager.delegate = self
@@ -96,14 +127,49 @@ final class LocationService: NSObject, ObservableObject {
     ///   "NY"                            (admin alone)
     ///   "United States"                 (country alone)
     func reverseGeocode(_ location: CLLocation) async -> String? {
-        let placemarks: [CLPlacemark]
-        do {
-            placemarks = try await geocoder.reverseGeocodeLocation(location)
-        } catch {
-            return nil
+        let key = Self.cacheKey(for: location)
+
+        // Cache hit — return immediately, no work.
+        if let cached = placeNameCache[key] { return cached }
+
+        // Coalesce onto an in-flight task if one exists for this bucket.
+        // The `await` here yields the MainActor while the existing task
+        // resolves.
+        if let existing = inflightGeocode[key] {
+            return await existing.value
         }
-        guard let pm = placemarks.first else { return nil }
-        return PlacemarkFormatter.displayName(from: pm)
+
+        // Miss + no in-flight — start the resolver, register it as in-flight
+        // so any concurrent callers coalesce, then unregister and populate
+        // the cache on completion.
+        let task = Task { [resolver, geocoder] () -> String? in
+            if let resolver {
+                return await resolver(location)
+            }
+            let placemarks: [CLPlacemark]
+            do {
+                placemarks = try await geocoder.reverseGeocodeLocation(location)
+            } catch {
+                return nil
+            }
+            guard let pm = placemarks.first else { return nil }
+            return PlacemarkFormatter.displayName(from: pm)
+        }
+        inflightGeocode[key] = task
+        let result = await task.value
+        inflightGeocode[key] = nil
+        if let result { placeNameCache[key] = result }
+        return result
+    }
+
+    /// ~100m coordinate bucket. `0.001` degrees is about 111m at the
+    /// equator (less at higher latitudes) — small enough that two clips
+    /// captured "at the same place" always hash together, large enough
+    /// that GPS drift doesn't fragment a real session.
+    nonisolated static func cacheKey(for location: CLLocation) -> String {
+        let lat = (location.coordinate.latitude * 1000).rounded() / 1000
+        let lon = (location.coordinate.longitude * 1000).rounded() / 1000
+        return "\(lat),\(lon)"
     }
 }
 

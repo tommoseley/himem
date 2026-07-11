@@ -71,11 +71,7 @@ final class EntryLifecycleService {
             if shouldCaptureLocation {
                 captureLocation(for: entry)
             }
-            // A capture just happened — pass `Date()` so the policy
-            // sees lastCaptureAt = now and suppresses any pending
-            // nudge (the user is covered for at least one rollover
-            // window).
-            Task { await NotificationService.shared.refreshDailyNudge(lastCaptureAt: Date()) }
+            // Channel B nudge-refresh retired 2026-07-07.
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
         }
@@ -325,37 +321,33 @@ final class EntryLifecycleService {
     }
 
     /// Pure: builds the joined-content string from an entry's fragments —
-    /// voice transcripts and note bodies — in chronological order. After
-    /// the fragment migration runs, every contributable text source lives
-    /// on a `MediaReference` (`.voice` carries `transcript`, `.note`
-    /// carries `text`); the legacy `textSegments` loop is gone.
+    /// voice transcripts, note bodies, and image/video descriptions — in
+    /// the memory's per-edge order (`edge.orderInMemory` ascending).
+    /// Walks `entry.edgesArray` so a clip shared with another memory
+    /// can appear in a different position in each memory's joined
+    /// content, per the v1 ontology.
     static func joinedContent(from entry: JournalEntry) -> String {
-        struct Item { let createdAt: Date; let text: String }
-        var items: [Item] = []
-        for ref in entry.mediaReferencesArray {
+        var parts: [String] = []
+        for edge in entry.edgesArray {
+            guard let ref = edge.clip else { continue }
+            let text: String
             switch ref.mediaTypeEnum {
             case .voice:
-                guard let transcript = ref.transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !transcript.isEmpty else { continue }
-                items.append(Item(createdAt: ref.createdAt ?? .distantPast, text: transcript))
+                text = ref.transcript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             case .note:
-                guard let body = ref.text?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !body.isEmpty else { continue }
-                items.append(Item(createdAt: ref.createdAt ?? .distantPast, text: body))
+                text = ref.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             case .image, .video:
                 // Photo/video descriptions feed into AI Organize and
                 // search the same way voice transcripts do — they're
                 // the human stand-in for the future visual-analysis
                 // pass. See `docs/design/HiMem · Photo Descriptions.html`.
-                guard let desc = ref.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !desc.isEmpty else { continue }
-                items.append(Item(createdAt: ref.createdAt ?? .distantPast, text: desc))
+                text = ref.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            }
+            if !text.isEmpty {
+                parts.append(text)
             }
         }
-        return items
-            .sorted { $0.createdAt < $1.createdAt }
-            .map(\.text)
-            .joined(separator: "\n\n")
+        return parts.joined(separator: "\n\n")
     }
 
     /// Deletes the specified MediaReferences (and their cached thumbnails, and
@@ -445,12 +437,7 @@ final class EntryLifecycleService {
             cacheThumbnails(for: savedRefs)
             captureLocation(for: entry)
             processEntry(entry)
-            // An entry was created today — cancel any pending nudge.
-            // A capture just happened — pass `Date()` so the policy
-            // sees lastCaptureAt = now and suppresses any pending
-            // nudge (the user is covered for at least one rollover
-            // window).
-            Task { await NotificationService.shared.refreshDailyNudge(lastCaptureAt: Date()) }
+            // Channel B nudge-refresh retired 2026-07-07.
             return entry.id
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
@@ -660,10 +647,85 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Delete a memory — the narrative + all its edges. **Clips
+    /// survive** as unplaced evidence (they may still be referenced by
+    /// other memories, or become zero-edge unplaced clips visible on
+    /// the Clips tab). Post-Phase-8: the clips are never destroyed by
+    /// deleting a memory. See `docs/design/HiMem · evidence and context.md`
+    /// § Deletion.
     func delete(entryId: UUID) {
         do {
             guard let entry = try fetchEntry(id: entryId) else { return }
             storage.viewContext.delete(entry)
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    /// Remove a clip from a specific memory — drops the connecting
+    /// `MemoryClipEdge` only. The clip itself survives, still attached
+    /// to any other memories it's in; if this was its last edge, it
+    /// returns to the Clips tab as unplaced evidence.
+    func removeClipFromMemory(edgeId: UUID) {
+        do {
+            let req = NSFetchRequest<MemoryClipEdge>(entityName: "MemoryClipEdge")
+            req.predicate = NSPredicate(format: "id == %@", edgeId as CVarArg)
+            req.fetchLimit = 1
+            guard let edge = try storage.viewContext.fetch(req).first else { return }
+            storage.viewContext.delete(edge)
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    /// Drops the `MemoryClipEdge` for `(memoryId, clipId)` — i.e. removes
+    /// the clip from this memory without touching the clip itself.
+    /// If the clip has no other memory edges after this, it returns to
+    /// the Clips bench as unplaced evidence. Wired to the placement
+    /// sheet's "Remove from this memory" destination and to the
+    /// "Move to another memory" flow's cleanup step.
+    ///
+    /// Distinct from `deleteMediaReference` (which destroys the clip
+    /// itself, cascading edges). Per `Memory Detail · unified editing
+    /// model.md:66` (July 5 2026), Delete clip always destroys; Remove
+    /// is a placement action.
+    func removeClipFromMemory(memoryId: UUID, refId: UUID) {
+        do {
+            let edgeReq = NSFetchRequest<MemoryClipEdge>(entityName: "MemoryClipEdge")
+            edgeReq.predicate = NSPredicate(
+                format: "clipId == %@ AND memoryId == %@",
+                refId as CVarArg,
+                memoryId as CVarArg
+            )
+            edgeReq.fetchLimit = 1
+            guard let edge = try storage.viewContext.fetch(edgeReq).first else { return }
+            storage.viewContext.delete(edge)
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    /// Delete a clip outright — destroys the underlying evidence. All
+    /// edges to any memory this clip was attached to cascade. Audio
+    /// file (for `.voice` clips) is removed from disk. This is the
+    /// heaviest deletion in the ontology — the clip is irreversibly
+    /// gone.
+    func deleteMediaReference(refId: UUID) {
+        do {
+            let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+            req.predicate = NSPredicate(format: "id == %@", refId as CVarArg)
+            req.fetchLimit = 1
+            guard let ref = try storage.viewContext.fetch(req).first else { return }
+            if let cacheFile = ref.thumbnailCacheFilename {
+                ThumbnailService.shared.evictThumbnail(filename: cacheFile)
+            }
+            if ref.mediaTypeEnum == .voice {
+                AudioPlayerService.deleteAudio(filename: ref.osIdentifier)
+            }
+            storage.viewContext.delete(ref)
             try storage.save(context: storage.viewContext)
         } catch {
             ErrorState.shared.report(.deleteFailed(error.localizedDescription))
@@ -821,8 +883,8 @@ final class EntryLifecycleService {
     }
 
     private func removeMedia(from entry: JournalEntry, ids: Set<UUID>) {
-        guard !ids.isEmpty, let refs = entry.mediaReferences as? Set<MediaReference> else { return }
-        for ref in refs where ids.contains(ref.id) {
+        guard !ids.isEmpty else { return }
+        for ref in entry.mediaReferencesArray where ids.contains(ref.id) {
             if let cacheFile = ref.thumbnailCacheFilename {
                 ThumbnailService.shared.evictThumbnail(filename: cacheFile)
             }

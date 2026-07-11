@@ -66,6 +66,14 @@ enum SortBatchCommit {
 
     /// Commits a single cluster proposal as one draft Memory.
     /// Extracted so the loop above stays legible.
+    ///
+    /// Post-Phase-2+3: each clip is written directly via
+    /// `storage.createVoiceFragment(createdAt:)` which creates the
+    /// `MediaReference` + its `MemoryClipEdge` atomically with the
+    /// clip's actual `capturedAt`. The pre-Phase-2+3 post-save fixup
+    /// loop that patched `ref.createdAt` after `saveEntry` is retired
+    /// (root cause was the `mediaCaptures` tuple's missing capturedAt
+    /// slot; this path bypasses the tuple entirely).
     @MainActor
     private static func commitOne(
         proposal: ClusterProposal,
@@ -77,7 +85,7 @@ enum SortBatchCommit {
         // same handoff as `CreateMemoryFromClipsSheet.commit`.
         // Failed moves skip the clip; its inbox row stays for
         // retry on the next attempt.
-        var captures: [(localIdentifier: String, mediaType: MediaReference.MediaType)] = []
+        var movedClips: [InboxClip] = []
         for clip in clips {
             let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
             let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
@@ -86,46 +94,46 @@ enum SortBatchCommit {
                     try FileManager.default.removeItem(at: voiceURL)
                 }
                 try FileManager.default.moveItem(at: inboxURL, to: voiceURL)
-                captures.append((clip.audioFilename, .voice))
+                movedClips.append(clip)
             } catch {
                 continue
             }
         }
-        guard !captures.isEmpty else { return nil }
+        guard !movedClips.isEmpty else { return nil }
 
-        let joinedTranscript = clips
+        let joinedTranscript = movedClips
             .map(\.transcript)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .joined(separator: "\n\n")
 
+        // Create the entry with no mediaCaptures — voice fragments are
+        // written explicitly below so their per-clip capturedAt lands
+        // on the ref at creation time (and creates the edge atomically).
         let newId = viewModel.saveEntry(
             content: joinedTranscript,
             inputType: .voiceInApp,
-            mediaCaptures: captures,
             topicName: nil
         )
-
         guard let newId else { return nil }
 
-        // Post-save fixups — same shape as CreateMemoryFromClipsSheet.
         let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         request.predicate = NSPredicate(format: "id == %@", newId as CVarArg)
         request.fetchLimit = 1
-        if let entry = try? storage.viewContext.fetch(request).first {
-            entry.title = proposal.proposedName
-        }
-        for clip in clips where !clip.transcript.isEmpty {
-            let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-            req.predicate = NSPredicate(format: "osIdentifier == %@", clip.audioFilename)
-            req.fetchLimit = 1
-            if let ref = try? storage.viewContext.fetch(req).first {
-                ref.transcript = clip.transcript
-            }
+        guard let entry = try? storage.viewContext.fetch(request).first else { return nil }
+        entry.title = proposal.proposedName
+
+        for clip in movedClips.sorted(by: { $0.capturedAt < $1.capturedAt }) {
+            _ = try? storage.createVoiceFragment(
+                for: entry,
+                audioFilename: clip.audioFilename,
+                transcript: clip.transcript,
+                createdAt: clip.capturedAt
+            )
         }
         try? storage.save(context: storage.viewContext)
 
         // Stamp per-clip location.
-        for clip in clips {
+        for clip in movedClips {
             ClipLocationResolver.stamp(
                 osIdentifier: clip.audioFilename,
                 latitude: clip.latitude,

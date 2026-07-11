@@ -35,29 +35,41 @@ enum EntryMapper {
             inferenceSummary: inference?.summaryText,
             feedbackState: inference?.feedbackStateEnum,
             userCorrection: inference?.userCorrection,
-            mediaItems: entry.mediaReferencesArray.map { ref in
-                MediaDisplayItem(
-                    id: ref.id,
-                    localIdentifier: ref.osIdentifier,
-                    mediaType: ref.mediaTypeEnum,
-                    thumbnailCacheFilename: ref.thumbnailCacheFilename,
-                    isAccessible: ref.isAccessible,
-                    transcript: ref.transcript,
-                    text: ref.text,
-                    mediaDescription: ref.mediaDescription,
-                    createdAt: ref.createdAt ?? .distantPast,
-                    // Per-clip placeName wins when present; otherwise
-                    // fall back to the memory's own locationName so
-                    // every existing memory with a captured location
-                    // lights up on the clip row without waiting for
-                    // the per-clip backfill. The two will diverge
-                    // only when a memory's clips actually span
-                    // places (multi-session memories spanning a
-                    // walk/drive) — at which point the per-clip
-                    // value renders.
-                    placeName: ref.placeName ?? entry.locationName
-                )
-            },
+            // Dedupe by ref id in case the underlying data has more than
+            // one edge pointing at the same clip within this memory
+            // (CloudKit merge from a pre-fix device, unknown write path).
+            // `StorageService.createEdge` is idempotent as of 2026-07-09
+            // so new writes can't produce dupes, but stale records
+            // already on-device would still render twice without this
+            // safety. See MediaReferenceDuplicateRenderingTests.
+            mediaItems: {
+                var seen: Set<UUID> = []
+                return entry.mediaReferencesArray.compactMap { ref in
+                    guard seen.insert(ref.id).inserted else { return nil }
+                    return MediaDisplayItem(
+                        id: ref.id,
+                        localIdentifier: ref.osIdentifier,
+                        mediaType: ref.mediaTypeEnum,
+                        thumbnailCacheFilename: ref.thumbnailCacheFilename,
+                        isAccessible: ref.isAccessible,
+                        transcript: ref.transcript,
+                        text: ref.text,
+                        mediaDescription: ref.mediaDescription,
+                        createdAt: ref.createdAt ?? .distantPast,
+                        // Per-clip placeName wins when present; otherwise
+                        // fall back to the memory's own locationName so
+                        // every existing memory with a captured location
+                        // lights up on the clip row without waiting for
+                        // the per-clip backfill. The two will diverge
+                        // only when a memory's clips actually span
+                        // places (multi-session memories spanning a
+                        // walk/drive) — at which point the per-clip
+                        // value renders.
+                        placeName: ref.placeName ?? entry.locationName,
+                        referencingMemoryCount: ref.referencingMemoryCount
+                    )
+                }
+            }(),
             recycledAt: entry.recycledAt,
             latitude: entry.latitude?.doubleValue,
             longitude: entry.longitude?.doubleValue,

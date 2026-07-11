@@ -174,8 +174,11 @@ function DateHeader({ label }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Header: HiMem mark · Memories|Projects seg · de-blued search glyph.
-// No density toggle — that control is gone.
+// Header: HiMem wordmark (left) · search + settings (right).
+// The canonical top bar — identical across Clips / Memories / Projects.
+// Object switching lives in the BOTTOM TabBar, not a top Seg. The old
+// 2-object "Memories|Projects" segmented control is retired (it omitted
+// Clips and duplicated the bottom nav). See HiMem · Home.html.
 // ─────────────────────────────────────────────────────────────
 function MemoriesHeader({ activeFilter = 'All' }) {
   const filters = ['All', 'content', 'tech', 'garden', 'howWeWork'];
@@ -184,9 +187,7 @@ function MemoriesHeader({ activeFilter = 'All' }) {
       <div style={{ padding: '8px 16px 10px', display: 'flex', alignItems: 'center' }}>
         <HiMemMark />
         <span style={{ flex: 1 }} />
-        <Seg active="Memories" />
-        <span style={{ flex: 1 }} />
-        {/* de-blued action glyphs — search + settings. Density toggle removed. */}
+        {/* de-blued action glyphs — search + settings. */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 16, color: PX.ink }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
@@ -285,6 +286,7 @@ function ScrMemoriesList() {
           <MemoryCard {...M_COOK} />
         </div>
       </div>
+      <TabBar active="memories" />
     </PhoneScreen>
   );
 }
@@ -305,6 +307,7 @@ function ScrMemoriesFiltered() {
         </div>
         <BeginningMarker first="March 2024" />
       </div>
+      <TabBar active="memories" />
     </PhoneScreen>
   );
 }

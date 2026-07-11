@@ -4,7 +4,6 @@ import CoreData
 @objc(MediaReference)
 public class MediaReference: NSManagedObject, Identifiable {
     @NSManaged public var id: UUID
-    @NSManaged public var entryId: UUID
     @NSManaged public var mediaType: String // "image", "voice", "video", "note"
     /// Photo/video local-asset id (PHAsset) or audio filename for `.voice`.
     /// Empty/unused for `.note` fragments.
@@ -60,7 +59,41 @@ public class MediaReference: NSManagedObject, Identifiable {
     /// described yet. Storage attribute is `mediaDescription` (not
     /// `description`) because `description` collides with `NSObject`.
     @NSManaged public var mediaDescription: String?
-    @NSManaged public var entry: JournalEntry?
+    /// Edges linking this clip to any memory (0–N). Membership is
+    /// exclusively encoded here per the v1 ontology (clip is evidence;
+    /// interpretation lives on the edge).
+    @NSManaged public var edges: NSSet?
+}
+
+extension MediaReference {
+    /// Memories this clip is attached to, sorted by `linkedAt`
+    /// descending — most-recently-attached first (matches the
+    /// "Referenced in" list ordering on Clip Detail).
+    var memoriesArray: [JournalEntry] {
+        edgesArray.compactMap { $0.memory }
+    }
+
+    /// Edges attaching this clip to memories, sorted by `linkedAt`
+    /// descending. Nil-safe — a `MemoryClipEdge` row imported before
+    /// the `linkedAt` cell was populated sinks to the bottom rather
+    /// than trapping the getter (July 11 2026 crash fix — see
+    /// `MemoryClipEdge.linkedAt` doc).
+    var edgesArray: [MemoryClipEdge] {
+        let set = edges as? Set<MemoryClipEdge> ?? []
+        return set.sorted { ($0.linkedAt ?? .distantPast) > ($1.linkedAt ?? .distantPast) }
+    }
+
+    /// Alias — semantic view of `memoriesArray` for Clip Detail's
+    /// "Referenced in" list. Sorted by `linkedAt` descending.
+    var referencingMemoriesSortedByLinkedAtDesc: [JournalEntry] {
+        memoriesArray
+    }
+
+    /// Number of memories currently referencing this clip. Drives the
+    /// Clip Detail delete-warning copy ("This is attached to N memories").
+    var referencingMemoryCount: Int {
+        (edges as? Set<MemoryClipEdge>)?.count ?? 0
+    }
 }
 
 extension MediaReference {

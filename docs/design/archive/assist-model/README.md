@@ -1,40 +1,21 @@
-# archive · assist-model
+# Archive · the assist-quota pricing model
 
-Retired **June 5 2026** when the **Capture · Connect · Create** pricing
-direction superseded the assist-quota framing. The assist-quota model
-metered AI usage as discrete "assists" with starter allotments, monthly
-caps, exhausted states, and pack purchases. It was replaced by an
-outcome-named tier model (Free / Plus / Studio) where the seam is
-"manual + on-device vs. automatic + frontier" — no counters, no
-exhausted state, no pack-purchase flow.
+**Retired June 4 2026.** These files implemented HiMem's original **metered-AI-assist** pricing: 3 starter assists, 50/month for Plus, buyable assist packs, Founders bonus assists, the Supporter tier, and all the exhausted/urgency/pack-purchase surfaces.
 
-## Live replacements
+**Why retired.** The pricing direction moved to **Capture · Connect · Create** — tiers named for outcomes (life-stages of a memory), with the Free/Plus seam being *manual + on-device* vs *automatic + frontier*, not a quota. Nobody buys assists; people buy outcomes. The new model makes most of the counting machinery here unnecessary.
 
-- **Pricing direction:** `../../Pricing model · Capture-Connect-Create.md`
-- **Pricing canvas:** `../../HiMem · Pricing.html` (+ `pricing-screens.jsx`,
-  `pricing-screens-lifecycle.jsx`, `pricing-screens-upgrade.jsx`)
-- **AI Organize:** `../../AI Organize · spec.md` — Honest-Label rules
-  unchanged; tiering rewritten around manual/on-device (Free) vs.
-  automatic/frontier (Plus).
+**Source of truth now:** `Pricing model · Capture-Connect-Create.md` (project root).
 
-## Files archived here
+**Status:** kept as **reference only**. Do not load these into active canvases. The new model is still pending one hard dependency — prototyping Apple's on-device organize against the Honest-Label rubric — before its replacement screens get built. When that clears, new pricing screens get authored fresh against the new model; these are here so the prior reasoning (Founders scarcity, honest two-path upgrade prompt, no-blame exhausted copy) isn't lost.
 
-| File | Was | Notes |
-|---|---|---|
-| `Open work · pricing flow.md` | Open-questions doc for the assist-quota model. | Superseded by §7 of the new `Pricing model · Capture-Connect-Create.md`. |
-| `pricing-screens-free-flow.jsx` | Free-tier flow with starter assists + paywall transitions. | Free is now uncapped on-device; no paywall surface. |
-| `pricing-screens-memory-detail.jsx` | Memory Detail with assist-counter chrome. | Replaced by the chip-as-review-state model in `pricing-screens-lifecycle.jsx`. |
-| `pricing-screens-modals.jsx` | Exhausted-state modals, pack-purchase sheets. | Exhausted state doesn't exist in the new model; pack-purchase retired. |
-| `pricing-screens-reorganize.jsx` | Reorganize flow with assist debit. | Reorganize is now free + manual on Free, automatic on Plus. |
-| `pricing-screens-settings.jsx` | Tier/Settings with monthly-used counters, pack balance, Founders tile. | Counters retired; tier UI rewritten in the new pricing canvas. |
-| `pricing-screens-tier-states.jsx` | Tier-aware state variants (starter / monthly / exhausted). | Variant axis collapsed — no metered states in the new model. |
+## What's here
+- `Himem · Pricing.html` — the 15-section assist-quota pricing canvas.
+- `pricing-screens-*.jsx` — its screen modules (settings, modals, tier-states, memory-detail, free-flow, reorganize).
+- `Pricing · QA test script.md` — QA walk of the assist states.
+- `Open work · pricing flow.md` — the free-tier state-map handoff doc (assist journey).
 
-## Why kept
-
-Historical reference and prior-art audit. Some component patterns
-(modal shells, settings rows, tier-tile typography) may still be reused.
-Voice and copy in these files reflect the retired metered framing —
-**do not copy strings**; refer to the live canvas and the new pricing
-doc instead.
-
-**Do not load any file from this folder in a live design canvas.**
+## Still potentially reusable as *patterns* (not as the model)
+- Founders live-scarcity counter + "cap closed" state.
+- The honest two-path upgrade prompt (direction A) — no per-unit math at the emotional moment.
+- No-blame exhausted/denied copy.
+- The field-affordance and provenance-sparkle treatments (already lifted into active work).

@@ -119,15 +119,15 @@ DCSection id="plus-pack" title="3b · Plus · assist pack purchase"
 
 - `AI Organize · spec.md` § 8 already defines the state matrix this builds on. Don't re-spec; reference.
 - `Projects · MVP spec.md` already locks the starter Project Assist rule and the ≥1 memory threshold. Don't re-litigate.
-- `CLAUDE.md` § Projects already documents the tier model, including the starter-loudness decision (May 27 — now landed in CLAUDE.md). The exhausted-state tier split also landed in `CLAUDE.md` § AI Organize (May 31).
+- `CLAUDE.md` § Projects already documents the tier model, including the starter-loudness decision (May 27 — now landed in CLAUDE.md). One addition still pending — see "Update CLAUDE.md" below.
 
-## CLAUDE.md updates (now complete)
+## When this work lands, also update CLAUDE.md
 
-Both additions are done; this section is kept as a record of what landed where.
+**Done (this session):** the starter-loudness rule now lives in `CLAUDE.md` § Projects — *"The starter run is **loud, not silent**…"* with the *Starter · free* label spec and the May 27 reversal justification. Nothing more to do here.
 
-**Done — starter loudness:** the starter-loudness rule now lives in `CLAUDE.md` § Projects — *"The starter run is **loud, not silent**…"* with the *Starter · free* label spec and the May 27 reversal justification.
+**Still pending — one addition:**
 
-**Done — exhausted-state tier split (May 31):** `CLAUDE.md` § AI Organize now has the bullet — *"Exhausted state splits by tier."* Plus → assist pack purchase, free → subscription paywall (Upgrade Hub), with a cross-reference back to this doc §2 for the modal spec and the IAP ship-block.
+**Under § AI Organize (or wherever assists are discussed):** "Plus users who run out of assists for the month can purchase an assist pack without changing their subscription. Free users hitting exhaustion are routed to the subscription paywall. Two destinations from one shared exhausted-state surface."
 
 ---
 

@@ -244,19 +244,19 @@ final class SearchEngine {
         switch type {
         case .voice:
             return NSPredicate(
-                format: "inputType IN %@ OR ANY mediaReferences.mediaType == %@",
+                format: "inputType IN %@ OR ANY edges.clip.mediaType == %@",
                 ["voice_in_app", "siri"],
                 "voice"
             )
         case .text:
             return NSPredicate(
-                format: "inputType == %@ AND mediaReferences.@count == 0",
+                format: "inputType == %@ AND edges.@count == 0",
                 "typed"
             )
         case .photo:
-            return NSPredicate(format: "ANY mediaReferences.mediaType == %@", "image")
+            return NSPredicate(format: "ANY edges.clip.mediaType == %@", "image")
         case .video:
-            return NSPredicate(format: "ANY mediaReferences.mediaType == %@", "video")
+            return NSPredicate(format: "ANY edges.clip.mediaType == %@", "video")
         }
     }
 

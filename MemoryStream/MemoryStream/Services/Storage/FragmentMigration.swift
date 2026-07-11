@@ -184,7 +184,7 @@ enum FragmentMigration {
         stats: MigrationStats
     ) throws {
         for entry in entries {
-            let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+            let refs = Set(entry.mediaReferencesArray)
 
             // Notes: dedupe by text. Empty text counts as a single bucket
             // — two empty notes on the same entry are still duplicates.
@@ -228,7 +228,7 @@ enum FragmentMigration {
         stats: MigrationStats
     ) throws -> Bool {
         var touched = false
-        let existingRefs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let existingRefs = Set(entry.mediaReferencesArray)
 
         // 1. Legacy audioFilePath → .voice MediaReference.
         //    The transcript becomes entry.content (which historically
@@ -239,13 +239,12 @@ enum FragmentMigration {
             if !alreadyMigrated {
                 let ref = MediaReference(context: context)
                 ref.id = deterministicUUID("fragment-migration-v4", "voice", entry.id.uuidString, audioPath)
-                ref.entryId = entry.id
                 ref.mediaType = MediaReference.MediaType.voice.rawValue
                 ref.osIdentifier = audioPath
                 ref.isAccessible = true
                 ref.createdAt = entry.createdAt
                 ref.transcript = entry.content
-                ref.entry = entry
+                try StorageService.createEdge(from: entry, to: ref, linkedAt: entry.createdAt, in: context)
                 stats.voiceCreated += 1
                 touched = true
             }
@@ -264,13 +263,12 @@ enum FragmentMigration {
             if !alreadyMigrated {
                 let ref = MediaReference(context: context)
                 ref.id = deterministicUUID("fragment-migration-v4", "note-segment", segment.id.uuidString)
-                ref.entryId = entry.id
                 ref.mediaType = MediaReference.MediaType.note.rawValue
                 ref.osIdentifier = ""
                 ref.isAccessible = true
-                ref.createdAt = segment.createdAt
+                ref.createdAt = segment.createdAt ?? entry.createdAt
                 ref.text = segment.text
-                ref.entry = entry
+                try StorageService.createEdge(from: entry, to: ref, linkedAt: segment.createdAt ?? entry.createdAt, in: context)
                 stats.noteCreated += 1
                 touched = true
             }

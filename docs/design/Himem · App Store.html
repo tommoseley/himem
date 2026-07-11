@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Himem · App Store screenshots</title>
+<title>HiMem · App Store screenshots</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,9 +28,12 @@
   /* Each artboard takes a deliberate canvas; the design_canvas wraps it. */
   .frame {
     width:600px; height:1300px; position:relative; overflow:hidden;
-    background:var(--paper);
+    /* Fixed light — marketing frames are intentionally NOT theme-aware.
+       (Hardcoded hex so the theme switcher / system dark mode can't flip
+       paper→black. The drawn phone content hardcodes its palette too.) */
+    background:#EFECE5;
     font-family:var(--sf);
-    color:var(--ink);
+    color:#1A1612;
   }
   .frame.dark { background:#000; color:#fff; }
   .frame.ochre { background:var(--ochre); color:#F7F1E8; }
@@ -118,7 +121,7 @@
     height:28px; padding: 0 12px;
     border-radius:9999px;
     background: rgba(26,22,18,0.06);
-    color:var(--ink); font-size:13px; font-weight:500;
+    color:#1A1612; font-size:13px; font-weight:500;
   }
   .pill.ochre { background:var(--ochre); color:#F7F1E8; }
   .pill.ai { background: rgba(30,92,142,0.10); color:var(--ai-blue); }
@@ -140,14 +143,14 @@
     if (!window.Frame1 || !window.DesignCanvas) { return setTimeout(tryMount, 40); }
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(
-      <DesignCanvas title="Himem · App Store screenshots" subtitle="6 marketing frames, 6.9″ portrait">
+      <DesignCanvas title="HiMem · App Store screenshots" subtitle="6 marketing frames, 6.9″ portrait, drawn from the CURRENT Crucible design language (button colour code, no-pen editing, AI-blue Find the thread ✦, data-custody closer). Frame 1 is the ochre Watch hero; frame 6 is the privacy closer.">
         <DCSection id="primary" title="Primary set" subtitle="Order matters — frame 1 carries the thumbnail">
-          <DCArtboard id="f1" label="01 · Catch it" width={600} height={1300}><Frame1/></DCArtboard>
-          <DCArtboard id="f2" label="02 · Your voice" width={600} height={1300}><Frame2/></DCArtboard>
-          <DCArtboard id="f3" label="03 · Sort later" width={600} height={1300}><Frame3/></DCArtboard>
-          <DCArtboard id="f4" label="04 · Find the thread" width={600} height={1300}><Frame4/></DCArtboard>
-          <DCArtboard id="f5" label="05 · Today, quietly" width={600} height={1300}><Frame5/></DCArtboard>
-          <DCArtboard id="f6" label="06 · Memory Box" width={600} height={1300}><Frame6/></DCArtboard>
+          <DCArtboard id="f1" label="01 · Catch the thought (Watch)" width={600} height={1300}><Frame1/></DCArtboard>
+          <DCArtboard id="f2" label="02 · A draft in your words (Memory)" width={600} height={1300}><Frame2/></DCArtboard>
+          <DCArtboard id="f3" label="03 · Your days, quietly. (Memories)" width={600} height={1300}><Frame3/></DCArtboard>
+          <DCArtboard id="f4" label="04 · Sort it out (Captured Clips)" width={600} height={1300}><Frame4/></DCArtboard>
+          <DCArtboard id="f5" label="05 · Yours, in your iCloud (privacy)" width={600} height={1300}><Frame6/></DCArtboard>
+          <DCArtboard id="f6" label="06 · Find the thread (Project)" width={600} height={1300}><Frame5/></DCArtboard>
         </DCSection>
       </DesignCanvas>
     );

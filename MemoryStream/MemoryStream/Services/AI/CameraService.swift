@@ -77,15 +77,18 @@ final class CameraService: ObservableObject {
         return granted
     }
 
-    // MARK: - Save to ubiquity + Photos library
+    // MARK: - Save to ubiquity
 
-    /// Saves the captured photo to the iCloud Drive ubiquity container
-    /// (the canonical home — that's what `MediaReference.osIdentifier`
-    /// will reference) and also to the user's Photos library as a
-    /// courtesy (default-on; gated by `alsoSaveToPhotosLibrary`).
-    /// Returns the ubiquity filename for `MediaReference.osIdentifier`.
+    /// Saves the captured photo to the iCloud Drive ubiquity container —
+    /// the canonical (and only) home per the locked data-custody
+    /// decision. Returns the ubiquity filename for
+    /// `MediaReference.osIdentifier`.
     ///
-    /// See `docs/design/Storage architecture · CLAUDE.md` Rule 6.
+    /// The old "Also save captures to my Photos library" toggle was
+    /// retired 2026-07-10 (see `screens-settings.jsx` lines 5-9,
+    /// 231-234): a second copy in Photos contradicted the locked
+    /// principle that HiMem media lives in the user's HiMem iCloud
+    /// Files folder, never the Photos library.
     func savePhoto(_ image: UIImage) async throws -> String {
         let filename = "\(UUID().uuidString).jpg"
         let destinationURL = UbiquityStore.shared.photoURL(for: filename)
@@ -99,18 +102,11 @@ final class CameraService: ObservableObject {
         } catch {
             throw CameraError.saveFailed("Ubiquity write failed: \(error.localizedDescription)")
         }
-        if alsoSaveToPhotosLibrary {
-            // Best-effort secondary write to Photos library. If it
-            // fails the user still has the canonical copy in ubiquity;
-            // the Photos-library copy is convenience, not authority.
-            await savePhotoToPhotosLibrary(image)
-        }
         return filename
     }
 
     /// Saves the captured video to the ubiquity container by moving
-    /// the temp file in place, then optionally copies to the Photos
-    /// library. Returns the ubiquity filename.
+    /// the temp file in place. Returns the ubiquity filename.
     func saveVideo(at fileURL: URL) async throws -> String {
         let ext = fileURL.pathExtension.isEmpty ? "mov" : fileURL.pathExtension
         let filename = "\(UUID().uuidString).\(ext)"
@@ -122,119 +118,6 @@ final class CameraService: ObservableObject {
         } catch {
             throw CameraError.saveFailed("Ubiquity move failed: \(error.localizedDescription)")
         }
-        if alsoSaveToPhotosLibrary {
-            await saveVideoToPhotosLibrary(at: destinationURL)
-        }
         return filename
-    }
-
-    /// User-facing toggle (Settings → "Also save captures to my
-    /// Photos library"). **Default off** per the data-custody lock:
-    /// media lives in HiMem's iCloud Files container; the Photos copy
-    /// is an opt-in courtesy for users who want their captures to
-    /// appear in Photos for sharing or printing.
-    ///
-    /// When on, captures land in a single album named
-    /// `Self.photosAlbumName` ("HiMem"). The previous per-topic album
-    /// scheme was retired June 10 2026.
-    var alsoSaveToPhotosLibrary: Bool {
-        UserDefaults.standard.object(forKey: Self.alsoSaveToPhotosLibraryKey) as? Bool ?? false
-    }
-
-    static let alsoSaveToPhotosLibraryKey = "himem.camera.alsoSaveToPhotosLibrary"
-
-    /// Single album we drop captures into when the user has opted in.
-    /// One album, not per-topic. Created lazily on first save.
-    static let photosAlbumName = "HiMem"
-
-    /// Best-effort copy to the user's Photos library, placed in the
-    /// "HiMem" album. Returns silently on failure — the canonical
-    /// copy is already in ubiquity, and a user without Photos library
-    /// permission still keeps their memories.
-    private func savePhotoToPhotosLibrary(_ image: UIImage) async {
-        guard isAuthorized else { return }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            var assetPlaceholder: PHObjectPlaceholder?
-            PHPhotoLibrary.shared().performChanges {
-                let request = PHAssetChangeRequest.creationRequestForAsset(from: image)
-                assetPlaceholder = request.placeholderForCreatedAsset
-            } completionHandler: { success, _ in
-                if success, let assetPlaceholder {
-                    Task {
-                        await Self.addAssetToHiMemAlbum(placeholder: assetPlaceholder)
-                        continuation.resume()
-                    }
-                } else {
-                    continuation.resume()
-                }
-            }
-        }
-    }
-
-    private func saveVideoToPhotosLibrary(at fileURL: URL) async {
-        guard isAuthorized else { return }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            var assetPlaceholder: PHObjectPlaceholder?
-            PHPhotoLibrary.shared().performChanges {
-                if let request = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: fileURL) {
-                    assetPlaceholder = request.placeholderForCreatedAsset
-                }
-            } completionHandler: { success, _ in
-                if success, let assetPlaceholder {
-                    Task {
-                        await Self.addAssetToHiMemAlbum(placeholder: assetPlaceholder)
-                        continuation.resume()
-                    }
-                } else {
-                    continuation.resume()
-                }
-            }
-        }
-    }
-
-    /// Adds a freshly-created asset into the "HiMem" Photos album,
-    /// creating the album on first call. Best-effort: failure here
-    /// leaves the asset in the user's Photos library at its default
-    /// location (still visible to them, just not foldered).
-    private static func addAssetToHiMemAlbum(placeholder: PHObjectPlaceholder) async {
-        let albumName = Self.photosAlbumName
-        let album: PHAssetCollection
-        if let existing = findAlbum(named: albumName) {
-            album = existing
-        } else {
-            guard let created = await createAlbum(named: albumName) else { return }
-            album = created
-        }
-        let assets = PHAsset.fetchAssets(withLocalIdentifiers: [placeholder.localIdentifier], options: nil)
-        guard assets.count > 0 else { return }
-        try? await PHPhotoLibrary.shared().performChanges {
-            guard let request = PHAssetCollectionChangeRequest(for: album) else { return }
-            request.addAssets(assets)
-        }
-    }
-
-    private static func findAlbum(named name: String) -> PHAssetCollection? {
-        let options = PHFetchOptions()
-        options.predicate = NSPredicate(format: "title = %@", name)
-        return PHAssetCollection.fetchAssetCollections(
-            with: .album, subtype: .any, options: options
-        ).firstObject
-    }
-
-    private static func createAlbum(named name: String) async -> PHAssetCollection? {
-        var placeholder: PHObjectPlaceholder?
-        do {
-            try await PHPhotoLibrary.shared().performChanges {
-                let request = PHAssetCollectionChangeRequest
-                    .creationRequestForAssetCollection(withTitle: name)
-                placeholder = request.placeholderForCreatedAssetCollection
-            }
-        } catch {
-            return nil
-        }
-        guard let localId = placeholder?.localIdentifier else { return nil }
-        return PHAssetCollection.fetchAssetCollections(
-            withLocalIdentifiers: [localId], options: nil
-        ).firstObject
     }
 }

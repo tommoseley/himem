@@ -194,7 +194,7 @@ struct ExistingMemoryPickerView: View {
         let cutoff = Date().addingTimeInterval(-Self.sevenDays)
         let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         req.predicate = NSPredicate(
-            format: "isRecycled == NO AND ANY mediaReferences.createdAt >= %@",
+            format: "isRecycled == NO AND ANY edges.clip.createdAt >= %@",
             cutoff as NSDate
         )
         let raw = (try? storage.viewContext.fetch(req)) ?? []

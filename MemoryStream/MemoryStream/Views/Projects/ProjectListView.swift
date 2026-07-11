@@ -10,6 +10,10 @@ struct ProjectListView: View {
     @State private var newProjectPurpose = ""
     @State private var selectedProjectId: UUID? = nil
     @ObservedObject private var entitlement = Entitlement.shared
+    /// Consumes the tab-shell FAB's "open new-project sheet" signal.
+    /// The FAB lives at `HiMemTabView`; the sheet lives here. Wired
+    /// via `NewProjectRequestBus` per the July 10 FAB lock.
+    @ObservedObject private var newProjectBus = NewProjectRequestBus.shared
 
     private var filteredProjects: [ProjectDisplayModel] {
         guard let topic = selectedTopic else { return projectVM.projects }
@@ -101,6 +105,12 @@ struct ProjectListView: View {
                     projectVM.createProject(name: name, purpose: purpose.isEmpty ? nil : purpose)
                 }
             )
+        }
+        .onChange(of: newProjectBus.pendingToken) { _, token in
+            if token != nil {
+                attemptCreateProject()
+                newProjectBus.consume()
+            }
         }
         .sheet(isPresented: $showPricing) {
             PricingView()

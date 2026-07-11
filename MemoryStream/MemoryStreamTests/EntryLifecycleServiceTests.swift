@@ -265,7 +265,7 @@ struct EntryLifecycleServiceTests {
 
         service.deleteMediaReferences(ids: [refA.id, refC.id])
 
-        let remaining = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let remaining = entry.mediaReferencesArray
         let remainingIds = remaining.map(\.id)
         #expect(remainingIds.count == 1)
         #expect(remainingIds.contains(refB.id))
@@ -278,7 +278,7 @@ struct EntryLifecycleServiceTests {
 
         service.deleteMediaReferences(ids: [])
 
-        let remaining = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let remaining = entry.mediaReferencesArray
         #expect(remaining.count == 1)
     }
 
@@ -305,7 +305,7 @@ struct EntryLifecycleServiceTests {
 
         service.migrateOrphanedContentIfNeeded(entryId: entry.id)
 
-        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = entry.mediaReferencesArray
         let noteRefs = refs.filter { $0.mediaTypeEnum == .note }
         #expect(noteRefs.count == 2)
         #expect(noteRefs.map(\.id).sorted() == [refA.id, refB.id].sorted())
@@ -323,7 +323,7 @@ struct EntryLifecycleServiceTests {
             service.migrateOrphanedContentIfNeeded(entryId: entry.id)
         }
 
-        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = entry.mediaReferencesArray
         #expect(refs.filter { $0.mediaTypeEnum == .note }.count == 1)
     }
 
@@ -338,7 +338,7 @@ struct EntryLifecycleServiceTests {
 
         service.migrateOrphanedContentIfNeeded(entryId: entry.id)
 
-        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = entry.mediaReferencesArray
         let noteRefs = refs.filter { $0.mediaTypeEnum == .note }
         #expect(noteRefs.count == 1)
         #expect(noteRefs.first?.text == "typed body unrelated to voice")
@@ -368,7 +368,7 @@ struct EntryLifecycleServiceTests {
 
         service.migrateOrphanedContentIfNeeded(entryId: entry.id)
 
-        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = entry.mediaReferencesArray
         #expect(refs.filter { $0.mediaTypeEnum == .note }.isEmpty)
     }
 
@@ -382,7 +382,7 @@ struct EntryLifecycleServiceTests {
 
         service.migrateOrphanedContentIfNeeded(entryId: entry.id)
 
-        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = entry.mediaReferencesArray
         #expect(refs.filter { $0.mediaTypeEnum == .note }.isEmpty)
     }
 
@@ -449,7 +449,7 @@ struct EntryLifecycleServiceTests {
         service.append(entryId: entry.id, additionalContent: "Second thought")
         service.append(entryId: entry.id, additionalContent: "Third thought")
 
-        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = entry.mediaReferencesArray
         let notes = refs.filter { $0.mediaTypeEnum == .note }
         #expect(notes.count == 3)
         let texts = Set(notes.compactMap(\.text))
@@ -466,7 +466,7 @@ struct EntryLifecycleServiceTests {
             voiceFilename: "clip.m4a"
         )
 
-        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = entry.mediaReferencesArray
         let voices = refs.filter { $0.mediaTypeEnum == .voice }
         let notes = refs.filter { $0.mediaTypeEnum == .note }
         #expect(voices.count == 1)
@@ -482,7 +482,7 @@ struct EntryLifecycleServiceTests {
 
         service.append(entryId: entry.id, additionalContent: "   ")
 
-        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = entry.mediaReferencesArray
         #expect(refs.isEmpty)
     }
 
@@ -498,7 +498,7 @@ struct EntryLifecycleServiceTests {
 
         service.append(entryId: entry.id, additionalContent: "new thought")
 
-        let refs = (entry.mediaReferences as? Set<MediaReference>) ?? []
+        let refs = entry.mediaReferencesArray
         let notes = refs.filter { $0.mediaTypeEnum == .note }
         let texts = Set(notes.compactMap(\.text))
         #expect(notes.count == 2)

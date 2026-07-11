@@ -62,6 +62,7 @@ function Accessibility() {
     ['Text', 'All type scales with Dynamic Type. No pixel values leak into UI text.', 'xxxLarge snaps to 130%.'],
     ['Labels', 'Every icon-only control names itself via aria-label or accessibilityLabel.', 'Names use voice: "Record memory", not "Mic".'],
     ['Colorblind', 'Status is never color alone. Pair with icon + label.', 'Success = check + "Synced". Danger = alert + word.'],
+    ['Affordance', 'One look, one job: a real button (≥ 44px) is the action; a solid pill + dot is managed content; a quiet label is status. Dashed = add / incomplete only.', 'Status is never dressed as a button; the action is never a bare text link. One primary action per moment, and it is the loudest interactive thing. Origin: the “Draft organized” cluster.'],
     ['Screen reader', 'Group labels follow reading order. Grouped list announces header once.', 'Decorative dividers are aria-hidden.'],
   ];
   return (

@@ -156,11 +156,13 @@ struct PhotoDescriptionEditSheet: View {
                     .foregroundStyle(Crucible.Color.ink3)
                 Spacer()
             }
-            // Bottom Delete clip — the photo/video editor is the
-            // "opened item" for media captures, so its own delete sits
-            // here per `Memory Detail · unified editing model.md`
-            // (June 12 2026). Dismisses the sheet immediately on tap;
-            // the parent's delete callback handles the rest.
+            // Bottom Delete — the photo/video editor is the "opened
+            // item" for media captures, so its own delete sits here per
+            // `Memory Detail · unified editing model.md` (June 12 2026).
+            // Delete always destroys per the July 5 update: "Delete
+            // clip destroys (→ Recently Deleted); 'Where does this
+            // belong?' relocates." Remove-from-memory lives on the
+            // placement sheet, not this button.
             BottomDeleteButton(kind: .delete(noun: "clip")) {
                 onDelete()
                 dismiss()

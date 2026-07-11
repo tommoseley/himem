@@ -80,6 +80,9 @@ const TG = {
   hand: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11V5a1.5 1.5 0 013 0v5M12 10V4a1.5 1.5 0 013 0v6M15 10V6a1.5 1.5 0 013 0v8a6 6 0 01-6 6h-1a6 6 0 01-5-3l-2.5-4a1.5 1.5 0 012.5-1.6L9 13"/></svg>,
   sync: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0115-6.7L21 8M21 3v5h-5M21 12a9 9 0 01-15 6.7L3 16M3 21v-5h5"/></svg>,
   bundle: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><rect x="5" y="11" width="14" height="4" rx="1.5"/><rect x="7" y="17" width="10" height="3" rx="1.5"/></svg>,
+  siri: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 10v4M12 7.5v9M15.5 10v4"/></svg>,
+  siriSm: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 10v4M12 7.5v9M15.5 10v4"/></svg>,
+  bolt: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>,
 };
 
 // ── 1 · Capture · Next · Watch ──────────────────────────────────
@@ -148,7 +151,7 @@ function ScrTutWatch() {
       points={[
         { tone: 'accent', glyph: TG.watch, title: 'Record, hands-free', body: "Raise your wrist and talk. The Watch captures audio only — no screen to manage, nothing to organize in the moment." },
         { tone: 'ai', glyph: TG.sync, title: 'It syncs to your phone', body: "Clips land in Captured Clips on your iPhone and are transcribed there. Your Watch never holds your library — just the latest clips." },
-        { tone: 'accent', glyph: TG.bundle, title: 'Bundle into a memory', body: "Review the session and turn it into a new memory, or add it to one you're already building. A roll of clips becomes one memory." },
+        { tone: 'accent', glyph: TG.bundle, title: 'Shape it into a memory', body: "Review the session and keep it as a new memory, or add it to one you're already building. A roll of clips becomes one memory." },
       ]}
       cta="Got it"
       footnote="Replay from the ? in the toolbar."
@@ -203,7 +206,34 @@ function ScrTutWatchManual() {
   );
 }
 
+// ── 6 · Capturing with Siri ─────────────────────────────────────
+// The phone-side embodiment of the perishability principle: capture with
+// zero navigation, before the thought fades. A differentiator the user won't
+// stumble onto (the Siri phrases are invisible until we name them), so it
+// earns a tutorial on the discoverability criterion. Both phrases ship today
+// (open+record, and in-Siri dictation that never opens the app).
+function Quote({ children }) {
+  return <span style={{ color: PX.ink, fontWeight: 600 }}>{children}</span>;
+}
+function ScrTutSiri() {
+  return (
+    <TutorialPage
+      eyebrow="Capturing with Siri"
+      title="Catch it without a tap."
+      intro="Two hands-free ways to save a thought — Siri can open HiMem and start recording, or take it down for you without opening the app at all."
+      points={[
+        { tone: 'accent', glyph: TG.siri, title: 'Say the word', body: <>&ldquo;<Quote>Hey Siri, record in HiMem</Quote>&rdquo; opens the app and starts recording on its own. Nothing to tap once the thought strikes.</> },
+        { tone: 'accent', glyph: TG.mic, title: 'Or just tell Siri', body: <>&ldquo;<Quote>Hey Siri, capture in HiMem</Quote>.&rdquo; Siri asks what you want to remember, takes it down, and saves it &mdash; without ever opening the app. On Plus, it&rsquo;s organized by the time you look.</> },
+        { tone: 'accent', glyph: TG.bolt, title: 'Before it fades', body: "From the lock screen, across the room, hands full — the fastest path to a memory that's already slipping away." },
+      ]}
+      cta="Got it"
+      footnote="Say &ldquo;Hey Siri, record in HiMem&rdquo; to try it. Replay from the ? in the toolbar."
+    />
+  );
+}
+
 Object.assign(window, {
   TutorialPage, TutPoint,
   ScrTutCapture, ScrTutOrganize, ScrTutFindThread, ScrTutWatch, ScrTutWatchDiscovery, ScrTutWatchManual,
+  ScrTutSiri,
 });

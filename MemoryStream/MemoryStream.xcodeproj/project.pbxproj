@@ -85,12 +85,10 @@
 		A100000321 /* WatchSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000320 /* WatchSharedState.swift */; };
 		A100000323 /* Linkify.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000323 /* Linkify.swift */; };
 		A100000500 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000500 /* NotificationService.swift */; };
-		A100000501 /* StorageService+EntryQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000501 /* StorageService+EntryQueries.swift */; };
 		A100000502 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000502 /* TranscriptionService.swift */; };
 		A100000503 /* FragmentMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000503 /* FragmentMigration.swift */; };
 		A100000509 /* SummaryFieldMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000509 /* SummaryFieldMigration.swift */; };
 		A100000510 /* WatchInboxNotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000510 /* WatchInboxNotificationCoordinator.swift */; };
-		A100000511 /* DailyNudgePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000511 /* DailyNudgePolicy.swift */; };
 		A100000602 /* StoreKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000602 /* StoreKitService.swift */; };
 		A100000604 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = B100000604 /* Products.storekit */; };
 		A100000612 /* OrganizeMemoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000612 /* OrganizeMemoryCard.swift */; };
@@ -129,7 +127,6 @@
 		A100000735 /* VoiceRecordingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000735 /* VoiceRecordingController.swift */; };
 		A100000736 /* EntryAppendCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000736 /* EntryAppendCoordinator.swift */; };
 		A100000737 /* JournalErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000737 /* JournalErrorBanner.swift */; };
-		A100000739 /* JournalInboxBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000739 /* JournalInboxBanner.swift */; };
 		A100000740 /* JournalCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000740 /* JournalCaptureCoordinator.swift */; };
 		A100000741 /* InboxTranscriptionDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000741 /* InboxTranscriptionDispatcher.swift */; };
 		A100000742 /* CapturedClipsSubtitleBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000742 /* CapturedClipsSubtitleBuilder.swift */; };
@@ -164,6 +161,26 @@
 		A100000992 /* TutorialOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000992 /* TutorialOrchestrator.swift */; };
 		A100000993 /* QuickLookViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000993 /* QuickLookViewer.swift */; };
 		A100000994 /* BottomDeleteButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000994 /* BottomDeleteButton.swift */; };
+		A200000010 /* MemoryClipEdge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000010 /* MemoryClipEdge.swift */; };
+		A200000020 /* HiMemTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000020 /* HiMemTabView.swift */; };
+		A200000021 /* ClipsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000021 /* ClipsTabView.swift */; };
+		A200000022 /* ClipDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000022 /* ClipDetailView.swift */; };
+		A200000023 /* PlaceClipSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000023 /* PlaceClipSheet.swift */; };
+		A200000024 /* ClipFateRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000024 /* ClipFateRow.swift */; };
+		A200000025 /* CoachmarkOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000025 /* CoachmarkOrchestrator.swift */; };
+		A200000026 /* CoachmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000026 /* CoachmarkView.swift */; };
+		A200000027 /* ClipsStatusSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000027 /* ClipsStatusSheet.swift */; };
+		A200000028 /* DebouncedTrigger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000028 /* DebouncedTrigger.swift */; };
+		A200000029 /* BenchHeaderTitleBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000029 /* BenchHeaderTitleBuilder.swift */; };
+		A200000030 /* ProjectsNavigationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000030 /* ProjectsNavigationContext.swift */; };
+		A200000031 /* PhoneCaptureBenchDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000031 /* PhoneCaptureBenchDispatcher.swift */; };
+		A200000032 /* CaptureLandingRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000032 /* CaptureLandingRouter.swift */; };
+		A200000033 /* NewProjectRequestBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000033 /* NewProjectRequestBus.swift */; };
+		A200000034 /* NewProjectFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000034 /* NewProjectFAB.swift */; };
+		A200000035 /* UnifiedBenchGrouper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000035 /* UnifiedBenchGrouper.swift */; };
+		A200000036 /* SessionMediaAbsorber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000036 /* SessionMediaAbsorber.swift */; };
+		A200000037 /* BenchAbsorbedMediaBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000037 /* BenchAbsorbedMediaBus.swift */; };
+		A200000038 /* MemoryDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000038 /* MemoryDetailPresentationContext.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
 		A900000002 /* OnDeviceOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000002 /* OnDeviceOrganizer.swift */; };
 		A900000003 /* ServerOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000003 /* ServerOrganizer.swift */; };
@@ -244,6 +261,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A200000002 /* MemoryStream 3.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "MemoryStream 3.xcdatamodel"; sourceTree = "<group>"; };
 		B100000001 /* MemoryStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryStreamApp.swift; sourceTree = "<group>"; };
 		B100000002 /* JournalEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntry.swift; sourceTree = "<group>"; };
 		B100000003 /* ExtractedEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractedEntity.swift; sourceTree = "<group>"; };
@@ -265,7 +283,6 @@
 		B100000019 /* EntryCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryCardView.swift; sourceTree = "<group>"; };
 		B100000022 /* TopicTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicTabBar.swift; sourceTree = "<group>"; };
 		B100000023 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
-		B100000025 /* MemoryStream.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = MemoryStream.xcdatamodel; sourceTree = "<group>"; };
 		B100000026 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B100000027 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B100000028 /* NewTopicSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTopicSheet.swift; sourceTree = "<group>"; };
@@ -322,12 +339,10 @@
 		B100000320 /* WatchSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchSharedState.swift; path = Shared/WatchSharedState.swift; sourceTree = "<group>"; };
 		B100000323 /* Linkify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Linkify.swift; sourceTree = "<group>"; };
 		B100000500 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
-		B100000501 /* StorageService+EntryQueries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StorageService+EntryQueries.swift"; sourceTree = "<group>"; };
 		B100000502 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		B100000503 /* FragmentMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FragmentMigration.swift; sourceTree = "<group>"; };
 		B100000509 /* SummaryFieldMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryFieldMigration.swift; sourceTree = "<group>"; };
 		B100000510 /* WatchInboxNotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchInboxNotificationCoordinator.swift; sourceTree = "<group>"; };
-		B100000511 /* DailyNudgePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyNudgePolicy.swift; sourceTree = "<group>"; };
 		B100000602 /* StoreKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitService.swift; sourceTree = "<group>"; };
 		B100000604 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = file.storekit; path = Products.storekit; sourceTree = "<group>"; };
 		B100000612 /* OrganizeMemoryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeMemoryCard.swift; sourceTree = "<group>"; };
@@ -363,7 +378,6 @@
 		B100000735 /* VoiceRecordingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingController.swift; sourceTree = "<group>"; };
 		B100000736 /* EntryAppendCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryAppendCoordinator.swift; sourceTree = "<group>"; };
 		B100000737 /* JournalErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalErrorBanner.swift; sourceTree = "<group>"; };
-		B100000739 /* JournalInboxBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalInboxBanner.swift; sourceTree = "<group>"; };
 		B100000740 /* JournalCaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCaptureCoordinator.swift; sourceTree = "<group>"; };
 		B100000741 /* InboxTranscriptionDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxTranscriptionDispatcher.swift; sourceTree = "<group>"; };
 		B100000742 /* CapturedClipsSubtitleBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedClipsSubtitleBuilder.swift; sourceTree = "<group>"; };
@@ -398,6 +412,26 @@
 		B100000992 /* TutorialOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TutorialOrchestrator.swift; path = MemoryStream/Services/Tutorials/TutorialOrchestrator.swift; sourceTree = SOURCE_ROOT; };
 		B100000993 /* QuickLookViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookViewer.swift; sourceTree = "<group>"; };
 		B100000994 /* BottomDeleteButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomDeleteButton.swift; sourceTree = "<group>"; };
+		B200000010 /* MemoryClipEdge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryClipEdge.swift; sourceTree = "<group>"; };
+		B200000020 /* HiMemTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiMemTabView.swift; sourceTree = "<group>"; };
+		B200000021 /* ClipsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipsTabView.swift; sourceTree = "<group>"; };
+		B200000022 /* ClipDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipDetailView.swift; sourceTree = "<group>"; };
+		B200000023 /* PlaceClipSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceClipSheet.swift; sourceTree = "<group>"; };
+		B200000024 /* ClipFateRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipFateRow.swift; sourceTree = "<group>"; };
+		B200000025 /* CoachmarkOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CoachmarkOrchestrator.swift; path = MemoryStream/Services/Tutorials/CoachmarkOrchestrator.swift; sourceTree = SOURCE_ROOT; };
+		B200000026 /* CoachmarkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CoachmarkView.swift; path = MemoryStream/Views/Components/CoachmarkView.swift; sourceTree = SOURCE_ROOT; };
+		B200000027 /* ClipsStatusSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipsStatusSheet.swift; path = MemoryStream/Views/Clips/ClipsStatusSheet.swift; sourceTree = SOURCE_ROOT; };
+		B200000028 /* DebouncedTrigger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DebouncedTrigger.swift; path = MemoryStream/Services/DebouncedTrigger.swift; sourceTree = SOURCE_ROOT; };
+		B200000029 /* BenchHeaderTitleBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BenchHeaderTitleBuilder.swift; path = MemoryStream/Views/Inbox/BenchHeaderTitleBuilder.swift; sourceTree = SOURCE_ROOT; };
+		B200000030 /* ProjectsNavigationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProjectsNavigationContext.swift; path = MemoryStream/Services/Projects/ProjectsNavigationContext.swift; sourceTree = SOURCE_ROOT; };
+		B200000031 /* PhoneCaptureBenchDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PhoneCaptureBenchDispatcher.swift; path = MemoryStream/Services/Storage/PhoneCaptureBenchDispatcher.swift; sourceTree = SOURCE_ROOT; };
+		B200000032 /* CaptureLandingRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureLandingRouter.swift; path = MemoryStream/Services/CaptureLandingRouter.swift; sourceTree = SOURCE_ROOT; };
+		B200000033 /* NewProjectRequestBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NewProjectRequestBus.swift; path = MemoryStream/Services/Projects/NewProjectRequestBus.swift; sourceTree = SOURCE_ROOT; };
+		B200000034 /* NewProjectFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NewProjectFAB.swift; path = MemoryStream/Views/Components/NewProjectFAB.swift; sourceTree = SOURCE_ROOT; };
+		B200000035 /* UnifiedBenchGrouper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UnifiedBenchGrouper.swift; path = MemoryStream/Services/Storage/UnifiedBenchGrouper.swift; sourceTree = SOURCE_ROOT; };
+		B200000036 /* SessionMediaAbsorber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SessionMediaAbsorber.swift; path = MemoryStream/Services/Storage/SessionMediaAbsorber.swift; sourceTree = SOURCE_ROOT; };
+		B200000037 /* BenchAbsorbedMediaBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BenchAbsorbedMediaBus.swift; path = MemoryStream/Services/Storage/BenchAbsorbedMediaBus.swift; sourceTree = SOURCE_ROOT; };
+		B200000038 /* MemoryDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryDetailPresentationContext.swift; path = MemoryStream/Services/MemoryDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
 		B900000002 /* OnDeviceOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceOrganizer.swift; sourceTree = "<group>"; };
 		B900000003 /* ServerOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOrganizer.swift; sourceTree = "<group>"; };
@@ -550,6 +584,7 @@
 				B100000301 /* CaptureModality.swift */,
 				B100000048 /* Project.swift */,
 				B100000626 /* OrganizePass.swift */,
+				B200000010 /* MemoryClipEdge.swift */,
 				B100000024 /* MemoryStream.xcdatamodeld */,
 			);
 			path = Models;
@@ -558,6 +593,10 @@
 		G100000012 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				B200000020 /* HiMemTabView.swift */,
+				B200000021 /* ClipsTabView.swift */,
+				B200000027 /* ClipsStatusSheet.swift */,
+				B200000022 /* ClipDetailView.swift */,
 				G100000070 /* Launch */,
 				G100000080 /* Onboarding */,
 				G100000040 /* Journal */,
@@ -600,6 +639,9 @@
 				B100000071 /* EpigraphService.swift */,
 				B100000081 /* AuthService.swift */,
 				B100000631 /* WakeLock.swift */,
+				B200000028 /* DebouncedTrigger.swift */,
+				B200000032 /* CaptureLandingRouter.swift */,
+				B200000038 /* MemoryDetailPresentationContext.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -612,9 +654,9 @@
 				B100000045 /* EntryExpandedView.swift */,
 				B100000736 /* EntryAppendCoordinator.swift */,
 				B100000737 /* JournalErrorBanner.swift */,
-				B100000739 /* JournalInboxBanner.swift */,
 				B100000740 /* JournalCaptureCoordinator.swift */,
 				B100000205 /* ChronologicalCaptureStream.swift */,
+				B200000024 /* ClipFateRow.swift */,
 				B100000970 /* TranscriptMode.swift */,
 				B100000971 /* CompactTranscriptViews.swift */,
 				B100000982 /* EditCommitBar.swift */,
@@ -655,8 +697,11 @@
 				B100000952 /* ManagedChipEdit.swift */,
 				B100000991 /* TutorialsHubView.swift */,
 				B100000992 /* TutorialOrchestrator.swift */,
+				B200000025 /* CoachmarkOrchestrator.swift */,
+				B200000026 /* CoachmarkView.swift */,
 				B100000993 /* QuickLookViewer.swift */,
 				B100000994 /* BottomDeleteButton.swift */,
+				B200000034 /* NewProjectFAB.swift */,
 				B100000951 /* ManageTopicsSheet.swift */,
 				B100000980 /* VideoPlayerSheet.swift */,
 				B100000732 /* TopicColorPicker.swift */,
@@ -693,9 +738,12 @@
 				B100000696 /* ClusterProposal.swift */,
 				B100000697 /* ClipClusterProposer.swift */,
 				B100000698 /* SortBatchCommit.swift */,
-				B100000501 /* StorageService+EntryQueries.swift */,
 				B100000503 /* FragmentMigration.swift */,
 				B100000509 /* SummaryFieldMigration.swift */,
+				B200000031 /* PhoneCaptureBenchDispatcher.swift */,
+				B200000035 /* UnifiedBenchGrouper.swift */,
+				B200000036 /* SessionMediaAbsorber.swift */,
+				B200000037 /* BenchAbsorbedMediaBus.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -849,12 +897,14 @@
 				B100000691 /* SessionListView.swift */,
 				B100000699 /* ClusterCardStack.swift */,
 				B100000742 /* CapturedClipsSubtitleBuilder.swift */,
+				B200000029 /* BenchHeaderTitleBuilder.swift */,
 				B100000745 /* PhasePill.swift */,
 				B100000746 /* ShimmerLine.swift */,
 				B100000747 /* IncomingCard.swift */,
 				B100000749 /* SyncStrip.swift */,
 				B100000315 /* CreateMemoryFromClipsSheet.swift */,
 				B100000316 /* ExistingMemoryPickerView.swift */,
+				B200000023 /* PlaceClipSheet.swift */,
 			);
 			path = Inbox;
 			sourceTree = "<group>";
@@ -864,7 +914,6 @@
 			children = (
 				B100000500 /* NotificationService.swift */,
 				B100000510 /* WatchInboxNotificationCoordinator.swift */,
-				B100000511 /* DailyNudgePolicy.swift */,
 			);
 			path = Notifications;
 			sourceTree = "<group>";
@@ -913,6 +962,8 @@
 				B100000761 /* ProjectSuggestionDismissalStore.swift */,
 				B100000762 /* ProjectSuggestionsViewModel.swift */,
 				B100000763 /* ProjectAssistViewModel.swift */,
+				B200000030 /* ProjectsNavigationContext.swift */,
+				B200000033 /* NewProjectRequestBus.swift */,
 			);
 			path = Projects;
 			sourceTree = "<group>";
@@ -1215,7 +1266,6 @@
 				A100000735 /* VoiceRecordingController.swift in Sources */,
 				A100000736 /* EntryAppendCoordinator.swift in Sources */,
 				A100000737 /* JournalErrorBanner.swift in Sources */,
-				A100000739 /* JournalInboxBanner.swift in Sources */,
 				A100000740 /* JournalCaptureCoordinator.swift in Sources */,
 				A100000741 /* InboxTranscriptionDispatcher.swift in Sources */,
 				A100000742 /* CapturedClipsSubtitleBuilder.swift in Sources */,
@@ -1252,7 +1302,6 @@
 				A100000008 /* StorageService.swift in Sources */,
 				A100000500 /* NotificationService.swift in Sources */,
 				A100000510 /* WatchInboxNotificationCoordinator.swift in Sources */,
-				A100000511 /* DailyNudgePolicy.swift in Sources */,
 				A100000654 /* ProjectCapPolicy.swift in Sources */,
 				A100000655 /* ProjectAssistGate.swift in Sources */,
 				A900000005 /* Entitlement.swift in Sources */,
@@ -1278,9 +1327,25 @@
 				A900000008 /* ReorganizeReviewSheet.swift in Sources */,
 				A100000631 /* WakeLock.swift in Sources */,
 				A100000633 /* SummaryRenderer.swift in Sources */,
-				A100000501 /* StorageService+EntryQueries.swift in Sources */,
 				A100000502 /* TranscriptionService.swift in Sources */,
 				A100000503 /* FragmentMigration.swift in Sources */,
+				A200000010 /* MemoryClipEdge.swift in Sources */,
+				A200000020 /* HiMemTabView.swift in Sources */,
+				A200000021 /* ClipsTabView.swift in Sources */,
+				A200000027 /* ClipsStatusSheet.swift in Sources */,
+				A200000028 /* DebouncedTrigger.swift in Sources */,
+				A200000029 /* BenchHeaderTitleBuilder.swift in Sources */,
+				A200000030 /* ProjectsNavigationContext.swift in Sources */,
+				A200000031 /* PhoneCaptureBenchDispatcher.swift in Sources */,
+				A200000032 /* CaptureLandingRouter.swift in Sources */,
+				A200000033 /* NewProjectRequestBus.swift in Sources */,
+				A200000034 /* NewProjectFAB.swift in Sources */,
+				A200000035 /* UnifiedBenchGrouper.swift in Sources */,
+				A200000036 /* SessionMediaAbsorber.swift in Sources */,
+				A200000037 /* BenchAbsorbedMediaBus.swift in Sources */,
+				A200000038 /* MemoryDetailPresentationContext.swift in Sources */,
+				A200000022 /* ClipDetailView.swift in Sources */,
+				A200000023 /* PlaceClipSheet.swift in Sources */,
 				A100000509 /* SummaryFieldMigration.swift in Sources */,
 				A100000009 /* ClaudeAPIService.swift in Sources */,
 				A100000010 /* LocalEntityExtractor.swift in Sources */,
@@ -1309,6 +1374,8 @@
 				A100000952 /* ManagedChipEdit.swift in Sources */,
 				A100000991 /* TutorialsHubView.swift in Sources */,
 				A100000992 /* TutorialOrchestrator.swift in Sources */,
+				A200000025 /* CoachmarkOrchestrator.swift in Sources */,
+				A200000026 /* CoachmarkView.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,
 				A100000994 /* BottomDeleteButton.swift in Sources */,
 				A100000951 /* ManageTopicsSheet.swift in Sources */,
@@ -1338,6 +1405,7 @@
 				A100000662 /* SuggestedMemoriesSheet.swift in Sources */,
 				A100000045 /* EntryExpandedView.swift in Sources */,
 				A100000205 /* ChronologicalCaptureStream.swift in Sources */,
+				A200000024 /* ClipFateRow.swift in Sources */,
 				A100000970 /* TranscriptMode.swift in Sources */,
 				A100000971 /* CompactTranscriptViews.swift in Sources */,
 				A100000982 /* EditCommitBar.swift in Sources */,
@@ -2239,9 +2307,9 @@
 		B100000024 /* MemoryStream.xcdatamodeld */ = {
 			isa = XCVersionGroup;
 			children = (
-				B100000025 /* MemoryStream.xcdatamodel */,
+				A200000002 /* MemoryStream 3.xcdatamodel */,
 			);
-			currentVersion = B100000025 /* MemoryStream.xcdatamodel */;
+			currentVersion = A200000002 /* MemoryStream 3.xcdatamodel */;
 			path = MemoryStream.xcdatamodeld;
 			sourceTree = "<group>";
 			versionGroupType = wrapper.xcdatamodel;

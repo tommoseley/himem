@@ -39,8 +39,29 @@ function App() {
         <DCArtboard id="expanded" label="2. Card expanded (in place)" width={340} height={735}>
           <ScrCCSessionListExpanded />
         </DCArtboard>
-        <DCArtboard id="sheet" label="3. Make a Memory · confirm sheet" width={340} height={735}>
+        <DCArtboard id="sheet" label="3. Create one memory · confirm sheet" width={340} height={735}>
           <ScrCCBundleConfirm />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="density" title="Density · pill vs tap-the-card vs compact" subtitle="Dogfood June 30: the per-card ochre pill is over half the card, squeezing the transcript — the actual memory — on a surface whose whole job is 'read this, decide.' B removes the pill (whole card taps, ochre returns once on Create in the sheet). C goes further: a left time-box replaces the date/time text, preview clamps to two lines, and a gesture (swipe/tap) expands the row. All show idle-gap sessioning — the five 6:09–6:18 dinner clips collapse into one session.">
+        <DCArtboard id="list-current" label="A. Current · per-card pill (wall of ochre)" width={340} height={735}>
+          <ScrCCSessionList />
+        </DCArtboard>
+        <DCArtboard id="list-quiet" label="B. Quiet · tap-the-card (real CIA dinner)" width={340} height={735}>
+          <ScrCCQuietDinner />
+        </DCArtboard>
+        <DCArtboard id="list-compact" label="C. Compact · time-box + gesture-to-expand" width={340} height={735}>
+          <ScrCCCompactDinner />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="grouping" title="Captured Clips · the workbench (canonical, locked July 4 2026)" subtitle="LOCKED. Captured Clips is a workbench, not a queue: clips sit until placed, placement drains the bench, no nag-to-zero. Sort is the bench's resting state — the AI proposes confident groupings (Honest-Label: time+place & word-match on-device/Free; semantic on Plus) at the top, loose clips wait below in plain sight. Sort is the moment: pre-accepted proposals, quiet per-card Adjust/Not-together, ONE ochre commit. Select mode restores multi-select for hand-grouping non-contiguous clips — superseding v2's 'no multi-select' rule.">
+        <DCArtboard id="sort" label="The bench · Sort suggestions on top, loose clips below (canonical)" width={340} height={735}>
+          <ScrCCSort />
+        </DCArtboard>
+        <DCArtboard id="select-mode" label="Select · hand-pick non-contiguous clips → one memory" width={340} height={735}>
+          <ScrCCSelectMode />
         </DCArtboard>
       </DCSection>
 
@@ -104,7 +125,7 @@ function PrincipleCard() {
           On operational surfaces, the unit is <strong>whatever the user is moving through the
           system</strong>. For Captured Clips that's the <em>session</em>, not the clip. Sessions
           are what become Memories; clips are sub-components. Making sessions primary collapses
-          9 clips into 3 cards and lets the default action — <strong>Make a Memory</strong> — be visible
+          9 clips into 3 cards and lets the default action — <strong>Create one memory</strong> — be visible
           inside every card. One tap, normally. Clip-level triage lives <em>inside the card</em>,
           revealed by tapping the body. Never a new screen.
         </div>

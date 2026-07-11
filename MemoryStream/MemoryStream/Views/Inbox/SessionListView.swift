@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreData
 import AVFoundation
 
 /// Session-first Captured Clips · v2. One surface. Cards expand in
@@ -15,9 +16,16 @@ struct SessionListView: View {
     @ObservedObject var inbox: InboxManifest = .shared
     @ObservedObject var arrivals: InboxArrivalTracker = .shared
     @ObservedObject var viewModel: JournalViewModel
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var context
 
     @State private var sessions: [ClipGroup] = []
+    /// Unplaced photo/video refs pulled into each voice session by
+    /// `SessionMediaAbsorber` (July 11 2026 media-agnostic lock).
+    /// Keyed by `ClipGroup.id`. Recomputed on inbox change or Core
+    /// Data change; published to `BenchAbsorbedMediaBus` so the
+    /// parent `ClipsTabView` can filter these out of its top
+    /// day-grouped stack (avoids double-rendering).
+    @State private var absorbedMediaBySessionId: [UUID: [MediaReference]] = [:]
     @State private var expandedSessionId: UUID? = nil
     @State private var bundleSession: BundleRequest? = nil
     @State private var playingClipId: UUID? = nil
@@ -57,24 +65,18 @@ struct SessionListView: View {
     }
 
     var body: some View {
-        // No inner NavigationStack — this view is pushed onto the
-        // parent's stack (per v2 spec: "Captured Clips isn't a modal
-        // — back only"). Routing comes from JournalView /
-        // SettingsView via `.navigationDestination(isPresented:)`.
+        // No inner NavigationStack; no navigation title; no toolbar
+        // "Done" button. Per `Captured Clips · session-first · spec.md`
+        // v4, this view is only ever embedded as the Clips tab's default
+        // content — the parent (`ClipsTabView`) owns the title ("Clips")
+        // and the tab bar handles navigation. The modal-push paths from
+        // Settings + JournalView (2026-07-09) are retired.
         ZStack {
             Crucible.Color.paper.ignoresSafeArea()
             if inbox.isEmpty {
                 emptyState
             } else {
                 list
-            }
-        }
-        .navigationTitle("Captured Clips")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Done") { dismiss() }
-                    .foregroundStyle(Crucible.Color.accent)
             }
         }
         .sheet(item: $bundleSession) { request in
@@ -86,6 +88,7 @@ struct SessionListView: View {
         }
         .onAppear {
             sessions = computeSessions()
+            recomputeAbsorbedMedia()
             // Tutorial #4 (Captured Clips · the Watch story). Spec
             // gate: opened **non-empty** — clips have actually
             // arrived. Empty-state is intentionally NOT a trigger
@@ -97,6 +100,7 @@ struct SessionListView: View {
         }
         .onChange(of: inbox.clips) { _, _ in
             sessions = computeSessions()
+            recomputeAbsorbedMedia()
             // If a session expanded its last clip away, collapse.
             if let id = expandedSessionId,
                !sessions.contains(where: { $0.id == id }) {
@@ -110,8 +114,49 @@ struct SessionListView: View {
             // phase) the sessions need to be re-grouped without
             // those clipIds to avoid double-rendering.
             sessions = computeSessions()
+            recomputeAbsorbedMedia()
         }
-        .onDisappear { stopPlayback() }
+        .onReceive(NotificationCenter.default.publisher(
+            for: .NSManagedObjectContextObjectsDidChange,
+            object: context
+        )) { _ in
+            // Media refs land as unplaced refs on Core Data change.
+            // Re-absorb so a photo captured now appears inside its
+            // sitting's session card.
+            recomputeAbsorbedMedia()
+        }
+        .onDisappear {
+            stopPlayback()
+            // Clear absorption on teardown so a re-mount of Clips
+            // starts fresh — matters if the Clips tab is torn down
+            // while unplaced refs are still queued.
+            BenchAbsorbedMediaBus.shared.setAbsorbed([])
+        }
+    }
+
+    /// Runs `SessionMediaAbsorber` against the current sessions and
+    /// unplaced media refs. Publishes the absorbed id set for
+    /// `ClipsTabView` to consume.
+    private func recomputeAbsorbedMedia() {
+        let unplaced = fetchUnplacedNonVoiceRefs()
+        let result = SessionMediaAbsorber.absorb(
+            sessions: sessions,
+            unplacedMedia: unplaced
+        )
+        absorbedMediaBySessionId = result.mediaBySessionId
+        BenchAbsorbedMediaBus.shared.setAbsorbed(result.absorbedRefIds)
+    }
+
+    /// Fetch unplaced photo/video/note MediaReferences — candidates
+    /// for absorption into a voice session's time window.
+    private func fetchUnplacedNonVoiceRefs() -> [MediaReference] {
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(
+            format: "edges.@count == 0 AND mediaType != %@",
+            MediaReference.MediaType.voice.rawValue
+        )
+        req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
+        return (try? context.fetch(req)) ?? []
     }
 
     /// Groups the inbox's clips into sessions for the SessionCard
@@ -290,17 +335,27 @@ struct SessionListView: View {
 
 
     private var headerTitle: String {
-        // Title counts EVERYTHING the watch is sending, ready or
-        // in-flight — "N from your Watch" stays honest about the
-        // full incoming workload. Manifest clips include the
-        // already-in-flight ones (the file lands in the manifest
-        // at `acceptArrivedClip` time, before transcription); add
-        // any pre-announced clips that aren't yet in the manifest.
+        // Title counts EVERYTHING landing on the bench, ready or
+        // in-flight — "N new clips" stays honest about the full
+        // incoming workload regardless of source. Manifest clips
+        // include the already-in-flight ones (the file lands in the
+        // manifest at `acceptArrivedClip` time, before transcription);
+        // add any pre-announced clips that aren't yet in the manifest.
+        //
+        // Source-agnostic per `CLAUDE.md` §Phone (July 10 2026,
+        // line 142 corollary): the bench takes clips from Watch AND
+        // from the phone Clips-FAB, so the headline never names a
+        // source. Source lives per-clip on the card, not here.
         let inFlightOnly = arrivals.clipsInFlight.keys.filter { id in
             !inbox.clips.contains(where: { $0.clipId == id })
         }.count
-        let n = inbox.count + inFlightOnly
-        return n == 1 ? "1 from your Watch" : "\(n) from your Watch"
+        // Include absorbed photo/video items (July 11 media-agnostic
+        // lock) so the count is honest across media types — a mixed
+        // sitting reads "3 new clips," not "2" with a stray photo
+        // row inside the card.
+        let absorbedMediaCount = absorbedMediaBySessionId.values.reduce(0) { $0 + $1.count }
+        let n = inbox.count + inFlightOnly + absorbedMediaCount
+        return BenchHeaderTitleBuilder.title(clipCount: n)
     }
 
     private var headerSubtitle: String {
@@ -407,7 +462,10 @@ struct SessionListView: View {
                 guard !clips.isEmpty else { return }
                 bundleSession = BundleRequest(session: session, clipsToBundle: clips)
             } label: {
-                Label("Make a Memory", systemImage: "sparkles")
+                // "Create one memory" is the placement primitive for an
+                // already-grouped (idle-gap) session per
+                // docs/design/Kingfisher Language.md. Retired: "Make a Memory."
+                Label("Create one memory", systemImage: "sparkles")
             }
         }
     }
@@ -427,7 +485,14 @@ struct SessionListView: View {
             let f = DateFormatter(); f.dateFormat = "h:mm a"
             return f.string(from: session.capturedAt)
         }()
-        let clipPart = session.clipCount == 1 ? "1 clip" : "\(session.clipCount) clips"
+        // Total clip count includes absorbed photo/video items so
+        // the meta reads "3 clips" for a mixed voice+photo sitting,
+        // not "2 clips" (voice-only) with a stray extra row inside
+        // (July 11 lock — see `Captured Clips · session-first ·
+        // spec.md` §Model).
+        let mediaCount = absorbedMediaBySessionId[session.id]?.count ?? 0
+        let totalCount = session.clipCount + mediaCount
+        let clipPart = totalCount == 1 ? "1 clip" : "\(totalCount) clips"
         let durStr = formatDuration(session.totalDuration)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
@@ -512,16 +577,26 @@ struct SessionListView: View {
     @ViewBuilder
     private func expandedBody(_ session: ClipGroup) -> some View {
         let selected = selectionFor(session)
-        let ordered = orderedClipsByOffset(session)
+        let rows = chronologicalRows(session)
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(ordered.enumerated()), id: \.element.id) { idx, clip in
-                clipRow(
-                    clip,
-                    indexInSession: idx,
-                    session: session,
-                    isSelected: selected.contains(clip.clipId),
-                    isLast: idx == ordered.count - 1
-                )
+            // Interleaved voice + media rows sorted by capture time
+            // (July 11 spec §Model): the sitting reads in the order
+            // it happened — `voice(0:00) → photo(+128s) → voice(+180s)`
+            // — never voice-batched-then-media-batched. Voice-only
+            // sessions collapse to the same render as before.
+            ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
+                switch row {
+                case .voice(let clip, let voiceIndex):
+                    clipRow(
+                        clip,
+                        indexInSession: voiceIndex,
+                        session: session,
+                        isSelected: selected.contains(clip.clipId),
+                        isLast: idx == rows.count - 1
+                    )
+                case .media(let ref):
+                    mediaClipRow(ref, isLast: idx == rows.count - 1)
+                }
             }
             // v3 (July 4 2026): the "Make a Memory" pill lives here,
             // folded into the expander. One primary verb, one tap.
@@ -546,6 +621,103 @@ struct SessionListView: View {
     /// spec's chronological row order).
     private func orderedClipsByOffset(_ session: ClipGroup) -> [InboxClip] {
         session.clips.sorted { $0.capturedAt < $1.capturedAt }
+    }
+
+    /// One row in the expanded session card — a voice clip or an
+    /// absorbed media ref. Interleaved by capture time so the
+    /// reader watches the sitting in the order it happened
+    /// (July 11 lock, `Captured Clips · session-first · spec.md`
+    /// §Model). `voiceIndex` is the position among the session's
+    /// **voice** clips only (so the "0:00 / +Ns" offset labels
+    /// stay honest — the offset is against the session start,
+    /// not the merged row index).
+    private enum ExpandedRow: Identifiable {
+        case voice(InboxClip, voiceIndex: Int)
+        case media(MediaReference)
+
+        var id: UUID {
+            switch self {
+            case .voice(let c, _): return c.clipId
+            case .media(let r):    return r.id
+            }
+        }
+
+        var capturedAt: Date {
+            switch self {
+            case .voice(let c, _): return c.capturedAt
+            case .media(let r):    return r.createdAt ?? .distantPast
+            }
+        }
+    }
+
+    /// Returns the session's voice clips + absorbed media items
+    /// merged into one chronological list. Media without a
+    /// `createdAt` sink to the start (`.distantPast`) rather than
+    /// crashing the sort.
+    private func chronologicalRows(_ session: ClipGroup) -> [ExpandedRow] {
+        let voiceOrdered = orderedClipsByOffset(session)
+        let voiceRows: [ExpandedRow] = voiceOrdered.enumerated().map { idx, clip in
+            .voice(clip, voiceIndex: idx)
+        }
+        let media = absorbedMediaBySessionId[session.id] ?? []
+        let mediaRows: [ExpandedRow] = media.map { .media($0) }
+        return (voiceRows + mediaRows).sorted { $0.capturedAt < $1.capturedAt }
+    }
+
+    /// Row for an absorbed photo/video within a session — thumbnail
+    /// + label + time, no fake transcript, no retry link. Rendered
+    /// after voice rows per `screens-clips-page.jsx` §SessionMediaRow.
+    /// Tap navigates into `ClipDetailView` (same destination as loose
+    /// clips in the top day-grouped stack pre-absorption).
+    @ViewBuilder
+    private func mediaClipRow(_ ref: MediaReference, isLast: Bool) -> some View {
+        let label = ref.mediaTypeEnum == .video ? "Video" : "Photo"
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 12) {
+                // Empty selection ring for now — user tapping the row
+                // selects the clip's inclusion state (Slice H will
+                // wire this to the same selection map as voice rows).
+                Circle()
+                    .strokeBorder(Crucible.Color.accent, lineWidth: 1.5)
+                    .background(Circle().fill(Crucible.Color.accent))
+                    .frame(width: 20, height: 20)
+                    .overlay(
+                        Circle()
+                            .fill(Crucible.Color.accentInk)
+                            .frame(width: 8, height: 8)
+                    )
+                SessionMediaThumbnail(ref: ref)
+                VStack(alignment: .leading, spacing: 2) {
+                    if let created = ref.createdAt {
+                        Text(shortTime(created))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Crucible.Color.ink3)
+                            .monospacedDigit()
+                    }
+                    Text(label)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.ink)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink4)
+            }
+            .padding(.vertical, 12)
+            if !isLast {
+                Rectangle()
+                    .fill(Crucible.Color.hairline)
+                    .frame(height: 0.5)
+            }
+        }
+    }
+
+    /// Short "3:36 PM" formatter — parity with the voice clip's
+    /// offset display within a session row.
+    private func shortTime(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: date)
     }
 
     @ViewBuilder
@@ -842,18 +1014,20 @@ struct SessionListView: View {
         }
     }
 
-    /// Make a Memory pill — full capsule (height 40, radius 20),
+    /// Placement pill — full capsule (height 40, radius 20),
     /// 14pt semibold paper-color text, trailing chevron arrow.
-    /// Matches `MakeAMemoryPill` in the JSX exactly. Disabled state
-    /// drops the ochre to 35% alpha so it reads as inert rather than
-    /// dimmed (per JSX: `rgba(198,74,28,0.35)`).
+    /// Matches `MakeAMemoryPill` in the JSX exactly (JSX symbol name
+    /// preserved; visible copy is "Create one memory" per Kingfisher
+    /// Language.md — the placement primitive for an idle-gap session).
+    /// Disabled state drops the ochre to 35% alpha so it reads as
+    /// inert rather than dimmed (per JSX: `rgba(198,74,28,0.35)`).
     @ViewBuilder
     private func makeAMemoryPill(_ session: ClipGroup, selectedClips: [InboxClip], isDisabled: Bool) -> some View {
         Button {
             bundleSession = BundleRequest(session: session, clipsToBundle: selectedClips)
         } label: {
             HStack(spacing: 8) {
-                Text("Make a Memory")
+                Text("Create one memory")
                     .font(.system(size: 14, weight: .semibold))
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .bold))
@@ -961,6 +1135,56 @@ struct SessionListView: View {
         if sessionActivated {
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             sessionActivated = false
+        }
+    }
+}
+
+/// Inline 40×40 photo/video thumbnail used inside a session's
+/// expanded body row (July 11 media-agnostic lock). Loads via
+/// `ThumbnailService` the same way `MediaClipRow` does — a real
+/// preview, never a generic glyph. Falls back to a media-type
+/// system image while the file downloads or if it can't render.
+private struct SessionMediaThumbnail: View {
+    @ObservedObject var ref: MediaReference
+    @State private var thumbnail: UIImage?
+
+    var body: some View {
+        ZStack(alignment: .center) {
+            if let thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 40, height: 40)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Crucible.Color.hairline.opacity(0.3))
+                    .frame(width: 40, height: 40)
+                    .overlay {
+                        Image(systemName: ref.mediaTypeEnum == .video ? "video" : "photo")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Crucible.Color.ink4)
+                    }
+            }
+            if ref.mediaTypeEnum == .video {
+                Circle()
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 16, height: 16)
+                    .overlay {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 7))
+                            .foregroundStyle(.black)
+                    }
+            }
+        }
+        .task(id: ref.id) {
+            guard thumbnail == nil else { return }
+            if let name = await ThumbnailService.shared.cacheThumbnail(
+                for: ref.osIdentifier,
+                mediaType: ref.mediaTypeEnum
+            ) {
+                thumbnail = ThumbnailService.shared.cachedThumbnail(filename: name)
+            }
         }
     }
 }

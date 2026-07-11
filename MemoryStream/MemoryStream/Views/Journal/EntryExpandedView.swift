@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreData
 
 /// Identifies the voice tile a user tapped, so the AudioPlayerSheet can be
 /// presented via SwiftUI's `sheet(item:)` API. `mediaId` is the
@@ -60,6 +61,13 @@ struct EntryExpandedView: View {
     // through `applyEditsImmediately`, and the per-sheet target ids).
     @State private var editedTitle = ""
     @State private var removedMediaIds: Set<UUID> = []
+    /// Non-nil while `PlaceClipSheet` is presented on top of this
+    /// memory. Carries the clip id being relocated so the sheet can
+    /// resolve the ref + wire "Remove from this memory" against this
+    /// memory's edge. Per `Memory Detail · unified editing model.md:66`
+    /// (July 5 2026): "Where does this belong?" from a clip's edit
+    /// state opens the placement sheet with three destinations.
+    @State private var relocatingClipId: UUID? = nil
     @State private var selectedMedia: MediaDisplayItem? = nil
     /// Non-nil while the full-screen video player is presented. Set
     /// when the user taps a video in the chronological capture stream
@@ -253,19 +261,26 @@ struct EntryExpandedView: View {
             // reach it *is* the deliberation, so no confirm. Recently
             // Deleted (30 days) is the safety net.
             sectionRow {
-                if let onRemoveFromProject {
-                    BottomDeleteButton(kind: .removeFromProject) {
-                        onRemoveFromProject(entry.id)
-                        dismiss()
+                // Per `screens-projects-views.jsx` §ScrProjectMemberOpen
+                // (2026-07-09 update), a memory opened from within a
+                // project surfaces BOTH fate actions at the bottom: the
+                // recycle "Remove from [project]" (memory survives)
+                // above the red "Delete memory" (destroys → Recently
+                // Deleted). Memory opened outside a project shows only
+                // Delete.
+                VStack(spacing: 10) {
+                    if let onRemoveFromProject {
+                        BottomDeleteButton(kind: .removeFromProject) {
+                            onRemoveFromProject(entry.id)
+                            dismiss()
+                        }
                     }
-                    .padding(.top, 24)
-                } else {
                     BottomDeleteButton(kind: .delete(noun: "memory")) {
                         onRecycle?(entry.id)
                         dismiss()
                     }
-                    .padding(.top, 24)
                 }
+                .padding(.top, 24)
             }
             // Bottom inset so the floating Contribute FAB doesn't cover the
             // last row.
@@ -287,6 +302,14 @@ struct EntryExpandedView: View {
             editedTitle = entry.displayTitle
             migrateOrphanedContentIfNeeded()
             resolveTranscriptModeIfNeeded()
+            // Signal that a Memory Detail is on screen so
+            // `HiMemTabView` hides its tab-shell FAB. Without this
+            // the shell FAB stacks above Memory Detail's own append
+            // FAB — the "two RABs" bug (July 11 2026).
+            MemoryDetailPresentationContext.shared.enter(memoryId: entry.id)
+        }
+        .onDisappear {
+            MemoryDetailPresentationContext.shared.exit(memoryId: entry.id)
         }
         // Rule #6 — one edit at a time. When the coordinator's
         // `activeEditId` changes to something other than the title or
@@ -321,7 +344,13 @@ struct EntryExpandedView: View {
                 updateMediaDescription(id: mediaId, text: newText)
             },
             onDeleteMedia: { mediaId in
-                lifecycle.deleteMediaReferences(ids: [mediaId])
+                // Delete clip always destroys per `Memory Detail ·
+                // unified editing model.md:66` (locked July 5 2026) —
+                // "Delete clip *destroys* (→ Recently Deleted); 'Where
+                // does this belong?' *relocates*." The remove-from-
+                // memory action lives on the placement sheet, not the
+                // delete button.
+                lifecycle.deleteMediaReference(refId: mediaId)
                 lifecycle.regenerateContent(forEntryId: entry.id)
             }
         ))
@@ -334,6 +363,23 @@ struct EntryExpandedView: View {
                 showManageTopics = false
             })
             .presentationDetents([.large])
+        }
+        .sheet(isPresented: Binding(
+            get: { relocatingClipId != nil },
+            set: { presented in if !presented { relocatingClipId = nil } }
+        )) {
+            if let id = relocatingClipId,
+               let ref = fetchRefForRelocate(id: id) {
+                PlaceClipSheet(
+                    ref: ref,
+                    sourceMemoryId: entry.id,
+                    onPlaced: {
+                        // A relocate action ran — regenerate the memory's
+                        // content since its clip set changed.
+                        lifecycle.regenerateContent(forEntryId: entry.id)
+                    }
+                )
+            }
         }
         // Capture-flow host attached to the List (NavigationStack-level
         // hosting controller), NOT the outer ZStack (`UIHostingController
@@ -787,6 +833,9 @@ struct EntryExpandedView: View {
                     removedMediaIds.insert(id)
                     applyEditsImmediately()
                 },
+                onRelocateClip: { id in
+                    relocatingClipId = id
+                },
                 onOpenVoice: { item in
                     audioPlayerForFile = AudioPlayerTarget(
                         mediaId: item.id,
@@ -1057,14 +1106,30 @@ struct EntryExpandedView: View {
     private func applyEditsImmediately() {
         let ids = removedMediaIds
         guard !ids.isEmpty else { return }
-        lifecycle.deleteMediaReferences(ids: ids)
+        // Delete always destroys per `Memory Detail · unified editing
+        // model.md:66`. Remove-from-memory is a separate placement
+        // action reached via "Where does this belong?".
+        for id in ids {
+            lifecycle.deleteMediaReference(refId: id)
+        }
         lifecycle.regenerateContent(forEntryId: entry.id)
         removedMediaIds = []
     }
 
     private func deleteNoteFragment(id: UUID) {
-        lifecycle.deleteMediaReferences(ids: [id])
+        lifecycle.deleteMediaReference(refId: id)
         lifecycle.regenerateContent(forEntryId: entry.id)
+    }
+
+    /// Fetches the MediaReference by id for the placement sheet.
+    /// PlaceClipSheet needs a concrete ref (not just an id) so its
+    /// title branches on `referencingMemoryCount`.
+    private func fetchRefForRelocate(id: UUID) -> MediaReference? {
+        let ctx = StorageService.shared.viewContext
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        return try? ctx.fetch(req).first
     }
 
     private func updateMediaDescription(id: UUID, text: String) {

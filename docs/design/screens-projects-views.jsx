@@ -42,6 +42,7 @@ function ScrProjectsList() {
           New project
         </div>
       </div>
+      <TabBar active="projects" />
     </PhoneScreen>
   );
 }
@@ -351,6 +352,95 @@ function ScrSuggestionsReview() {
   );
 }
 
+// A local serif heading (pricing-screens' SerifH isn't loaded on this canvas).
+function SerifTitle({ children, size = 22, style }) {
+  return (
+    <div style={{ fontFamily: PX.serif, fontWeight: 400, fontSize: size, lineHeight: 1.14, letterSpacing: -0.4, color: PX.ink, ...style }}>
+      {children}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 5. Project MEMBER, opened. Tapping a memory card in a project
+//    opens the memory (a real, interactive object — not a dead row).
+//    Its bottom carries TWO full-width actions, per the buttons lock:
+//      • Remove from project (Recycle) — memory LEAVES this project,
+//        survives in the library. The disassociation the user asked for.
+//      • Delete memory (Trash) — destroys → Recently Deleted.
+//    A memory in 0 projects simply won't show the first button.
+// ─────────────────────────────────────────────────────────────
+function ScrProjectMemberOpen() {
+  return (
+    <PhoneScreen>
+      {/* nav — back to the project it was opened from */}
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '6px 14px 8px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: PX.accent, fontSize: 15 }}>
+          <svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 8l7 7"/></svg>
+          Foodies!
+        </span>
+        <span style={{ flex: 1 }} />
+        <span style={{ display: 'inline-flex', gap: 14, color: PX.ink3 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M8 11V2M4.5 5.5L8 2l3.5 3.5M3 12v8a1 1 0 001 1h12a1 1 0 001-1v-8"/></svg>
+        </span>
+      </div>
+
+      <div style={{ flex: 1, overflow: 'hidden', padding: '0 18px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 8 }}>
+          Jul 4 · 9:37 PM · Culinary Institute
+        </div>
+        <SerifTitle size={24} style={{ marginBottom: 10 }}>Culinary Institute</SerifTitle>
+
+        {/* which projects this memory is in — makes membership legible + editable */}
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: PX.ink4 }}>In</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minHeight: 30, padding: '0 11px', borderRadius: 10, background: PX.wash1, fontSize: 12.5, color: PX.ink }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={PX.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6a2 2 0 012-2h4l2 2h6a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+            Foodies!
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minHeight: 30, padding: '0 11px', borderRadius: 10, border: '1px dashed ' + PX.accent, fontSize: 12.5, fontWeight: 600, color: PX.accent }}>
+            <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M7 2v10M2 7h10"/></svg>
+            Add to project
+          </span>
+        </div>
+
+        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ai, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Spark size={12} color={PX.ai} /> Summary
+        </div>
+        <div style={{ fontSize: 14, lineHeight: 1.5, color: PX.ink, letterSpacing: -0.1, marginBottom: 18 }}>
+          You discussed a 400°-then-250° cheesecake with a deliberate wobble, and mentioned working at Bar Oliver in Manhattan. You talked about farm-to-table cooking with Ben, your waiter.
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {/* the two full-width fate actions — Remove (survives) then Delete (destroys) */}
+        <div style={{ paddingBottom: 8 }}>
+          <div style={{
+            minHeight: 50, borderRadius: 13, border: '1px solid ' + PX.accent, color: PX.accent,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            fontSize: 15.5, fontWeight: 600, letterSpacing: -0.1, marginBottom: 10,
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+            Remove from Foodies!
+          </div>
+          <div style={{ fontSize: 11.5, color: PX.ink3, textAlign: 'center', marginBottom: 18, lineHeight: 1.45 }}>
+            Leaves this project. The memory stays in your library.
+          </div>
+          <div style={{
+            minHeight: 50, borderRadius: 13, border: '1px solid ' + PX.danger, color: PX.danger,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            fontSize: 15.5, fontWeight: 600, letterSpacing: -0.1,
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
+            Delete memory
+          </div>
+        </div>
+      </div>
+    </PhoneScreen>
+  );
+}
+
 Object.assign(window, {
   ScrProjectsList, ScrProjectDetail, ScrProjectSummarized, ScrSuggestionsReview,
+  ScrProjectMemberOpen,
 });

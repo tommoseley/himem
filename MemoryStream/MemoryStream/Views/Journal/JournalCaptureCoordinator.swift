@@ -134,4 +134,89 @@ struct JournalCaptureCoordinator {
             return newId
         }
     }
+
+    /// Same dispatch as `createNewMemory(from:viewModel:seedNote:)`
+    /// but routes through `EntryLifecycleService` directly. Used by
+    /// the tab-level `HiMemTabView` capture flow, which shouldn't own
+    /// a `JournalViewModel` (a second VM instance duplicates the
+    /// `NSManagedObjectContextObjectsDidChange` observer and forces
+    /// a redundant main-thread `loadEntries()` on every Core Data
+    /// change — noticeably harmful during CloudKit import churn).
+    ///
+    /// The `viewModel`-based variant above updates the feed via
+    /// `viewModel.loadEntries()` for its own subscribers; this variant
+    /// relies on `JournalView`'s own viewModel to observe the Core
+    /// Data change and refresh — one observer, one fetch.
+    @discardableResult
+    func createNewMemory(
+        from item: CapturedItem,
+        lifecycle: EntryLifecycleService,
+        seedNote: String?
+    ) -> UUID? {
+        switch item {
+        case .voice(let filename, let transcript):
+            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard filename != nil || !trimmed.isEmpty else { return nil }
+            return lifecycle.save(
+                content: trimmed,
+                inputType: .voiceInApp,
+                voiceFilename: filename
+            )
+        case .photo(let id):
+            return lifecycle.save(
+                content: "",
+                inputType: .camera,
+                mediaCaptures: [(id, .image)]
+            )
+        case .video(let id):
+            return lifecycle.save(
+                content: "",
+                inputType: .camera,
+                mediaCaptures: [(id, .video)]
+            )
+        case .note(let text):
+            let body: String
+            if let pending = seedNote, !pending.isEmpty {
+                body = pending + (text.isEmpty ? "" : "\n\n" + text)
+            } else {
+                body = text
+            }
+            guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            let newId = lifecycle.save(content: body, inputType: .typed)
+            if let id = newId {
+                _ = try? lifecycle.createNoteFragment(forEntryId: id, text: body)
+            }
+            return newId
+        case .attach(let items):
+            guard !items.isEmpty else { return nil }
+            return lifecycle.save(content: "", inputType: .camera, mediaCaptures: items)
+        case .voiceSession(let clips, _):
+            guard let first = clips.first else { return nil }
+            let newId = lifecycle.save(
+                content: first.transcript,
+                inputType: .voiceInApp,
+                voiceFilename: first.audioFilename,
+                voiceCapturedAt: first.capturedAt
+            )
+            if let entryId = newId {
+                for clip in clips.dropFirst() {
+                    lifecycle.append(
+                        entryId: entryId,
+                        additionalContent: clip.transcript,
+                        voiceFilename: clip.audioFilename,
+                        voiceCapturedAt: clip.capturedAt
+                    )
+                }
+            }
+            for clip in clips {
+                ClipLocationResolver.stamp(
+                    osIdentifier: clip.audioFilename,
+                    latitude: clip.latitude,
+                    longitude: clip.longitude,
+                    in: StorageService.shared.viewContext
+                )
+            }
+            return newId
+        }
+    }
 }

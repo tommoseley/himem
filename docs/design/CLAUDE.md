@@ -30,6 +30,7 @@ Whenever you finish a substantial piece of work, look at the universal section. 
 - **Never blame the user.** "We couldn't reach…" never "You are offline."
 - **No emoji** in copy or design specimens. (Brand-typographic exceptions like a stylized `<em>` letterform are not emoji.)
 - **Plain English wins.** No "leverage," no "ecosystem," no "delight."
+- **Recognition over generation; lead with signal, never bury the rest (locked July 4 2026).** The AI's job is to *reduce the cost of starting*, not to organize for the user. Present **recognizable proposals**, never a blank prompt — approving a cluster is far cheaper than creating one from scratch. But a proposal is only calming if it's trustworthy: a confident *wrong* proposal is worse than none (it converts recognition back into detect-and-undo). So **under-suggest** — Honest-Label discipline applies to every AI proposal. And **surface the signal without hiding the rest**: a filter the user trusts is *additive* ("here's what stood out"), a filter they fear is *subtractive* ("I decided what you don't need to see"). The escape hatch ("nothing's lost, it can wait") is the precondition that makes signal-forward feel calm instead of controlling. Applies to every AI surface — Sort, draft-organize, find-the-thread. *Origin: the Captured Clips workbench / Sort resolution — see `Captured Clips · session-first · spec.md` v3.*
 
 ## Design language — Crucible
 
@@ -103,7 +104,7 @@ HiMem has *two distinct capture modes*. These are properties of **intent**, not 
 
 **Structured capture** — The user *intentionally* creates a Memory. They enter a reflective space. Clips and media flow into a container that already exists or is created on the spot. Memory-oriented from the first tap. *Today: phone direct-voice composer, phone append composer, iPad (when it ships).*
 
-**Ad-hoc capture** — The user catches fragments. Brainstorms. Doesn't organize yet. Session-oriented; structure comes later via consolidation. *Today: watch.* *Future possibilities (don't design for these now): a Studio quick-capture button; a phone widget; a Siri shortcut that fires into the session inbox instead of into a new Memory.*
+**Ad-hoc capture** — The user catches fragments. Brainstorms. Doesn't organize yet. Session-oriented; structure comes later via consolidation. *Today: watch, **and the phone Clips-tab FAB** (added July 10 2026 — see the context-aware FAB rule below).* *Future possibilities (don't design for these now): a Studio quick-capture button; a phone widget; a Siri shortcut that fires into the session inbox instead of into a new Memory.*
 
 The boundary isn't watch-vs-phone. It's "I'm capturing inside a container I'm building" vs "I'm catching something to sort out later." Both modes will exist on multiple surfaces over time. Don't bake "watch = ad-hoc" into anything fundamental.
 
@@ -131,12 +132,15 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 - **Next clip (MVP)**: bottom-right ochre glyph paired with Stop & save. One tap commits the current clip and starts a new one — counter resets to 0:00, waveform never pauses, haptic pulse confirms. Persistent `Clip N · on a roll` state line under the timer. Each tap = one new Clip (not a new Memory); clips group into one Memory on phone via existing session rules. Min clip 2s (debounced below). 5-min cap is per-clip, not per-roll. Cancel-after-Next discards only the current unfinished clip — earlier clips already committed. Dims to *Sync soon* at 49/50 unsynced. **Same affordance ships on phone direct-voice composer and phone append composer** in MVP — capture rules must be platform-uniform. See `On a roll · spec.md` for cross-platform model and `Watch · spec.md` for the watch-specific layout.
 
 ### Phone
-- **The Memories list is the landing surface.** Reverse-chronological, grouped by the day each memory happened (Mon June 8, Wed June 3…); the **Memories ⇄ Projects** segmented control sits in the header. No auto-open of inbox. *(There is no separate "Today" page — that earlier concept was absorbed by the Memories list, which lands on recent thinking and is never empty. An "on this day" resurfacing card could be added atop Memories later, but it's a feature, not the home.)*
-- Inbox status surfaces as a **banner card pinned at top of the Memories list** when count > 0 (e.g. "2 new from Apple Watch · Tap to review").
-- **Captured Clips** reachable from Settings always, including count of 0.
+- **Three primary objects: Clips · Memories · Projects** (Evidence · Context · Intent), a three-tab segmented control in the capture→shape→build order. *(Decision July 8 2026 — see `HiMem · the shaping model.md` § "The name question — resolved" and `HiMem · evidence and context.md`.)*
+- **Cold launch lands on Memories** (reverse-chronological, grouped by the day each memory happened) — what you open HiMem *for*. The last-used tab is remembered **only while the app stays alive** (open *into* Clips after a capture session, return to it minutes later; a cold start is always Memories).
+- **Clips is the first-class evidence surface** (retires the standalone "Captured Clips" window). Default view = AI suggestions + everything not-yet-connected (incl. clips still downloading from the phone), no architecture word exposed; reveals to All / Voice / Photos / Notes. **Capture returns to Clips.** Tapping a clip opens the clip as the primary object (transcript · media · date · **Referenced in: [memories]** · Projects).
+- **New-arrival status is a dot on the Clips tab, not a banner** (banner retired July 10 2026 — it predated the three-tab model, when Captured Clips was a hidden window; now Clips is an always-visible tab, so a banner pointing at it is redundant chrome on the reflective Memories surface). The dot answers *"should I look?"* — **presence, not a count** (a number implies an obligation to zero-out, the guilt-inbox we reject). The dot represents **new, unseen arrivals** and **clears when the user opens Clips** — it does *not* track all-unplaced (that work is carried by the persistent default **New** filter, which still opens to the unshaped clips after the dot clears). Badge/filter split: badge = *"something arrived"* (transient), New filter = *"what's still unshaped"* (persistent).
+- **App-icon badge: none.** iOS only supports a numeric app-icon badge, and a number reintroduces counting — so HiMem shows **no app-icon number**. The passive Channel A notification already carries "something arrived" externally; the in-app dot handles the rest. (This resolves the previously-"under review" badge question: dot in-app, nothing on the home-screen icon.)
+- **Active Navigation Tap (status sheet) — required for v1, not optional.** First tap on a tab navigates; tapping the *active* tab scrolls to top if scrolled, and — when already at top — presents a **status sheet** for that section. On Clips the sheet shows *new arrivals by source (Watch / iPhone / Siri), what's processing (downloading / organizing), and what's available to shape (loose count)* plus quick filter shortcuts — **no census/vanity counts** (no "247 referenced"; the sheet is *what needs me*, not *how much I have*). This is a required build; what's optional is only the *user's* discovery of it — status also lives in the dot + default filter, so the app works for someone who never taps twice. See `Kingfisher · North Star.md` · "Calm by default, density on demand."
 - **Audio is the source of truth.** Never auto-delete original audio. Transcripts are derivative and regeneratable. *(Where that audio physically lives → see **Media storage** below.)*
-- **iPhone FAB voice = direct memory** (not inbox-routed). Inbox is Watch-only.
-- One canonical name: **"Captured Clips"** in app chrome; **"X new from Apple Watch"** only in banner copy.
+- **The FAB is context-aware — the active tab declares capture intent (locked July 10 2026, supersedes "iPhone FAB = direct memory; inbox Watch-only").** On **Clips**, + captures an **ad-hoc clip to the bench and stays on Clips** — the new clip drops into the list already in view (recognition, *no navigation*). On **Memories**, + opens the structured memory composer. On **Projects**, + acts on the unit of the surface you're on: at the **project list** level it creates a **new project** (name + goal sheet — the same sheet the "+ New project" list row opens, a second path to one sheet, not a new capability); **inside a project** it creates a **memory in that project** (in-context capture). The generalizing rule: **+ creates one of whatever you're looking at a collection of** — Clips list → a clip, Memories list → a memory, Projects list → a project, inside a project → a memory-in-that-project. The Projects-list + is the one place + is *not* capturing a thought (it makes an empty container, not a caught thought) — that's fine because no thought is in flight while browsing the project list; CC must **not** force it into the capture pipeline. Rationale: the tab is a *visible, persistent* declaration of headspace, so reading it is not "magic" — teleporting the user to another tab after they capture *is*. Both destinations honor capture-now-decide-later, and nothing is lost across them (bench clips promote to memories; memories accept more clips), so the escape hatch makes context-sensitivity safe. The old lock ("iPhone FAB = direct memory, inbox Watch-only") was made when Clips was a *hidden window* with no tab to stand on; now that Clips is a first-class peer surface, phone ad-hoc capture has a natural home — this catches the lock up to the *intent-is-not-platform* principle, it doesn't break it. **Corollary: the bench is no longer Watch-only** — clips arrive from the Watch *and* the phone Clips FAB, so bench headers/status must be **source-agnostic** ("N new clips", never "N from your Watch"); source is per-clip metadata (a small Watch/phone glyph on the card), never the headline.
+- One canonical name: **"Captured Clips"** in app chrome. (The old "X new from Apple Watch" banner copy is retired — arrival status is now the Clips-tab dot; see the arrival-status bullet above.)
 
 ### Data custody (locked principle, June 2026)
 
@@ -152,15 +156,6 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 **Why this is buildable now, not a rebuild:** there is no backend holding user content to tear down, because there isn't one. CloudKit private DB already syncs and survives reinstall today; the work is (a) moving media into the iCloud Files container and (b) keeping the structured data in the *private* database (Option A — see chat June 2026). Option B (serialize transcripts/projects as files too, drop CloudKit) was rejected: no privacy gain over A — the private DB was never ours — at the cost of CloudKit's sync + query engine.
 
 **Resolves a conflict with `docs/design/Storage architecture · CLAUDE.md` (flagged June 19 2026).** That doc's "v2 direction" section described retiring CloudKit and making every memory a file as a *locked* next step — i.e. Option B — and justified it as "closing the remaining custody surface." **That justification is false and the locked status is killed:** there is no remaining custody surface to close, because the CloudKit private DB was never in our custody (the whole point of Option A). Option A is the single locked storage answer for v1 and beyond. The files-as-source-of-truth idea survives **only** as an explicitly *not-locked* future bet, and **not on privacy grounds** — its real (and only) value is tangible ownership + portability ("a journal the user can open in Files.app and take elsewhere"), a legibility/marketing direction that trades away CloudKit's sync + query engine and has not been costed. CC action: demote the storage doc's v2 section from "locked" to "candidate, portability-not-privacy," so two docs don't both claim "locked" on opposite verdicts.
-
-**What it would actually cost (so the candidate doesn't get revived as if free).** The agency story is real, but the build isn't a refactor — it's a fresh data-layer with these uncosted obligations:
-- **NSMetadataQuery-based change watching** across devices (CloudKit's free today).
-- **Conflict-copy UX** when two devices edit the same memory file (CloudKit serializes for us today).
-- **File-versioning for schema evolution** — every additive field becomes a forward/backward-compat migration we own (CloudKit's lightweight migration is free today).
-- **Loss of CloudKit's query engine.** The Memories list ranking, topic joins, and mention indices all re-serve from the local SQLite cache exclusively, with full consistency burden on us.
-- **User-mutable structured fields.** The media-bytes rule ("a missing file is a calm honest state") would need to extend to every field — hand-edited, broken, moved-out-from-under-the-app become first-class states for *every* memory attribute, not just the bytes.
-
-If revived seriously, the work begins with a costing pass on those five, **not** with implementation. None of them is a blocker; together they make the agency value the bar the move has to clear, instead of a free upside.
 
 ---
 
@@ -190,7 +185,7 @@ If revived seriously, the work begins with a costing pass on those five, **not**
 ### Naming
 - **Memory Box** is the canonical name for the user's archive (not "bin").
 - **Captured Clips** is the inbox of unprocessed Watch audio.
-- **Memory** is an Entry; multiple clips can become media on one Memory.
+- **Memory** is an Entry; a memory references 1–N clips, and **one clip can be evidence in many memories** (Clip↔Memory is many-to-many; the edge carries an optional annotation — "why this matters here"). A clip is *evidence*, stored once; memories/titles/summaries/topics/annotations are *context*. See `HiMem · evidence and context.md` (locked v1 ontology).
 - **Project** is an owner-created container of memories with a name and a goal field ("What are you building toward?"). See `Projects · MVP spec.md` for the full ruleset.
 
 ### Projects (locked, see `Projects · MVP spec.md`)
@@ -206,43 +201,30 @@ If revived seriously, the work begins with a costing pass on those five, **not**
 - **Tier:** Project Assist is a **Plus capability** — the Connect layer. Free gets **3 active projects**, built and managed by hand; Plus gets unlimited projects plus the growing-itself intelligence (related memories, suggested membership, find-the-thread synthesis, cross-project). A one-time Free *taste* of Find the thread, if offered, is a trial flag decided in the pricing doc — not a metered starter. Studio (post-launch) reads raw fragments + cross-project + structured output + export.
 - **AI blue, always.** AI Summary, the "Organized · review" card, sparkle glyph, confidence chips, suggestion "why" lines — all `#1E5C8E`, never ochre or amber. Shipping iOS code uses ochre/amber across multiple AI surfaces; this is a **uniform sweep, separate PR before TestFlight**, not a footnote on the Projects spec. Half-applied color rules are worse than uniformly-wrong ones. *(The old list-level "App is inferring" prompt is retired — see `AI Organize · spec.md §8.1`. Review is Memory-Detail-only.)*
 
-### Notifications (locked, May 2026 — revised)
+### Notifications (locked May 2026 · revised · Channel B retired July 7 2026)
 
-**Two independent channels. One pending notification per channel.** Each channel manages its own `UNNotificationRequest`; they can coexist. Cross-cutting rules at the bottom.
+**One channel only — Captured Clips arrivals. Passive. No inactivity nudge.** HiMem does not notify you about *absence*.
 
-#### Channel A · Captured Clips (default on)
+> **Why Channel B (Inactivity) was retired.** It fired after 24h of no capture — *"It's been a quiet day" / "Three days since you captured anything"* — which is precisely **the app raising the skipped thing**, the one posture `Kingfisher · North Star.md` forbids outright ("The app never raises the skipped thing; the person does… does not send the soft-voiced check-in. The stake is carried silently and surfaced only on pull."). Off-by-default opt-in was the old mitigation; the constitution's rule is absolute, so the channel is gone, not softened. It also contradicted our own App Store promise ("No streaks. No nudges."). The audit that caught it: July 7 2026.
+
+#### Channel A · Captured Clips (the only channel)
 - One pending notification at a time, representing the current inbox state.
-- **Always passive — never buzzes, never lights up the screen.** Uses `UNNotificationInterruptionLevel.passive` so the notification lands silently in Notification Center / on the lock screen but doesn't vibrate, doesn't fire a banner, doesn't wake the device. The badge does the reminder work; the notification is just a tappable handle to jump to Captured Clips.
-- **App in foreground** → no notification posted at all; the badge alone reflects state. The user is already looking at the app — no interruption surface needed.
+- **Always passive — never buzzes, never lights up the screen.** Uses `UNNotificationInterruptionLevel.passive` so the notification lands silently in Notification Center / on the lock screen but doesn't vibrate, doesn't fire a banner, doesn't wake the device. It is a tappable handle to jump to Captured Clips, nothing more.
+- **App in foreground** → no notification posted at all; the badge alone reflects state.
 - **App backgrounded or locked, first clip into an empty inbox** → post the passive notification.
 - **Subsequent arrivals while pending** → update the existing notification in place. Same `UNNotificationRequest` identifier, body re-rendered with current count ("4 voice clips waiting" → "5 voice clips waiting"), badge synced. Still passive.
 - **User clears the inbox** (review in app, tap notification, Mute action) → notification removed, badge cleared.
-- **No arbitrary caps.** No daily limit, no per-clip fire count, no automatic cooldown. Passive + one-pending + in-place-updates is the entire noise budget; everything that would normally need a cap is solved by never buzzing.
-- **Stale (>24h) is obsolete as a separate trigger** — the existing pending passive notification already represents the unreviewed inbox.
-
-#### Channel B · Inactivity (user opt-in)
-- Fires when **24h has elapsed since the last successful capture** (watch clip received OR memory created on phone).
-- **Cadence:** first nudge at 24h (sound + banner). Then silent for the rest of the first week — the pending notification stays visible but doesn't re-buzz. From 7d onward, re-buzzes weekly (at 7d, 14d, 21d, … since last capture). Each re-buzz updates the body text to current duration ("3 quiet days" → "1 quiet week" → "2 quiet weeks") via the same `UNNotificationRequest` identifier with `sound: .default`.
-- One pending notification at a time. Body re-renders silently as days tick by between re-buzz milestones.
-- **User opt-in.** Presented during onboarding (see below) alongside Channel A. No default value imposed — the user decides per-channel.
-- **A successful capture** clears Channel B's pending notification and resets the 24h timer.
-- **Copy is honest-label, not pushy.** "It's been a quiet day." / "Three days since you captured anything." / "Two quiet weeks." Never "Come back!" or "We miss you!"
-- **No badge.** Channel A owns the app icon badge.
+- **No arbitrary caps.** Passive + one-pending + in-place-updates is the entire noise budget.
+- **The badge is a dot, in-app only (resolved July 10 2026).** Earlier this was "under review." Resolved: the in-app **Clips tab shows a dot** for new unseen arrivals (presence, not a count), clearing when the user opens Clips; the **app icon shows no number** (a numeric badge is the only thing iOS allows there, and counting reintroduces the guilt-inbox). The passive notification is the only external arrival signal. See the Phone · arrival-status bullet.
 
 #### Onboarding · notification setup
-- One of the first onboarding screens asks the user which notifications they want — both channels presented with a one-line description and a toggle.
-- This is the in-app opt-in. The iOS system permission dialog fires immediately after, only if at least one toggle is on.
-- Defaults shown: Channel A toggled on, Channel B toggled off — but the user sees and confirms both, no silent enrollment.
-- Settings → Notifications surfaces the same two toggles for later changes.
+- The onboarding notifications screen now presents **one** toggle — Captured Clips arrivals (passive) — defaulted on, shown and confirmed (no silent enrollment). The iOS system permission dialog fires after, only if it's on.
+- Settings → Notifications surfaces the same single toggle.
 
-#### Cross-cutting (both channels)
-- **Quiet hours 10pm–7am local.** First-of-stretch push defers to 7am. Arrivals/updates during quiet hours update the deferred payload silently; it fires once at 7am with current state.
-- *Snooze 4h* and *Mute for today* are inline `UNNotificationAction` controls. Snooze suppresses **that channel** for 4 hours; Mute suppresses it through local midnight. Both clear that channel's pending notification.
-- Swipe-to-dismiss-silences is **NOT implementable** on iOS; don't spec it.
-- Foreground app: no push, badge only (Channel A keeps the badge live; Channel B doesn't badge).
-- Tap notification → opens the relevant surface (A → Captured Clips; B → Today).
-- Long-press → Manage → jumps to iOS Settings for that channel.
-- Focus modes respected via each channel — user can mute one without the other.
+#### Cross-cutting
+- **Quiet hours 10pm–7am local.** A first-of-stretch post defers to 7am; arrivals during quiet hours update the deferred payload silently and it lands once at 7am with current state. (Passive already means it never wakes the device — this only governs when it appears.)
+- *Mute for today* is an inline `UNNotificationAction` — suppresses through local midnight, clears the pending notification.
+- Tap notification → opens Captured Clips. Long-press → Manage → iOS Settings. Focus modes respected.
 
 - **AI Organize (locked, see `AI Organize · spec.md` for full rules)**
 - **AI is an organizational helper, not the product.** The summary's job is to give a memory a name its author will recognize six months later.
@@ -259,16 +241,26 @@ If revived seriously, the work begins with a costing pass on those five, **not**
 
 ### In-context capture — "capture where the memory was triggered" (post-v1 consideration, June 17 2026)
 
-*Not v1. Recorded so it isn't lost — a direct consequence of the perishability first principle.*
+*Mostly v1 now. **Project capture ships in v1** (the context-aware FAB, locked July 10 — see this file's FAB rule); **artifact capture remains post-v1.** The section is kept for the shared rationale. A direct consequence of the perishability first principle.*
 
 The insight: a **Project is not a folder you file into — it's a room full of cues.** Once a project exists, browsing it *triggers* recall ("I'm looking at the Naples photo of Dad → oh, the Cozumel sunburn story"). At that moment the fastest path to capture must be **one tap, in place**, because the trigger and the surrounding context are exactly what's about to pass. Forcing the user to leave the project, find global capture, record, then re-file is the canonical perishability violation — it asks them to carry the memory (and often the *associative chain* behind it) while operating the UI.
 
 Three entry points this implies (all preserve "capture first, organize later" — the project association is a *known destination*, not an organizing step):
 - **Global capture** — the main FAB / Watch / Memory Box. No project. Most common. *(ships in v1)*
-- **Project capture** — a "+ New memory" inside a project; the new memory is auto-associated with that project. The point isn't filing — it's that *the project was the trigger*. *(post-v1)*
+- **Project capture** — a "+ New memory" inside a project; the new memory is auto-associated with that project. The point isn't filing — it's that *the project was the trigger*. ***(ships in v1 — this is the context-aware FAB's "inside a project" behavior, locked July 10 2026 at the top of this file. The "post-v1" it once carried is superseded.)***
 - **Artifact capture** — "Remember this" on a photo / video / document; creates a memory linked to that artifact (and its project). The artifact is the memory cue; the workflow is *see → remember → capture*, not *add → annotate*. *(post-v1; connects to the photo-as-cue realization behind the App Store voice-first framing)*
 
 Design caution if/when built: it must feel like *"something else just came back to me while I'm here,"* never *"create memory → choose project"* (task-app behavior). The button protects the memory, it doesn't organize it. Anywhere a memory can be triggered — projects, photos, videos, search results, future collections/publishing surfaces — should support immediate capture. A secondary goal beyond preserving the *memory* is preserving the *momentum*: capture-in-place lets a cascade of associated recollections land one after another without the UI breaking the chain.
+
+### Idle-gap sessioning — "a session is a sitting, not a wrist-raise" (June 30 2026)
+
+*A direct consequence of perishability at the organizing end. The automatic rule is locked for the Captured Clips build; the explicit affordance is a post-v1 candidate. Full detail: `Captured Clips · session-first · spec.md` → Idle-gap sessioning.*
+
+Dogfood (dinner at the CIA, June 30) exposed it: five clips captured 6:09–6:18 PM were obviously *one dinner*, but each wrist-raise became its own session, so the day arrived as 13 one-clip cards and the user had to re-consolidate by hand. That is perishability failing at the *organizing* end — the thing that is one memory arrived as five decisions.
+
+- **Automatic rule (locked, no user action):** clips separated by less than an idle threshold (default 10 min, provisional) are one session; a longer gap closes it. **Silence is the boundary.** `rollGroupId` from On a roll always overrides. Deterministic — a clock, not a classifier — so it ships without the intent parser.
+- **Explicit affordance (candidate, post-v1):** *"hold a block open"* — a spoken/one-tap command that keeps one session open across longer-than-threshold gaps (a dinner across courses, a lecture with a break). The idle timer is still the safety net (auto-closes on a longer silence); there is **no mode to get trapped in** and nothing to remember to turn off. Never blocks capture to set up (create any named destination silently, tell the user after). Its voice-command form ("everything for the next hour is one block") is the first spoken *command* that is clearly not content — it forks the intent-parser question, which is the dependency that makes it post-v1.
+- The two need each other: strict automatic close would wrongly split a real dinner's between-course lulls; the hold-open affordance is the escape valve for exactly that case. Both are the same principle — **structure forms from the user's rhythm or one spoken breath, never from navigation** — the prospective sibling of retroactive clustering and the voice-declared sibling of in-context capture.
 
 ### Out of MVP (v2+)
 - On-device transcription on the watch.

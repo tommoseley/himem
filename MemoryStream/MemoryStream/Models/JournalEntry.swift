@@ -18,7 +18,13 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var longitude: NSNumber?
     @NSManaged public var locationName: String?
     @NSManaged public var extractedEntities: NSSet?
-    @NSManaged public var mediaReferences: NSSet?
+    /// Associative-edge set to `MemoryClipEdge`. Reads walk this; writes
+    /// go through `StorageService.createMediaReference` which creates
+    /// the edge atomically. Membership is exclusively encoded on the
+    /// edge per the v1 ontology (clip is evidence; interpretation lives
+    /// on the edge). No legacy `mediaReferences` shim — v3 is the only
+    /// model version.
+    @NSManaged public var edges: NSSet?
     @NSManaged public var inferenceSummary: InferenceSummary?
     @NSManaged public var organizePasses: NSSet?
     @NSManaged public var textSegments: NSSet?
@@ -177,9 +183,28 @@ extension JournalEntry {
         return set.sorted { $0.name < $1.name }
     }
 
+    /// Clips referenced by this memory, sorted by their per-memory
+    /// `orderInMemory` on the connecting `MemoryClipEdge` (falls back
+    /// to `linkedAt`, then `ref.createdAt`). Walks edges — the legacy
+    /// `mediaReferences` set is unused (v2 shim, retired in v3).
     var mediaReferencesArray: [MediaReference] {
-        let set = mediaReferences as? Set<MediaReference> ?? []
-        return set.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
+        edgesArray.compactMap { $0.clip }
+    }
+
+    /// Sorted list of `MemoryClipEdge`s linking this memory to its
+    /// clips. Ordering: `orderInMemory` ascending, then `linkedAt`
+    /// ascending as a stable tiebreaker.
+    var edgesArray: [MemoryClipEdge] {
+        let set = edges as? Set<MemoryClipEdge> ?? []
+        return set.sorted { lhs, rhs in
+            if lhs.orderInMemory != rhs.orderInMemory {
+                return lhs.orderInMemory < rhs.orderInMemory
+            }
+            // Nil-safe compare — `MemoryClipEdge.linkedAt` is optional
+            // at the Core Data level (see `MemoryClipEdge.swift`).
+            // Nil-linkedAt edges sink to the end via `.distantPast`.
+            return (lhs.linkedAt ?? .distantPast) < (rhs.linkedAt ?? .distantPast)
+        }
     }
 
     var textSegmentsArray: [TextSegment] {

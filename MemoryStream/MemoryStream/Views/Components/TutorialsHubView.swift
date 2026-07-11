@@ -1,11 +1,16 @@
 import SwiftUI
 import WatchConnectivity
 
-/// Tutorials hub — the replay surface for the locked five-tutorial
+/// Learn hub — the replay surface for the locked five-tutorial
 /// set per `docs/design/Tutorials · triggers spec.md` (June 10 2026)
 /// and `docs/design/Himem · Tutorials.html`. Opened from the `?`
-/// toolbar glyph in the main browsing header and from the `Tutorials`
+/// toolbar glyph in the main browsing header and from the `Learn`
 /// row in Settings → Display.
+///
+/// Copy: "Learn, not Help" (locked in `Kingfisher · North Star.md`).
+/// Help says something's wrong; Learn says *want to understand this?*
+/// The hub title is "Learn"; internal identifiers still say
+/// `Tutorial…` to avoid a mass rename with no functional payoff.
 ///
 /// **Five tutorials, locked:**
 /// 1. Capture · Next · Watch — phone capture + on-a-roll behavior + Watch hint
@@ -25,6 +30,11 @@ struct TutorialsHubView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        // Layout matches `docs/design/screens-settings.jsx` §ScrTutorialsHub:
+        //   - subheading paragraph
+        //   - Tour card (single row) SET APART at the top
+        //   - "BY FEATURE" section header (uppercase, tracked)
+        //   - concept-tutorials card (six rows with dividers)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Short walkthroughs you can replay any time. Opened from the **?** in the toolbar.")
@@ -35,33 +45,69 @@ struct TutorialsHubView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 14)
 
-                VStack(spacing: 0) {
-                    ForEach(Array(TutorialCatalog.all.enumerated()), id: \.element.id) { idx, entry in
-                        NavigationLink {
-                            entry.destination
-                        } label: {
-                            TutorialsHubRow(entry: entry)
-                        }
-                        .buttonStyle(.plain)
-                        if idx < TutorialCatalog.all.count - 1 {
-                            Divider().background(Crucible.Color.hairline)
-                                .padding(.leading, 68)
-                        }
-                    }
-                }
-                .background(Crucible.Color.card)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Crucible.Color.hairline, lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 16)
+                tourCard
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+
+                Text("By feature")
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(1.4)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .padding(.horizontal, 22)
+                    .padding(.bottom, 8)
+
+                conceptsCard
+                    .padding(.horizontal, 16)
             }
             .padding(.bottom, 40)
         }
         .background(Crucible.Color.sunk)
-        .navigationTitle("Tutorials")
+        .navigationTitle("Learn")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The tour row on its own — anchored coachmark walkthrough, set
+    /// apart per `Tutorials · triggers spec.md`.
+    @ViewBuilder
+    private var tourCard: some View {
+        NavigationLink {
+            TutorialCatalog.tour.destination
+        } label: {
+            TutorialsHubRow(entry: TutorialCatalog.tour)
+        }
+        .buttonStyle(.plain)
+        .background(Crucible.Color.card)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Crucible.Color.hairline, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// The concept tutorials — one card with dividers between rows.
+    @ViewBuilder
+    private var conceptsCard: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(TutorialCatalog.byFeature.enumerated()), id: \.element.id) { idx, entry in
+                NavigationLink {
+                    entry.destination
+                } label: {
+                    TutorialsHubRow(entry: entry)
+                }
+                .buttonStyle(.plain)
+                if idx < TutorialCatalog.byFeature.count - 1 {
+                    Divider().background(Crucible.Color.hairline)
+                        .padding(.leading, 68)
+                }
+            }
+        }
+        .background(Crucible.Color.card)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Crucible.Color.hairline, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }
 
@@ -129,7 +175,28 @@ private struct TutorialsHubRow: View {
 /// is intentionally not in the hub (by the time a user could replay
 /// it, they've already accepted or declined the install).
 enum TutorialCatalog {
-    static let all: [TutorialCatalogEntry] = [
+    /// The tour row per `Tutorials · triggers spec.md` §"The '?' toolbar
+    /// entry + Learn hub": "Take a tour of the screen — 'What each
+    /// button and area does' (the anchored coachmark walkthrough — set
+    /// apart at the top; 'Show me around' on the empty home launches
+    /// the same thing)."
+    ///
+    /// The coachmark tour surface isn't built yet; wire this to the
+    /// Capture tutorial as the canonical "how HiMem works" tour so the
+    /// row lands somewhere honest until the coachmark ships. Post-launch
+    /// this becomes the contextual coachmark tour keyed to the screen
+    /// the user came from.
+    static let tour = TutorialCatalogEntry(
+        id: "screen-tour",
+        title: "Take a tour of the screen",
+        subtitle: "What each button and area does",
+        systemImage: "hand.point.up.left.fill",
+        tint: .accent,
+        isPlusOnly: false,
+        destination: AnyView(CaptureTutorialView())
+    )
+
+    static let byFeature: [TutorialCatalogEntry] = [
         TutorialCatalogEntry(
             id: "capture",
             title: "Capturing a memory",
@@ -174,6 +241,15 @@ enum TutorialCatalog {
             tint: .accent,
             isPlusOnly: false,
             destination: AnyView(WatchStoryTutorialView())
+        ),
+        TutorialCatalogEntry(
+            id: "siri",
+            title: "Capturing with Siri",
+            subtitle: "Hands-free, before it fades",
+            systemImage: "mic.badge.plus",
+            tint: .accent,
+            isPlusOnly: false,
+            destination: AnyView(SiriTutorialView())
         ),
         TutorialCatalogEntry(
             id: "storage",
@@ -707,6 +783,39 @@ struct TopicsTutorialView: View {
                 TutorialPoint(systemImage: "paintpalette", tint: .accent,
                               title: "Rename or recolor any time",
                               body: "Edit a topic in Settings — every memory in that topic updates with it. Topics are a living index, not a label gun.")
+            ],
+            ctaTitle: "Got it",
+            onCtaTap: { dismiss() },
+            footnote: "Replay from the ? in the toolbar.",
+            onDismiss: { dismiss() }
+        )
+        .navigationBarHidden(true)
+    }
+}
+
+/// Tutorial #6 — Capturing with Siri. Discovery-triggered per
+/// `Tutorials · triggers spec.md` (July 5 2026): auto-fires once on
+/// Today after `memoryCount >= 3` so the faster path only surfaces
+/// after the capture habit is established. Both phrases are All-tier;
+/// Plus adds background auto-organize (mentioned inline in the third
+/// point). Also replayable from the Learn hub.
+struct SiriTutorialView: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        TutorialPage(
+            eyebrow: "Capturing with Siri",
+            title: "Hands-free, before it fades.",
+            intro: "Two phrases keep HiMem within reach when your hands aren't — a thought that has to wait for the app is a thought that fades.",
+            points: [
+                TutorialPoint(systemImage: "mic.badge.plus", tint: .accent,
+                              title: "\u{201C}Record in HiMem\u{201D}",
+                              body: "Opens HiMem and starts recording right away. Best for a longer thought — talk as long as you need."),
+                TutorialPoint(systemImage: "text.bubble", tint: .accent,
+                              title: "\u{201C}Capture in HiMem\u{2026}\u{201D}",
+                              body: "Dictate a short thought straight to Siri — never opens the app. Good for a one-liner while you're on the move."),
+                TutorialPoint(systemImage: "sparkles", tint: .aiBlue,
+                              title: "Plus organizes it in the background",
+                              body: "On Plus, dictated notes get a title, summary, and topics drafted automatically. Free keeps them as raw notes until you tap Organize.")
             ],
             ctaTitle: "Got it",
             onCtaTap: { dismiss() },

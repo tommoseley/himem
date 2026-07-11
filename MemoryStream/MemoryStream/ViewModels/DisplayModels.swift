@@ -177,6 +177,12 @@ struct MediaDisplayItem: Identifiable, Equatable {
     /// Bishop St, Bluffton". Nil while resolve is in flight, for
     /// legacy clips, and for `.note` fragments.
     var placeName: String? = nil
+    /// Number of memories referencing this clip via `MemoryClipEdge`.
+    /// Drives the Memory-Detail per-clip Delete verb split — when > 1
+    /// the button reads "Remove from this memory" (drops one edge) vs.
+    /// "Delete clip" (destroys the clip) when 1. See
+    /// `docs/design/HiMem · evidence and context.md`.
+    var referencingMemoryCount: Int = 1
 }
 
 // MARK: - Tag Display Model

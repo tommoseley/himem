@@ -13,7 +13,7 @@
 //   4 Photos               PHPhotoLibrary.request…          optional
 //   5 Camera               AVCaptureDevice.requestAccess    optional
 //   6 Location             CLLocationManager.requestWhenIn… optional
-//   7 Notifications        UNUserNotificationCenter.req…    optional · two channels
+//   7 Notifications        UNUserNotificationCenter.req…    optional · one channel
 //
 // Required = Sign in, Microphone, Speech. The rest are skippable and, if
 // denied, show a calm "turn this on later in Settings" and continue.
@@ -410,9 +410,10 @@ function ScrW6Location() {
 }
 
 // ═════════════════════════════════════════════════════════════
-// PAGE 7 · Notifications (optional · two channels)
-// Channel A (Captured Clips, passive) ON by default; Channel B
-// (Inactivity, opt-in) OFF. Both shown, then the iOS dialog fires.
+// PAGE 7 · Notifications (optional · one channel)
+// Captured Clips arrivals (passive) ON by default. Channel B (Inactivity)
+// retired July 7 2026 — an absence nudge is the app raising the skipped
+// thing, which the North Star forbids. One toggle, then the iOS dialog.
 // ═════════════════════════════════════════════════════════════
 function ChannelToggle({ on, title, body }) {
   return (
@@ -447,7 +448,7 @@ function ScrW7Notifications({ dialog = false }) {
           {G.bell}
         </div>
         <h1 style={{ fontFamily: PX.serif, fontWeight: 400, fontSize: 26, lineHeight: 1.18, letterSpacing: -0.5, color: PX.ink, margin: '20px 0 0', textWrap: 'pretty' }}>
-          Two kinds of nudge. You choose both.
+          One quiet note. Nothing else.
         </h1>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
           <ChannelToggle
@@ -455,16 +456,14 @@ function ScrW7Notifications({ dialog = false }) {
             title="When clips arrive"
             body="A quiet, silent note when Watch clips are waiting. No buzz."
           />
-          <ChannelToggle
-            on={false}
-            title="If it’s been a while"
-            body="An optional reminder after a quiet stretch. Off unless you want it."
-          />
+        </div>
+        <div style={{ fontSize: 12.5, color: PX.ink3, lineHeight: 1.5, marginTop: 14, padding: '0 2px' }}>
+          That’s the only notification HiMem sends. We’ll never nudge you about a quiet day — this is your journal, not a streak.
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ paddingBottom: 30, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ fontSize: 11.5, color: PX.ink3, textAlign: 'center', lineHeight: 1.45, padding: '0 8px' }}>
-            iOS will ask once. You can change either of these in Settings later.
+            iOS will ask once. You can change this in Settings later.
           </div>
           <button style={{ height: 52, borderRadius: 14, border: 'none', cursor: 'pointer', width: '100%', background: PX.accent, color: PX.accentInk, fontSize: 16, fontWeight: 600, letterSpacing: -0.2 }}>
             Turn on notifications
@@ -780,8 +779,8 @@ function WizardNotes() {
         <p style={p}>A returning user already made these choices — re-walling them through seven pages is theater. Reinstall is <strong style={strong}>Apple auth → Restore → Today</strong>. Apple sign-in proves it’s the right person; then we <strong style={strong}>honestly show the memories coming back from iCloud</strong>, counted as they land. Anything iOS revoked on uninstall is re-requested <em>in context at first capture</em>, never as a fresh cascade. The restore <em>is</em> the wait-cover here — not a distraction from the wait, but the reassuring truth of it.</p>
       </div>
       <div style={card}>
-        <h3 style={h3}>Two notification channels</h3>
-        <p style={p}>Page 7 shows both toggles before the iOS ask: <strong style={strong}>“When clips arrive”</strong> (passive, silent — on) and <strong style={strong}>“If it’s been a while”</strong> (inactivity — off). The user confirms both; the system dialog fires only if at least one is on. Mirrors the locked two-channel model.</p>
+        <h3 style={h3}>One notification channel</h3>
+        <p style={p}>Page 7 shows a single toggle before the iOS ask: <strong style={strong}>“When clips arrive”</strong> (passive, silent — on). The old inactivity channel (“If it’s been a while”) was retired July 7 2026 — an absence nudge is the app raising the skipped thing, which the North Star forbids.</p>”</strong> (inactivity — off). The user confirms both; the system dialog fires only if at least one is on. Mirrors the locked two-channel model.</p>
       </div>
     </div>
   );

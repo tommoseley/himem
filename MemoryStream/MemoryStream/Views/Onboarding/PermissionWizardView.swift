@@ -28,8 +28,7 @@ struct PermissionWizardView: View {
 
     @State private var step: WizardStep = .apple
     @State private var editedName: String = ""
-    @State private var notifyClipsOn: Bool = true   // Channel A, locked notif spec default ON
-    @State private var notifyNudgeOn: Bool = false  // Channel B, locked notif spec default OFF
+    @State private var notifyClipsOn: Bool = true   // Channel A (Captured Clips), locked default ON
     @State private var blockedReason: RequiredPermission? = nil
 
     // Restore flow state — populated on the reinstall path. The
@@ -81,7 +80,6 @@ struct PermissionWizardView: View {
                     case .location:     locationPage()
                     case .notifications: ScrW7Notifications(
                                             clipsOn: $notifyClipsOn,
-                                            nudgeOn: $notifyNudgeOn,
                                             onBack: { withWizardAnim { step = .location } },
                                             onSkip: { withWizardAnim { step = .land } },
                                             onContinue: handleNotifications)
@@ -315,12 +313,12 @@ struct PermissionWizardView: View {
     }
 
     private func handleNotifications() async {
-        if notifyClipsOn || notifyNudgeOn {
+        // Channel A (Captured Clips arrivals) is implicit — no persisted
+        // preference. Channel B retired 2026-07-07.
+        if notifyClipsOn {
             _ = try? await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound, .badge])
         }
-        // Persist Channel B preference; Channel A is implicit.
-        UserDefaults.standard.set(notifyNudgeOn, forKey: NotificationService.Keys.notifyDailyNudge)
         await advance(to: .land)
     }
 
@@ -348,10 +346,9 @@ struct PermissionWizardView: View {
 
     /// Returns the next step if `current` should be skipped (permission
     /// already granted), or nil if `current` is the right step to land
-    /// on. Notifications is special-cased: skip only when iOS auth is
-    /// granted AND the user previously set the Channel B (inactivity
-    /// nudge) preference, since the page is the only surface that
-    /// captures Channel B opt-in.
+    /// on. Notifications is skipped once iOS auth is granted — no
+    /// per-channel preference to capture now that Channel B is
+    /// retired (2026-07-07).
     ///
     /// **Debug bypass.** When `AuthService.debugForceFullWizard` is set
     /// (via Settings → Debug → Reset onboarding), this returns nil for
@@ -377,8 +374,7 @@ struct PermissionWizardView: View {
             return (status == .authorizedWhenInUse || status == .authorizedAlways) ? .notifications : nil
         case .notifications:
             let settings = await UNUserNotificationCenter.current().notificationSettings()
-            let hasNudgePref = UserDefaults.standard.object(forKey: NotificationService.Keys.notifyDailyNudge) != nil
-            return (settings.authorizationStatus == .authorized && hasNudgePref) ? .land : nil
+            return settings.authorizationStatus == .authorized ? .land : nil
         case .apple, .name, .land, .restoring, .restoreDone:
             return nil
         }
@@ -1019,11 +1015,14 @@ struct ScrW1Name: View {
     }
 }
 
-// MARK: - Page 7 · Notifications (two-channel)
+// MARK: - Page 7 · Notifications (Captured Clips only)
 
+/// Channel B (inactivity nudge) retired 2026-07-07 per `CLAUDE.md`
+/// §Notifications — Kingfisher forbids the app raising the skipped
+/// thing. The page collapsed from a two-channel picker to a single
+/// Captured Clips toggle.
 struct ScrW7Notifications: View {
     @Binding var clipsOn: Bool
-    @Binding var nudgeOn: Bool
     let onBack: () -> Void
     let onSkip: () -> Void
     let onContinue: () async -> Void
@@ -1039,7 +1038,7 @@ struct ScrW7Notifications: View {
                     .overlay(G.bell.image.foregroundStyle(Crucible.Color.accent))
                     .padding(.top, 36)
 
-                Text("Two kinds of nudge. You choose both.")
+                Text("A quiet ping when your Watch clips land.")
                     .font(.system(size: 26, design: .serif))
                     .fontWeight(.regular)
                     .lineSpacing(2)
@@ -1050,12 +1049,7 @@ struct ScrW7Notifications: View {
                     channelRow(
                         on: $clipsOn,
                         title: "When clips arrive",
-                        body: "A quiet, silent note when Watch clips are waiting. No buzz."
-                    )
-                    channelRow(
-                        on: $nudgeOn,
-                        title: "If it\u{2019}s been a while",
-                        body: "An optional reminder after a quiet stretch. Off unless you want it."
+                        body: "A silent note on the lock screen when Watch clips are ready to review. No buzz, no streaks."
                     )
                 }
                 .padding(.top, 18)

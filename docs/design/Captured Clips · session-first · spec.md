@@ -2,7 +2,11 @@
 
 Operational surface. May 2026. Locked for v1.
 
+> **v4, July 8 2026 — this surface is now the `Clips` tab's default view.** "Captured Clips" is no longer a standalone window reached from Settings; it's the **default (New) view of the first-class `Clips` page** (Clips · Memories · Projects). See `HiMem · the shaping model.md` and `HiMem · evidence and context.md`. Two consequences that override older prose below: (1) the **per-card "Make a Memory" pill is retired** — the workbench/Sort model (below) is the resting state, and the vocabulary is intent-language ("Where does this belong?" / "Create one memory" / "Keep these · N memories") per `Kingfisher Language.md` §Vocabulary; wherever the v2 prose below says "Make a Memory pill inside every card," read it as the retired model. (2) There is **no "Settings → Captured Clips" entry** — the page is a tab. The mechanics (idle-gap grouping, expand-in-place, auto-exclude, day headers, Sort, dedup, set-aside) all stand.
+
 > **v2 of this spec, May 19 2026.** The earlier version described a session-detail screen with multi-select rings, a sliding bottom action bar, and "Bundle as memory" verbs. Building that produced screens we hated. This rewrite kills the drill-in screen, kills clip-level multi-select, and renames the action everywhere. If older code or design references contradict this doc, this doc wins.
+
+> **v3, July 4 2026 — the workbench model + Sort.** After several days of real dogfood use (20 clips across 3 days), the one-card-one-pill session list proved unusable: a wall of ochre, plus a road trip scattered across a dozen single-clip sessions with no way to combine them. This version reframes Captured Clips from a *queue* to a *workbench*, makes **Sort** (AI-proposed groupings) the bench's resting state, and **restores multi-select** as a relational "where does this belong" affordance — explicitly superseding v2's "no multi-select" rule (see *The workbench + Sort* below). v2's session-first mechanics (idle-gap grouping, expand-in-place, auto-exclude, Make-a-Memory verb) all still stand; v3 is a layer on top, not a replacement.
 
 ## Why this exists
 
@@ -18,13 +22,95 @@ Captured Clips shows ad-hoc clips grouped into sessions. Each session is one car
 
 ## Model
 
-- **A *clip* is one audio file.** Today: produced exclusively by the watch.
-- **A *session* is a deterministic grouping of clips** by time + location, plus the `rollGroupId` from On a roll (a UUID stamped at recording start, preserved across Next taps).
+- **A *clip* is one captured fragment — media-agnostic (locked July 11 2026).** A clip is *one thing caught*: a voice recording, a photo, or a typed note. **Not audio-only.** (The old "a clip is one audio file, produced exclusively by the watch" definition is retired — it predated the July 9 media-agnostic Clips lock and the source-agnostic FAB. Clips now arrive from the watch *and* the phone, as voice/photo/note.) Each clip carries a capture timestamp and a source glyph (watch/phone); type is per-clip metadata, never a reason to segregate it.
+- **A *session* is a deterministic grouping of clips** by an **idle-gap rule** (see *Idle-gap sessioning* below), plus the `rollGroupId` from On a roll (a UUID stamped at recording start, preserved across Next taps) as an override when present. Location is a secondary tiebreaker. **The rule groups by timestamp, not by media type** — a photo and a voice clip two minutes apart are *one sitting*, so they land in one session card together (a mixed "3 clips" card, not a voice card plus a stray photo row).
 - **Sessions are proto-Memories.** A session, on confirm, becomes a Memory. The session ID is retired; the Memory carries the audio segments forward.
 - **One session = one Memory, normally.** Manual split / merge is post-MVP. The default mapping is 1:1.
 - **A single-clip session is still a session.** Same card shape. No regression to per-clip UI for N=1.
 - **Accidental clips** (no speech detected, sub-2-second clips, palm-muted) are flagged at sync time and **auto-excluded from the bundle.** The card surfaces the exclusion count as a quiet line ("1 clip auto-excluded · no speech"). The user can include an excluded clip back from the expanded card view. They can also exclude a "good" clip the same way.
-- **No AI in the grouping itself.** Grouping is deterministic. AI helps with the title on bundle (existing rule, unchanged).
+- **Deterministic grouping has no AI; *Sort* is the AI layer above it.** The idle-gap rule (below) is a clock, not a classifier. **Sort** (below) is the AI proposal layer that groups across sessions by time+place and word-match (Free/on-device) or semantics (Plus). The two compose: idle-gap forms sessions; Sort proposes which sessions/clips belong to one Memory. Title-on-bundle AI is unchanged.
+
+## Idle-gap sessioning (locked June 30 2026)
+
+**Origin (dogfood, June 30):** a dinner at the CIA produced five separate clips between 6:09 and 6:18 PM — obviously *one sitting* — but each wrist-raise became its own session, so the day shattered into 13 one-clip cards and the consolidation burden landed entirely on the user. That is a perishability failure at the *organizing* end: the thing that is actually one memory (a dinner) arrived as five decisions. This rule makes a session mean *a sitting*, not *a wrist-raise*.
+
+### The automatic rule (no user action)
+
+- **Clips separated by less than the idle threshold belong to the same session; a gap ≥ the threshold closes it. Media type is irrelevant to the boundary — voice, photo, and note clips group together by timestamp** (a photo shot two minutes after a voice clip is the same sitting, and shares the card). Silence is the boundary. The dinner above arrives as **one card, five clips**, with zero effort.
+- **Default threshold: 10 minutes of idle.** (Provisional — see open question below; a real dinner has 10–min+ lulls between courses, which the strict rule would wrongly split. This is exactly why the explicit hold-open affordance exists.)
+- **`rollGroupId` always overrides.** An On-a-roll roll is one session regardless of gaps — the user already declared it as continuous.
+- **Still deterministic, still no AI.** The threshold is a clock, not a classifier. This replaces “by time + location” with a named, testable boundary; location stays only as a tiebreaker when two rolls overlap in time.
+- **Retroactive on sync.** Grouping runs on the phone after clips arrive, so late-syncing watch clips fold into the correct session by their capture timestamps, not their arrival order.
+- **Side benefit:** fewer cards means fewer full-width ochre *Make a Memory* pills stacked down the list — directly easing the “wall of ochre” the per-card pill produces on a busy day.
+
+### The explicit affordance — “hold a block open” (candidate, not v1)
+
+For moments the user *knows* are one sitting but that span longer-than-threshold gaps (a dinner across courses, a lecture with a break, a museum walkthrough):
+
+- A spoken or one-tap **“start a block”** holds a single session open across gaps that would otherwise close it. Everything captured until the block ends joins one session.
+- **The idle timer is still the safety net** — the block auto-closes after a longer idle stretch (candidate: 10 min of *its own* silence, or a hard cap). There is **no mode to get trapped in** and **nothing the user must remember to turn off**; if they walk away, silence closes it.
+- **Never blocks capture to set up.** If the block names a not-yet-existing destination (“…into a new *CIA Dinner* memory”), create it silently and tell the user after — the words keep flowing.
+- **Voice-command form forks the intent-parser question.** “Hey HiMem, everything I say for the next hour is one block” is the first case where a spoken *command* is clearly not content. The parser must distinguish “start/hold a scoped session” from “a memory that happens to mention an hour.” That parser is the dependency that makes this post-v1; the **automatic idle-gap rule above ships without it.**
+- This is the *prospective* sibling of the retroactive clustering, and the voice-declared sibling of in-context capture (CLAUDE.md · “In-context capture”). Same principle — structure forms from the user’s rhythm or one spoken breath, never from navigation.
+
+## The workbench + Sort (locked July 4 2026)
+
+**Origin (dogfood, July 4):** 20 clips accumulated across three days. Processing them one card at a time — twenty identical *Make a Memory* cycles — was emotionally exhausting, and a road trip (Nazareth, Martin Guitar, Milford) was scattered across a dozen non-adjacent single-clip sessions with no way to combine them. The fix is not a new object; it's a reframe of what Captured Clips *is*, plus an AI proposal layer.
+
+### Captured Clips is a workbench, not a queue
+
+- **Persistent work surface, not an inbox to zero out.** Clips sit on the bench. You pick one up, combine it, set it aside, come back tomorrow. There is **no nag-to-zero**, no "20 unprocessed" guilt count, no decay. (Aligns with the passive-notification rule — the badge informs, never scolds.)
+- **Placement drains the bench.** A clip that lands in a Memory *leaves* Captured Clips — it found its home. The bench only ever holds **unplaced** raw material, so it shrinks as work gets done and grows as you capture. Nothing is deleted (the clip lives in its Memory now), so "never lose a thought" holds. This is the anti-hoard mechanic: the bench drains by placement, never by decay.
+- **Safe to leave because the transcript already caught the substance.** You can leave a clip for a month without anxiety — the words are already preserved (transcript + audio in the user's iCloud). This is what separates the workbench from a pile of un-transcribed voice memos, which rot because you must re-listen. Perishability was satisfied at capture; organizing can wait.
+
+### Sort is the bench's resting state
+
+- **Sort is not a button you run — it's what Captured Clips looks like now.** Open the bench and it already shows: **confident groupings at the top** ("a few of these seem to belong together"), **loose clips below** ("these can wait"). New clips flow into the picture as they arrive. There is no "Run Sort" action to press and wonder about, so there is no "did anything happen?" confusion (resolves the re-run problem directly).
+- **Dismissed groupings get an invisible set-aside flag.** Tapping *Not together* returns the clips to loose and marks that grouping so Sort won't re-propose it. The user never sees the flag; they just never get re-nagged with a grouping they already declined.
+- **Loose clips look like normal clips** — the distinction isn't stamped on the clip; it's that grouping suggestions live *above* them when they exist. This **merges the old Sort screen and the compact session list into one surface** — no separate mode.
+
+### Media clips — thumbnails, never a wall (locked July 9 2026)
+
+**Origin (dogfood, July 9):** once the inbox held real photos, the compact list rendered four identical “Photo · 5:39 PM” rows — a grey glyph and a timestamp, nothing to tell one from another. A photo has no transcript, so a text-shaped row is *useless* for it. The bench became unreadable exactly when it filled up. Rules:
+
+- **Photo and video clips render as real thumbnails, never a generic media glyph.** The thumbnail *is* the content preview — the visual equivalent of the transcript-preview line a voice clip gets. A grey camera glyph on a photo row is a bug.
+- **Same-minute bursts collapse into one row.** Multiple photos/videos captured in the same minute (or tight cluster) become a single **burst row**: a horizontal thumbnail strip (up to ~5, then `+N`), the time, the count (“4 photos · 5:39 PM”), and the place if known. A 12-photo burst is one scannable line, not twelve walls. Tapping the burst opens the set.
+- **A lone photo/video** is a compact row: thumbnail (~46px) + “Photo”/“Video” + time/place. Video thumbnails carry a small play badge.
+- **These render rules apply wherever a media clip appears — inside a mixed session card or standing alone.** A photo that idle-gap groups *into* a session renders as a thumbnail row **within that session card**, alongside the voice/note rows; a photo that is genuinely on its own (no other clip within the idle window) is its **own single-clip session** and renders as the compact lone row above. "Lone photo → compact row" describes a photo that *is its own session*, never a reason to pull a photo **out** of a session it belongs to by timestamp.
+- **Voice and note clips are unchanged** — they keep the transcript-preview line (the words are their thumbnail).
+- **Sort clusters show a thumbnail strip too** when their members are visual, so a proposed grouping of trip photos reads as *those photos*, not a text summary of them.
+- This is the media-typed expression of “lead with signal”: the signal in a photo is the image; show it.
+
+### Sort is the moment (one commit, not N)
+
+- **Clusters are pre-accepted proposals**, shown only when confident. Per-card affordances are **quiet secondaries**: *Adjust* (blue) and *Not together* (dismiss → clips fall back to loose).
+- **One ochre commit at the bottom: "Keep these · N memories."** Sort is the moment; each cluster is not its own moment. This obeys the button rule (one primary action, the loudest thing) and is *more* dread-killing — one tap finishes the batch. (Supersedes the per-card ochre "Keep together" button, which reintroduced a smaller wall of ochre.)
+  - **Commit behavior:** one tap makes **each cluster its own draft Memory**, batched — **no confirmation sheet(s) after.** The Sort screen *was* the review; opening N sheets (or one giant sheet) post-commit re-introduces the ceremony we're killing. Each new Memory is titled with **its proposed cluster name** and created as **Draft organized** (renameable/reviewable later in Memory detail). Loose clips are excluded from the commit and stay on the bench.
+- **Recognition, not repeated commitment.** The default is *yes*; the user acts only on the exceptions and finishes once. Recognition is dramatically cheaper than generation — that's why it feels good.
+
+### Clustering is Honest-Label, and tiered
+
+- **Only confident clusters appear. Never a vibe.** A blank suggestions area is honest; a confident wrong grouping is worse than none — it converts recognition back into detect-and-undo, which is *more* friction. Under-suggest.
+- **Free (Capture, on-device):** deterministic clusters — same time-window + same place, and literal word/entity match. "Why" strings are **templates filled from the signals** ("5 clips · one 18-minute stretch, same place"), not LLM prose. Runs offline, no server, no cost. Handles the obvious cases (dinner by time+place; "Hosta Hideaway" by word-match).
+  - **First-cut gates (tune in dogfood):** time+place = within ~90 min **AND** within ~200m, with **location a hard requirement** — a rolling time window single-links and blobs into an all-day cluster unless location breaks the chain. No/coarse location → don't cluster on time alone (tighten the time gate or skip); never invent a "same place" you can't confirm.
+  - **Word-match must be *distinctive*, not merely non-stopword.** ≥ 2 chars + stopword filter is too loose — it false-positives on common content words ("restaurant," "town," "lovely"), which reads as random and inverts the magic. Require the shared token to be a **proper noun or low-frequency term in the user's own corpus** (cheap TF rarity check), and prefer a **shared bigram or ≥ 4-char distinctive token** over any single content word. A missed match is invisible; a false one erodes trust in every card. *(Dogfood, July 4: "little town" surfaced as a cluster — exactly the generic-bigram false positive this gate must reject; "Pennsylvania," a proper noun, is the kind of token that should pass.)*
+- **One clip set = one candidate (overlap dedup — locked July 4 2026).** A cluster is defined by its **clip set**, not its reason. Multiple signals routinely point at the same clips (the Pennsylvania clips also share "little town"; a dinner matches on both time+place *and* a shared word). **Never show the same clips in two cards.** Before rendering, collapse candidates by clip-set overlap:
+  - **Identical or subset/superset sets → one candidate** (keep the union of clips).
+  - **Substantial overlap (≥ ~50% of the smaller set) → merge** into one candidate over the union. Minor incidental overlap (one shared clip between two otherwise-distinct groups) may stay separate, but **a clip may appear in at most one rendered candidate** — assign it to the strongest-signal cluster and remove it from the weaker.
+  - The merged candidate's **"why" names the strongest/most-distinctive signal** and may mention the runner-up ("3 clips · same afternoon in Pennsylvania"), rather than spawning a second card. Signal strength: proper-noun word-match ≈ time+place > distinctive bigram > single content word.
+  - **Why it matters:** within a single Sort pass, dedup prevents *Keep these · N memories* creating N overlapping memories from the same clips — double-filing at the moment of first placement, which is confusing. The pass must guarantee each clip lands in at most one *proposed cluster*. **Note (per `HiMem · evidence and context.md`):** a clip gaining a **second** memory *later* is legitimate and expected — that's the staged AI-association act, not a Sort bulk operation. Sort places once (primary memory); connection multiplies afterward. **each clip lands in at most one new memory.**
+- **Plus (Connect):** *semantic* clusters the deterministic pass can't see (the wine-thermos clip + the Q-tips clip both being "packing gear" without a shared word), cross-day thematic grouping, and better cluster *names*. The "grow themselves" intelligence.
+- **AI-blue is not a Plus signal.** Blue = "this is an inference moment," regardless of tier (on-device organize is already an AI-blue Free feature). Sort wearing Spark/`aiTint` on Free is consistent.
+
+### Lead with signal, never bury the rest
+
+- The bench shows the confident groupings **and** the loose pile, always, in plain sight. A filter you trust is *additive* ("here's what stood out"); a filter you fear is *subtractive* ("I decided what you don't need to see"). Never hide the rest — the loose pile is always one glance away. The "nothing's lost · they can wait" escape hatch is not decoration; it is the precondition that makes signal-forward feel calm instead of controlling.
+
+### Multi-select restored (supersedes v2's "no multi-select")
+
+- **v2 banned clip-level multi-select.** That rule predated multi-day, single-clip-session-across-days reality. Dogfood proved the need: hand-picking non-contiguous clips (four road-trip clips from different hours) into one Memory. **This section supersedes that ban.**
+- **The verb is relational, not file-manager.** For a loose clip, the action is **“Where does this belong?”** — a sheet: *New memory* · *Suggested* (conservative, Honest-Label, floated to top) · *Recent memories & projects* (flat — the user shouldn't have to know which type the destination is). Multi-select survives as a *mechanism underneath* "where does this belong," for batching several loose clips into one destination — not as the headline interaction.
+- **Selection = ring, never a check** (Crucible rule, unchanged). Select mode shows exactly one ochre commit (the bottom bar), so "one primary action per moment" holds there too.
 
 ## Two capture paradigms (background — see CLAUDE.md)
 
@@ -34,7 +120,7 @@ HiMem has two capture modes. **Structured** = user intentionally creates a Memor
 
 | Surface | What's there |
 |---|---|
-| Today header banner | "X new from Apple Watch" pinned banner when inbox count > 0. (Existing.) |
+| Memories arrival status | A **dot on the Clips tab** when new unseen clips have arrived (presence, not a count; clears on opening Clips). *(Retired the old "X new from Apple Watch" banner, July 10 2026 — redundant once Clips became an always-visible tab.)* |
 | **Captured Clips · session list** | The only top-level Captured Clips surface. Each session is one card. Cards expand in place. **No drill-in screen.** |
 | Bundle confirm sheet | The seam: operational hands off to reflective. AI-suggested title in Source Serif AI blue, topic chip, optional project chip. Same sheet as existing New-memory flow. |
 | Settings → Captured Clips | Top-level row, `N pending`. Never buried. (Existing.) |
@@ -46,10 +132,15 @@ HiMem has two capture modes. **Structured** = user intentionally creates a Memor
 ### Session list (the only top-level surface)
 
 - **Chrome.** Back `<` left, **"Done"** right. No eyebrow strip. No `✕`. No "Edit" mode.
-- **Title block.** "N from your Watch" (SF Pro 22, weight 600 — *not* Source Serif; this is operational). Sub-line: "M sessions · today, 12:17 – 3:36 PM" — pure metadata, no instruction.
+- **Title block.** "N new clips" (SF Pro 22, weight 600 — *not* Source Serif; this is operational). **Source-agnostic** (locked July 10 2026): clips now arrive from the Watch *and* the phone Clips-tab FAB, so the header describes bench *state* ("3 new clips"), never provenance ("3 from your Watch") — source is a per-card glyph, not the headline. Sub-line: "M sessions · today, 12:17 – 3:36 PM" — pure metadata, no instruction.
 - **No helper copy.** No "Tap to select. Swipe to delete." Affordances do their own teaching.
-- **Session cards stacked.** Each card carries, top to bottom:
-  - **Meta row.** "Thu May 28 · 3:36 PM · 4 clips · 0:12" in SF Pro 12 ink2. Date+time format is `EEE MMM d · h:mm a` (current year) or `EEE MMM d, yyyy · h:mm a` (older year) — same format as Memory Detail clip headers. No relative "Today / Yesterday" labels on session cards; the screen often spans days, and the absolute date avoids ambiguity at a glance. Location (when present) lives on a quieter second line below.
+- **Session cards stacked**, grouped under **day headers**. Because the inbox routinely spans multiple days (dogfood, July 4: 20 sessions across 3 days), a time-only meta row is ambiguous — "12:09 PM" could be any of three days. So:
+  - **Day-group headers** partition the list in reverse-chronological order: **"Today" / "Yesterday" / "Jun 30"** (SF Pro 13, weight 600, ink3, sticky optional). Matches the Memories-list day-grouping pattern — same vocabulary across surfaces.
+  - Under a day header, a card's meta row stays time-only ("3:36 PM · 4 clips · 0:12") — the header supplies the date, no repetition.
+  - **Cluster / Sort suggestion cards** (which float out of strict chronological order) carry the date **in the card meta** ("Jun 30 · 6:09–6:18 PM · 5 clips"), since a day header can't unambiguously cover them.
+  - **Rule:** every entry must be unambiguously dateable at a glance — via its day header (chronological list) or its own meta (floated cluster). Never time-only in a multi-day inbox.
+  Each card carries, top to bottom:
+  - **Meta row.** "3:36 PM · 4 clips · 0:12" in SF Pro 12 ink2. (Date comes from the day header above; a floated cluster card prefixes the date — see day-grouping above.)
   - **Transcript preview.** A single block of quoted speech, joined with "… " between clips, capped at ~3 lines and ellipsized. Not a list of separate quoted lines.
   - **Auto-exclude note** (when relevant). "1 clip auto-excluded · no speech." Muted ink2. Not a chip, not amber, not a warning — it's a note that we already handled it. Tappable to expand.
   - **Primary action.** `Make a Memory →` as a full-width pill *inside the card*, ochre tinted (cream text on ochre at 100%, OR ochre text on 8% ochre tint — pick the contrast level by hierarchy; on light cards we want the heavy variant). One verb. One tap. This is the action of the card.
@@ -79,7 +170,7 @@ HiMem has two capture modes. **Structured** = user intentionally creates a Memor
 
 - **Header**: `Cancel · New memory · Create` when destination is a new memory; `Cancel · Add to memory · Add` when destination is an existing memory.
 - **Destination toggle** (new, top of sheet, above session summary): segmented control with two options — `Make a new memory` (default) and `Add to existing memory`. Picking the second swaps the body content but stays on the same sheet.
-- **Session summary chip**: ochre-tinted, single line: "Thu May 28 · 3:36 PM · 3 clips · 0:12" with sub-line "1 clip excluded" when relevant. Shown in both modes.
+- **Session summary chip**: ochre-tinted, single line: "3 clips · 3:36 PM · 0:12" with sub-line "1 clip excluded" when relevant. Shown in both modes.
 
 **Make-a-new-memory mode** (default — existing behavior):
 
@@ -101,21 +192,26 @@ HiMem has two capture modes. **Structured** = user intentionally creates a Memor
 
 The bundle sheet is **where voice softens** from operational to reflective. Serif AI-blue title (or serif memory titles in the picker) is the first true thing the user sees on this sheet — they're moving from triage into Memory creation, or into an existing Memory's life.
 
-## Vocabulary (locked)
+## Vocabulary (locked · reconciled to `Kingfisher Language.md` July 7 2026)
+
+> **"Make a Memory" is retired along with the one-card-one-pill session list it lived on.** The workbench model speaks the intent language (`Kingfisher Language.md`): a loose clip asks **"Where does this belong?"** (placement), a recognized session's action is **"Create one memory"** (shaping — "Create" is the allowed conscious-creation exception), and a Sort cluster batch commits with **"Keep these · N memories."** "Make" is a banned software verb. The old rejected-variants below still hold — *and now "Make a Memory" joins them.*
 
 | Use | Don't use |
 |---|---|
-| **Make or Add To a memory** (button, every count of clips) | Bundle, Bundle as memory, Save as memory, Create memory, "Make a Memory" (predecessor; reframed to signal both destinations after Add-to-existing-memory landed) |
+| **Where does this belong?** (loose-clip placement — sheet title + the relational action) | Make a Memory, Make or Add to Memory, Assign, File |
+| **Create one memory** (turning a recognized session into a memory) | Make a Memory, Make Memory, Bundle, Save as memory |
+| **Keep these · N memories** (Sort batch commit) | Accept, Confirm, Make memories |
+| **Review** (an AI cluster's affordance — the AI observed, the human decides) | Accept, Approve, Create Memory |
 | **Captured Clips** (chrome name) | Inbox, Pending, Watch queue |
-| **N from your Watch** (title copy when N > 0) | Captured clips ready, Pending clips |
+| **N new clips** (title copy when N > 0 — source-agnostic) | N from your Watch, Captured clips ready, Pending clips |
 | **Auto-excluded** (status word for accidentals) | Accidental, Likely accidental as a primary label, Invalid |
 | **Session** (internal noun — appears in long-press menu as "Delete session") | Capture session, Recording, Batch |
 
-The word **Bundle** is retired in user-facing copy. It survives in this spec as engineering shorthand only.
+The words **Bundle** and **Make** are retired in user-facing copy. They survive in this spec as engineering shorthand only.
 
 ## Color (locked, restated)
 
-- **Ochre `#C64A1C`** is the only chromatic accent on this surface, used on the Make a Memory pill and nothing else at rest. Not on rings. Not on play glyphs. Not on borders.
+- **Ochre `#C64A1C`** is the only chromatic accent on this surface, used on the primary commit (*Create one memory* / *Keep these*) and nothing else at rest. Not on rings. Not on play glyphs. Not on borders.
 - **Amber `#B87322`** does **not** appear on this surface in normal state. "Auto-excluded · no speech" is muted ink2, not amber. Amber is reserved for things the user must act on; auto-exclusion is something we *already handled.*
 - **AI blue `#1E5C8E`** does not appear on the list. It enters when the bundle sheet opens (suggested title).
 - **Confirmed green** is for "Memory created" toast, not for inclusion toggles.
@@ -124,10 +220,10 @@ The word **Bundle** is retired in user-facing copy. It survives in this spec as 
 
 | State | What it looks like |
 |---|---|
-| **Empty inbox** | "Nothing new from your Watch" title, sub-line "Audio you record on your Apple Watch lands here." No action button. Reached from Settings → Captured Clips even when count = 0. No eyebrow. |
+| **Empty inbox** | "Nothing new yet" title, sub-line "Thoughts you catch on your Watch or the + button land here." No action button. Reached from Settings → Captured Clips even when count = 0. No eyebrow. |
 | **Inbox with sessions** | Default session list. |
 | **All-excluded session** | Card shows "All clips auto-excluded · no speech" instead of transcript preview. Make a Memory pill is disabled (60% opacity, non-tappable). The `Discard session` link appears on the *collapsed* card here — the only state where it does — because the primary action is dead and the user needs a visible exit. Same two-tap confirm. |
-| **Single-clip session** | Same card shape. Meta row reads "Thu May 28 · 3:36 PM · 1 clip · 0:01". Transcript preview is just that one quote. No regression to a different layout for N=1. |
+| **Single-clip session** | Same card shape. Meta row reads "3:36 PM · 1 clip · 0:01". Transcript preview is just that one quote. No regression to a different layout for N=1. |
 | **Sync in progress** | Card greys to 60% opacity while clips are still uploading. Sub-line "Syncing · N of M". Expand allowed; only already-synced clips show inside. |
 | **Stale (no recent capture)** | List shows in reverse-chrono regardless of age. No "old vs new" partitioning in MVP. |
 
@@ -194,12 +290,11 @@ Deferred — none block shipping:
 - Bulk delete by criteria (e.g. "delete all auto-excluded from yesterday").
 - "Discard all" — considered, deprioritized. Discard-all addresses a worst case (a bad day where nothing was worth keeping); add-to-existing addresses the common case the v1 spec missed. Worth revisiting if user research shows users routinely have piles of sessions they want to nuke wholesale.
 - A separate "Older" partition for clips > 48h unprocessed.
-- Photo and video clips on this surface (today the inbox is audio-only).
 - Per-clip retry-transcription affordance. (Re-sync the whole session if transcription fails; clip-level retry is post-MVP.)
 
 ## Implementation notes
 
-- **Grouping job is unchanged.** Time + location heuristic, plus `rollGroupId` from On a roll as a deterministic override when present.
+- **Grouping job runs the idle-gap rule** (see Idle-gap sessioning), not the old “time + location” heuristic. Clips sort by capture timestamp; a gap ≥ threshold starts a new session; `rollGroupId` from On a roll is a deterministic override that keeps a roll as one session regardless of gaps. Location is a tiebreaker only. Runs on the phone after sync so late-arriving clips fold in by timestamp.
 - **Auto-exclude detection** runs on phone after sync, not on watch. Heuristics: zero speech tokens in transcription, total amplitude below threshold, clip duration < 2s with no detected speech. Recoverable from the expanded card.
 - **Session card transcript preview** — a single SF Pro block in ink2 with straight quotes, capped at 3 lines, ~60 chars per joined fragment, ellipsized. **No serif italic for transcripts at this level.** The operational register holds until the bundle sheet.
 - **Card expand** is a self-contained accordion within the card. No portal, no sheet, no nav-stack push. State held in component, not in route. Expand state is single-cardinal: at most one card expanded at a time (tapping another card collapses the first).
@@ -214,7 +309,8 @@ Deferred — none block shipping:
 
 ## Open questions
 
-- **Hour-bucketing for very long days.** 8 cards across 8 hours is manageable; 20 across 12 hours starts to need day-headers. Default for MVP: no day headers, reverse-chrono only. Revisit if pending-clip counts get large in practice.
+- **Idle-gap threshold value.** Default 10 min (see Idle-gap sessioning). A real dinner has 10-min+ lulls between courses, so a strict automatic 10-min close would split one sitting in two — which is precisely the case the explicit *hold-a-block* affordance exists to catch. Open: is 10 min right for the automatic rule, or should it be longer (15–20) to better match real sittings, accepting that longer gaps risk merging genuinely separate moments? Needs dogfood data on real inter-clip gaps before locking the number. The *rule* is locked; the *constant* is not.
+- **Day-group headers (resolved July 4 2026).** Earlier this was punted ("no day headers, reverse-chrono only, revisit if pending-clip counts get large"). Dogfood made it large — 20 sessions across 3 days — and time-only cards became ambiguous. **Resolved: day-group headers** ("Today / Yesterday / Jun 30"), matching the Memories-list pattern; cards under a header stay time-only, floated cluster cards carry the date in meta. See *The interaction → Session list*.
 - **What's the "share session" affordance?** None in MVP. Sessions don't ship as their own thing; Memories do.
 - **Disabled-state copy on Make a Memory.** When all clips are excluded, what does the pill say — "Make a Memory" greyed, or "Nothing to bundle"? Lean toward staying greyed with the normal label, since "Nothing to bundle" uses the retired verb and is more text than the disabled state needs.
 - **Discard confirm copy.** `Discard 4 clips?` reads cleanly for N>1 but `Discard 1 clip?` is slightly awkward. Acceptable; the count grounds the action. Alternative `Discard this session?` drops the count but loses the "this is permanent" weight that the number carries. Sticking with the count for now.

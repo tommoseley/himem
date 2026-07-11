@@ -3,13 +3,22 @@
 //
 // Locked rules from `Captured Clips · session-first · spec.md`:
 //  • One surface only. No session-detail screen. Cards expand in place.
-//  • No multi-select. Inclusion is a per-row ring toggle, always live.
+//  • v3 (July 4 2026): Captured Clips is a WORKBENCH, not a queue. Sort
+//    (AI-proposed groupings) is the bench's resting state — confident
+//    clusters on top, loose clips below. No nag-to-zero; placement drains
+//    the bench. Multi-select is RESTORED (relational "where does this
+//    belong"), superseding v2's "no multi-select" rule.
 //  • Selection = ring, never check.
-//  • The card's "Make a Memory" pill is always present and always means
-//    "bundle the currently-included clips." No "Bundle N as memory" copy.
+//  • Sort is the moment: pre-accepted proposals, quiet per-card Adjust/
+//    Not-together, ONE ochre batch commit ("Keep these · N memories").
+//  • Clustering is Honest-Label: only confident clusters appear.
+//    Free/on-device = time+place + word-match (template why-strings);
+//    Plus = semantic + cross-day + naming. AI-blue ≠ Plus.
 //  • Auto-excluded clips are a muted note, never amber, never a chip.
 //  • Operational surface — SF Pro throughout, no Source Serif on the list.
-//  • Vocabulary: "Make a Memory" everywhere. "Bundle" is retired.
+//  • Vocabulary: intent language per `Kingfisher Language.md` — a recognized
+//    session → "Create one memory"; a loose clip → "Where does this belong?".
+//    "Make a Memory" and "Bundle" are retired.
 
 // ─────────────────────────────────────────────────────────────
 // Top chrome — back ‹ on the left, "Done" on the right. No eyebrow.
@@ -37,7 +46,7 @@ function CCHeader({ count = 9, range = 'Today, 12:01 PM–3:36 PM', sessions = 3
       <div style={{
         fontSize: 22, fontWeight: 600, color: PX.ink, letterSpacing: -0.4, marginTop: 14, lineHeight: 1.15,
       }}>
-        {count} from your Watch
+        {count} new clip{count === 1 ? '' : 's'}
       </div>
       <div style={{ fontSize: 12.5, color: PX.ink3, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
         {sessions} session{sessions === 1 ? '' : 's'} · {range}
@@ -79,7 +88,7 @@ function MakeAMemoryPill({ disabled = false }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
       fontSize: 14, fontWeight: 600, letterSpacing: -0.1,
     }}>
-      Make a Memory
+      Create one memory
       <svg width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2 1l5 6-5 6"/>
       </svg>
@@ -147,13 +156,80 @@ function PinGlyph() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Compact session row — the scan view.
+// A left time-box (calendar-chip: start time + period) replaces the
+// date/time text lines; the preview clamps to two lines; a trailing
+// chevron signals a gesture (swipe/tap) expands to the full card.
+// Location + clip-count ride under the time-box, small.
+// ─────────────────────────────────────────────────────────────
+function TimeBox({ start, period, clips }) {
+  return (
+    <div style={{
+      width: 60, flexShrink: 0, borderRadius: 11,
+      background: PX.wash1, border: '1px solid ' + PX.hairline,
+      padding: '7px 0 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+    }}>
+      <span style={{ fontSize: 17, fontWeight: 700, color: PX.ink, letterSpacing: -0.4, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{start}</span>
+      <span style={{ fontSize: 9.5, fontWeight: 700, color: PX.ink3, letterSpacing: 1, textTransform: 'uppercase' }}>{period}</span>
+      <span style={{
+        marginTop: 4, fontSize: 10, fontWeight: 600, color: PX.accent,
+        background: PX.accentTint, borderRadius: 6, padding: '1.5px 6px', letterSpacing: -0.05,
+      }}>{clips} clip{clips > 1 ? 's' : ''}</span>
+    </div>
+  );
+}
+
+function SessionRowCompact({ start, period, clips, place, previewLine, autoExcluded = 0, selectable = false, selected = false }) {
+  return (
+    <div style={{
+      background: selected ? PX.accentTint : PX.card,
+      border: '1px solid ' + (selected ? PX.accent : PX.hairline), borderRadius: 14,
+      padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'stretch',
+    }}>
+      {selectable && (
+        <span style={{ alignSelf: 'center', flexShrink: 0 }}>
+          <IncludeRing included={selected} />
+        </span>
+      )}
+      <TimeBox start={start} period={period} clips={clips} />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
+        {place && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: PX.ink3, fontSize: 11.5, letterSpacing: -0.05 }}>
+            <PinGlyph />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{place}</span>
+          </div>
+        )}
+        <div style={{
+          fontSize: 13.5, color: PX.ink2, lineHeight: 1.42, letterSpacing: -0.1,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        }}>
+          “{previewLine}”
+        </div>
+        {autoExcluded > 0 && (
+          <div style={{ fontSize: 11, color: PX.ink3, letterSpacing: -0.05 }}>
+            {autoExcluded} clip{autoExcluded > 1 ? 's' : ''} auto-excluded · no speech
+          </div>
+        )}
+      </div>
+      {!selectable && (
+        <span style={{ alignSelf: 'center', color: PX.ink4, flexShrink: 0 }}>
+          <svg width="8" height="13" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 1l6 6-6 6"/>
+          </svg>
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Session card.
 // `expanded` swaps the transcript preview for inline clip rows.
 // Action pill is the same in both states.
 // ─────────────────────────────────────────────────────────────
 function SessionCard({
   time, date = 'Today', place, clips, duration, previewLine, autoExcluded = 0,
-  expanded = false, clipsDetail = null, disabled = false,
+  expanded = false, clipsDetail = null, disabled = false, quiet = false,
 }) {
   const excludeNote =
     autoExcluded > 0
@@ -165,7 +241,8 @@ function SessionCard({
       background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 14,
       padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12,
     }}>
-      {/* Meta — time/clips/duration, then date + location beneath */}
+      {/* Meta — time/clips/duration, then date + location beneath.
+          In quiet mode a trailing chevron signals the whole card is the tap target. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <div style={{
           display: 'flex', alignItems: 'baseline', gap: 6,
@@ -176,6 +253,13 @@ function SessionCard({
           <span>{clips} clip{clips > 1 ? 's' : ''}</span>
           <span style={{ color: PX.ink4 }}>·</span>
           <span>{duration}</span>
+          {quiet && (
+            <span style={{ marginLeft: 'auto', color: PX.ink4, display: 'inline-flex', alignSelf: 'center' }}>
+              <svg width="8" height="13" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 1l6 6-6 6"/>
+              </svg>
+            </span>
+          )}
         </div>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 5,
@@ -224,7 +308,7 @@ function SessionCard({
         </div>
       )}
 
-      <MakeAMemoryPill disabled={disabled} />
+      {!quiet && <MakeAMemoryPill disabled={disabled} />}
     </div>
   );
 }
@@ -390,7 +474,7 @@ function ScrCCBundleConfirm() {
               <span className="cru-topic-dot" />
               How We Work
             </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 13, border: '1px solid ' + PX.hairline, fontSize: 12.5, color: PX.ink2 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minHeight: 40, boxSizing: 'border-box', padding: '0 15px', borderRadius: 12, border: '1px dashed ' + PX.accent, fontSize: 14, fontWeight: 600, color: PX.accent }}>
               + New
             </span>
           </div>
@@ -626,7 +710,7 @@ function CCHeaderSync({ total = 4, ready = 2, syncing = 2, range = 'today, 3:37 
         <span style={{ fontSize: 14, fontWeight: 500, color: PX.accent, letterSpacing: -0.1 }}>Done</span>
       </div>
       <div style={{ fontSize: 22, fontWeight: 600, color: PX.ink, letterSpacing: -0.4, marginTop: 14, lineHeight: 1.15 }}>
-        {total} from your Watch
+        {total} new clip{total === 1 ? '' : 's'}
       </div>
       <div style={{ fontSize: 12.5, color: PX.ink3, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
         {ready} ready · {syncing} syncing · {range}
@@ -715,8 +799,326 @@ function ScrCCStalled() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// QUIET LIST — the "boilerplate over half the screen" fix.
+// Per-card Make-a-Memory pill removed; the whole card is the tap
+// target (trailing chevron signals it), so the transcript — the
+// actual memory — is the loudest thing on the card. Ochre returns
+// once, on Create, inside the bundle sheet.
+//
+// Content is the real CIA dinner dogfood (June 30). Also shows
+// idle-gap sessioning: the five 6:09–6:18 clips that arrived as
+// five separate cards collapse into ONE "dinner" session here.
+// Compare against ScrCCSessionList (current, per-card pills).
+// ─────────────────────────────────────────────────────────────
+function ScrCCQuietDinner() {
+  return (
+    <PhoneScreen>
+      <CCHeader count={9} sessions={4} range="today, 9:01 AM – 6:18 PM" />
+      <div style={{
+        flex: 1, overflow: 'hidden',
+        padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+        {/* Idle-gap sessioning: 6:09–6:18 is one sitting → one card, five clips */}
+        <SessionCard
+          quiet
+          time="6:09 – 6:18 PM"
+          date="Today"
+          place="Culinary Institute, Hyde Park"
+          clips={5}
+          duration="4:15"
+          previewLine="Our waiter's name is Ben — 2nd of 3 years, concentrating on farm-to-table … the brioche had excellent sea salt on top, nice large flakes … you can hold at 400 for about 30 minutes, then lower to 250 …"
+          autoExcluded={1}
+        />
+        <SessionCard
+          quiet
+          time="9:09 AM"
+          date="Today"
+          clips={1}
+          duration="0:03"
+          previewLine="We need to buy a proper travel-sized laundry bag."
+        />
+        <SessionCard
+          quiet
+          time="9:04 AM"
+          date="Today"
+          place="Franconia, NH"
+          clips={1}
+          duration="0:18"
+          previewLine="New Hampshire was lovely. Mountainous, not a lot of growth. It was markedly different when we got to Vermont — still lovely, but more buildup …"
+        />
+        <SessionCard
+          quiet
+          time="9:01 AM"
+          date="Today"
+          clips={1}
+          duration="0:47"
+          previewLine="For the budget wrap that I have, when I turn it off I get a notice that it can't read from the sensor if the app is turned off, so it'll get out of sync …"
+        />
+      </div>
+    </PhoneScreen>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMPACT LIST — the scan view.
+// Time-box on the left instead of date/time text; two-line preview;
+// chevron signals a gesture (swipe/tap) to expand the row into the
+// full card. Densest of the three: ~7–8 sessions per screen.
+// Same real CIA dinner content + idle-gap grouping.
+// ─────────────────────────────────────────────────────────────
+function ScrCCCompactDinner() {
+  return (
+    <PhoneScreen>
+      <CCHeader count={9} sessions={4} range="today, 9:01 AM – 6:18 PM" />
+      <div style={{
+        flex: 1, overflow: 'hidden',
+        padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+        <SessionRowCompact
+          start="6:09"
+          period="PM"
+          clips={5}
+          place="Culinary Institute, Hyde Park"
+          previewLine="Our waiter's name is Ben — 2nd of 3 years, farm-to-table … brioche had excellent sea salt, nice large flakes … hold at 400 for 30 min, then lower to 250 …"
+          autoExcluded={1}
+        />
+        <SessionRowCompact
+          start="9:09"
+          period="AM"
+          clips={1}
+          previewLine="We need to buy a proper travel-sized laundry bag."
+        />
+        <SessionRowCompact
+          start="9:04"
+          period="AM"
+          clips={1}
+          place="Franconia, NH"
+          previewLine="New Hampshire was lovely. Mountainous, not a lot of growth. Markedly different when we got to Vermont — still lovely, but more buildup …"
+        />
+        <SessionRowCompact
+          start="9:01"
+          period="AM"
+          clips={1}
+          previewLine="For the budget wrap I have, when I turn it off I get a notice that it can't read from the sensor if the app is off, so it'll get out of sync …"
+        />
+      </div>
+    </PhoneScreen>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SELECT MODE — cross-session grouping. The capability dogfooding
+// revealed as missing: hand-pick several clips from anywhere in the
+// list and make them ONE memory. (Revises the original "no multi-select"
+// rule — that predated multi-day, single-clip-session reality.)
+//
+// Normal compact mode has zero ochre buttons (quiet scan). Select mode
+// has exactly ONE — the bottom commit bar — so "one primary action per
+// moment" holds either way. Ring = selection (never a check).
+// ─────────────────────────────────────────────────────────────
+function CCHeaderSelect({ selected = 0 }) {
+  return (
+    <div style={{ padding: '8px 14px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', height: 32, justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 14, fontWeight: 500, color: PX.accent, letterSpacing: -0.1 }}>Cancel</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: PX.ink, letterSpacing: -0.2 }}>
+          {selected === 0 ? 'Select clips' : `${selected} selected`}
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: PX.accent, letterSpacing: -0.1 }}>Select all</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: PX.ink3, marginTop: 8, letterSpacing: -0.05 }}>
+        Pick clips from anywhere below — they’ll become one memory together.
+      </div>
+    </div>
+  );
+}
+
+function ScrCCSelectMode() {
+  return (
+    <PhoneScreen>
+      <CCHeaderSelect selected={4} />
+      <div style={{
+        flex: 1, overflow: 'hidden',
+        padding: '0 14px 92px', display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+        <SessionRowCompact selectable selected start="12:03" period="PM" clips={1} place="Nazareth, PA"
+          previewLine="Nazareth is a lovely little town. We're shopping at the caddy corner, a restaurant. There's a church nearby playing music …" />
+        <SessionRowCompact selectable selected start="11:59" period="AM" clips={1} place="Nazareth, PA"
+          previewLine="Driving past Nazareth, Pennsylvania, I saw the sign for CF Martin guitars — so we decided to drop by and see what it's like." />
+        <SessionRowCompact selectable selected start="10:36" period="AM" clips={1} place="Milford, PA"
+          previewLine="Milford, Pennsylvania is a little town that looks like it was pulled right out of a movie. It's just beautiful." />
+        <SessionRowCompact selectable start="9:09" period="AM" clips={1}
+          previewLine="We need to buy a proper travel-sized laundry bag." />
+        <SessionRowCompact selectable selected start="12:00" period="PM" clips={1} place="Nazareth, PA"
+          previewLine="And a bummer of bummers is their summer break." />
+        <SessionRowCompact selectable start="9:04" period="AM" clips={1} place="Franconia, NH"
+          previewLine="New Hampshire was lovely. Mountainous, not a lot of growth. Markedly different when we got to Vermont …" />
+      </div>
+      {/* One ochre action for the whole selection — the wall of 20 becomes 1 */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        padding: '12px 16px calc(12px + env(safe-area-inset-bottom))',
+        background: 'linear-gradient(to top, ' + PX.paper + ' 72%, transparent)',
+        display: 'flex', gap: 10, alignItems: 'center',
+      }}>
+        <div style={{
+          flex: 1, height: 50, borderRadius: 14, background: PX.accent, color: PX.accentInk,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          fontSize: 15.5, fontWeight: 600, letterSpacing: -0.15,
+        }}>
+          Create one memory · 4 clips
+          <svg width="9" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 1l6 6-6 6"/></svg>
+        </div>
+      </div>
+    </PhoneScreen>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SORT — the dread-killer. The AI does the first grouping pass;
+// you approve. 20 clips → ~5 confident clusters you sweep, plus
+// loose clips that WAIT on the bench (no forced decision).
+//
+// Honest-Label discipline: only conservative clusters appear —
+// time-window + same location, or literal word-match. Never a vibe.
+// A clip that isn't confidently grouped stays loose, never guessed.
+// ─────────────────────────────────────────────────────────────
+function ClusterMini({ time, text }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '5px 0' }}>
+      <span style={{ fontSize: 10.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums', flexShrink: 0, width: 44 }}>{time}</span>
+      <span style={{
+        fontSize: 12.5, color: PX.ink2, lineHeight: 1.35, letterSpacing: -0.05,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{text}</span>
+    </div>
+  );
+}
+
+function ClusterCard({ why, name, meta, clips }) {
+  return (
+    <div style={{
+      background: PX.card, border: '1px solid ' + PX.aiEdge, borderRadius: 16,
+      overflow: 'hidden',
+    }}>
+      {/* AI-blue reason band — the honest 'why these' */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '8px 14px', background: PX.aiTint, color: PX.ai,
+        fontSize: 11.5, fontWeight: 600, letterSpacing: -0.05,
+      }}>
+        <Spark size={12} color={PX.ai} />
+        {why}
+      </div>
+      <div style={{ padding: '12px 14px 13px' }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: PX.ink, letterSpacing: -0.3 }}>{name}</div>
+        <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 2, letterSpacing: -0.05 }}>{meta}</div>
+        <div style={{ marginTop: 8, borderTop: '1px solid ' + PX.divider, paddingTop: 4 }}>
+          {clips.map((c, i) => <ClusterMini key={i} time={c[0]} text={c[1]} />)}
+        </div>
+        {/* pre-accepted proposal — quiet per-card secondaries; commit is the one bottom bar */}
+        <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginTop: 12 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: PX.ai }}>Adjust</span>
+          <span style={{ fontSize: 13.5, fontWeight: 500, color: PX.ink3 }}>Not together</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScrCCSort() {
+  return (
+    <PhoneScreen>
+      <div style={{ padding: '8px 16px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', height: 32, justifyContent: 'space-between' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', color: PX.ink2 }}>
+            <svg width="10" height="16" viewBox="0 0 9 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 1L1 7l6 6"/></svg>
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: PX.accent }}>Done</span>
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 600, color: PX.ink, letterSpacing: -0.4, marginTop: 12 }}>
+          A few of these seem to belong together
+        </div>
+        <div style={{ fontSize: 12.5, color: PX.ink3, marginTop: 4, letterSpacing: -0.05 }}>
+          3 groups stood out from 20 clips · the rest can wait
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflow: 'hidden', padding: '0 14px 92px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <ClusterCard
+          why="5 clips · one 18-minute stretch, same place"
+          name="Dinner at the CIA"
+          meta="Jun 30 · 6:09–6:18 PM · Culinary Institute, Hyde Park"
+          clips={[
+            ['6:12', 'Our waiter Ben — 2nd of 3 years, farm-to-table…'],
+            ['6:11', 'The brioche had excellent sea salt, large flakes…'],
+            ['6:18', 'Hold at 400 for 30 min, then lower to 250…'],
+          ]}
+        />
+        <ClusterCard
+          why="2 clips mention “Hosta Hideaway”"
+          name="Hosta Hideaway"
+          meta="Jul 2 · 2:58–3:00 PM · 2 clips"
+          clips={[
+            ['3:00', 'www.thehostahideaway.com'],
+            ['2:58', 'Remember the Hosta Hideaway in Gettysburg? Dillsburg.'],
+          ]}
+        />
+        <ClusterCard
+          why="3 clips near Nazareth, PA within the hour"
+          name="Nazareth &amp; Martin Guitar"
+          meta="Jul 2 · 11:59 AM–12:09 PM · Nazareth, PA"
+          clips={[
+            ['12:03', 'Nazareth is a lovely little town, shopping at the caddy corner…'],
+            ['11:59', 'Saw the sign for CF Martin guitars, decided to drop by…'],
+            ['12:09', 'This has our website, our phone number…'],
+          ]}
+        />
+
+        <div style={{ paddingTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: PX.ink3, letterSpacing: 0.3, textTransform: 'uppercase' }}>These can wait · 6 clips</span>
+          <span style={{ flex: 1, height: 1, background: PX.divider }} />
+          <span style={{ fontSize: 12, color: PX.ai, fontWeight: 500 }}>Review</span>
+        </div>
+        <div style={{ fontSize: 12, color: PX.ink3, lineHeight: 1.45, letterSpacing: -0.05, marginTop: -4 }}>
+          None looked like an obvious group yet. They’ll keep — nothing’s lost.
+        </div>
+        {/* the actual loose clips — the bench always shows them, never buries them.
+            Day header keeps a multi-day inbox unambiguous (matches Memories list). */}
+        <div style={{ fontSize: 13, fontWeight: 600, color: PX.ink3, letterSpacing: -0.1, margin: '2px 2px 0' }}>Jun 30</div>
+        <SessionRowCompact start="9:10" period="AM" clips={1}
+          previewLine="And by God, Q-tips." />
+        <SessionRowCompact start="9:09" period="AM" clips={1}
+          previewLine="We need to buy a proper travel-sized laundry bag." />
+        <SessionRowCompact start="9:04" period="AM" clips={1} place="Franconia, NH"
+          previewLine="New Hampshire was lovely. Mountainous, not a lot of growth. Markedly different when we got to Vermont …" />
+      </div>
+      {/* one ochre commit for the whole batch — Sort is the moment */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        padding: '12px 16px calc(12px + env(safe-area-inset-bottom))',
+        background: 'linear-gradient(to top, ' + PX.paper + ' 72%, transparent)',
+      }}>
+        <div style={{
+          height: 50, borderRadius: 14, background: PX.accent, color: PX.accentInk,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          fontSize: 15.5, fontWeight: 600, letterSpacing: -0.15,
+        }}>
+          Keep these · 3 memories
+          <svg width="9" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 1l6 6-6 6"/></svg>
+        </div>
+      </div>
+    </PhoneScreen>
+  );
+}
+
 Object.assign(window, {
   ScrCCSessionList,
+  ScrCCQuietDinner,
+  ScrCCCompactDinner,
+  ScrCCSelectMode,
+  ScrCCSort,
   ScrCCSessionListExpanded,
   ScrCCBundleConfirm,
   ScrCCSyncing,

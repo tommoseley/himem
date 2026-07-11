@@ -4,13 +4,15 @@ May 2026. Locked for v1.
 
 ## Model
 
+> **Framing (locked July 7 2026): a Project is *intent*, not organization.** A Project is not "a folder for memories" — it's *"something you're building over time."* The distinction matters everywhere the concept is named: coaching says *"Building something over weeks or months? That's what Projects are for,"* never *"Projects organize your memories."* This protects two things — it explains why Projects exist without invoking filing, and it means a user who never makes a Project **hasn't failed to organize**; they simply had nothing they were building toward. Continuity is the point; organization is a side effect. *(Kingfisher · North Star → Recognition/intent. Any copy that frames Projects as folders or organization is drift — fix it.)*
+
 - **Project = name + goal + member memories.** Nothing else in MVP. No cover art, no date range, no archive state, no description beyond the goal field.
 - **Topic ⟷ Project is many-to-many.** Topics and projects are orthogonal. A memory has one topic and belongs to **0–N projects**. A project's topic chips are derived from the topics of its member memories — there's no project-level topic field.
 - **Memory × Project is many-to-many too.** A single memory can sit in multiple projects. Adding to a new project does *not* remove it from existing ones — they're parallel containers, not exclusive folders. (Matches what `JournalEntry.projects: NSSet?` already allows.)
 - **Goal field**: "What are you building toward?" Optional placeholder asks "A video? A post? An idea?" Free-text, short. Shows on the detail screen below the title in serif italics. Not interpreted by AI directly; passed as context.
 - **Membership is assigned to memories, not the other way around.** A memory is tagged into a project either at memory-creation (chip in the new-memory sheet) or after the fact (Add memory sheet on project detail).
-- **Removing a memory from a project.** **Right-to-left swipe** on a memory row in the project's memory list reveals a red **Remove** action — same convention used elsewhere in the app. Tap removes the memory from this project; the memory itself is untouched. A toast appears at the bottom: *"Removed from [project] · Undo"* with a 5-second timeout. No confirmation modal — the undo toast is the safety net.
-  - Memory Detail shows project membership as read-only chips in MVP. To remove a memory from a project, the user goes to the project page and swipes. One canonical management surface.
+- **Removing a memory from a project.** Open the member memory (tap its card in the project's list) and scroll to the bottom: a full-width **Remove from project** button (Recycle/unlink glyph — *not* Trash) sits there, naming the project. Tap removes the memory from **this** project; the memory itself and its membership in any other project are untouched. A toast appears: *"Removed from [project] · Undo"* (5-second timeout) — the undo is the safety net, so no confirmation modal. **No swipe.** *(Aligns with the locked deletion/relocation model — swipe-to-delete retired everywhere June 12 2026; destruction and unlinking are both bottom-of-opened-item full-width buttons. See `HiMem · Buttons & Actions.html` and `Memory Detail · unified editing model.md` §129.)*
+  - Memory Detail shows project membership as chips. Tapping a chip opens its manage affordance; the actual unlink is the bottom **Remove from project** button on the opened memory. One deliberate, consistent surface — never a list-row swipe.
   - Removing a memory marks the project's existing Project Assist summary stale (amber footer `"Project membership changed · Refresh"`, same handoff to AI Organize spec § 8 as adding). Derived topic chips recompute on read.
 - **Derived topics**: compute on read for MVP. If a project ever crosses ~50 memories, introduce `derivedTopicsSnapshot` cached on the project and invalidated on member add/remove. Not urgent now.
 - **Naming carryover**: Core Data attribute is still `Project.purpose`; UI label is "goal." These can diverge. If the rename is bundled with the pre-TestFlight schema deploy, rename the attribute too — otherwise leave the attribute alone.
@@ -41,7 +43,7 @@ The single AI action on a project. **One pass produces two outputs.**
 ### What it produces
 
 **Output 1 — Project summary.**
-A single Honest-Label paragraph, 2–4 sentences, in second-person voice. Same rules as the memory-level summary (no third-person pronouns, present for thinking, past for events, describe-don't-interpret).
+A single Honest-Label paragraph, 2–4 sentences, in second-person voice. Same rules as the memory-level summary (owner is *you*, others named with pronouns as appropriate — default to singular *they* when unknown; present for thinking, past for events, describe-don't-interpret).
 
 Example:
 
@@ -71,7 +73,7 @@ Studio (post-MVP) can structure further. MVP stays the size of a paragraph plus 
 
 - Second-person — `you / you're / you've` — baked in at storage time.
 - Present tense for ongoing thinking; past for events that happened.
-- **No third-person personal pronouns anywhere.** Other people referenced by name.
+- **Pronouns are fine.** Owner is *you*; others are named, with pronouns as appropriate. When a person's pronoun isn't established, default to singular *they* — never guess from a name.
 - Describe, don't interpret. The paragraph's job is to give the owner a recognizable handle six months later.
 - On share/export, `replacingOccurrences("you", firstName)` swaps voice.
 

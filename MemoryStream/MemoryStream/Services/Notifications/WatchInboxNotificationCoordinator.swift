@@ -120,7 +120,7 @@ final class WatchInboxNotificationCoordinator {
     private init() {}
 
     /// Register the notification category + inline actions. Call once at
-    /// app launch (after `NotificationService.registerDefaults`).
+    /// app launch.
     func registerCategories() {
         let snooze = UNNotificationAction(
             identifier: Self.actionSnooze4hIdentifier,

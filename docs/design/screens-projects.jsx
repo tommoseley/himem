@@ -93,14 +93,13 @@ function IconTrio() {
   );
 }
 
-// Top chrome shared across the Projects tab (header + seg + topic strip)
+// Top chrome for the Projects tab. Wordmark (left) + search/settings (right);
+// object switching is the BOTTOM TabBar, not a top Seg. Old 2-object Seg retired.
 function ProjectsTabHeader({ activeTopic = 'Content' }) {
   return (
     <div style={{ paddingTop: 6 }}>
       <div style={{ padding: '8px 16px 10px', display: 'flex', alignItems: 'center' }}>
         <HiMemMark />
-        <span style={{ flex: 1 }} />
-        <Seg active="Projects" />
         <span style={{ flex: 1 }} />
         <IconTrio />
       </div>

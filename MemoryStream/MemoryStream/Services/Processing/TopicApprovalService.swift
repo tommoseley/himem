@@ -32,10 +32,11 @@ final class TopicApprovalService: ObservableObject {
             // Update the in-memory palette cache
             TopicPaletteStore.shared.set(key: paletteKey, for: current.name)
 
-            // Per-topic Photos-album sync was retired June 10 2026 —
-            // captures now land in a single "HiMem" album (gated by
-            // `CameraService.alsoSaveToPhotosLibrary`). Approving a
-            // topic no longer touches the Photos library.
+            // Per-topic Photos-album sync was retired June 10 2026,
+            // and the "Also save captures to Photos library" toggle
+            // was retired 2026-07-10 (see `screens-settings.jsx`).
+            // Approving a topic never touches the Photos library —
+            // all media lives in HiMem's iCloud Files container.
         } catch {
             ErrorState.shared.report(.topicError(error.localizedDescription))
         }

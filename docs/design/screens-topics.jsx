@@ -27,20 +27,21 @@ function TopicChip({ label, state = 'set', onable }) {
   const off = state === 'off';
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      fontSize: 12.5, fontWeight: 500, letterSpacing: -0.05,
+      display: 'inline-flex', alignItems: 'center', gap: 7,
+      minHeight: 40, boxSizing: 'border-box',
+      fontSize: 14, fontWeight: 500, letterSpacing: -0.1,
       color: off ? PX.ink3 : (isNew ? PX.ai : PX.ink),
       background: off ? 'transparent' : (isNew ? PX.aiTint : PX.wash1),
       border: '1px solid ' + (off ? PX.hairline : (isNew ? PX.ai : 'transparent')),
       borderStyle: isNew ? 'dashed' : 'solid',
-      padding: '5px 11px', borderRadius: 14,
+      padding: '0 15px', borderRadius: 12,
     }}>
       {isNew
-        ? <Spark size={11} color={PX.ai} />
-        : <span style={{ width: 6, height: 6, borderRadius: 3, background: off ? PX.ink4 : PX.accent, flexShrink: 0 }} />}
+        ? <Spark size={13} color={PX.ai} />
+        : <span style={{ width: 7, height: 7, borderRadius: 4, background: off ? PX.ink4 : PX.accent, flexShrink: 0 }} />}
       {label}
       {isNew && <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: PX.ai, marginLeft: 1 }}>New</span>}
-      {state === 'pick' && <Check size={11} color={PX.accent} />}
+      {state === 'pick' && <Check size={13} color={PX.accent} />}
     </span>
   );
 }
@@ -52,15 +53,16 @@ function TopicRow({ topics, manage }) {
   return (
     <div style={{ margin: '0 14px' }}>
       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.4, textTransform: 'uppercase', color: PX.ink3, marginBottom: 8 }}>Topics</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         {topics.map(t => <TopicChip key={t} label={t} state="set" />)}
         {manage && (
           <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            fontSize: 12.5, fontWeight: 600, color: PX.accent,
-            border: '1px dashed ' + PX.accent, borderRadius: 14, padding: '5px 11px', cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            minHeight: 40, boxSizing: 'border-box',
+            fontSize: 14, fontWeight: 600, color: PX.accent,
+            border: '1px dashed ' + PX.accent, borderRadius: 12, padding: '0 15px', cursor: 'pointer',
           }}>
-            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M7 2v10M2 7h10" /></svg>
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M7 2v10M2 7h10" /></svg>
             Edit
           </span>
         )}
