@@ -183,6 +183,9 @@
 		A200000038 /* MemoryDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000038 /* MemoryDetailPresentationContext.swift */; };
 		A200000039 /* ClipDisplayModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000039 /* ClipDisplayModel.swift */; };
 		A200000040 /* ClipEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000040 /* ClipEditor.swift */; };
+		A200000041 /* ClipRegister.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000041 /* ClipRegister.swift */; };
+		A200000042 /* ClipAtomProjections.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000042 /* ClipAtomProjections.swift */; };
+		A200000043 /* ClipAtomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000043 /* ClipAtomView.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
 		A900000002 /* OnDeviceOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000002 /* OnDeviceOrganizer.swift */; };
 		A900000003 /* ServerOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000003 /* ServerOrganizer.swift */; };
@@ -436,6 +439,9 @@
 		B200000038 /* MemoryDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryDetailPresentationContext.swift; path = MemoryStream/Services/MemoryDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000039 /* ClipDisplayModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDisplayModel.swift; path = MemoryStream/Views/Clip/ClipDisplayModel.swift; sourceTree = SOURCE_ROOT; };
 		B200000040 /* ClipEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipEditor.swift; path = MemoryStream/Views/Clip/ClipEditor.swift; sourceTree = SOURCE_ROOT; };
+		B200000041 /* ClipRegister.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipRegister.swift; path = MemoryStream/Views/Clip/ClipRegister.swift; sourceTree = SOURCE_ROOT; };
+		B200000042 /* ClipAtomProjections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipAtomProjections.swift; path = MemoryStream/Views/Clip/ClipAtomProjections.swift; sourceTree = SOURCE_ROOT; };
+		B200000043 /* ClipAtomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipAtomView.swift; path = MemoryStream/Views/Clip/ClipAtomView.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
 		B900000002 /* OnDeviceOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceOrganizer.swift; sourceTree = "<group>"; };
 		B900000003 /* ServerOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOrganizer.swift; sourceTree = "<group>"; };
@@ -978,6 +984,9 @@
 			children = (
 				B200000039 /* ClipDisplayModel.swift */,
 				B200000040 /* ClipEditor.swift */,
+				B200000041 /* ClipRegister.swift */,
+				B200000042 /* ClipAtomProjections.swift */,
+				B200000043 /* ClipAtomView.swift */,
 			);
 			path = Clip;
 			sourceTree = "<group>";
@@ -1360,6 +1369,9 @@
 				A200000038 /* MemoryDetailPresentationContext.swift in Sources */,
 				A200000039 /* ClipDisplayModel.swift in Sources */,
 				A200000040 /* ClipEditor.swift in Sources */,
+				A200000041 /* ClipRegister.swift in Sources */,
+				A200000042 /* ClipAtomProjections.swift in Sources */,
+				A200000043 /* ClipAtomView.swift in Sources */,
 				A200000022 /* ClipDetailView.swift in Sources */,
 				A200000023 /* PlaceClipSheet.swift in Sources */,
 				A100000509 /* SummaryFieldMigration.swift in Sources */,
