@@ -170,7 +170,7 @@ struct CompactClipRow: View {
                         HStack(spacing: 6) {
                             Image(systemName: "play.circle")
                                 .font(.system(size: 13, weight: .medium))
-                            Text(VoiceClipPanel.playFooterLabel(duration: audioDuration))
+                            Text(TranscriptClipController.playFooterLabel(duration: audioDuration))
                                 .font(.caption)
                         }
                         .foregroundStyle(Crucible.Color.ink3)
@@ -180,7 +180,7 @@ struct CompactClipRow: View {
                     }
                     .buttonStyle(.plain)
                     .frame(minHeight: 32)
-                    .accessibilityLabel(VoiceClipPanel.playFooterAccessibilityLabel(duration: audioDuration))
+                    .accessibilityLabel(TranscriptClipController.playFooterAccessibilityLabel(duration: audioDuration))
                     .task(id: item.id) { await loadAudioDurationIfNeeded() }
                 }
             }

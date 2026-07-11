@@ -81,6 +81,19 @@ struct ClipAtomView: View {
     /// `model.failed = true`; the retry link renders in parallel.
     var accidentalTranscript: Bool = false
 
+    /// Slice 9b (Memory Detail Full stream): caller-supplied
+    /// italic caption for the empty-transcript case that neither
+    /// `pendingTranscript` nor `accidentalTranscript` covers.
+    /// `TranscriptClipController` uses this to disambiguate the
+    /// iCloud audio state: `"Audio downloading from iCloud…"` /
+    /// `"Audio no longer in iCloud."` when the transcript is
+    /// empty because the source file isn't local yet — vs the
+    /// operational bench's pending/accidental cases. Ignored when
+    /// transcript is non-empty. Precedence order in the content
+    /// slot: pendingTranscript > accidentalTranscript >
+    /// emptyTranscriptCaption > default "(no transcript)".
+    var emptyTranscriptCaption: String? = nil
+
     /// Inline status text appended after the retry link
     /// (e.g. `"· Retrying…"` while a retry is in flight,
     /// `"· Retry failed"` after an error). Owned by the container
@@ -117,7 +130,8 @@ struct ClipAtomView: View {
                     providedThumbnail: providedThumbnail,
                     onTap: onTapContent,
                     pendingTranscript: pendingTranscript,
-                    accidentalTranscript: accidentalTranscript
+                    accidentalTranscript: accidentalTranscript,
+                    emptyTranscriptCaption: emptyTranscriptCaption
                 )
                 if model.failed, let onRetry = onRetryTranscription {
                     ClipRetry(onTap: onRetry, status: retryStatus)
@@ -317,6 +331,12 @@ struct ClipContentSlot: View {
     /// Consumer sets this alongside `model.failed`; the retry link
     /// renders in parallel at atom level.
     var accidentalTranscript: Bool = false
+    /// Slice 9b (Memory Detail Full stream): caller-supplied italic
+    /// caption for the empty-transcript case that neither
+    /// `pendingTranscript` nor `accidentalTranscript` covers.
+    /// Precedence: pending > accidental > caption > default
+    /// "(no transcript)".
+    var emptyTranscriptCaption: String? = nil
 
     var body: some View {
         switch content {
@@ -329,6 +349,12 @@ struct ClipContentSlot: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if text.isEmpty && accidentalTranscript {
                 Text("No speech detected · likely accidental")
+                    .font(.system(size: 13))
+                    .italic()
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if text.isEmpty, let caption = emptyTranscriptCaption {
+                Text(caption)
                     .font(.system(size: 13))
                     .italic()
                     .foregroundStyle(Crucible.Color.ink3)
