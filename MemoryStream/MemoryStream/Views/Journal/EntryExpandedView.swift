@@ -1091,10 +1091,24 @@ struct EntryExpandedView: View {
         }
     }
 
+    /// T4 (checklist): memory meta shares the atom's reflective
+    /// date shape — `Sun Jul 5 · 3:44 PM` (or `Sun Jul 5, 2025 ·
+    /// 3:44 PM` when the date isn't the current year). Was
+    /// `July 5 · 3:44 PM`, which collided with the clip header's
+    /// `EEE MMM d` format on the same screen. Format string
+    /// matches `ClipAtomProjections.formatDateTimePlace` so a
+    /// spec change in one place is a spec change in both.
     private var fullTimestamp: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM d · h:mm a"
-        return formatter.string(from: entry.createdAt)
+        let cal = Calendar.current
+        let currentYear = cal.component(.year, from: Date())
+        let entryYear = cal.component(.year, from: entry.createdAt)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = (entryYear == currentYear) ? "EEE MMM d" : "EEE MMM d, yyyy"
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a"
+        let dateStr = dateFormatter.string(from: entry.createdAt)
+        let timeStr = timeFormatter.string(from: entry.createdAt)
+        return "\(dateStr) · \(timeStr)"
     }
 
     private func openInMaps(name: String, latitude: Double, longitude: Double) {

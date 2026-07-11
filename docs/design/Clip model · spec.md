@@ -223,9 +223,15 @@ gate for "clip is converged" — not the prose above.
   `play` for both operational and reflective — same shape, register-styled
   (operational 12pt ink3, reflective 14pt semibold accent). No more
   `play.circle.fill` filled disc.
-- [ ] **E2 · Reflective Full-stream clips must carry the evidence line.** The
-  atom's `reflectiveCard` renders `ClipEvidenceControl` for any non-`.none`
-  evidence, so this should ride along with E1 — needs device verification.
+- [x] **E2 · Reflective Full-stream clips carry the evidence line.** The
+  atom's `reflectiveCard` renders `ClipEvidenceControl` when
+  `ClipEvidenceProjection.project(model:register:) != .none`, and voice
+  clips project to `.namedPlay(label: "Original recording", durationString:)`
+  regardless of surface (single-clip memory vs Full stream). Locked by
+  `voice_evidence_reflective_isNamedPlay` at the projection level.
+  `TranscriptClipController.readState` (Slice 9b) is the single reflective
+  render path for voice clips on Memory Detail — no divergent single-clip
+  vs multi-clip code path exists to fork behavior.
 - [x] **E3 · Compact expanded body carries evidence.** `CompactClipRow`'s
   expanded voice footer now uses the same `play` glyph + accent-triangle /
   ink3-label tint pair as the atom's `.namedPlay` render.
@@ -240,9 +246,11 @@ gate for "clip is converged" — not the prose above.
   `.uppercased()` + `.tracking(0.4)` in the atom's reflective branch; the
   projection already returned the canonical
   `Sun May 17 · 6:12 PM · Bishop St, Bluffton` form — the view was the drift.
-- [ ] **T4 · One date format per surface.** Cross-surface concern; the atom is
-  now honest but memory-meta chrome still lives outside this file. Deferred
-  pending pass on the memory-detail surface.
+- [x] **T4 · One date format per surface.** `EntryExpandedView.fullTimestamp`
+  now uses `EEE MMM d · h:mm a` (with `, yyyy` for prior years) — same shape
+  as `ClipTimingProjection.formatDateTimePlace`. Memory Detail's memory-meta
+  line and clip-header line share vocabulary; `July 5 · 3:44 PM` (long month
+  name) is retired.
 - [x] **T5 · Compact row time is one treatment.** Removed the `isEmphasized`
   time-color swap; the chevron rotation is the accordion cue.
 
