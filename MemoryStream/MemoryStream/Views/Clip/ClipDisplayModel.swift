@@ -122,7 +122,7 @@ struct ClipDisplayModel: Equatable, Identifiable {
     /// image, or receives a pre-fetched `UIImage` via the
     /// `providedThumbnail` param (Slice 3) when the container has
     /// already batch-loaded the strip (e.g. a burst).
-    struct ThumbnailKey: Equatable {
+    struct ThumbnailKey: Equatable, Hashable {
         let osIdentifier: String
         let mediaType: MediaReference.MediaType
     }

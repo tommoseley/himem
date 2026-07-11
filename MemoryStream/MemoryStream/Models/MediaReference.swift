@@ -100,7 +100,7 @@ extension MediaReference {
     /// Fragment kinds that can hang off a Memory. The "media" name is
     /// historical — `.note` is a typed-text fragment with no underlying
     /// asset; the others reference an audio/photo/video file.
-    enum MediaType: String {
+    enum MediaType: String, Hashable {
         case image = "image"
         case voice = "voice"
         case video = "video"

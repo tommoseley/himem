@@ -655,13 +655,26 @@ struct BurstRow: View {
                 .stroke(Crucible.Color.hairline, lineWidth: 1)
         )
         .task(id: refs.map(\.id)) {
-            for ref in refs.prefix(5) where thumbnails[ref.id] == nil {
-                if let name = await ThumbnailService.shared.cacheThumbnail(
-                    for: ref.osIdentifier,
-                    mediaType: ref.mediaTypeEnum
-                ) {
-                    thumbnails[ref.id] = ThumbnailService.shared.cachedThumbnail(filename: name)
+            // Slice 6: batch-fetch through `BurstThumbnailPrefetcher`
+            // with bounded concurrency (default 3). Retires the
+            // R2-flagged storm where a 12-photo burst fired 12
+            // parallel `ThumbnailService.cacheThumbnail` calls at
+            // once — see `docs/architecture/2026-07-11-clip-model-
+            // convergence-plan.md` § Q4a.
+            let inputs = refs.prefix(5)
+                .filter { thumbnails[$0.id] == nil }
+                .map {
+                    BurstThumbnailPrefetcher.PrefetchInput(
+                        id: $0.id,
+                        thumbnailKey: ClipDisplayModel.ThumbnailKey(
+                            osIdentifier: $0.osIdentifier,
+                            mediaType: $0.mediaTypeEnum
+                        )
+                    )
                 }
+            let loaded = await BurstThumbnailPrefetcher.prefetch(keys: inputs)
+            for (id, image) in loaded {
+                thumbnails[id] = image
             }
         }
     }
