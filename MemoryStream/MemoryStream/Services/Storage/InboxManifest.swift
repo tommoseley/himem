@@ -198,11 +198,18 @@ final class InboxManifest: ObservableObject {
     /// clipIds, so a dismissed record with a placed clipId can
     /// never match a future proposal.
     ///
-    /// Not `@Published` — the workbench reads it directly through
-    /// `dismissedClusterFingerprints` when it recomputes proposals
-    /// after a manifest change, so a `@Published` clips update
-    /// already drives the refresh.
-    private(set) var dismissedClusters: [DismissedCluster] = []
+    /// `@Published` so `SessionListView` (which observes
+    /// `InboxManifest.shared` as `@ObservedObject`) re-renders
+    /// when the user taps *Not together* on a cluster card. The
+    /// prior "not Published" reasoning ("a `@Published` clips
+    /// update already drives the refresh") was wrong: dismissing
+    /// a cluster does NOT touch `clips`, so no publish fires,
+    /// SwiftUI never re-runs the `proposals` computed property,
+    /// and the dismissed cluster stays on screen (field-observed
+    /// bug 2026-07-11).
+    ///
+    /// Money-tested by `InboxManifestDismissedClustersTests.dismissCluster_firesObjectWillChange_soSwiftUIRerenders`.
+    @Published private(set) var dismissedClusters: [DismissedCluster] = []
 
     /// Folders. Created lazily on first access. Marked `nonisolated` so the
     /// WatchSessionDelegate can resolve paths off the main actor — the

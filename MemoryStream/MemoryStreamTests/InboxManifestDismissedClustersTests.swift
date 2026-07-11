@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Combine
 @testable import HiMem
 
 /// Money tests for the Sort dismissal store on `InboxManifest`.
@@ -76,6 +77,55 @@ struct InboxManifestDismissedClustersTests {
 
         #expect(InboxManifest.shared.dismissedClusterFingerprints.contains(p.fingerprint),
                 "dismissCluster must add the fingerprint to the suppression set")
+
+        InboxManifest.shared.remove(clipId: a)
+        InboxManifest.shared.remove(clipId: b)
+    }
+
+    /// Field-observed bug (2026-07-11 screenshot): tapping
+    /// **Not together** on a cluster card did nothing visible — the
+    /// card stayed on screen. Root cause: `dismissedClusters` was
+    /// not `@Published`, so mutating it never fired
+    /// `objectWillChange`. `SessionListView` observes
+    /// `InboxManifest.shared` via `@ObservedObject`; without a
+    /// publisher fire, SwiftUI never re-rendered, so the
+    /// `proposals` computed property never recomputed and the
+    /// dismissed cluster stayed visible.
+    ///
+    /// Money-test invariant: `dismissCluster(_:)` must fire
+    /// `objectWillChange` at least once. Before the fix, the count
+    /// stays at `0`; after the fix (adding `@Published` to
+    /// `dismissedClusters`) the count is `≥ 1`.
+    @Test
+    func dismissCluster_firesObjectWillChange_soSwiftUIRerenders() async throws {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
+
+        let priorClips = InboxManifest.shared.clips
+        let priorDismissed = InboxManifest.shared.dismissedClusters
+        InboxManifest.shared.debugReplaceClipsForTesting([])
+        InboxManifest.shared.debugReplaceDismissedForTesting([])
+        defer {
+            InboxManifest.shared.debugReplaceDismissedForTesting(priorDismissed)
+            InboxManifest.shared.debugReplaceClipsForTesting(priorClips)
+        }
+
+        let a = plantClip()
+        let b = plantClip()
+        let p = proposal(clipIds: [a, b])
+
+        // Subscribe AFTER setup so only the dismissCluster call
+        // is measured.
+        var fireCount = 0
+        let cancellable = InboxManifest.shared.objectWillChange.sink { _ in
+            fireCount += 1
+        }
+        defer { cancellable.cancel() }
+
+        InboxManifest.shared.dismissCluster(p)
+
+        #expect(fireCount >= 1,
+                "dismissCluster must fire objectWillChange so SessionListView re-renders and the dismissed cluster disappears from the workbench")
 
         InboxManifest.shared.remove(clipId: a)
         InboxManifest.shared.remove(clipId: b)
