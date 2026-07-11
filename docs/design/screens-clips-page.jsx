@@ -158,18 +158,36 @@ function BurstRow({ time, place, count, kind = 'photo', hues }) {
   );
 }
 
-// A single photo/video clip (not a burst) — thumbnail + time, no fake transcript.
-function MediaClipRow({ time, place, hue, video }) {
+// Inline "Add a description" affordance — a photo/video's description is the
+// clip's WORDS (the human stand-in for the future visual transcript, exactly
+// parallel to a voice clip's transcript), so it's editable at the CLIP level,
+// right here on the Clips surface. Ochre = human-written (never AI blue).
+const DESC_PENCIL = <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l4-1L17 6l-3-3L4 13l-1 4z"/></svg>;
+function AddDescHint() {
   return (
-    <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 13, padding: '9px 11px', display: 'flex', gap: 11, alignItems: 'center' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: PX.accent, marginTop: 4 }}>
+      {DESC_PENCIL} Add a description
+    </span>
+  );
+}
+
+// A single photo/video clip (not a burst) — thumbnail + time. Its description
+// (if written) reads as the row's body, the way a voice clip's transcript does;
+// if empty, the row invites one. Tap → the media clip detail (full editor).
+function MediaClipRow({ time, place, hue, video, desc }) {
+  return (
+    <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 13, padding: '9px 11px', display: 'flex', gap: 11, alignItems: 'flex-start' }}>
       <Thumb size={46} hue={hue} video={video} radius={9} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>{video ? 'Video' : 'Photo'}</div>
+        {desc
+          ? <div style={{ fontSize: 13.5, color: PX.ink, lineHeight: 1.4, letterSpacing: -0.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{desc}</div>
+          : <div style={{ fontSize: 13.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>{video ? 'Video' : 'Photo'}</div>}
         <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 1, letterSpacing: -0.05 }}>
           {time}{place ? ' · ' + place : ''}
         </div>
+        {!desc && <AddDescHint />}
       </div>
-      <svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M1 1l6 6-6 6"/></svg>
+      <svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 4 }}><path d="M1 1l6 6-6 6"/></svg>
     </div>
   );
 }
@@ -212,7 +230,7 @@ function ScrClipsDefault() {
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, padding: '2px 4px 0' }}>Mon May 11</div>
         {/* the burst that used to be 4 identical "Photo" rows — now one strip */}
         <BurstRow time="5:39 PM" place="Tybee Island" count={4} kind="photo" hues={[35, 60, 90, 120]} />
-        <MediaClipRow time="5:30 PM" place="Tybee Island" hue={200} video />
+        <MediaClipRow time="5:30 PM" place="Tybee Island" hue={200} video desc="Waves coming in at dusk — the light I want for the opening shot." />
         <MediaClipRow time="5:30 PM" place="Tybee Island" hue={150} />
         <LooseClipRow mediaIcon={MIC} time="2:33 PM" preview="One thing I like is that we can also add links to this — so if I have a link for something…" />
       </div>
@@ -319,6 +337,60 @@ function ScrClipDetail() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Media clip (photo/video) as primary object. Parallel to ScrClipDetail,
+// but where a voice clip shows Transcript, a photo/video shows DESCRIPTION
+// — the clip's words, human-written, editable HERE (evidence-level), the
+// same field AI Organize + search read. `described` toggles filled/empty.
+// ═══════════════════════════════════════════════════════════════
+function ScrMediaClipDetail({ described = false, video = false, editing = false }) {
+  return (
+    <PhoneScreen>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '6px 14px 8px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: PX.accent, fontSize: 15 }}>
+          <svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 8l7 7"/></svg>
+          Clips
+        </span>
+        <span style={{ flex: 1 }} />
+      </div>
+      <div style={{ flex: 1, overflow: 'hidden', padding: '0 18px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 10 }}>
+          {video ? 'Video' : 'Photo'} · May 11, 5:30 PM · Tybee Island
+        </div>
+        {/* media hero — the thumbnail IS the evidence, first-class */}
+        <MediaThumb kind={video ? 'video' : 'photo'} duration={video ? '0:18' : undefined} height={190} />
+        {/* DESCRIPTION — the clip's words. Empty invites; filled reads as body;
+            editing routes through the ONE canonical ClipEditor (field="description"). */}
+        {editing
+          ? <ClipEditor field="description" media={video ? 'video' : 'photo'}
+              value="Waves coming in at dusk — the low gold light I want for the opening shot. Shot wide so the horizon sits on the lower third." />
+          : described
+            ? <DescriptionFilled>Waves coming in at dusk — the low gold light I want for the opening shot. Shot wide so the horizon sits on the lower third.</DescriptionFilled>
+            : <DescriptionEmpty />}
+        {/* Referenced in — same ontology as a voice clip */}
+        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, margin: '18px 0 8px' }}>Referenced in</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 16 }}>
+          <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 12, padding: '10px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Mem size={13} color={PX.accent} />
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.15 }}>Tybee, opening sequence</span>
+              <span style={{ flex: 1 }} />
+              <svg width="6" height="11" viewBox="0 0 8 14" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
+            </div>
+          </div>
+        </div>
+        {/* placement affordance */}
+        <div style={{
+          minHeight: 44, borderRadius: 12, border: '1px dashed ' + PX.accent, color: PX.accent,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 14, fontWeight: 600,
+        }}>
+          <Plus size={13} color={PX.accent} /> Where else does this belong?
+        </div>
+      </div>
+    </PhoneScreen>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Active Navigation Tap — the Clips status sheet.
 // Tapping the already-active Clips tab (when at top) slides this up.
 // Answers "what exactly is there?" — sources · processing · available.
@@ -395,44 +467,25 @@ function ScrClipsStatusSheet() {
 //   • Rows sort by capture timestamp: voice(0:00) → photo(+128s)
 //     → voice(+180s), one continuous sitting.
 // ═══════════════════════════════════════════════════════════════
-const RING = <span style={{ width: 22, height: 22, borderRadius: 11, border: '6px solid ' + PX.accent, background: PX.card, boxSizing: 'border-box', flexShrink: 0, marginTop: 1 }} />;
-const RETRY = (
-  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: PX.ai }}>
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={PX.ai} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9a7 7 0 0111-5l3 2M21 15a7 7 0 01-11 5l-3-2"/><path d="M17 3v3h-3M7 21v-3h3"/></svg>
-    Retry transcription
-  </span>
-);
-const PLAYTRI = <svg width="15" height="17" viewBox="0 0 16 18" fill="none" stroke={PX.ink4} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}><path d="M4 3l10 6-10 6z"/></svg>;
-
-function SessionVoiceRow({ offset, dur, text, divider }) {
+// Session clip rows — the operational register of the canonical ClipAtom.
+// These wrap ClipAtom (register="operational", inclusion ring) and add only the
+// session-body chrome: a divider between stacked rows. No duplicate ring/retry/
+// play primitives — those live once in screens-clip-model.jsx.
+function SessionVoiceRow({ offset, dur, text, divider, failed = false }) {
   return (
-    <div style={{ borderTop: divider ? '1px solid ' + PX.hairline : 'none', paddingTop: divider ? 14 : 0, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-      {RING}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', gap: 16, fontSize: 12.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums', marginBottom: 4 }}>
-          <span style={{ fontWeight: 600, color: PX.ink2 }}>{offset}</span>
-          <span>{dur}</span>
-        </div>
-        <div style={{ fontSize: 15, color: PX.ink, lineHeight: 1.4, letterSpacing: -0.1, marginBottom: 8 }}>“{text}”</div>
-        {RETRY}
-      </div>
-      {PLAYTRI}
+    <div style={{ borderTop: divider ? '1px solid ' + PX.hairline : 'none', paddingTop: divider ? 14 : 0 }}>
+      <ClipAtom media="audio" register="operational" ring meta={offset} duration={dur} transcript={text} failed={failed} />
     </div>
   );
 }
 
-// A photo/video clip sitting INSIDE the session — ring + thumbnail,
-// no transcript line, no Retry. This is the row the July 11 fix adds.
-function SessionMediaRow({ offset, hue, label = 'Photo', video, divider }) {
+// A photo/video clip inside the session — the same atom, media register. The
+// empty-description invite is rendered by ClipAtom itself (operational media),
+// so nothing here duplicates it.
+function SessionMediaRow({ offset, hue, label = 'Photo', video, divider, desc }) {
   return (
-    <div style={{ borderTop: divider ? '1px solid ' + PX.hairline : 'none', paddingTop: divider ? 14 : 0, display: 'flex', gap: 12, alignItems: 'center' }}>
-      {RING}
-      <Thumb size={50} hue={hue} video={video} radius={10} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: PX.ink2, fontVariantNumeric: 'tabular-nums', marginBottom: 2 }}>{offset}</div>
-        <div style={{ fontSize: 14.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>{label}</div>
-      </div>
-      <svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M1 1l6 6-6 6"/></svg>
+    <div style={{ borderTop: divider ? '1px solid ' + PX.hairline : 'none', paddingTop: divider ? 14 : 0 }}>
+      <ClipAtom media={video ? 'video' : 'photo'} register="operational" ring meta={offset} hue={hue} description={desc} />
     </div>
   );
 }
@@ -483,6 +536,7 @@ function ScrMixedSession() {
 
 Object.assign(window, {
   TabBar, ClipsHeader, LooseClipRow, PlacedClipRow, Thumb, BurstRow, MediaClipRow,
+  AddDescHint, SessionMediaRow, ScrMediaClipDetail,
   StatusLine, ScrClipsStatusSheet,
   ScrClipsDefault, ScrClipsAll, ScrClipDetail, ScrMixedSession,
 });

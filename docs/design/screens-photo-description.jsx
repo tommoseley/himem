@@ -9,6 +9,11 @@
 //   · Per item (each photo / video gets its own), not per group.
 //   · Entry: inline preview under the tile + tap the media to open a viewer
 //     where you read/edit it.
+//   · Editable at the CLIP level, not only inside a memory (July 11 2026):
+//     the description is the clip's words (evidence), so the same field is
+//     writable on the Clips surface — a media row shows it / invites it, and
+//     the media clip detail (ScrMediaClipDetail, screens-clips-page.jsx)
+//     carries this editor in the slot a voice clip fills with Transcript.
 //   · Empty state is PROMPTING (not faint) — right now it's the only way to
 //     make a photo searchable, so the invitation earns visibility.
 //   · Optional — never blocks. Label is "Description".

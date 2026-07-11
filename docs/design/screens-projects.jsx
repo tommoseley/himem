@@ -17,6 +17,7 @@ const TOPIC = {
   garden:    { label: 'Garden',          slug: 'pine' },
   global:    { label: 'Global Cuisine',  slug: 'sand'   },
   howWeWork: { label: 'How We Work',     slug: 'plum'   },
+  travel:    { label: 'Travel',          slug: 'sand'   },
 };
 
 function TopicChip({ k, active }) {

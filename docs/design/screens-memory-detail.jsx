@@ -163,11 +163,51 @@ function MDSummary({ children }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Clip card · transcript-first. Header (date+time+location), transcript body
-// as the working object, and a quiet "Original recording" control beneath —
-// audio is evidence, not the lead. (Unified editing model, June 9 2026.)
+// CANONICAL CLIP CONTENT (locked July 11 2026)
+// A clip's rendered body — transcript + the quiet evidence control — is ONE
+// component, used identically by a Full clip card AND by an expanded Compact
+// row. A clip must look like a clip everywhere it appears: same transcript
+// type (15 / 1.5), same evidence control, NO bold repeated lead sentence.
+// The evidence control is media-aware: audio → "Original recording",
+// video → "Video", photo → a thumbnail chip, note → nothing (text IS the clip).
 // ─────────────────────────────────────────────────────────────
-function MDClip({ day, date, year, time, location, transcript }) {
+// Reflective evidence control. Audio/video delegate to the ONE canonical
+// ClipEvidence (screens-clip-model.jsx); photo keeps the reflective thumbnail
+// chip (a photo clip in a memory has no inline thumbnail, so the chip IS its
+// evidence marker); note → nothing.
+function MDClipEvidence({ media = 'audio', duration }) {
+  if (media === 'note') return null;
+  if (media === 'photo') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: PX.ink3, paddingTop: 2 }}>
+        <span style={{
+          width: 34, height: 34, borderRadius: 8, background: PX.wash1, border: '1px solid ' + PX.hairline,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={PX.ink3} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="15" rx="2.5"/><circle cx="12" cy="12.5" r="3.2"/><path d="M8 5l1.5-2h5L16 5"/></svg>
+        </span>
+        <span style={{ fontSize: 12, letterSpacing: -0.05 }}>Photo</span>
+      </div>
+    );
+  }
+  return <ClipEvidence media={media} duration={duration} register="reflective" />;
+}
+
+// The clip body, shared by every expanded presentation of a clip.
+function MDClipContent({ transcript, media = 'audio', duration }) {
+  return (
+    <React.Fragment>
+      <div style={{ fontSize: 15, lineHeight: 1.5, color: PX.ink, letterSpacing: -0.1 }}>
+        {transcript}
+      </div>
+      <MDClipEvidence media={media} duration={duration}/>
+    </React.Fragment>
+  );
+}
+
+// Full clip card · transcript-first. Header (date+time+location) + the shared
+// clip content. (Unified editing model, June 9 2026.)
+function MDClip({ day, date, year, time, location, transcript, media, duration }) {
   return (
     <div style={{
       background: PX.card, border: '1px solid ' + PX.hairline,
@@ -182,18 +222,7 @@ function MDClip({ day, date, year, time, location, transcript }) {
       }}>
         {clipHeader({ day, date, year, time, location })}
       </div>
-      <div style={{ fontSize: 15, lineHeight: 1.5, color: PX.ink, letterSpacing: -0.1 }}>
-        {transcript}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: PX.ink3, paddingTop: 2 }}>
-        <span style={{
-          width: 24, height: 24, borderRadius: 12, border: '1px solid ' + PX.hairline,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
-          <svg width="9" height="9" viewBox="0 0 12 12" fill={PX.ink3}><path d="M2 1.5l8 4.5-8 4.5z"/></svg>
-        </span>
-        <span style={{ fontSize: 12, letterSpacing: -0.05 }}>Original recording</span>
-      </div>
+      <MDClipContent transcript={transcript} media={media} duration={duration}/>
     </div>
   );
 }
@@ -489,7 +518,7 @@ function MDClipMediaIcon({ media = 'audio' }) {
   );
 }
 
-function MDClipCompactRow({ time, lead, transcript, media, open, last, editing, onClick }) {
+function MDClipCompactRow({ time, lead, transcript, media, duration, open, last, editing, onClick }) {
   const header = (
     <div onClick={onClick} style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -514,47 +543,18 @@ function MDClipCompactRow({ time, lead, transcript, media, open, last, editing, 
     <div style={{ borderBottom: last && !open ? 'none' : '1px solid ' + PX.hairline, position: 'relative', overflow: 'hidden' }}>
       {header}
       {open && !editing && (
-        <div style={{ padding: '2px 4px 14px', background: PX.card }}>
-          <div style={{ fontSize: 14.5, lineHeight: 1.5, color: PX.ink, letterSpacing: -0.1 }}>
-            {transcript}
-          </div>
+        // The SAME clip content as a Full card — transcript + evidence control.
+        // The row's own icon·time line above is the header; no repeated lead.
+        <div style={{ padding: '2px 4px 14px', background: PX.card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <MDClipContent transcript={transcript} media={media || 'audio'} duration={duration}/>
         </div>
       )}
       {open && editing && (
-        // EDIT STATE — in flow, pushes siblings, never overlays. Field + a real
-        // Cancel/Done row beneath it (not a floating bar). FAB hidden at the
-        // screen level. This is the correct target for the June-9 build bugs.
-        <div style={{ padding: '2px 4px 12px', background: PX.card, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{
-            border: '1px solid ' + PX.accent, background: PX.paper, borderRadius: 12,
-            padding: '10px 12px', boxShadow: '0 0 0 3px ' + PX.accentTint,
-            fontSize: 14.5, lineHeight: 1.5, color: PX.ink, letterSpacing: -0.1,
-          }}>
-            {transcript}<span style={{ display: 'inline-block', width: 2, height: 17, background: PX.accent, verticalAlign: 'text-bottom', marginLeft: 1 }}/>
-          </div>
-          {/* play control stays visible while editing — replay to fix the text */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: PX.ink3 }}>
-            <span style={{
-              width: 24, height: 24, borderRadius: 12, border: '1px solid ' + PX.hairline,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <svg width="9" height="9" viewBox="0 0 12 12" fill={PX.ink3}><path d="M2 1.5l8 4.5-8 4.5z"/></svg>
-            </span>
-            <span style={{ fontSize: 12, letterSpacing: -0.05 }}>Original recording · 0:42</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14 }}>
-            <span style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600, color: PX.danger, letterSpacing: -0.1 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
-              Delete clip
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
-              <span style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', fontSize: 14.5, fontWeight: 600, color: PX.ink2, letterSpacing: -0.1 }}>Cancel</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, padding: '0 16px', borderRadius: 11, background: PX.accent, color: PX.accentInk, fontSize: 14.5, fontWeight: 600 }}>
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
-                Done
-              </span>
-            </span>
-          </div>
+        // EDIT STATE — the ONE canonical ClipEditor (field="transcript"). In
+        // flow, pushes siblings, never overlays. No "Move to…" in the compact
+        // index (that lives on the full card). FAB hidden at the screen level.
+        <div style={{ padding: '2px 4px 14px', background: PX.card }}>
+          <ClipEditor field="transcript" value={transcript} media={media || 'audio'} duration={duration || '0:42'} showLabel={false} showMove={false} />
         </div>
       )}
     </div>
@@ -751,57 +751,12 @@ function MDClipV2({ day, date, year, time, location, transcript, editing }) {
         {clipHeader({ day, date, year, time, location })}
       </div>
       {editing ? (
-        <React.Fragment>
-          <MDEditField>{transcript}</MDEditField>
-          {/* play control stays visible while editing — you replay to fix the text */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: PX.ink3, paddingTop: 2 }}>
-            <span style={{
-              width: 24, height: 24, borderRadius: 12, border: '1px solid ' + PX.hairline,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <svg width="9" height="9" viewBox="0 0 12 12" fill={PX.ink3}><path d="M2 1.5l8 4.5-8 4.5z"/></svg>
-            </span>
-            <span style={{ fontSize: 12, letterSpacing: -0.05 }}>Original recording · 0:48</span>
-          </div>
-          {/* clip-fate management row (Delete clip · Move to…) — sits above the
-              text-edit commit row so four actions never crowd one line. */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, marginTop: 2, paddingTop: 10, borderTop: '1px solid ' + PX.divider }}>
-            <span style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600, color: PX.danger, letterSpacing: -0.1 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
-              Delete clip
-            </span>
-            <span style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600, color: PX.ink2, letterSpacing: -0.1 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17v-3a4 4 0 014-4h11"/><path d="M16 5l5 5-5 5"/></svg>
-              Move to…
-            </span>
-          </div>
-          {/* text-edit commit row — Cancel / Done (right). */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 14, marginTop: 2 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
-              <span style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', fontSize: 14.5, fontWeight: 600, color: PX.ink2, letterSpacing: -0.1 }}>Cancel</span>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, padding: '0 16px',
-                borderRadius: 11, background: PX.accent, color: PX.accentInk, fontSize: 14.5, fontWeight: 600, letterSpacing: -0.1,
-              }}>
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
-                Done
-              </span>
-            </span>
-          </div>
-        </React.Fragment>
+        // EDIT STATE — the ONE canonical ClipEditor (field="transcript"). The
+        // full card includes "Move to…" (relocate the clip); the card header
+        // above already carries the date, so no label inside the editor.
+        <ClipEditor field="transcript" value={transcript} media="audio" duration="0:48" showLabel={false} showMove />
       ) : (
-        <React.Fragment>
-          <div style={{ fontSize: 15, lineHeight: 1.5, color: PX.ink, letterSpacing: -0.1 }}>{transcript}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: PX.ink3, paddingTop: 2 }}>
-            <span style={{
-              width: 24, height: 24, borderRadius: 12, border: '1px solid ' + PX.hairline,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <svg width="9" height="9" viewBox="0 0 12 12" fill={PX.ink3}><path d="M2 1.5l8 4.5-8 4.5z"/></svg>
-            </span>
-            <span style={{ fontSize: 12, letterSpacing: -0.05 }}>Original recording · 0:48</span>
-          </div>
-        </React.Fragment>
+        <MDClipContent transcript={transcript} media="audio" duration="0:48"/>
       )}
     </div>
   );

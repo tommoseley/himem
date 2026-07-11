@@ -22,7 +22,9 @@
 
 <script type="text/babel" src="design-canvas.jsx"></script>
 <script type="text/babel" src="crucible-primitives.jsx"></script>
+<script type="text/babel" src="screens-photo-description.jsx"></script>
 <script type="text/babel" src="screens-clips-page.jsx"></script>
+<script type="text/babel" src="screens-clip-model.jsx"></script>
 
 <script type="text/babel">
 function App() {
@@ -36,8 +38,14 @@ function App() {
         <DCArtboard id="clips-all" label="Clips · All · placed clips show Referenced in" width={340} height={735}>
           <ScrClipsAll />
         </DCArtboard>
-        <DCArtboard id="clip-detail" label="Clip as primary object · transcript · media · Referenced in" width={340} height={735}>
+        <DCArtboard id="clip-detail" label="Voice clip as primary object · transcript · media · Referenced in" width={340} height={735}>
           <ScrClipDetail />
+        </DCArtboard>
+        <DCArtboard id="media-clip-empty" label="Photo clip · Description empty → prompts (the clip's words, editable here)" width={340} height={735}>
+          <ScrMediaClipDetail described={false} />
+        </DCArtboard>
+        <DCArtboard id="media-clip-described" label="Photo clip · Description written → reads as the clip's body, like a transcript" width={340} height={735}>
+          <ScrMediaClipDetail described={true} />
         </DCArtboard>
         <DCArtboard id="clips-mixed-session" label="Mixed session · idle-gap is media-agnostic · voice + photo + voice in ONE card (3 clips)" width={340} height={880}>
           <ScrMixedSession />

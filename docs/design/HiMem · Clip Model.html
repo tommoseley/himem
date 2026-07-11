@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HiMem · Clip Model</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="crucible.css" />
+<script src="crucible-theme.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: var(--paper); font-family: var(--sans); color: var(--ink); }
+  #root { width: 100vw; height: 100vh; overflow: hidden; }
+  a { color: var(--accent); }
+  a:hover { color: var(--accent-press); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#C64A1C"/>
+    <g fill="none" stroke="#EFECE5" stroke-width="3.4" stroke-linecap="round">
+      <circle cx="30" cy="34" r="5.4"/><circle cx="30" cy="66" r="5.4"/>
+      <path d="M40 34 H72"/><path d="M40 66 H72"/><path d="M30 40 V60"/>
+    </g>
+  </svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="crucible-primitives.jsx"></script>
+<script type="text/babel" src="screens-projects.jsx"></script>
+<script type="text/babel" src="screens-memories.jsx"></script>
+<script type="text/babel" src="screens-clips-page.jsx"></script>
+<script type="text/babel" src="screens-clip-model.jsx"></script>
+
+<script type="text/babel">
+const P = window.PX;
+
+// ── Small annotation helpers ──────────────────────────────────
+function Eyebrow({ children, color }) {
+  return <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: color || 'var(--ink3)', marginBottom: 10 }}>{children}</div>;
+}
+function Card({ children, w }) {
+  return <div style={{ width: w, background: P.card, border: '1px solid ' + P.hairline, borderRadius: 16, padding: '15px 16px' }}>{children}</div>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANEL A · The atom — one structure, two registers
+// ═══════════════════════════════════════════════════════════════
+function AtomPanel() {
+  const wrap = (label, sub, register) => (
+    <div style={{ flex: 1 }}>
+      <Eyebrow color={register === 'operational' ? P.accent : P.ai}>{label}</Eyebrow>
+      <div style={{ fontSize: 12.5, color: P.ink3, lineHeight: 1.5, marginBottom: 16, minHeight: 52 }}>{sub}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Card w="100%">
+          <ClipAtom register={register} ring={register === 'operational'}
+            media="audio" duration={register === 'operational' ? '0:03' : '0:42'}
+            meta={register === 'operational' ? '+0s   ·   0:03' : 'Wed Jun 3 · 9:47 PM · Bluffton'}
+            transcript="So it looks like we're flying up to Maine in two weeks to see my son." />
+        </Card>
+        <Card w="100%">
+          <ClipAtom register={register} ring={register === 'operational'}
+            media="photo" hue={35}
+            meta={register === 'operational' ? '+128s' : 'Wed Jun 3 · 9:51 PM · Bluffton'}
+            description={register === 'reflective' ? 'The new camera, still boxed on the workbench.' : undefined} />
+        </Card>
+        <Card w="100%">
+          <ClipAtom register={register}
+            media="note"
+            meta={register === 'operational' ? '+3m' : 'Wed Jun 3 · 9:54 PM'}
+            transcript="Stowe, Vermont — lovely town. Worth a detour if the timing works." />
+        </Card>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ width: 900, minHeight: 620, background: P.paper, padding: 40, boxSizing: 'border-box', fontFamily: P.sans }}>
+      <div style={{ fontFamily: P.serif, fontSize: 27, fontWeight: 400, letterSpacing: -0.5, color: P.ink }}>A clip is a clip, everywhere.</div>
+      <div style={{ fontSize: 13.5, color: P.ink2, marginTop: 8, marginBottom: 26, maxWidth: 760, lineHeight: 1.55 }}>
+        The same three-part structure — <strong>timing header → content → evidence control</strong> — in both registers.
+        Voice shows its transcript then a Play; a photo shows a real thumbnail (the image <em>is</em> the evidence); a note is just its text.
+        Only the skin changes: the operational register (Clips / a session) is denser and carries the ochre inclusion ring and Retry;
+        the reflective register (a Memory) is roomier, drops the ring, and states the recording in full.
+      </div>
+      <div style={{ display: 'flex', gap: 40 }}>
+        {wrap('Operational · Clips / session', 'Throughput. SF Pro, inclusion ring, offset timing, Retry on a failed transcript. This is triage — deciding what a clip becomes.', 'operational')}
+        <div style={{ width: 1, background: P.divider }} />
+        {wrap('Reflective · Memory', 'Reading. Roomier, no ring, full date · time · location, the recording named in full. This is the finished narrative.', 'reflective')}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANEL B · The collection skeleton
+// ═══════════════════════════════════════════════════════════════
+function SkeletonPanel() {
+  const tag = (t, c) => <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: c, background: c === P.ai ? P.aiTint : P.wash1, borderRadius: 6, padding: '3px 8px' }}>{t}</span>;
+  return (
+    <div style={{ width: 820, minHeight: 600, background: P.paper, padding: 40, boxSizing: 'border-box', fontFamily: P.sans }}>
+      <div style={{ fontFamily: P.serif, fontSize: 27, fontWeight: 400, letterSpacing: -0.5, color: P.ink }}>A collection = composition + a body of clips.</div>
+      <div style={{ fontSize: 13.5, color: P.ink2, marginTop: 8, marginBottom: 26, maxWidth: 700, lineHeight: 1.55 }}>
+        Every clip collection has the same bones: a <strong>composition header</strong> (the timespan and what media it holds)
+        and a <strong>body</strong> of clip atoms. The composition line is one shared primitive — it heads a session,
+        rides on a memory card, and heads a memory's transcript.
+      </div>
+
+      <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
+        <div style={{ width: 380 }}>
+          <Card w="100%">
+            <div style={{ position: 'relative' }}>
+              <div style={{ outline: '1.5px dashed ' + P.accent, outlineOffset: 6, borderRadius: 4, marginBottom: 20 }}>
+                <ClipComposition timespan="10:32 AM" media={{ audio: 2, photo: 1 }} register="operational" />
+              </div>
+              <div style={{ outline: '1.5px dashed ' + P.ai, outlineOffset: 8, borderRadius: 4 }}>
+                <ClipAtom register="operational" ring media="audio" duration="0:03" meta="+0s   ·   0:03" transcript="This is a test voice clip." />
+                <ClipDivider />
+                <ClipAtom register="operational" ring media="photo" hue={35} meta="+128s" />
+              </div>
+            </div>
+          </Card>
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 22, paddingTop: 6 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            {tag('Composition', P.accent)}
+            <div style={{ flex: 1, fontSize: 13, color: P.ink2, lineHeight: 1.5 }}>Timespan + media counts. The one line that summarises the whole collection. <em>This is what a memory card shows.</em></div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            {tag('Body', P.ai)}
+            <div style={{ flex: 1, fontSize: 13, color: P.ink2, lineHeight: 1.5 }}>The clip atoms, in capture order. Present when the collection is opened (a session, or a memory's detail); hidden when it's collapsed to a card.</div>
+          </div>
+          <div style={{ borderTop: '1px solid ' + P.divider, paddingTop: 18, fontSize: 13, color: P.ink3, lineHeight: 1.55, fontStyle: 'italic', fontFamily: P.serif }}>
+            A <strong>session</strong> is exactly this — a collection with no title, summary, or topics yet. A proto-memory on the workbench.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANEL C · The derivation — session → card → detail (SAME atom)
+// ═══════════════════════════════════════════════════════════════
+// Shared derived-layer node (title + AI summary + topics) — the thing that
+// turns a bare collection into a memory.
+function DerivedLayer({ compact }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 8 : 12 }}>
+      <div style={{ fontFamily: P.serif, fontWeight: 500, fontSize: compact ? 17.5 : 24, lineHeight: 1.15, color: P.ink, letterSpacing: -0.3 }}>
+        Travel planning: Georgia, Vermont, and Maine
+      </div>
+      <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
+        <AISpark />
+        <span style={{ fontSize: compact ? 15 : 15.5, color: P.ink2, lineHeight: 1.5, letterSpacing: -0.05,
+          ...(compact ? { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}) }}>
+          You're planning several destinations — Helen, Georgia and Stowe, Vermont — with a confirmed trip to Maine in two weeks to see your son.
+        </span>
+      </div>
+      {!compact && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margintop: 2 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minHeight: 34, padding: '0 13px', borderRadius: 11, background: P.wash1, fontSize: 13.5, color: P.ink }}>
+            <span style={{ width: 7, height: 7, borderRadius: 4, background: topicVar('travel') }} /> Travel
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhoneFrame({ children, label }) {
+  return (
+    <div>
+      <div style={{ width: 320, height: 660, background: P.paper, borderRadius: 26, border: '1px solid ' + P.hairline, overflow: 'hidden', position: 'relative', boxShadow: '0 10px 40px rgba(26,22,18,0.10)' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// 1 · Session on the Clips tab — collection, NO derived layer, + triage actions.
+function DemoSession() {
+  return (
+    <div style={{ padding: '20px 16px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: P.ink3, marginBottom: 8 }}>New · today</div>
+      <div style={{ fontFamily: P.serif, fontSize: 24, fontWeight: 400, color: P.ink, letterSpacing: -0.4 }}>3 new clips</div>
+      <div style={{ fontSize: 12.5, color: P.ink3, margin: '4px 0 16px' }}>1 session · 9:47–9:54 PM</div>
+      <div style={{ background: P.card, border: '1px solid ' + P.hairline, borderRadius: 18, padding: '15px 16px' }}>
+        <ClipCollection
+          register="operational"
+          timespan="9:47 PM"
+          media={{ audio: 2, photo: 1 }}
+          body={<>
+            <ClipAtom register="operational" ring media="audio" duration="0:07" meta="+0s   ·   0:07" transcript="Places to visit — Helen, Georgia." />
+            <ClipDivider />
+            <ClipAtom register="operational" ring media="photo" hue={35} meta="+128s" />
+            <ClipDivider />
+            <ClipAtom register="operational" ring media="audio" duration="0:05" meta="+3m   ·   0:05" transcript="Flying up to Maine in two weeks to see my son." />
+          </>}
+          actions={<>
+            <div style={{ minHeight: 48, borderRadius: 13, background: P.accent, color: P.accentInk, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 15, fontWeight: 600, marginTop: 4 }}>
+              Create one memory
+              <svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke={P.accentInk} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6" /></svg>
+            </div>
+          </>}
+        />
+      </div>
+      <div style={{ marginTop: 'auto', fontSize: 12, color: P.ink3, fontStyle: 'italic', fontFamily: P.serif, lineHeight: 1.5, textAlign: 'center' }}>
+        A collection with no derived layer.
+      </div>
+    </div>
+  );
+}
+
+// 2 · Memory card on the list — derived layer + composition, body COLLAPSED.
+function DemoCard() {
+  return (
+    <div style={{ padding: '20px 16px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontFamily: P.serif, fontSize: 15, color: P.ink2, marginBottom: 12 }}>Wednesday, June 3</div>
+      <MemoryCard
+        title="Travel planning: Georgia, Vermont, and Maine"
+        time="9:47 PM"
+        media={{ audio: 2, photo: 1 }}
+        topics={['travel']}
+        gist={{ kind: 'summary', text: "You're planning several destinations — Helen, Georgia and Stowe, Vermont — with a confirmed trip to Maine in two weeks to see your son." }}
+      />
+      <div style={{ marginTop: 'auto', fontSize: 12, color: P.ink3, fontStyle: 'italic', fontFamily: P.serif, lineHeight: 1.5, textAlign: 'center' }}>
+        Derived layer + composition. Body hidden.
+      </div>
+    </div>
+  );
+}
+
+// 3 · Memory detail — derived layer + composition + the FULL clip-atom body.
+function DemoDetail() {
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '16px 18px 10px', overflow: 'hidden', flex: 1 }}>
+        <DerivedLayer />
+        <div style={{ height: 1, background: P.divider, margin: '16px 0 14px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: P.ink3 }}>Transcript</span>
+          <span style={{ color: P.ink4 }}>·</span>
+          <ClipComposition media={{ audio: 2, photo: 1 }} register="reflective" />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <ClipAtom register="reflective" media="audio" duration="0:07" meta="Wed Jun 3 · 9:47 PM · Bluffton" transcript="Places to visit — Helen, Georgia." />
+          <ClipDivider />
+          <ClipAtom register="reflective" media="photo" hue={35} meta="Wed Jun 3 · 9:51 PM · Bluffton" description="The new camera, still boxed." />
+        </div>
+      </div>
+      <div style={{ padding: '0 18px 16px', fontSize: 12, color: P.ink3, fontStyle: 'italic', fontFamily: P.serif, lineHeight: 1.5, textAlign: 'center' }}>
+        Derived layer + composition + body.
+      </div>
+    </div>
+  );
+}
+
+function Arrow({ label }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, width: 132, alignSelf: 'center' }}>
+      <div style={{ fontSize: 11.5, color: P.accent, fontWeight: 600, textAlign: 'center', lineHeight: 1.4, letterSpacing: -0.1 }}>{label}</div>
+      <svg width="60" height="14" viewBox="0 0 60 14" fill="none" stroke={P.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 7h54M49 2l6 5-6 5" /></svg>
+    </div>
+  );
+}
+
+function DerivationPanel() {
+  return (
+    <div style={{ width: 1560, minHeight: 780, background: P.paper, padding: 40, boxSizing: 'border-box', fontFamily: P.sans }}>
+      <div style={{ fontFamily: P.serif, fontSize: 28, fontWeight: 400, letterSpacing: -0.5, color: P.ink }}>Memory = collection + derived data.</div>
+      <div style={{ fontSize: 13.5, color: P.ink2, marginTop: 8, marginBottom: 30, maxWidth: 940, lineHeight: 1.55 }}>
+        One object, three states of maturity. A <strong>session</strong> is the bare collection. Add the derived layer — an AI title,
+        summary, and topics — and it becomes a <strong>memory</strong>: collapsed to a <strong>card</strong> on the list (composition visible, body hidden),
+        or opened to <strong>detail</strong> (the same clip atoms from the session, now read reflectively). The clips never change; only what surrounds them does.
+      </div>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'stretch' }}>
+        <div><Eyebrow color={P.accent}>1 · Session (Clips)</Eyebrow><PhoneFrame><DemoSession /></PhoneFrame></div>
+        <Arrow label="+ derived layer (title · summary · topics)" />
+        <div><Eyebrow color={P.ai}>2 · Memory card (list)</Eyebrow><PhoneFrame><DemoCard /></PhoneFrame></div>
+        <Arrow label="expand the body" />
+        <div><Eyebrow color={P.ai}>3 · Memory detail</Eyebrow><PhoneFrame><DemoDetail /></PhoneFrame></div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANEL D · Rules
+// ═══════════════════════════════════════════════════════════════
+function RulesPanel() {
+  const cell = { padding: '17px 22px', borderBottom: '1px solid rgba(26,22,18,0.10)' };
+  const eyebrow = { fontSize: 10.5, fontWeight: 700, color: 'rgba(26,22,18,0.45)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 7 };
+  const body = { fontSize: 13.5, lineHeight: 1.55, color: '#1A1612', letterSpacing: -0.1 };
+  const code = { fontFamily: 'var(--mono)', fontSize: 12.5, background: P.wash1, borderRadius: 5, padding: '1px 5px' };
+  return (
+    <div style={{ width: 720, minHeight: 780, background: '#FFFCF6', overflow: 'hidden', fontFamily: P.sans }}>
+      <div style={{ padding: '26px 22px 6px' }}>
+        <div style={{ fontFamily: P.serif, fontSize: 27, fontWeight: 400, color: '#1A1612', letterSpacing: -0.4 }}>The model, in rules.</div>
+        <div style={{ fontSize: 13, color: 'rgba(26,22,18,0.55)', marginTop: 6, lineHeight: 1.5 }}>Three shared components. Two registers. One ontology. See <em>Clip model · spec.md</em>.</div>
+      </div>
+      <div style={cell}><div style={eyebrow}>The atom</div><div style={body}>One <code style={code}>ClipAtom</code>: <strong>timing → content → evidence</strong>, always in that order. Voice/note show a transcript; photo/video show a real thumbnail (never a generic glyph — the image is the evidence). <code style={code}>register</code> is the only skin switch.</div></div>
+      <div style={cell}><div style={eyebrow}>Two registers, never flattened</div><div style={body}><strong>Operational</strong> (Clips / session) is dense, SF Pro, carries the ochre inclusion ring + Retry. <strong>Reflective</strong> (Memory) is roomier, no ring, names the recording in full. Same bones, different skin — the operational/reflective split is a locked Crucible rule; we honour it, we don't erase it.</div></div>
+      <div style={cell}><div style={eyebrow}>The collection</div><div style={body}><code style={code}>ClipCollection</code> = <code style={code}>ClipComposition</code> (timespan + media counts, the memory-card's own line) + a body of atoms. The composition primitive is shared across session header, memory card, and transcript header.</div></div>
+      <div style={cell}><div style={eyebrow}>Session vs memory</div><div style={body}>A <strong>session</strong> is a collection with no derived layer — a proto-memory. A <strong>memory</strong> is a collection <em>plus</em> the derived layer (AI title, summary, topics, mentions). <strong>Card</strong> = derived + composition, body collapsed. <strong>Detail</strong> = derived + composition + body.</div></div>
+      <div style={{ padding: '17px 22px' }}><div style={eyebrow}>Why it matters</div><div style={body}>The same clip is recognisably the same object on the workbench and in the finished memory. "Make a memory" stops being a conversion into a different thing and becomes what it truly is — <em>wrapping a collection you already have with a little context.</em></div></div>
+    </div>
+  );
+}
+
+// ── Canvas ────────────────────────────────────────────────────
+function App() {
+  return (
+    <DesignCanvas
+      title="HiMem · Clip Model"
+      subtitle="Plan B — the clip atom, the collection skeleton, and the session→card→detail derivation, built from three shared components. A memory is a clip collection wearing a derived layer. Proves structural consistency across the operational (Clips) and reflective (Memory) surfaces without flattening the two registers."
+    >
+      <DCSection id="atom" title="1 · The atom" subtitle="One structure, two registers. The same clip is the same object on both surfaces.">
+        <DCArtboard id="atom-two" label="A clip is a clip, everywhere" width={900} height={620}>
+          <AtomPanel />
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="skeleton" title="2 · The collection skeleton" subtitle="Composition header + a body of clip atoms. A session is this with nothing added.">
+        <DCArtboard id="skeleton-1" label="Composition + body" width={820} height={600}>
+          <SkeletonPanel />
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="derivation" title="3 · The derivation" subtitle="Session → memory card → memory detail. The clips never change; only what surrounds them.">
+        <DCArtboard id="derivation-1" label="Memory = collection + derived data" width={1560} height={780}>
+          <DerivationPanel />
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="rules" title="The rules" subtitle="What CC builds against.">
+        <DCArtboard id="rules-1" label="The model, in rules" width={720} height={780}>
+          <RulesPanel />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
