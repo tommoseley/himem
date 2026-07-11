@@ -41,7 +41,6 @@ struct ClusterCardStack: View {
                 }
                 commitBar
             }
-            .padding(.horizontal, 14)
             .padding(.bottom, 12)
         }
     }

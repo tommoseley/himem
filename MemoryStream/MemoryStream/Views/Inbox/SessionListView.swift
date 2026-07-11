@@ -41,6 +41,14 @@ struct SessionListView: View {
     /// when the user expands a session for the first time; once they
     /// toggle a ring, manual selection takes over.
     @State private var sessionSelections: [UUID: Set<UUID>] = [:]
+    /// Per-session absorbed-media inclusion. Keyed by session id;
+    /// value is the `Set` of `MediaReference.id` that the user has
+    /// excluded from the bundle by tapping the ring on an absorbed
+    /// media row (photo / video). Default = empty (all media
+    /// included). Bundling filters `absorbedMediaBySessionId` by
+    /// this set — an excluded media ref stays on the bench as a
+    /// loose clip after the voice bundle commits.
+    @State private var sessionExcludedMediaIds: [UUID: Set<UUID>] = [:]
     /// Per-clip retry-transcription state — populated while a
     /// retry is in flight so the row's link shows a "Retrying…"
     /// spinner and disables to prevent double-taps. Cleared when
@@ -255,7 +263,6 @@ struct SessionListView: View {
                 .foregroundStyle(Crucible.Color.ink2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, 20)
         .padding(.top, 24)
     }
 
@@ -275,7 +282,6 @@ struct SessionListView: View {
                         totalInFlight: inFlight.count,
                         allPaused: allPaused(among: inFlight)
                     )
-                    .padding(.horizontal, 14)
                     .padding(.bottom, 10)
                     // Per-clip IncomingCards above the ready session
                     // list.
@@ -289,7 +295,6 @@ struct SessionListView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 14)
                     .padding(.bottom, 12)
                 }
                 ClusterCardStack(
@@ -302,7 +307,6 @@ struct SessionListView: View {
                         sessionCard(session)
                     }
                 }
-                .padding(.horizontal, 14)
                 Color.clear.frame(height: 20)
             }
         }
@@ -328,7 +332,6 @@ struct SessionListView: View {
                 .foregroundStyle(Crucible.Color.ink3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 16)
     }
@@ -601,7 +604,7 @@ struct SessionListView: View {
                         isLast: idx == rows.count - 1
                     )
                 case .media(let ref):
-                    mediaClipRow(ref, isLast: idx == rows.count - 1)
+                    mediaClipRow(ref, session: session, isLast: idx == rows.count - 1)
                 }
             }
             // v3 (July 4 2026): the "Make a Memory" pill lives here,
@@ -677,14 +680,14 @@ struct SessionListView: View {
     /// clips in the top day-grouped stack pre-absorption).
     ///
     /// Slice 8 (Sessions bench convergence): renders through
-    /// `ClipAtomView(register: .operational)`. The ring reads as
-    /// always-included (write-through no-op) because the current
-    /// `BundleRequest.clipsToBundle` only carries voice clips;
-    /// absorbed media rides along unconditionally. Wiring the ring
-    /// to a real media-inclusion set is a downstream change to the
-    /// bundling flow, not Slice 8's scope.
+    /// `ClipAtomView(register: .operational)`. Ring binding wired
+    /// to `sessionExcludedMediaIds[session.id]` — tapping the ring
+    /// toggles the media clip's inclusion in the bundle-a-memory
+    /// commit. Excluded media stays on the bench as a loose clip
+    /// after the voice bundle commits (see
+    /// `handleCommitOneMemory` for the filter).
     @ViewBuilder
-    private func mediaClipRow(_ ref: MediaReference, isLast: Bool) -> some View {
+    private func mediaClipRow(_ ref: MediaReference, session: ClipGroup, isLast: Bool) -> some View {
         // Photos/videos have no explicit session offset — the atom's
         // operational timing header computes offset against
         // sessionStart, but for absorbed media the offset reads as
@@ -692,9 +695,21 @@ struct SessionListView: View {
         // header consistent with voice rows.
         let sessionStart = ref.createdAt // best available anchor for a lone media clip
         let model = ClipDisplayModel(mediaReference: ref, duration: nil, sessionStart: sessionStart)
-        // Always-included ring, write-through no-op — see method
-        // docstring for the bundling-flow caveat.
-        let ringBinding = Binding<Bool>(get: { true }, set: { _ in })
+        let refId = ref.id
+        let sessionId = session.id
+        let isIncluded = !(sessionExcludedMediaIds[sessionId]?.contains(refId) ?? false)
+        // Real ring binding — reads/writes `sessionExcludedMediaIds`
+        // so the user can toggle absorbed media in/out of the bundle.
+        // Getter returns "included" (i.e. NOT excluded); setter
+        // flips the exclusion set.
+        let ringBinding = Binding<Bool>(
+            get: { !(sessionExcludedMediaIds[sessionId]?.contains(refId) ?? false) },
+            set: { newIncluded in
+                var set = sessionExcludedMediaIds[sessionId] ?? []
+                if newIncluded { set.remove(refId) } else { set.insert(refId) }
+                sessionExcludedMediaIds[sessionId] = set
+            }
+        )
         VStack(spacing: 0) {
             NavigationLink {
                 ClipDetailView(ref: ref)
@@ -707,6 +722,7 @@ struct SessionListView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .opacity(isIncluded ? 1.0 : 0.55)
             if !isLast {
                 Rectangle()
                     .fill(Crucible.Color.hairline)
