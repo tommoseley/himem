@@ -222,29 +222,51 @@ enum ClipsStatusDataSource {
 
     @MainActor
     static func snapshot() -> ClipsStatusData {
-        let inbox = InboxManifest.shared
-        let watchArrivals = inbox.clips.filter { $0.source == "watch" }.count
-        // iPhone FAB voice and Siri captures land as memories directly,
-        // not on the Clips bench, so their arrival counts are 0 here.
-        // Post-launch: an arrival-log to attribute presence by source
-        // even when the capture skips the inbox.
-        let phoneArrivals = 0
+        Self.compute(
+            clips: InboxManifest.shared.clips,
+            organizing: processingTaskCount(),
+            looseClips: looseRefCount()
+        )
+    }
+
+    /// Pure computation of the sheet's status snapshot from the
+    /// upstream sources. Extracted so the counting rules can be
+    /// exercised at value-level without mounting SwiftUI or
+    /// touching the singleton `InboxManifest.shared`.
+    ///
+    /// Contract:
+    ///   - `watchArrivals` = clips with `source == "watch"`
+    ///   - `phoneArrivals` = clips with `source == "phone"` (per
+    ///     `PhoneCaptureBenchDispatcher` — since Slice D added
+    ///     phone captures to the inbox bench, they no longer skip
+    ///     it)
+    ///   - `siriArrivals` = 0 (Siri captures still land as
+    ///     memories directly, not on the bench)
+    ///   - `downloading` = clips with `.announced` or `.received`
+    ///     status
+    ///   - The passed-through `organizing` and `looseClips` are
+    ///     computed by the Core Data readers on the caller side.
+    static func compute(
+        clips: [InboxClip],
+        organizing: Int,
+        looseClips: Int
+    ) -> ClipsStatusData {
+        let watchArrivals = clips.filter { $0.source == "watch" }.count
+        let phoneArrivals = clips.filter { $0.source == "phone" }.count
         let siriArrivals = 0
-        // "Downloading" = still coming in from Watch — either
-        // pre-announce with the file not yet on disk, or file on
-        // disk but transcription still queued.
-        let downloading = inbox.clips.filter {
+        // "Downloading" = still coming in — either pre-announce
+        // with the file not yet on disk, or file on disk but
+        // transcription still queued.
+        let downloading = clips.filter {
             $0.status == .announced || $0.status == .received
         }.count
-        let organizing = processingTaskCount()
-        let loose = looseRefCount()
         return ClipsStatusData(
             watchArrivals: watchArrivals,
             phoneArrivals: phoneArrivals,
             siriArrivals: siriArrivals,
             downloading: downloading,
             organizing: organizing,
-            looseClips: loose
+            looseClips: looseClips
         )
     }
 
