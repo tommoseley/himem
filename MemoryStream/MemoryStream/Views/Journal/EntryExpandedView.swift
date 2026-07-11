@@ -68,13 +68,20 @@ struct EntryExpandedView: View {
     /// (July 5 2026): "Where does this belong?" from a clip's edit
     /// state opens the placement sheet with three destinations.
     @State private var relocatingClipId: UUID? = nil
-    @State private var selectedMedia: MediaDisplayItem? = nil
-    /// Non-nil while the full-screen video player is presented. Set
-    /// when the user taps a video in the chronological capture stream
-    /// (photos still open `PhotoDescriptionEditSheet` via
-    /// `selectedMedia`). Pre-launch addition (Tom 2026-06-09): videos
-    /// in the ubiquity container had a play-overlay glyph but tapping
-    /// only opened the description sheet — no playback path existed.
+    /// Slice 9 (Memory Detail Full stream convergence): the
+    /// retired `PhotoDescriptionEditSheet` used to host the
+    /// QuickLook viewer inside its own sheet. With inline
+    /// description edit in `MediaCard`, the viewer moves up to
+    /// this container. Non-nil while the QuickLook is presented
+    /// over a photo tap. Video keeps its own `videoPlayerForItem`
+    /// full-screen cover.
+    @State private var photoViewerItem: QuickLookItem? = nil
+    /// Non-nil while the full-screen video player is presented.
+    /// Set when the user taps a video's play badge in the
+    /// chronological capture stream. Pre-launch addition (Tom
+    /// 2026-06-09): videos in the ubiquity container had a play-
+    /// overlay glyph but tapping only opened the description
+    /// sheet — no playback path existed.
     @State private var videoPlayerForItem: MediaDisplayItem? = nil
     @State private var audioPlayerForFile: AudioPlayerTarget? = nil
     @State private var showShareSheet = false
@@ -327,7 +334,7 @@ struct EntryExpandedView: View {
         }
         .modifier(MediaFragmentEditorStack(
             audioPlayerForFile: $audioPlayerForFile,
-            selectedMedia: $selectedMedia,
+            photoViewerItem: $photoViewerItem,
             videoPlayerForItem: $videoPlayerForItem,
             legacyTranscriptFallback: entry.content,
             onSaveAudioTranscript: { mediaId, newText in
@@ -339,19 +346,6 @@ struct EntryExpandedView: View {
                     // inference re-derive from the new text.
                     lifecycle.edit(entryId: entry.id, newContent: newText)
                 }
-            },
-            onSaveMediaDescription: { mediaId, newText in
-                updateMediaDescription(id: mediaId, text: newText)
-            },
-            onDeleteMedia: { mediaId in
-                // Delete clip always destroys per `Memory Detail ·
-                // unified editing model.md:66` (locked July 5 2026) —
-                // "Delete clip *destroys* (→ Recently Deleted); 'Where
-                // does this belong?' *relocates*." The remove-from-
-                // memory action lives on the placement sheet, not the
-                // delete button.
-                lifecycle.deleteMediaReference(refId: mediaId)
-                lifecycle.regenerateContent(forEntryId: entry.id)
             }
         ))
         .sheet(isPresented: $showShareSheet) {
@@ -861,15 +855,28 @@ struct EntryExpandedView: View {
                 onPlayVideo: { item in
                     videoPlayerForItem = item
                 },
-                onEditMediaDescription: { item in
-                    // Whole-card tap on a photo or video routes here.
-                    // Opens the description editor — the editor itself
-                    // hosts a tap-to-open larger viewer for the image
-                    // / video. Putting the description on the primary
-                    // gesture keeps it reachable; the prior whole-card
-                    // → QuickLook/player routing left it hidden behind
-                    // a swipe most users never tried.
-                    selectedMedia = item
+                onViewPhoto: { item in
+                    // Slice 9 (Memory Detail Full stream
+                    // convergence): photo thumbnail tap opens
+                    // QuickLook over the memory. The description
+                    // edit path is now inline inside `MediaCard`
+                    // via `ClipEditor(field: .description)` — this
+                    // callback owns consume only, matching Q3's
+                    // edit-vs-consume separation.
+                    switch MediaResolver.resolve(osIdentifier: item.localIdentifier,
+                                                 mediaType: item.mediaType) {
+                    case .ubiquity(let url):
+                        photoViewerItem = QuickLookItem(url: url)
+                    case .photoKit:
+                        // Legacy PHAsset paths don't resolve to a
+                        // file URL; the miss is rare post-ubiquity
+                        // migration and silent (same behavior the
+                        // retired sheet had).
+                        break
+                    }
+                },
+                onCommitMediaDescription: { mediaId, newText in
+                    updateMediaDescription(id: mediaId, text: newText)
                 },
                 mode: transcriptMode,
                 openCompactRowId: transcriptOpenRowId,
@@ -1391,7 +1398,12 @@ private struct CommitFooter: View {
 /// directly — CRAP audit 2026-06-07.
 private struct MediaFragmentEditorStack: ViewModifier {
     @Binding var audioPlayerForFile: AudioPlayerTarget?
-    @Binding var selectedMedia: MediaDisplayItem?
+    /// Slice 9 (Memory Detail Full stream convergence):
+    /// `PhotoDescriptionEditSheet` retired. The QuickLook viewer
+    /// it hosted moves up to this stack so a photo tap in
+    /// `MediaCard` can still consume the file directly. Video
+    /// keeps its own full-screen cover.
+    @Binding var photoViewerItem: QuickLookItem?
     @Binding var videoPlayerForItem: MediaDisplayItem?
     /// Used when a voice clip predates the per-clip transcript
     /// schema — the joined entry content is the only transcript
@@ -1401,11 +1413,6 @@ private struct MediaFragmentEditorStack: ViewModifier {
     /// (mediaId?, newText) — `nil` mediaId means a legacy voice
     /// entry whose transcript IS the entry content.
     let onSaveAudioTranscript: (UUID?, String) -> Void
-    let onSaveMediaDescription: (UUID, String) -> Void
-    /// Deletes the photo/video clip from inside the description editor's
-    /// bottom Delete button. Wired to the same `EntryLifecycleService`
-    /// delete path the Full/Compact rows use.
-    let onDeleteMedia: (UUID) -> Void
 
     func body(content: Content) -> some View {
         content
@@ -1420,17 +1427,9 @@ private struct MediaFragmentEditorStack: ViewModifier {
                 )
                 .presentationDetents([.large])
             }
-            .sheet(item: $selectedMedia) { item in
-                PhotoDescriptionEditSheet(
-                    item: item,
-                    onSaveDescription: { newDescription in
-                        onSaveMediaDescription(item.id, newDescription)
-                    },
-                    onDelete: {
-                        onDeleteMedia(item.id)
-                    }
-                )
-                .presentationDetents([.large])
+            .sheet(item: $photoViewerItem) { item in
+                QuickLookViewer(url: item.url)
+                    .ignoresSafeArea()
             }
             .fullScreenCover(item: $videoPlayerForItem) { item in
                 VideoPlayerSheet(item: item)

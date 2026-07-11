@@ -147,7 +147,6 @@
 		A100000901 /* MediaResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000901 /* MediaResolver.swift */; };
 		A100000902 /* MediaReferenceUbiquityMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000902 /* MediaReferenceUbiquityMigration.swift */; };
 		A100000910 /* EditTextSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000910 /* EditTextSheet.swift */; };
-		A100000911 /* PhotoDescriptionEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000911 /* PhotoDescriptionEditSheet.swift */; };
 		A100000950 /* TopicChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000950 /* TopicChip.swift */; };
 		A100000951 /* ManageTopicsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000951 /* ManageTopicsSheet.swift */; };
 		A100000952 /* ManagedChipEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000952 /* ManagedChipEdit.swift */; };
@@ -406,7 +405,6 @@
 		B100000901 /* MediaResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaResolver.swift; sourceTree = "<group>"; };
 		B100000902 /* MediaReferenceUbiquityMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReferenceUbiquityMigration.swift; sourceTree = "<group>"; };
 		B100000910 /* EditTextSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTextSheet.swift; sourceTree = "<group>"; };
-		B100000911 /* PhotoDescriptionEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoDescriptionEditSheet.swift; sourceTree = "<group>"; };
 		B100000950 /* TopicChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicChip.swift; sourceTree = "<group>"; };
 		B100000951 /* ManageTopicsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageTopicsSheet.swift; sourceTree = "<group>"; };
 		B100000952 /* ManagedChipEdit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedChipEdit.swift; sourceTree = "<group>"; };
@@ -727,7 +725,6 @@
 				B100000201 /* MediaTile.swift */,
 				B100000203 /* AudioPlayerSheet.swift */,
 				B100000910 /* EditTextSheet.swift */,
-				B100000911 /* PhotoDescriptionEditSheet.swift */,
 				B100000323 /* Linkify.swift */,
 				B100000302 /* AppendFAB.swift */,
 				B100000305 /* CaptureFlowHost.swift */,
@@ -1425,7 +1422,6 @@
 				A100000305 /* CaptureFlowHost.swift in Sources */,
 				A100000203 /* AudioPlayerSheet.swift in Sources */,
 				A100000910 /* EditTextSheet.swift in Sources */,
-				A100000911 /* PhotoDescriptionEditSheet.swift in Sources */,
 				A100000323 /* Linkify.swift in Sources */,
 				A100000046 /* RecycleBinView.swift in Sources */,
 				A100000047 /* PhotoLibraryPicker.swift in Sources */,

@@ -49,13 +49,19 @@ struct ChronologicalCaptureStream: View {
     /// card — the quick-play shortcut that skips the description
     /// editor and goes straight to playback.
     let onPlayVideo: (MediaDisplayItem) -> Void
-    /// Fires from whole-card tap on a photo or video. Opens the
-    /// description editor (`PhotoDescriptionEditSheet`); the editor
-    /// in turn hosts a tap-to-open larger viewer for the image/video.
-    /// Putting the description on the primary gesture keeps the
-    /// words-belong-to-this-capture promise — the prior whole-card
-    /// → QuickLook/player routing left the description unreachable.
-    let onEditMediaDescription: (MediaDisplayItem) -> Void
+    /// Fires when the user taps a photo thumbnail on a Full-mode
+    /// `MediaCard`. Container opens `QuickLookViewer` for the
+    /// underlying file. Slice 9 (Memory Detail Full stream
+    /// convergence): replaces the retired
+    /// `onEditMediaDescription` whole-card route — thumbnail =
+    /// consume; description slot = inline edit (Q3 separation).
+    let onViewPhoto: (MediaDisplayItem) -> Void
+    /// Commits an inline description edit on a photo/video from
+    /// `MediaCard`'s embedded `ClipEditor(field: .description)`.
+    /// Parent routes to `EntryLifecycleService.updateMediaDescription`.
+    /// Slice 9 successor to `onEditMediaDescription` — no more
+    /// sheet round-trip; the trimmed value lands here directly.
+    let onCommitMediaDescription: (UUID, String) -> Void
 
     /// View mode for long memories. `.full` is the historical behavior
     /// (one rich row per clip); `.compact` renders a scannable index of
@@ -116,15 +122,20 @@ struct ChronologicalCaptureStream: View {
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
             case .media(let item):
-                // Photo/video has no view-state Delete — the bottom
-                // Delete lives inside `PhotoDescriptionEditSheet`,
-                // which is the edit mode the whole-card tap opens.
+                // Slice 9 (Memory Detail Full stream convergence):
+                // description edit lives inline in `MediaCard` via
+                // `ClipEditor(field: .description)`. Whole-card tap
+                // is retired — thumbnail = consume (viewer / player);
+                // description slot = edit (Q3 separation).
                 MediaCard(
                     item: item,
                     onPlayVideo: item.mediaType == .video ? { onPlayVideo(item) } : nil,
-                    onTap: (item.mediaType == .image || item.mediaType == .video)
-                        ? { onEditMediaDescription(item) }
-                        : nil
+                    onViewPhoto: item.mediaType == .image ? { onViewPhoto(item) } : nil,
+                    onSaveDescription: { newText in
+                        onCommitMediaDescription(item.id, newText)
+                    },
+                    onDelete: { onDeleteMedia(item.id) },
+                    onRelocate: { onRelocateClip(item.id) }
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -152,9 +163,17 @@ struct ChronologicalCaptureStream: View {
                 // right (rotation only triggers on `isOpen`, which
                 // the parent never sets for media).
                 onTap: {
+                    // Slice 9: Compact media rows route consume
+                    // to the parent viewer path — description edit
+                    // is a Full-mode concern (media rows are
+                    // hidden in Compact per the collapsed accordion
+                    // spec). Photo → QuickLook via onViewPhoto;
+                    // video → AVPlayer via onPlayVideo. Voice/note
+                    // still toggle the single-open accordion.
                     switch item.mediaType {
-                    case .image, .video: onEditMediaDescription(item)
-                    default:              onToggleCompactRow?(item.id)
+                    case .image:  onViewPhoto(item)
+                    case .video:  onPlayVideo(item)
+                    default:      onToggleCompactRow?(item.id)
                     }
                 },
                 // Voice clips edit inline through the lifecycle service;
@@ -663,22 +682,44 @@ struct MediaCard: View {
     /// thumbnail. Nil for photo items (the overlay isn't drawn) and
     /// for callers that haven't yet wired playback.
     var onPlayVideo: (() -> Void)? = nil
-    /// Fires when the user taps the photo card body (excluding the
-    /// video play-overlay). Per the unified editing spec (June 2026)
-    /// "Media · Tap to consume" — photo opens its viewer/description
-    /// surface. Nil for video (which exposes consume via the play
-    /// overlay instead).
-    var onTap: (() -> Void)? = nil
+    /// Fires when the user taps the thumbnail on a photo item.
+    /// Container opens `QuickLookViewer`. Nil = photo thumbnail is
+    /// inert (video uses `onPlayVideo` for the play badge; photos
+    /// only get a viewer when this is wired).
+    var onViewPhoto: (() -> Void)? = nil
+    /// Commits an edited description. Called by the inline
+    /// `ClipEditor` on Done when the trimmed value differs from
+    /// `item.mediaDescription`. Nil = description slot is read-only.
+    var onSaveDescription: ((String) -> Void)? = nil
+    /// Deletes the photo/video clip. Fires from the fate row inside
+    /// the inline description editor (matches
+    /// `VoiceClipPanel.onDelete` shape). Nil = fate row is hidden
+    /// from the editor.
+    var onDelete: (() -> Void)? = nil
+    /// Relocates the photo/video clip to another memory / into a
+    /// new memory. Fires from the fate row inside the inline
+    /// description editor. Nil = the relocate half of the fate row
+    /// is hidden.
+    var onRelocate: (() -> Void)? = nil
+
+    /// Slice 9 (Memory Detail Full stream convergence): inline
+    /// description edit state, replacing the retired
+    /// `PhotoDescriptionEditSheet`. Nil = read state (invite or
+    /// filled description); non-nil = editing (inline
+    /// `ClipEditor(field: .description)`). Same pattern as
+    /// `ClipDetailView`'s Slice 7 description slot — one editor,
+    /// consistent across surfaces.
+    @State private var editingDescription: String? = nil
 
     var body: some View {
-        let card = VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             CaptureTimestampLabel(date: item.createdAt, placeName: item.placeName)
-            MediaCardThumbnail(item: item, onPlayVideo: onPlayVideo)
-            if let desc = item.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
-                MediaDescriptionFilled(text: desc)
-            } else {
-                MediaDescriptionEmpty()
-            }
+            MediaCardThumbnail(
+                item: item,
+                onPlayVideo: onPlayVideo,
+                onTapPhoto: onViewPhoto
+            )
+            descriptionSlot
         }
         .padding(.horizontal, 14)
         .padding(.top, 14)
@@ -687,16 +728,49 @@ struct MediaCard: View {
         .background(Crucible.Color.card)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Crucible.Color.hairline, lineWidth: 1))
+    }
 
-        if let onTap {
-            // Whole-card tap = consume. Used for photos (open viewer +
-            // description). Video keeps consume on the play overlay
-            // only so the thumbnail itself isn't a hidden tap target.
-            // `.contentShape` makes the padding tappable too.
-            card.contentShape(Rectangle())
-                .onTapGesture { onTap() }
+    /// Description edit surface — tap-to-edit invite / filled body
+    /// in read state, inline `ClipEditor` in edit state. Nil
+    /// `onSaveDescription` collapses this to read-only.
+    @ViewBuilder
+    private var descriptionSlot: some View {
+        if editingDescription != nil, let onSaveDescription, let onDelete {
+            ClipEditor(
+                field: .description,
+                draft: Binding(
+                    get: { editingDescription ?? "" },
+                    set: { editingDescription = $0 }
+                ),
+                initialValue: item.mediaDescription ?? "",
+                editId: "description-\(item.id.uuidString)",
+                evidence: nil,
+                fateActions: ClipEditorFateActions(
+                    onDelete: onDelete,
+                    onRelocate: onRelocate
+                ),
+                onCancel: { editingDescription = nil },
+                onDone: { newValue in
+                    onSaveDescription(newValue)
+                    editingDescription = nil
+                }
+            )
+        } else if let desc = item.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+            MediaDescriptionFilled(text: desc)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if onSaveDescription != nil {
+                        editingDescription = desc
+                    }
+                }
         } else {
-            card
+            MediaDescriptionEmpty()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if onSaveDescription != nil {
+                        editingDescription = ""
+                    }
+                }
         }
     }
 }
@@ -708,30 +782,19 @@ struct MediaCard: View {
 private struct MediaCardThumbnail: View {
     let item: MediaDisplayItem
     let onPlayVideo: (() -> Void)?
+    /// Slice 9: photo thumbnail tap → `QuickLookViewer` for the
+    /// original file. Video keeps its own play-badge callback for
+    /// the AVPlayer; the surrounding thumbnail area is inert on
+    /// video so a stray tap doesn't compete with the badge.
+    let onTapPhoto: (() -> Void)?
+
     @State private var thumbnail: UIImage?
 
     private let height: CGFloat = 168
 
     var body: some View {
         ZStack(alignment: .center) {
-            if let thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: height)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Crucible.Color.sunk)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: height)
-                    .overlay {
-                        Image(systemName: item.mediaType == .video ? "video" : "photo")
-                            .font(.system(size: 28))
-                            .foregroundStyle(Crucible.Color.ink4)
-                    }
-            }
+            thumbnailContent
             if item.mediaType == .video {
                 Button {
                     onPlayVideo?()
@@ -761,6 +824,37 @@ private struct MediaCardThumbnail: View {
             if let cached = await ThumbnailService.shared.cacheThumbnail(for: item.localIdentifier, mediaType: item.mediaType) {
                 thumbnail = ThumbnailService.shared.cachedThumbnail(filename: cached)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var thumbnailContent: some View {
+        let tile = Group {
+            if let thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Crucible.Color.sunk)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+                    .overlay {
+                        Image(systemName: item.mediaType == .video ? "video" : "photo")
+                            .font(.system(size: 28))
+                            .foregroundStyle(Crucible.Color.ink4)
+                    }
+            }
+        }
+        if item.mediaType == .image, let onTapPhoto {
+            Button(action: onTapPhoto) { tile }
+                .buttonStyle(.plain)
+                .accessibilityLabel("View photo")
+        } else {
+            tile
         }
     }
 
