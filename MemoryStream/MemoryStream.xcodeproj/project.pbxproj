@@ -181,6 +181,7 @@
 		A200000036 /* SessionMediaAbsorber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000036 /* SessionMediaAbsorber.swift */; };
 		A200000037 /* BenchAbsorbedMediaBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000037 /* BenchAbsorbedMediaBus.swift */; };
 		A200000038 /* MemoryDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000038 /* MemoryDetailPresentationContext.swift */; };
+		A200000039 /* ClipDisplayModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000039 /* ClipDisplayModel.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
 		A900000002 /* OnDeviceOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000002 /* OnDeviceOrganizer.swift */; };
 		A900000003 /* ServerOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000003 /* ServerOrganizer.swift */; };
@@ -432,6 +433,7 @@
 		B200000036 /* SessionMediaAbsorber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SessionMediaAbsorber.swift; path = MemoryStream/Services/Storage/SessionMediaAbsorber.swift; sourceTree = SOURCE_ROOT; };
 		B200000037 /* BenchAbsorbedMediaBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BenchAbsorbedMediaBus.swift; path = MemoryStream/Services/Storage/BenchAbsorbedMediaBus.swift; sourceTree = SOURCE_ROOT; };
 		B200000038 /* MemoryDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryDetailPresentationContext.swift; path = MemoryStream/Services/MemoryDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
+		B200000039 /* ClipDisplayModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDisplayModel.swift; path = MemoryStream/Views/Clip/ClipDisplayModel.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
 		B900000002 /* OnDeviceOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceOrganizer.swift; sourceTree = "<group>"; };
 		B900000003 /* ServerOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOrganizer.swift; sourceTree = "<group>"; };
@@ -597,6 +599,7 @@
 				B200000021 /* ClipsTabView.swift */,
 				B200000027 /* ClipsStatusSheet.swift */,
 				B200000022 /* ClipDetailView.swift */,
+				G200000010 /* Clip */,
 				G100000070 /* Launch */,
 				G100000080 /* Onboarding */,
 				G100000040 /* Journal */,
@@ -685,6 +688,14 @@
 				B100000092 /* VoiceSearchView.swift */,
 			);
 			path = Search;
+			sourceTree = "<group>";
+		};
+		G200000010 /* Clip */ = {
+			isa = PBXGroup;
+			children = (
+				B200000039 /* ClipDisplayModel.swift */,
+			);
+			path = Clip;
 			sourceTree = "<group>";
 		};
 		G100000043 /* Components */ = {
@@ -1344,6 +1355,7 @@
 				A200000036 /* SessionMediaAbsorber.swift in Sources */,
 				A200000037 /* BenchAbsorbedMediaBus.swift in Sources */,
 				A200000038 /* MemoryDetailPresentationContext.swift in Sources */,
+				A200000039 /* ClipDisplayModel.swift in Sources */,
 				A200000022 /* ClipDetailView.swift in Sources */,
 				A200000023 /* PlaceClipSheet.swift in Sources */,
 				A100000509 /* SummaryFieldMigration.swift in Sources */,
