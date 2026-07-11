@@ -109,11 +109,8 @@ struct CompactClipRow: View {
     let isOpen: Bool
     let onTap: () -> Void
     /// Fires when the user taps the expanded transcript body to edit
-    /// it in place. Mirrors `VoiceClipPanel.onCommitTranscript` so the
-    /// same `EntryLifecycleService.updateMediaTranscript` path runs
-    /// regardless of which mode the user is in. Nil callers render
-    /// the expanded body as static text — used by note items, which
-    /// will get their own edit path in a later slice.
+    /// it in place. Nil callers render the expanded body as static
+    /// text — used by items without an edit path (media, legacy notes).
     let onCommitTranscript: ((String) -> Void)?
     /// Fires when the user taps the quiet "Original recording · Play"
     /// footer beneath the expanded transcript. Per spec rule #8
@@ -130,13 +127,17 @@ struct CompactClipRow: View {
     /// sheet. Nil for image/video (they use the description editor's
     /// own delete affordance).
     let onRelocate: (() -> Void)?
-    @State private var isEditingTranscript: Bool = false
-    @State private var transcriptDraft: String = ""
-    @FocusState private var transcriptFieldFocused: Bool
-    @ObservedObject private var editCoordinator = TextEditCoordinator.shared
+
+    /// Slice 10b (Clip Model convergence): inline edit state.
+    /// Nil = read; non-nil = editing (renders `ClipEditor(field:
+    /// .transcript)` in the expanded body). Replaces the retired
+    /// `isEditingTranscript` / `transcriptDraft` / `FocusState`
+    /// / `TextEditCoordinator` observer trio — `ClipEditor` owns
+    /// coordinator participation and focus internally.
+    @State private var editingDraft: String? = nil
+
     /// Audio duration in seconds, resolved lazily so the play footer
-    /// reads "Original recording · 0:48". Mirrors the pattern in
-    /// `VoiceClipPanel` and `MediaTile`.
+    /// reads "Original recording · 0:48".
     @State private var audioDuration: TimeInterval? = nil
 
     init(
@@ -165,7 +166,8 @@ struct CompactClipRow: View {
                 if let onPlay, item.mediaType == .voice {
                     // Play footer present in read AND edit (spec
                     // rule #8). Tap fires the parent's audio-player
-                    // sheet — same callback as VoiceClipPanel.
+                    // sheet — same callback as
+                    // `TranscriptClipController`.
                     Button(action: onPlay) {
                         HStack(spacing: 6) {
                             Image(systemName: "play.circle")
@@ -200,59 +202,74 @@ struct CompactClipRow: View {
         // editing, commit the edit (Done semantics) before letting
         // the close happen — never discard.
         .onChange(of: isOpen) { _, newValue in
-            if !newValue && isEditingTranscript {
-                commitInlineTranscriptEdit()
-            }
-        }
-        // Rule #6 — one edit at a time. If another editor (title,
-        // summary, another transcript row) takes the active id while
-        // we're editing here, commit (don't discard) before they take
-        // over.
-        .onChange(of: editCoordinator.activeEditId) { _, newId in
-            if isEditingTranscript && newId != editId {
-                commitInlineTranscriptEdit()
+            if !newValue && editingDraft != nil {
+                commitDraft()
             }
         }
     }
 
-    /// Either the read-mode expanded transcript (tap-to-edit when a
-    /// commit callback is wired) or an inline `TextEditor`. Same
-    /// gesture pattern as VoiceClipPanel — `simultaneousGesture` is
-    /// the reliable answer inside a List row, where a plain
-    /// `onTapGesture` or `Button` can be swallowed by the row's own
-    /// gesture machinery.
+    /// Header — atom's `.reflectiveCompact` row + chevron. Slice 10b
+    /// convergence: the media glyph / time / preview projections all
+    /// come from `ClipAtomView`; the chevron and accordion animation
+    /// stay container-owned per `Memory Detail · long-memory
+    /// navigation.md` §Compact ("expanding it swaps in the clip's
+    /// reflective body"). `isEmphasized: isOpen` drives the ochre
+    /// time + semibold preview weight the row inherits from the
+    /// prior JSX spec.
+    private var header: some View {
+        Button(action: {
+            if editingDraft != nil { commitDraft() }
+            onTap()
+        }) {
+            HStack(spacing: 6) {
+                ClipAtomView(
+                    model: ClipDisplayModel(mediaDisplayItem: item, duration: audioDuration, sessionStart: nil),
+                    register: .reflectiveCompact,
+                    isEmphasized: isOpen
+                )
+                .frame(maxWidth: .infinity)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
+                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                    .animation(.easeInOut(duration: 0.15), value: isOpen)
+                    .padding(.trailing, 4)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(minHeight: 52)
+    }
+
+    /// Either the read-mode transcript body (tap-to-edit when a
+    /// commit callback is wired) or the inline `ClipEditor`. Slice
+    /// 10b: retired the bespoke `TextField(axis: .vertical)` +
+    /// `ClipFateRow` + `EditCommitBar` triple in favor of `ClipEditor`,
+    /// which encodes the same shape once. Read-mode retains
+    /// `simultaneousGesture` because a plain `onTapGesture` gets
+    /// eaten by List-row gesture machinery.
     @ViewBuilder
     private func expandedTranscriptArea(fallback: String) -> some View {
-        if isEditingTranscript, onCommitTranscript != nil {
-            // `TextField(axis: .vertical)` auto-grows to fit the
-            // entire transcript at the same font/line-height as the
-            // displayed text (rule #7). Same width, same metrics —
-            // no shorter fixed-height box that hides most of the
-            // content.
-            VStack(alignment: .leading, spacing: 10) {
-                TextField("", text: $transcriptDraft, axis: .vertical)
-                    .font(.system(size: 14.5))
-                    .lineSpacing(2)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .focused($transcriptFieldFocused)
-                    .textFieldStyle(.plain)
-                    .padding(10)
-                    .background(Crucible.Color.paper)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Crucible.Color.accent, lineWidth: 1)
-                    )
-                // Two-row edit state per `Memory Detail · unified
-                // editing model.md:66` (July 5 2026).
-                if let onRelocate {
-                    ClipFateRow(onDelete: onDelete, onRelocate: onRelocate)
+        if editingDraft != nil, let onCommitTranscript {
+            ClipEditor(
+                field: .transcript,
+                draft: Binding(
+                    get: { editingDraft ?? "" },
+                    set: { editingDraft = $0 }
+                ),
+                initialValue: currentText,
+                editId: "compact-transcript-\(item.id.uuidString)",
+                evidence: audioEvidence,
+                fateActions: ClipEditorFateActions(
+                    onDelete: onDelete,
+                    onRelocate: onRelocate
+                ),
+                onCancel: { editingDraft = nil },
+                onDone: { newValue in
+                    onCommitTranscript(newValue)
+                    editingDraft = nil
                 }
-                EditCommitBar(
-                    onCancel: { cancelInlineTranscriptEdit() },
-                    onDone:   { commitInlineTranscriptEdit() }
-                )
-            }
+            )
             .padding(.top, 2)
             .padding(.bottom, 12)
             .padding(.horizontal, 4)
@@ -268,39 +285,34 @@ struct CompactClipRow: View {
                 .contentShape(Rectangle())
                 .simultaneousGesture(
                     TapGesture().onEnded {
-                        if onCommitTranscript != nil { beginInlineTranscriptEdit() }
+                        if onCommitTranscript != nil { editingDraft = currentText }
                     }
                 )
         }
     }
 
-    private var editId: String { "compact-transcript-\(item.id.uuidString)" }
-
-    private func beginInlineTranscriptEdit() {
-        transcriptDraft = item.transcript ?? item.text ?? ""
-        isEditingTranscript = true
-        TextEditCoordinator.shared.begin(id: editId)
-        DispatchQueue.main.async {
-            transcriptFieldFocused = true
-        }
+    /// Voice: `.audio(duration:)`. Note: nil (no evidence). Feeds the
+    /// `ClipEditor`'s evidence row — kept visible during edit per
+    /// spec § "media evidence kept visible."
+    private var audioEvidence: ClipDisplayModel.Evidence? {
+        item.mediaType == .voice ? .audio(duration: audioDuration) : nil
     }
 
-    private func commitInlineTranscriptEdit() {
-        let trimmed = transcriptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let currentSource = (item.transcript ?? item.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed != currentSource, let onCommitTranscript {
+    private var currentText: String {
+        item.transcript ?? item.text ?? ""
+    }
+
+    private func commitDraft() {
+        guard let draft = editingDraft, let onCommitTranscript else {
+            editingDraft = nil
+            return
+        }
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed != current {
             onCommitTranscript(trimmed)
         }
-        transcriptFieldFocused = false
-        isEditingTranscript = false
-        TextEditCoordinator.shared.end(id: editId)
-    }
-
-    private func cancelInlineTranscriptEdit() {
-        transcriptDraft = item.transcript ?? item.text ?? ""
-        transcriptFieldFocused = false
-        isEditingTranscript = false
-        TextEditCoordinator.shared.end(id: editId)
+        editingDraft = nil
     }
 
     /// Loads the clip's duration via `AVURLAsset.load` if local. Same
@@ -315,55 +327,6 @@ struct CompactClipRow: View {
         if let cm = try? await asset.load(.duration), cm.seconds.isFinite {
             await MainActor.run { audioDuration = cm.seconds }
         }
-    }
-
-    private var header: some View {
-        // Tap on time/chevron toggles expand/collapse. Per the
-        // revised spec rule #5 (June 10 2026): the expander is
-        // **never disabled** — if an edit is in progress, collapsing
-        // or switching rows **commits** the edit first (Done
-        // semantics), then performs the expand/collapse. Only the
-        // explicit Cancel button discards. A disabled expander was
-        // the trap; commit-then-switch is the fix.
-        Button(action: {
-            if isEditingTranscript {
-                commitInlineTranscriptEdit()
-            }
-            onTap()
-        }) {
-            HStack(spacing: 10) {
-                // Leading media-type icon per spec update (June 11):
-                // a single glance at the index tells the user what
-                // kind of clip each row is — mic / camera / video /
-                // doc — without opening it. The icon stays ink3
-                // regardless of open state (only time + lead + chevron
-                // go ochre when open).
-                Image(systemName: Self.mediaSymbol(for: item.mediaType))
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Crucible.Color.ink3)
-                    .frame(width: 22, alignment: .center)
-                Text(Self.timeLabel(for: item.createdAt))
-                    .font(.system(size: 12, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
-                    .frame(width: 54, alignment: .leading)
-                Text(Self.previewLine(for: item))
-                    .font(.system(size: 14, weight: isOpen ? .semibold : .regular))
-                    .foregroundStyle(Crucible.Color.ink)
-                    .lineLimit(isOpen ? nil : 1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
-                    .rotationEffect(.degrees(isOpen ? 90 : 0))
-                    .animation(.easeInOut(duration: 0.15), value: isOpen)
-            }
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .frame(minHeight: 52)
     }
 
     /// The body text shown inside the open expander. `nil` falls back to

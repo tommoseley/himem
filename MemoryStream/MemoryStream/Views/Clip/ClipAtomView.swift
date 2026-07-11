@@ -94,6 +94,15 @@ struct ClipAtomView: View {
     /// emptyTranscriptCaption > default "(no transcript)".
     var emptyTranscriptCaption: String? = nil
 
+    /// Slice 10b (Compact row convergence): visual emphasis for
+    /// the `.reflectiveCompact` register — when true, the time
+    /// label goes ochre (`Crucible.Color.accent`) and the preview
+    /// line goes semibold. Used by `CompactClipRow` to render the
+    /// `isOpen` accordion state. Ignored in `.operational` and
+    /// `.reflective` — those registers don't have a
+    /// container-driven "active row" concept.
+    var isEmphasized: Bool = false
+
     /// Inline status text appended after the retry link
     /// (e.g. `"· Retrying…"` while a retry is in flight,
     /// `"· Retry failed"` after an error). Owned by the container
@@ -182,7 +191,7 @@ struct ClipAtomView: View {
             if let time = timing.timeOnly {
                 Text(time)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Crucible.Color.ink3)
+                    .foregroundStyle(isEmphasized ? Crucible.Color.accent : Crucible.Color.ink3)
                     .monospacedDigit()
             }
             previewLine(from: content)
@@ -200,11 +209,11 @@ struct ClipAtomView: View {
         switch content {
         case .transcriptPreview(let text):
             Text(text.isEmpty ? "(no transcript)" : text)
-                .font(.system(size: 13))
+                .font(.system(size: 13, weight: isEmphasized ? .semibold : .regular))
                 .foregroundStyle(Crucible.Color.ink2)
         case .media(let description):
             Text(description ?? mediaLabel(model.media))
-                .font(.system(size: 13, weight: description == nil ? .semibold : .regular))
+                .font(.system(size: 13, weight: description == nil || isEmphasized ? .semibold : .regular))
                 .foregroundStyle(Crucible.Color.ink2)
         case .transcriptFull:
             // Unreachable in .reflectiveCompact (project returns
