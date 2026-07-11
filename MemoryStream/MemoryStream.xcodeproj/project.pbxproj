@@ -186,6 +186,7 @@
 		A200000041 /* ClipRegister.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000041 /* ClipRegister.swift */; };
 		A200000042 /* ClipAtomProjections.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000042 /* ClipAtomProjections.swift */; };
 		A200000043 /* ClipAtomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000043 /* ClipAtomView.swift */; };
+		A200000044 /* ClipComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000044 /* ClipComposition.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
 		A900000002 /* OnDeviceOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000002 /* OnDeviceOrganizer.swift */; };
 		A900000003 /* ServerOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000003 /* ServerOrganizer.swift */; };
@@ -442,6 +443,7 @@
 		B200000041 /* ClipRegister.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipRegister.swift; path = MemoryStream/Views/Clip/ClipRegister.swift; sourceTree = SOURCE_ROOT; };
 		B200000042 /* ClipAtomProjections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipAtomProjections.swift; path = MemoryStream/Views/Clip/ClipAtomProjections.swift; sourceTree = SOURCE_ROOT; };
 		B200000043 /* ClipAtomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipAtomView.swift; path = MemoryStream/Views/Clip/ClipAtomView.swift; sourceTree = SOURCE_ROOT; };
+		B200000044 /* ClipComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipComposition.swift; path = MemoryStream/Views/Clip/ClipComposition.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
 		B900000002 /* OnDeviceOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceOrganizer.swift; sourceTree = "<group>"; };
 		B900000003 /* ServerOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOrganizer.swift; sourceTree = "<group>"; };
@@ -987,6 +989,7 @@
 				B200000041 /* ClipRegister.swift */,
 				B200000042 /* ClipAtomProjections.swift */,
 				B200000043 /* ClipAtomView.swift */,
+				B200000044 /* ClipComposition.swift */,
 			);
 			path = Clip;
 			sourceTree = "<group>";
@@ -1372,6 +1375,7 @@
 				A200000041 /* ClipRegister.swift in Sources */,
 				A200000042 /* ClipAtomProjections.swift in Sources */,
 				A200000043 /* ClipAtomView.swift in Sources */,
+				A200000044 /* ClipComposition.swift in Sources */,
 				A200000022 /* ClipDetailView.swift in Sources */,
 				A200000023 /* PlaceClipSheet.swift in Sources */,
 				A100000509 /* SummaryFieldMigration.swift in Sources */,
