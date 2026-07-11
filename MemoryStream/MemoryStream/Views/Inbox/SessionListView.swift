@@ -70,6 +70,14 @@ struct SessionListView: View {
         let id = UUID()
         let session: ClipGroup
         let clipsToBundle: [InboxClip]
+        /// Absorbed photo/video/note `MediaReference`s the user
+        /// kept included on the media rows (i.e. did NOT deselect
+        /// via the ring). The create-memory step attaches these
+        /// to the new/existing entry via `StorageService.createEdge`
+        /// so a mixed session (2 voice + 1 photo) yields one
+        /// memory that actually contains all three clips. Empty
+        /// when the session has no absorbed media.
+        let absorbedMediaRefs: [MediaReference]
     }
 
     var body: some View {
@@ -91,6 +99,7 @@ struct SessionListView: View {
             CreateMemoryFromClipsSheet(
                 clips: request.clipsToBundle,
                 session: request.session,
+                absorbedMediaRefs: request.absorbedMediaRefs,
                 viewModel: viewModel
             )
         }
@@ -463,7 +472,11 @@ struct SessionListView: View {
                 let selected = selectionFor(session)
                 let clips = session.clips.filter { selected.contains($0.clipId) }
                 guard !clips.isEmpty else { return }
-                bundleSession = BundleRequest(session: session, clipsToBundle: clips)
+                bundleSession = BundleRequest(
+                    session: session,
+                    clipsToBundle: clips,
+                    absorbedMediaRefs: includedAbsorbedMedia(in: session)
+                )
             } label: {
                 // "Create one memory" is the placement primitive for an
                 // already-grouped (idle-gap) session per
@@ -919,7 +932,11 @@ struct SessionListView: View {
     @ViewBuilder
     private func makeAMemoryPill(_ session: ClipGroup, selectedClips: [InboxClip], isDisabled: Bool) -> some View {
         Button {
-            bundleSession = BundleRequest(session: session, clipsToBundle: selectedClips)
+            bundleSession = BundleRequest(
+                session: session,
+                clipsToBundle: selectedClips,
+                absorbedMediaRefs: includedAbsorbedMedia(in: session)
+            )
         } label: {
             HStack(spacing: 8) {
                 Text("Create one memory")
@@ -941,6 +958,20 @@ struct SessionListView: View {
         // tap-to-expand gesture.
         .contentShape(Rectangle())
         .simultaneousGesture(TapGesture().onEnded {})
+    }
+
+    /// Absorbed photo/video refs for `session` that the user has
+    /// NOT deselected on the media clip ring. Feeds
+    /// `BundleRequest.absorbedMediaRefs` so the create-memory step
+    /// attaches these to the new/existing entry via
+    /// `StorageService.createEdge`. Order preserved from
+    /// `absorbedMediaBySessionId` (which itself is `createdAt`-
+    /// sorted upstream).
+    private func includedAbsorbedMedia(in session: ClipGroup) -> [MediaReference] {
+        let excluded = sessionExcludedMediaIds[session.id] ?? []
+        let all = absorbedMediaBySessionId[session.id] ?? []
+        guard !excluded.isEmpty else { return all }
+        return all.filter { !excluded.contains($0.id) }
     }
 
     // MARK: - Selection state

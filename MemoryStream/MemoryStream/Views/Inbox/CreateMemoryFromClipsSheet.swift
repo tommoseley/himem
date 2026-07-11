@@ -23,6 +23,14 @@ struct CreateMemoryFromClipsSheet: View {
     /// ("3 clips · 3:36 PM · 0:12"). Optional so existing single-clip
     /// callers can keep working.
     var session: ClipGroup? = nil
+    /// Absorbed photo/video/note `MediaReference`s the user kept
+    /// included on the bench session card. Each gets attached to
+    /// the new/existing entry via `StorageService.createEdge` so
+    /// a mixed 2-voice + 1-photo session yields one memory
+    /// containing all three clips (July 11 2026 media-agnostic
+    /// idle-gap lock). Empty when the session had no absorbed
+    /// media or the user deselected them all.
+    var absorbedMediaRefs: [MediaReference] = []
     @ObservedObject var viewModel: JournalViewModel
 
     @State private var destination: Destination = .newMemory
@@ -527,6 +535,23 @@ struct CreateMemoryFromClipsSheet: View {
                         createdAt: clip.capturedAt
                     )
                 }
+                // July 11 2026 media-agnostic idle-gap lock: absorbed
+                // photo/video refs on the bench session card get
+                // attached here so the resulting memory contains all
+                // the session's clips, not just voice. Sorted by
+                // `createdAt` so edge ordering matches the visual
+                // chronology inside the card. Idempotent via
+                // `StorageService.createEdge`.
+                let sortedMedia = absorbedMediaRefs
+                    .sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
+                for ref in sortedMedia {
+                    try? StorageService.createEdge(
+                        from: entry,
+                        to: ref,
+                        linkedAt: Date(),
+                        in: storage.viewContext
+                    )
+                }
             }
             try? storage.save(context: storage.viewContext)
 
@@ -603,6 +628,30 @@ struct CreateMemoryFromClipsSheet: View {
                 longitude: stamp.longitude,
                 in: storage.viewContext
             )
+        }
+
+        // July 11 2026 media-agnostic idle-gap lock: attach
+        // absorbed photo/video refs to the destination entry, same
+        // as the new-memory path. Fetch the entry once so
+        // `createEdge` can build the reciprocal link. Idempotent
+        // per `StorageService.createEdge`.
+        if !absorbedMediaRefs.isEmpty {
+            let entryReq = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+            entryReq.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
+            entryReq.fetchLimit = 1
+            if let entry = try? storage.viewContext.fetch(entryReq).first {
+                let sortedMedia = absorbedMediaRefs
+                    .sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
+                for ref in sortedMedia {
+                    try? StorageService.createEdge(
+                        from: entry,
+                        to: ref,
+                        linkedAt: Date(),
+                        in: storage.viewContext
+                    )
+                }
+                try? storage.save(context: storage.viewContext)
+            }
         }
 
         InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
