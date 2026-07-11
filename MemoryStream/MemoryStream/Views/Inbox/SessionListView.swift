@@ -480,18 +480,28 @@ struct SessionListView: View {
     // days — "Today" for today, "Yesterday" for yesterday, short
     // "Wed Jul 2" for older. Removes the ambiguity of a 3-day-old
     // road-trip clip reading like today's.
+    /// Slice 8 (Sessions bench convergence): summary line derives
+    /// from `CompositionModel.from(clips:)` — the same primitive
+    /// every collection surface (memory cards, transcript header)
+    /// reads. Session card retains its bespoke chrome
+    /// (`time · count · duration` then date-label below) because
+    /// the shape doesn't match `ClipComposition`'s default (which
+    /// renders timespan + count, no duration); a future
+    /// convergence can extend `CompositionModel` with a total
+    /// duration and swap this for the shared component.
     private func sessionMetaRow(_ session: ClipGroup) -> some View {
+        let voiceClips = session.clips.map {
+            ClipDisplayModel(inboxClip: $0, sessionStart: session.capturedAt)
+        }
+        let mediaClips = (absorbedMediaBySessionId[session.id] ?? []).map {
+            ClipDisplayModel(mediaReference: $0, sessionStart: session.capturedAt)
+        }
+        let composition = CompositionModel.from(clips: voiceClips + mediaClips)
         let timeStr: String = {
             let f = DateFormatter(); f.dateFormat = "h:mm a"
             return f.string(from: session.capturedAt)
         }()
-        // Total clip count includes absorbed photo/video items so
-        // the meta reads "3 clips" for a mixed voice+photo sitting,
-        // not "2 clips" (voice-only) with a stray extra row inside
-        // (July 11 lock — see `Captured Clips · session-first ·
-        // spec.md` §Model).
-        let mediaCount = absorbedMediaBySessionId[session.id]?.count ?? 0
-        let totalCount = session.clipCount + mediaCount
+        let totalCount = composition.mediaCounts.total
         let clipPart = totalCount == 1 ? "1 clip" : "\(totalCount) clips"
         let durStr = formatDuration(session.totalDuration)
         return VStack(alignment: .leading, spacing: 3) {
@@ -669,41 +679,38 @@ struct SessionListView: View {
     /// after voice rows per `screens-clips-page.jsx` §SessionMediaRow.
     /// Tap navigates into `ClipDetailView` (same destination as loose
     /// clips in the top day-grouped stack pre-absorption).
+    ///
+    /// Slice 8 (Sessions bench convergence): renders through
+    /// `ClipAtomView(register: .operational)`. The ring reads as
+    /// always-included (write-through no-op) because the current
+    /// `BundleRequest.clipsToBundle` only carries voice clips;
+    /// absorbed media rides along unconditionally. Wiring the ring
+    /// to a real media-inclusion set is a downstream change to the
+    /// bundling flow, not Slice 8's scope.
     @ViewBuilder
     private func mediaClipRow(_ ref: MediaReference, isLast: Bool) -> some View {
-        let label = ref.mediaTypeEnum == .video ? "Video" : "Photo"
+        // Photos/videos have no explicit session offset — the atom's
+        // operational timing header computes offset against
+        // sessionStart, but for absorbed media the offset reads as
+        // the wall-clock delta. Passing sessionStart keeps the
+        // header consistent with voice rows.
+        let sessionStart = ref.createdAt // best available anchor for a lone media clip
+        let model = ClipDisplayModel(mediaReference: ref, duration: nil, sessionStart: sessionStart)
+        // Always-included ring, write-through no-op — see method
+        // docstring for the bundling-flow caveat.
+        let ringBinding = Binding<Bool>(get: { true }, set: { _ in })
         VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 12) {
-                // Empty selection ring for now — user tapping the row
-                // selects the clip's inclusion state (Slice H will
-                // wire this to the same selection map as voice rows).
-                Circle()
-                    .strokeBorder(Crucible.Color.accent, lineWidth: 1.5)
-                    .background(Circle().fill(Crucible.Color.accent))
-                    .frame(width: 20, height: 20)
-                    .overlay(
-                        Circle()
-                            .fill(Crucible.Color.accentInk)
-                            .frame(width: 8, height: 8)
-                    )
-                SessionMediaThumbnail(ref: ref)
-                VStack(alignment: .leading, spacing: 2) {
-                    if let created = ref.createdAt {
-                        Text(shortTime(created))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Crucible.Color.ink3)
-                            .monospacedDigit()
-                    }
-                    Text(label)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.ink)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Crucible.Color.ink4)
+            NavigationLink {
+                ClipDetailView(ref: ref)
+            } label: {
+                ClipAtomView(
+                    model: model,
+                    register: .operational,
+                    ring: ringBinding
+                )
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 12)
+            .buttonStyle(.plain)
             if !isLast {
                 Rectangle()
                     .fill(Crucible.Color.hairline)
@@ -725,28 +732,39 @@ struct SessionListView: View {
         let accidental = clip.transcript.isEmpty && clip.transcriptionAttempted
         let isPlaying = playingClipId == clip.clipId
         // Manually-excluded clips (user toggled off) dim to 0.55.
-        // Auto-excluded clips keep full opacity (so the italic
-        // "No speech detected" line stays readable). Per JSX:
-        // `opacity: !included && !autoExcluded ? 0.55 : 1`.
+        // Auto-excluded (accidental) clips keep full opacity — the
+        // italic "No speech detected" line reads as informational,
+        // not deselected. Container chrome: opacity + divider live
+        // outside the atom because they're session-scoped, not
+        // clip-scoped.
         let manuallyExcluded = !isSelected && !accidental
+        let model = ClipDisplayModel(inboxClip: clip, sessionStart: session.capturedAt)
+        // Ring binding — `toggleClipSelection` handles both directions
+        // (insert or remove), so the setter ignores the incoming value
+        // and just flips.
+        let ringBinding = Binding<Bool>(
+            get: { isSelected },
+            set: { _ in toggleClipSelection(clipId: clip.clipId, in: session) }
+        )
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 12) {
-                clipSelectionRing(isSelected: isSelected) {
-                    toggleClipSelection(clipId: clip.clipId, in: session)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    clipMetaRow(clip, indexInSession: indexInSession, session: session)
-                    clipBody(clip, accidental: accidental, included: isSelected)
-                    clipRetryLink(clip)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    toggleClipSelection(clipId: clip.clipId, in: session)
-                }
-                clipPlayButton(clip: clip, isPlaying: isPlaying)
-            }
-            .padding(.vertical, 12)
+            ClipAtomView(
+                model: model,
+                register: .operational,
+                ring: ringBinding,
+                onTapContent: { toggleClipSelection(clipId: clip.clipId, in: session) },
+                onPlayEvidence: {
+                    if isPlaying {
+                        stopPlayback()
+                    } else {
+                        playClip(clip)
+                    }
+                },
+                onRetryTranscription: model.failed ? { retryClipTranscription(clip) } : nil,
+                isPlayingEvidence: isPlaying,
+                pendingTranscript: !clip.transcriptionAttempted,
+                accidentalTranscript: accidental,
+                retryStatus: retryStatusText(for: clip)
+            )
             .opacity(manuallyExcluded ? 0.55 : 1.0)
             if !isLast {
                 Rectangle()
@@ -756,151 +774,16 @@ struct SessionListView: View {
         }
     }
 
-    /// Per-clip play glyph — the only play affordance in the v2 spec.
-    /// Per spec Bug #7: "Play button heavier than the primary action"
-    /// was wrong. Stroke-only triangle in ink3 inside a 26pt frame,
-    /// no background circle, no accent tint. Quiet by design.
-    private func clipPlayButton(clip: InboxClip, isPlaying: Bool) -> some View {
-        Button {
-            if isPlaying {
-                stopPlayback()
-            } else {
-                playClip(clip)
-            }
-        } label: {
-            Image(systemName: isPlaying ? "stop" : "play")
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(Crucible.Color.ink3)
-                .frame(width: 26, height: 26)
-                .contentShape(Rectangle())
+    /// Retry link's inline status suffix ("Retrying…", or the last
+    /// short outcome text). Nil = no suffix, meaning either the
+    /// retry hasn't been triggered or the auto-clear timer already
+    /// fired. `retryingClipIds` beats `clipRetryStatus` — a caller
+    /// re-tapping mid-status jumps back to "Retrying…" immediately.
+    private func retryStatusText(for clip: InboxClip) -> String? {
+        if retryingClipIds.contains(clip.clipId) {
+            return "Retrying…"
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isPlaying ? "Stop clip" : "Play clip")
-    }
-
-    /// Selection toggle per Crucible: ring, never check.
-    /// Empty → excluded. Filled (ochre) with a small paper-color
-    /// inner dot → included. Spec Bug #2: "Filled ochre checkmark
-    /// circles for selected clips" is wrong; the filled state has
-    /// no glyph, just a tinier filled dot inside the ring.
-    private func clipSelectionRing(isSelected: Bool, onTap: @escaping () -> Void) -> some View {
-        Button(action: onTap) {
-            ZStack {
-                Circle()
-                    .strokeBorder(
-                        isSelected ? Crucible.Color.accent : Crucible.Color.ink4,
-                        lineWidth: 1.5
-                    )
-                    .background(Circle().fill(isSelected ? Crucible.Color.accent : Color.clear))
-                    .frame(width: 20, height: 20)
-                if isSelected {
-                    // Paper-color inner dot — selection indicator
-                    // without resorting to a check glyph. Matches
-                    // `IncludeRing` in the JSX exactly.
-                    Circle()
-                        .fill(Crucible.Color.accentInk)
-                        .frame(width: 8, height: 8)
-                }
-            }
-            .contentShape(Rectangle())
-            .padding(.top, 1)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isSelected ? "Exclude this clip" : "Include this clip")
-    }
-
-    private func clipMetaRow(_ clip: InboxClip, indexInSession: Int, session: ClipGroup) -> some View {
-        // "0:00   0:05" for the first clip (offset 0, duration); "+10s   0:05" for later.
-        let offset = clip.capturedAt.timeIntervalSince(session.capturedAt)
-        let offsetStr: String
-        if indexInSession == 0 || offset < 1 {
-            offsetStr = "0:00"
-        } else {
-            offsetStr = "+\(Int(offset))s"
-        }
-        return HStack(spacing: 12) {
-            Text(offsetStr)
-                .monospacedDigit()
-                .frame(width: 36, alignment: .leading)
-            Text(formatDuration(clip.duration))
-                .monospacedDigit()
-        }
-        .font(.system(size: 11, weight: .medium))
-        .foregroundStyle(Crucible.Color.ink3)
-    }
-
-    @ViewBuilder
-    private func clipBody(_ clip: InboxClip, accidental: Bool, included: Bool) -> some View {
-        // Per JSX: `color: muted ? ink3 : ink2` and italic only when
-        // auto-excluded. Manually-excluded clips are handled by the
-        // row's 0.55 opacity above — text itself stays roman.
-        let muted = !included || accidental
-        if !clip.transcript.isEmpty {
-            Text("\u{201C}\(clip.transcript)\u{201D}")
-                .font(.system(size: 13))
-                .foregroundStyle(muted ? Crucible.Color.ink3 : Crucible.Color.ink2)
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else if accidental {
-            Text("No speech detected · likely accidental")
-                .font(.system(size: 13))
-                .italic()
-                .foregroundStyle(Crucible.Color.ink3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            Text("Transcribing…")
-                .font(.system(size: 13))
-                .italic()
-                .foregroundStyle(Crucible.Color.ink3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    /// Inline "Retry transcription" link under each clip row.
-    /// Small blue text-link per HiMem · Buttons & Actions §2
-    /// (retry is an AI action → AI-blue). Only shows when a
-    /// transcription has already been attempted — pending clips
-    /// have "Transcribing…" as the body and don't need a retry
-    /// affordance yet.
-    ///
-    /// Simultaneous-tap gesture is used so the tap doesn't fall
-    /// through to the row's `onTapGesture` selection toggle above.
-    @ViewBuilder
-    private func clipRetryLink(_ clip: InboxClip) -> some View {
-        let isRetrying = retryingClipIds.contains(clip.clipId)
-        if clip.transcriptionAttempted {
-            HStack(spacing: 6) {
-                Button {
-                    retryClipTranscription(clip)
-                } label: {
-                    HStack(spacing: 4) {
-                        if isRetrying {
-                            ProgressView().controlSize(.mini)
-                            Text("Retrying…")
-                                .font(.system(size: 11, weight: .medium))
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 10, weight: .semibold))
-                            Text("Retry transcription")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                    }
-                    .foregroundStyle(Crucible.Color.aiBlue)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isRetrying)
-                .simultaneousGesture(TapGesture().onEnded {})
-                if let status = clipRetryStatus[clip.clipId] {
-                    Text("· \(status)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Crucible.Color.ink3)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 4)
-        }
+        return clipRetryStatus[clip.clipId]
     }
 
     /// Kicks off a re-run of `TranscriptionService` against the
@@ -1139,52 +1022,3 @@ struct SessionListView: View {
     }
 }
 
-/// Inline 40×40 photo/video thumbnail used inside a session's
-/// expanded body row (July 11 media-agnostic lock). Loads via
-/// `ThumbnailService` the same way `MediaClipRow` does — a real
-/// preview, never a generic glyph. Falls back to a media-type
-/// system image while the file downloads or if it can't render.
-private struct SessionMediaThumbnail: View {
-    @ObservedObject var ref: MediaReference
-    @State private var thumbnail: UIImage?
-
-    var body: some View {
-        ZStack(alignment: .center) {
-            if let thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Crucible.Color.hairline.opacity(0.3))
-                    .frame(width: 40, height: 40)
-                    .overlay {
-                        Image(systemName: ref.mediaTypeEnum == .video ? "video" : "photo")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Crucible.Color.ink4)
-                    }
-            }
-            if ref.mediaTypeEnum == .video {
-                Circle()
-                    .fill(Color.white.opacity(0.9))
-                    .frame(width: 16, height: 16)
-                    .overlay {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 7))
-                            .foregroundStyle(.black)
-                    }
-            }
-        }
-        .task(id: ref.id) {
-            guard thumbnail == nil else { return }
-            if let name = await ThumbnailService.shared.cacheThumbnail(
-                for: ref.osIdentifier,
-                mediaType: ref.mediaTypeEnum
-            ) {
-                thumbnail = ThumbnailService.shared.cachedThumbnail(filename: name)
-            }
-        }
-    }
-}

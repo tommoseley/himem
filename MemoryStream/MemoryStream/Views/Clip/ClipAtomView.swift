@@ -54,6 +54,41 @@ struct ClipAtomView: View {
     /// = don't render the link.
     var onRetryTranscription: (() -> Void)? = nil
 
+    /// `true` = evidence control renders the stop glyph (◼);
+    /// `false` = play glyph (▶). Session-scoped audio controllers
+    /// (e.g. `SessionListView`'s single-player) drive this via a
+    /// `playingClipId == model.id` comparison. Slice 8 (Sessions
+    /// bench convergence) hook — no visual effect on `.reflective`
+    /// or `.reflectiveCompact`, where evidence renders as the
+    /// named-play row and the transient stop state isn't part of
+    /// the reflective vocabulary.
+    var isPlayingEvidence: Bool = false
+
+    /// `true` = the voice/note transcript is empty because
+    /// transcription hasn't been attempted yet — atom shows
+    /// `"Transcribing…"` italic instead of a blank line. Meaningful
+    /// only in `.operational` where the bench distinguishes pending
+    /// vs empty vs failed; ignored in `.reflective` /
+    /// `.reflectiveCompact` (a memory doesn't linger in
+    /// "transcribing" state — it's either done or the retry link
+    /// is showing).
+    var pendingTranscript: Bool = false
+
+    /// `true` = the voice/note transcript is empty *after* a
+    /// transcription attempt (accidental capture). Atom shows
+    /// `"No speech detected · likely accidental"` italic. Distinct
+    /// from `pendingTranscript`. Consumer sets this alongside
+    /// `model.failed = true`; the retry link renders in parallel.
+    var accidentalTranscript: Bool = false
+
+    /// Inline status text appended after the retry link
+    /// (e.g. `"· Retrying…"` while a retry is in flight,
+    /// `"· Retry failed"` after an error). Owned by the container
+    /// because the state lives outside the clip (per-user, per-tap
+    /// transient). Nil = no suffix. Only rendered when the retry
+    /// link is visible (`.operational && model.failed`).
+    var retryStatus: String? = nil
+
     var body: some View {
         switch register {
         case .operational:
@@ -80,14 +115,16 @@ struct ClipAtomView: View {
                     media: model.media,
                     thumbnailKey: model.thumbnailKey,
                     providedThumbnail: providedThumbnail,
-                    onTap: onTapContent
+                    onTap: onTapContent,
+                    pendingTranscript: pendingTranscript,
+                    accidentalTranscript: accidentalTranscript
                 )
                 if model.failed, let onRetry = onRetryTranscription {
-                    ClipRetry(onTap: onRetry)
+                    ClipRetry(onTap: onRetry, status: retryStatus)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            ClipEvidenceControl(projection: evidence, onTap: onPlayEvidence)
+            ClipEvidenceControl(projection: evidence, onTap: onPlayEvidence, isPlaying: isPlayingEvidence)
         }
         .padding(.vertical, 12)
     }
@@ -266,18 +303,46 @@ struct ClipContentSlot: View {
     let thumbnailKey: ClipDisplayModel.ThumbnailKey?
     let providedThumbnail: UIImage?
     let onTap: (() -> Void)?
+    /// Slice 8 (Sessions bench): renders `"Transcribing…"` italic
+    /// for empty `.transcriptFull` when transcription hasn't been
+    /// attempted yet. Distinguishes the pending state from the
+    /// attempted-and-empty state (which shows the retry link at
+    /// atom level instead).
+    var pendingTranscript: Bool = false
+    /// Slice 8 (Sessions bench): renders `"No speech detected ·
+    /// likely accidental"` italic for empty `.transcriptFull` when
+    /// transcription was attempted (i.e. `model.failed = true`) —
+    /// the accidental-capture state. Distinct from `pendingTranscript`
+    /// (not-yet-attempted) and from generic "(no transcript)".
+    /// Consumer sets this alongside `model.failed`; the retry link
+    /// renders in parallel at atom level.
+    var accidentalTranscript: Bool = false
 
     var body: some View {
         switch content {
         case .transcriptFull(let text):
-            Text(text.isEmpty ? "(no transcript)" : "\u{201C}\(text)\u{201D}")
-                .font(.system(size: 13.5))
-                .foregroundStyle(Crucible.Color.ink2)
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture { onTap?() }
+            if text.isEmpty && pendingTranscript {
+                Text("Transcribing…")
+                    .font(.system(size: 13))
+                    .italic()
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if text.isEmpty && accidentalTranscript {
+                Text("No speech detected · likely accidental")
+                    .font(.system(size: 13))
+                    .italic()
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(text.isEmpty ? "(no transcript)" : "\u{201C}\(text)\u{201D}")
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onTap?() }
+            }
         case .transcriptPreview:
             // Consumed by the atom's reflectiveCompact row inline —
             // this slot isn't invoked in that register.
@@ -370,6 +435,11 @@ private struct ClipThumbnailView: View {
 struct ClipEvidenceControl: View {
     let projection: ClipEvidenceProjection
     let onTap: (() -> Void)?
+    /// Slice 8 (Sessions bench): flips the operational glyph
+    /// (`▶ → ◼`) so a single session-scoped player can drive N
+    /// atoms visually. Ignored on `.namedPlay` (reflective) —
+    /// the transient stop state isn't part of that vocabulary.
+    var isPlaying: Bool = false
 
     var body: some View {
         switch projection {
@@ -380,7 +450,7 @@ struct ClipEvidenceControl: View {
                 onTap?()
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "play")
+                    Image(systemName: isPlaying ? "stop" : "play")
                         .font(.system(size: 12, weight: .regular))
                     if let durationString {
                         Text(durationString)
@@ -423,18 +493,30 @@ struct ClipEvidenceControl: View {
 /// action → AI-blue link (not ochre).
 struct ClipRetry: View {
     let onTap: () -> Void
+    /// Slice 8 (Sessions bench): optional inline status appended
+    /// after the link (`"· Retrying…"`, `"· Retry failed"`). Owned
+    /// by the container because it's transient per-user state, not
+    /// a property of the clip.
+    var status: String? = nil
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 10, weight: .semibold))
-                Text("Retry transcription")
-                    .font(.system(size: 11, weight: .medium))
+        HStack(spacing: 6) {
+            Button(action: onTap) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("Retry transcription")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundStyle(Crucible.Color.aiBlue)
+                .contentShape(Rectangle())
             }
-            .foregroundStyle(Crucible.Color.aiBlue)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            if let status {
+                Text("· \(status)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Crucible.Color.ink3)
+            }
         }
-        .buttonStyle(.plain)
     }
 }
