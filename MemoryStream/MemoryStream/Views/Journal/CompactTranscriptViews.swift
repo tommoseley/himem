@@ -168,14 +168,21 @@ struct CompactClipRow: View {
                     // rule #8). Tap fires the parent's audio-player
                     // sheet — same callback as
                     // `TranscriptClipController`.
+                    // E3 alignment: same glyph shape as the atom's
+                    // reflective namedPlay (`play`, not
+                    // `play.circle`), same tint discipline (accent
+                    // for the triangle, ink3 for the label) so the
+                    // compact expanded body's play affordance
+                    // reads as the same primitive.
                     Button(action: onPlay) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "play.circle")
-                                .font(.system(size: 13, weight: .medium))
+                        HStack(spacing: 8) {
+                            Image(systemName: "play")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Crucible.Color.accent)
                             Text(TranscriptClipController.playFooterLabel(duration: audioDuration))
-                                .font(.caption)
+                                .font(.system(size: 13))
+                                .foregroundStyle(Crucible.Color.ink3)
                         }
-                        .foregroundStyle(Crucible.Color.ink3)
                         .padding(.top, 2)
                         .padding(.bottom, 12)
                         .padding(.horizontal, 4)
@@ -222,10 +229,16 @@ struct CompactClipRow: View {
             onTap()
         }) {
             HStack(spacing: 6) {
+                // C1: when the row is expanded, hide the header's
+                // preview line so it doesn't double-print above
+                // the full transcript in the body below. T5: time
+                // stays one color — the chevron rotation is the
+                // open-state cue, no ochre time swap.
                 ClipAtomView(
                     model: ClipDisplayModel(mediaDisplayItem: item, duration: audioDuration, sessionStart: nil),
                     register: .reflectiveCompact,
-                    isEmphasized: isOpen
+                    isEmphasized: isOpen,
+                    hidePreview: isOpen
                 )
                 .frame(maxWidth: .infinity)
                 Image(systemName: "chevron.right")
@@ -274,7 +287,12 @@ struct CompactClipRow: View {
             .padding(.bottom, 12)
             .padding(.horizontal, 4)
         } else {
-            Text(fallback)
+            // C2: quote the transcript in the expanded body so it
+            // reads as spoken words — matches the atom's
+            // reflective / operational transcript render. Media
+            // clips (no transcript) fall to `fallback = nil`
+            // upstream so this branch never renders for them.
+            Text("\u{201C}\(fallback)\u{201D}")
                 .font(.system(size: 14.5))
                 .lineSpacing(2)
                 .foregroundStyle(Crucible.Color.ink)

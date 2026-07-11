@@ -166,10 +166,16 @@ private func formatShortDuration(_ seconds: TimeInterval) -> String {
     return String(format: "%d:%02d", m, s)
 }
 
+/// One operational offset notation — always `+Ns` delta-seconds
+/// (T1 in `Clip model · spec.md` convergence checklist). Mixing
+/// `0:00` and `+129s` on the same session was the drift the
+/// checklist calls out. First clip prints `+0s`; sessionless
+/// operational clips also print `+0s` (no session anchor to
+/// delta against). Only ever seconds.
 private func formatOffset(from sessionStart: Date?, to capturedAt: Date) -> String {
-    guard let sessionStart else { return "0:00" }
+    guard let sessionStart else { return "+0s" }
     let delta = capturedAt.timeIntervalSince(sessionStart)
-    if delta < 1 { return "0:00" }
+    if delta < 1 { return "+0s" }
     return "+\(Int(delta))s"
 }
 

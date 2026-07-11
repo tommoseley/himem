@@ -94,14 +94,43 @@ struct ClipAtomView: View {
     /// emptyTranscriptCaption > default "(no transcript)".
     var emptyTranscriptCaption: String? = nil
 
-    /// Slice 10b (Compact row convergence): visual emphasis for
-    /// the `.reflectiveCompact` register — when true, the time
-    /// label goes ochre (`Crucible.Color.accent`) and the preview
-    /// line goes semibold. Used by `CompactClipRow` to render the
-    /// `isOpen` accordion state. Ignored in `.operational` and
-    /// `.reflective` — those registers don't have a
-    /// container-driven "active row" concept.
+    /// Slice 10b (Compact row convergence): container-driven
+    /// "active row" hint for `.reflectiveCompact`. When true, the
+    /// preview line goes semibold — the chevron rotation is the
+    /// primary open-state cue. Ignored in `.operational` and
+    /// `.reflective`. Time color stays ink3 either way per
+    /// checklist T5 ("Compact row time is one treatment. …Same
+    /// element, one color.").
     var isEmphasized: Bool = false
+
+    /// Compact row spec (checklist C1 — "no double-printed lead
+    /// line"). When the container expands the row into its
+    /// reflective body, it also passes `hidePreview: true` so the
+    /// collapsed preview sentence stops printing above the same
+    /// sentence in the transcript body. Header collapses to time-
+    /// only + media glyph (matching the long-memory nav spec:
+    /// "expanded, the header collapses to time-only and the body
+    /// carries the full transcript"). Ignored in `.operational`
+    /// and `.reflective`.
+    var hidePreview: Bool = false
+
+    /// Media clip content-invite in an opened context (checklist
+    /// C3). When true and the media clip's description is empty,
+    /// the atom renders the ochre dashed "Add a description"
+    /// affordance under the thumbnail — the description is the
+    /// media clip's *words* and the opened row invites the user
+    /// to write them. Session-expanded body sets true (Q2 opened-
+    /// context branch); dense flat-list rows and reflective
+    /// memory cards leave it false so the empty state stays
+    /// silent.
+    var showDescriptionInvite: Bool = false
+
+    /// Optional tap target for the C3 invite. Nil = invite is
+    /// visible but inert — some containers rely on an outer
+    /// `NavigationLink` to route the whole tap (session-expanded
+    /// media row is one such case). Non-nil intercepts the tap
+    /// and fires the closure instead.
+    var onTapDescriptionInvite: (() -> Void)? = nil
 
     /// Inline status text appended after the retry link
     /// (e.g. `"· Retrying…"` while a retry is in flight,
@@ -140,7 +169,9 @@ struct ClipAtomView: View {
                     onTap: onTapContent,
                     pendingTranscript: pendingTranscript,
                     accidentalTranscript: accidentalTranscript,
-                    emptyTranscriptCaption: emptyTranscriptCaption
+                    emptyTranscriptCaption: emptyTranscriptCaption,
+                    showDescriptionInvite: showDescriptionInvite,
+                    onTapDescriptionInvite: onTapDescriptionInvite
                 )
                 if model.failed, let onRetry = onRetryTranscription {
                     ClipRetry(onTap: onRetry, status: retryStatus)
@@ -189,15 +220,25 @@ struct ClipAtomView: View {
                     .frame(width: 16, alignment: .center)
             }
             if let time = timing.timeOnly {
+                // T5: time is one color regardless of open state.
+                // The chevron rotation is the accordion cue.
                 Text(time)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isEmphasized ? Crucible.Color.accent : Crucible.Color.ink3)
+                    .foregroundStyle(Crucible.Color.ink3)
                     .monospacedDigit()
             }
-            previewLine(from: content)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // C1: when the container hides the preview (expanded
+            // row), pad with an empty flexible spacer so the row
+            // height stays consistent while the chevron sits on
+            // the trailing edge.
+            if hidePreview {
+                Spacer(minLength: 0)
+            } else {
+                previewLine(from: content)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
@@ -295,22 +336,31 @@ struct ClipTimingHeader: View {
         switch register {
         case .operational:
             HStack(spacing: 12) {
+                // T2: duration lives in the Play control only.
+                // Previously the row printed `+128s · 0:03` AND
+                // `▶ 0:03` on the same line — same value twice.
+                // The offset is the only per-row datum here now;
+                // duration attaches to the play affordance to
+                // preserve the "duration always names playback"
+                // discipline the reflective register also follows.
                 if let offset = timing.offsetString {
                     Text(offset)
                         .monospacedDigit()
-                        .frame(width: 36, alignment: .leading)
-                }
-                if let duration = timing.durationString {
-                    Text(duration).monospacedDigit()
+                        .frame(width: 44, alignment: .leading)
                 }
             }
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(Crucible.Color.ink3)
         case .reflective:
+            // T3: mixed-case with location. Previously we
+            // uppercased + letter-spaced this line, which
+            // stripped the "Sun May 17 · 6:12 PM · Bishop St,
+            // Bluffton" cadence into a shout ("SAT JUL 4 · 9:37
+            // PM"). The projection already returns the canonical
+            // form — the view was the drift.
             if let full = timing.dateTimePlace {
-                Text(full.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.4)
+                Text(full)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Crucible.Color.ink3)
             }
         case .reflectiveCompact:
@@ -350,6 +400,15 @@ struct ClipContentSlot: View {
     /// Precedence: pending > accidental > caption > default
     /// "(no transcript)".
     var emptyTranscriptCaption: String? = nil
+    /// Media invite (checklist C3). When true and the media
+    /// clip's description is empty, the atom renders the ochre
+    /// dashed "Add a description" affordance under the
+    /// thumbnail. Tapping fires `onTapDescriptionInvite`.
+    var showDescriptionInvite: Bool = false
+    /// Fires when the user taps the ochre "Add a description"
+    /// invite. Nil = the invite renders as a static prompt (still
+    /// visible per spec, but inert).
+    var onTapDescriptionInvite: (() -> Void)? = nil
 
     var body: some View {
         switch content {
@@ -404,8 +463,9 @@ struct ClipContentSlot: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .onTapGesture { onTap?() }
             }
-            if let description, !description.isEmpty {
-                Text(description)
+            let trimmed = description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty {
+                Text(trimmed)
                     .font(.system(size: 13.5))
                     .foregroundStyle(Crucible.Color.ink2)
                     .lineSpacing(2)
@@ -413,6 +473,33 @@ struct ClipContentSlot: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture { onTap?() }
+            } else if showDescriptionInvite {
+                // C3: ochre dashed invite for the opened-context
+                // empty-description case. `Q2` decides where this
+                // fires (opened row = show; dense flat rows =
+                // silent).
+                Button {
+                    onTapDescriptionInvite?()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Add a description")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundStyle(Crucible.Color.accent)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(
+                                Crucible.Color.accent,
+                                style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(onTapDescriptionInvite == nil)
+                .accessibilityLabel("Add a description")
             }
         }
     }
@@ -503,12 +590,18 @@ struct ClipEvidenceControl: View {
             }
             .buttonStyle(.plain)
         case .namedPlay(let label, let durationString):
+            // E1: same glyph as `.compactPlay`, register-styled.
+            // Previously used `play.circle.fill` — filled ochre
+            // disc — which read as a different affordance from
+            // the operational hairline play triangle. Same
+            // symbol, larger + accent-tinted for reflective
+            // presence.
             Button {
                 onTap?()
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 16))
+                    Image(systemName: "play")
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Crucible.Color.accent)
                     Text(evidenceLabel(label: label, durationString: durationString))
                         .font(.system(size: 13))

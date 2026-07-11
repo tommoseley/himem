@@ -210,3 +210,64 @@ and converge in a following pass.
 - **`HiMem · evidence and context.md`** — this is the visual expression of that
   ontology: clip = evidence (the atom), memory = context (the derived layer),
   one clip can be evidence in many memories (the atom is surface-agnostic).
+
+## Convergence acceptance checklist — known divergences to kill
+
+Audited against the shipping iOS build (screenshots, July 11 2026). Each is a
+place a clip is drawn differently than the canonical atom. CC checks these off
+surface-by-surface; the slice tag says where the fix lands. This is the pass/fail
+gate for "clip is converged" — not the prose above.
+
+### Part 1 · Evidence control (the Play affordance)
+- [x] **E1 · One Play glyph across registers.** `ClipEvidenceControl` now uses
+  `play` for both operational and reflective — same shape, register-styled
+  (operational 12pt ink3, reflective 14pt semibold accent). No more
+  `play.circle.fill` filled disc.
+- [ ] **E2 · Reflective Full-stream clips must carry the evidence line.** The
+  atom's `reflectiveCard` renders `ClipEvidenceControl` for any non-`.none`
+  evidence, so this should ride along with E1 — needs device verification.
+- [x] **E3 · Compact expanded body carries evidence.** `CompactClipRow`'s
+  expanded voice footer now uses the same `play` glyph + accent-triangle /
+  ink3-label tint pair as the atom's `.namedPlay` render.
+
+### Part 2 · Timing header
+- [x] **T1 · One operational offset notation.** `formatOffset` always emits
+  `+Ns` — first clip is `+0s`, never `0:00`. Locked by
+  `timing_operational_firstClip_is_plusZeroSeconds`.
+- [x] **T2 · Duration once, not twice.** Operational `ClipTimingHeader` no
+  longer renders `durationString`; duration lives on the Play control only.
+- [x] **T3 · Reflective header is mixed-case with location.** Dropped
+  `.uppercased()` + `.tracking(0.4)` in the atom's reflective branch; the
+  projection already returned the canonical
+  `Sun May 17 · 6:12 PM · Bishop St, Bluffton` form — the view was the drift.
+- [ ] **T4 · One date format per surface.** Cross-surface concern; the atom is
+  now honest but memory-meta chrome still lives outside this file. Deferred
+  pending pass on the memory-detail surface.
+- [x] **T5 · Compact row time is one treatment.** Removed the `isEmphasized`
+  time-color swap; the chevron rotation is the accordion cue.
+
+### Part 3 · Content
+- [x] **C1 · No double-printed lead line.** `ClipAtomView` gains
+  `hidePreview: Bool` — `CompactClipRow` passes `hidePreview: isOpen`, so the
+  collapsed preview sentence stops printing above the same sentence in the
+  expanded transcript body.
+- [x] **C2 · One quotation rule.** `CompactClipRow`'s expanded body now wraps
+  the transcript in `"…"` — matches the atom's `.reflective` / `.operational`
+  transcript render.
+- [x] **C3 · Photo clip in an expanded session shows "Add a description."**
+  `ClipAtomView.showDescriptionInvite` (with optional
+  `onTapDescriptionInvite`). Session-expanded `mediaClipRow` passes true; the
+  surrounding `NavigationLink` handles tap routing to Clip Detail's inline
+  editor.
+
+### Correct today — protect from regression
+- [x] **Rings** present on operational rows, absent on reflective/compact.
+- [x] **Session composition header** uses per-media glyphs (`🎙2 📷1`), matching
+  the memory card (`ClipComposition`).
+
+### Open decision, not a bug
+- [ ] **D1 · Total duration on the collection header.** Operational session shows
+  `· 0:06`; the reflective memory card omits it. Lock whether duration is
+  register-specific (operational keeps it, reflective drops it) or dropped for
+  strict parity — then write the one line into §2's `{timespan, media, words}`
+  definition. Slice 8 must not silently re-decide it.

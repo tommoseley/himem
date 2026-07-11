@@ -211,8 +211,13 @@ struct ClipAtomProjectionTests {
 
     // MARK: - Timing projection — register-specific shape
 
-    /// Operational timing = offset + duration (`+128s · 0:03` for the
-    /// second clip in a session; `0:00 · 0:03` for the first).
+    /// Operational timing = offset only in the header row per T1
+    /// ("one operational offset notation" — always `+Ns` seconds,
+    /// never `0:00 · 0:03`) and T2 ("duration once, not twice" —
+    /// duration lives in the Play control). The projection still
+    /// carries `durationString` so the play affordance can read it;
+    /// the atom's `ClipTimingHeader` operational branch just
+    /// doesn't render it any more.
     @Test func timing_operational_is_offset_form() {
         let sessionStart = Date(timeIntervalSince1970: 1_720_000_000)
         let clip = ClipDisplayModel(
@@ -231,6 +236,46 @@ struct ClipAtomProjectionTests {
         #expect(p.durationString == "0:03")
         #expect(p.dateTimePlace == nil)
         #expect(p.timeOnly == nil)
+    }
+
+    /// T1: first clip of a session (capturedAt == sessionStart)
+    /// still reads `+0s`, never `0:00`. Locks the "one operational
+    /// offset notation" rule so mixed `0:00`/`+128s` output can't
+    /// creep back in.
+    @Test func timing_operational_firstClip_is_plusZeroSeconds() {
+        let sessionStart = Date(timeIntervalSince1970: 1_720_000_000)
+        let clip = ClipDisplayModel(
+            id: UUID(),
+            media: .voice,
+            capturedAt: sessionStart,
+            sessionStart: sessionStart,
+            placeName: nil,
+            content: .transcript("hi"),
+            evidence: .audio(duration: 3),
+            thumbnailKey: nil,
+            failed: false
+        )
+        let p = ClipTimingProjection.project(model: clip, register: .operational)
+        #expect(p.offsetString == "+0s",
+                "First clip in a session must render `+0s` (checklist T1) — never fall back to `0:00`")
+    }
+
+    /// T1 corollary: sessionless operational clips also read
+    /// `+0s`. Prior behavior returned `0:00`, mixing forms.
+    @Test func timing_operational_noSession_isPlusZeroSeconds() {
+        let clip = ClipDisplayModel(
+            id: UUID(),
+            media: .voice,
+            capturedAt: Date(timeIntervalSince1970: 1_720_000_000),
+            sessionStart: nil,
+            placeName: nil,
+            content: .transcript("hi"),
+            evidence: .audio(duration: 3),
+            thumbnailKey: nil,
+            failed: false
+        )
+        let p = ClipTimingProjection.project(model: clip, register: .operational)
+        #expect(p.offsetString == "+0s")
     }
 
     /// Reflective timing = full `Sun May 17 · 6:12 PM · Bishop St,

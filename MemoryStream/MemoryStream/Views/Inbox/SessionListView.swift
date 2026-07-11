@@ -730,7 +730,16 @@ struct SessionListView: View {
                 ClipAtomView(
                     model: model,
                     register: .operational,
-                    ring: ringBinding
+                    ring: ringBinding,
+                    // C3: expanded session card is an opened
+                    // context — light the ochre "Add a description"
+                    // invite when the media clip's description is
+                    // empty. Tapping routes to Clip Detail's inline
+                    // editor via the surrounding NavigationLink
+                    // (`onTapDescriptionInvite = nil` so the invite
+                    // stays visible but doesn't intercept — the
+                    // outer link handles the push).
+                    showDescriptionInvite: true
                 )
                 .contentShape(Rectangle())
             }
