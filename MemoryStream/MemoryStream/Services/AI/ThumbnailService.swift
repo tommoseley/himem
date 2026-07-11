@@ -10,6 +10,24 @@ final class ThumbnailService {
 
     private let thumbnailSize = CGSize(width: 200, height: 200)
 
+    /// In-flight dedup — coalesces concurrent `cacheThumbnail(for:mediaType:)`
+    /// calls for the same `osIdentifier` onto one underlying fetch. Standing
+    /// hygiene per Q4b of the July 11 2026 Clip Model convergence plan: same
+    /// clip surfacing on two views simultaneously (Clips-tab burst row + the
+    /// same clip in Memory Detail as its own atom, or a rapid tab switch)
+    /// used to fire two `PHImageManager` / ubiquity reads back-to-back. This
+    /// map guarantees exactly one. Keyed by `osIdentifier` because
+    /// `cacheFilename(for:)` is a pure function of it.
+    private var inFlight: [String: Task<String?, Never>] = [:]
+
+    #if DEBUG
+    /// Test hook — non-zero while a `cacheThumbnail` call is in flight,
+    /// drained to zero after all awaiters resolve. Used by
+    /// `ThumbnailServiceDedupTests` to assert the dedup map is managed
+    /// correctly (no leaks, no dangling entries).
+    var _inFlightCount: Int { inFlight.count }
+    #endif
+
     // MARK: - Cache Directory (Library/Caches — excluded from backup, OS-evictable)
 
     static var thumbnailDirectory: URL {
@@ -66,12 +84,24 @@ final class ThumbnailService {
             return filename
         }
 
-        switch MediaResolver.resolve(osIdentifier: localIdentifier, mediaType: mediaType) {
-        case .ubiquity(let fileURL):
-            return await ubiquityThumbnail(fileURL: fileURL, mediaType: mediaType, cacheURL: url, cacheFilename: filename)
-        case .photoKit(let identifier):
-            return await phImageManagerThumbnail(identifier: identifier, cacheURL: url, cacheFilename: filename)
+        if let existing = inFlight[localIdentifier] {
+            return await existing.value
         }
+
+        let task = Task { [weak self] () -> String? in
+            guard let self else { return nil }
+            switch MediaResolver.resolve(osIdentifier: localIdentifier, mediaType: mediaType) {
+            case .ubiquity(let fileURL):
+                return await self.ubiquityThumbnail(fileURL: fileURL, mediaType: mediaType, cacheURL: url, cacheFilename: filename)
+            case .photoKit(let identifier):
+                return await self.phImageManagerThumbnail(identifier: identifier, cacheURL: url, cacheFilename: filename)
+            }
+        }
+        inFlight[localIdentifier] = task
+
+        let result = await task.value
+        inFlight[localIdentifier] = nil
+        return result
     }
 
     /// Loads the file at `fileURL`, decodes per `mediaType`, downsamples

@@ -15,6 +15,11 @@ struct ClipDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingDelete = false
     @State private var showingPlacement = false
+    /// Slice 7 (Clip Model convergence): inline description editor
+    /// state for photo/video clips. Nil = read state (invite or
+    /// filled description); non-nil = editing (inline
+    /// `ClipEditor(field: .description)`).
+    @State private var descriptionDraft: String? = nil
 
     private let storage = StorageService.shared
 
@@ -26,6 +31,9 @@ struct ClipDetailView: View {
                     transcriptSection(transcript)
                 } else if ref.mediaTypeEnum == .note, let text = ref.text, !text.isEmpty {
                     transcriptSection(text)
+                }
+                if isMediaClip {
+                    descriptionSection
                 }
                 referencedInSection
                 placementAffordance
@@ -41,6 +49,90 @@ struct ClipDetailView: View {
         .sheet(isPresented: $showingPlacement) {
             PlaceClipSheet(ref: ref)
         }
+    }
+
+    private var isMediaClip: Bool {
+        ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video
+    }
+
+    // MARK: - Description section (photo/video — Slice 7)
+
+    /// Description slot for photo/video clips per `Clip model ·
+    /// spec.md` §Content ("the description is the media clip's
+    /// words") and Q2's answer: **Clip Detail is an opened
+    /// context**, so the ochre invite lights up when empty. Tap
+    /// the invite (or the existing description body) → inline
+    /// `ClipEditor(field: .description)`. No sheet.
+    @ViewBuilder
+    private var descriptionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("DESCRIPTION")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1.3)
+                .foregroundStyle(Crucible.Color.ink3)
+            if descriptionDraft != nil {
+                ClipEditor(
+                    field: .description,
+                    draft: Binding(
+                        get: { descriptionDraft ?? "" },
+                        set: { descriptionDraft = $0 }
+                    ),
+                    initialValue: ref.mediaDescription ?? "",
+                    editId: "description-\(ref.id.uuidString)",
+                    evidence: nil,
+                    fateActions: ClipEditorFateActions(
+                        onDelete: {
+                            descriptionDraft = nil
+                            confirmingDelete = true
+                        },
+                        onRelocate: nil
+                    ),
+                    onCancel: { descriptionDraft = nil },
+                    onDone: { newValue in
+                        ref.mediaDescription = newValue.isEmpty ? nil : newValue
+                        ref.lastEditedAt = Date()
+                        try? storage.save(context: context)
+                        descriptionDraft = nil
+                    }
+                )
+            } else if let description = ref.mediaDescription, !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Crucible.Color.ink)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        descriptionDraft = description
+                    }
+            } else {
+                emptyDescriptionInvite
+            }
+        }
+    }
+
+    private var emptyDescriptionInvite: some View {
+        Button {
+            descriptionDraft = ""
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Add a description")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.accent)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(
+                        Crucible.Color.accent,
+                        style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a description")
     }
 
     // MARK: - Sections
