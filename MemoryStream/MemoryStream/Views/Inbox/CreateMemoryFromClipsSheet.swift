@@ -168,10 +168,21 @@ struct CreateMemoryFromClipsSheet: View {
     /// holding a microphone glyph, then "N clips · time · duration"
     /// primary line + "M clips excluded" sub-line. Card background,
     /// hairline border (not accent tint background).
+    ///
+    /// Slice 10a of the Clip Model convergence
+    /// (`docs/architecture/2026-07-11-clip-model-convergence-plan.md`):
+    /// clip-count derives from `CompositionModel.from(clips:)` — the
+    /// same primitive `sessionMetaRow` uses. The mic-tile icon +
+    /// excluded-count sub-line stay bespoke (session-scoped chrome
+    /// `ClipComposition`'s default shape doesn't render), matching
+    /// Slice 8's partial-swap pattern.
     private func summaryChip(for session: ClipGroup) -> some View {
         let f = DateFormatter(); f.dateFormat = "h:mm a"
         let timeStr = f.string(from: session.capturedAt)
-        let bundleCount = clips.count
+        let composition = CompositionModel.from(
+            clips: clips.map { ClipDisplayModel(inboxClip: $0, sessionStart: session.capturedAt) }
+        )
+        let bundleCount = composition.mediaCounts.total
         let countStr = bundleCount == 1 ? "1 clip" : "\(bundleCount) clips"
         let durStr = formatDuration(session.totalDuration)
         let accidentalCount = session.clips.count - bundleCount
