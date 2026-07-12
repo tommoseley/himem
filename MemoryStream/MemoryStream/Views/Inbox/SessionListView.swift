@@ -275,11 +275,15 @@ struct SessionListView: View {
     // MARK: - Empty state
 
     private var emptyState: some View {
+        // Source-agnostic copy per `CLAUDE.md` §Phone (July 12 2026):
+        // clips arrive from the phone FAB, the Watch, and Siri, so
+        // the empty-state must not headline any one source. Wording
+        // matches `screens-clips-page.jsx §ScrClipsEmpty`.
         VStack(alignment: .leading, spacing: 8) {
-            Text("Nothing new from your Watch")
+            Text("Nothing new")
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(Crucible.Color.ink)
-            Text("Audio you record on your Apple Watch lands here.")
+            Text("Clips you capture — with the + button, on your Watch, or with Siri — land here.")
                 .font(.footnote)
                 .foregroundStyle(Crucible.Color.ink2)
         }

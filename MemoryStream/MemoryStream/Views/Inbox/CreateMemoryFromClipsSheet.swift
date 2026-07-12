@@ -625,15 +625,16 @@ struct CreateMemoryFromClipsSheet: View {
 
         // Drop manifest rows — audio files were already moved out.
         InboxManifest.shared.removeBatch(clipIds: movedClips.map { $0.clipId })
-        // Land the user on the freshly-created memory (`Himem ·
-        // Memory Detail.html` §Just created, July 12 2026): a new
-        // memory is never empty; it contains its included clips as
-        // the body immediately. The bus tells `HiMemTabView` to
-        // switch to Memories and the memories-instance
-        // `JournalView` to push Memory Detail. Only fires on a
-        // successful save (`newId` non-nil above).
+        // Post-create acceptance criteria per `Clip model · spec.md`
+        // §Create one memory (July 12 2026): the sheet dismisses,
+        // the session is consumed (the manifest publish above
+        // triggers `OpenedSessionView` to auto-dismiss back to the
+        // calm Clips list), and a **"Memory created" toast** with a
+        // View action confirms it worked. NO auto-navigation to
+        // Memories — the user asked to make a memory, not to be
+        // teleported. The toast provides the opt-in View path.
         if let newId {
-            MemoryNavigationBus.shared.pendingOpenMemoryId = newId
+            MemoryNavigationBus.shared.justCreatedMemoryId = newId
         }
         dismiss()
     }

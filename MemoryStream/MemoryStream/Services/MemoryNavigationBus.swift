@@ -30,6 +30,19 @@ import Foundation
 final class MemoryNavigationBus: ObservableObject {
     static let shared = MemoryNavigationBus()
 
+    /// Non-nil = a memory was just materialised from a session and the
+    /// **"Memory created" toast** should show on Clips. The user stays
+    /// on the Clips list per `Clip model · spec.md` §Create one memory
+    /// (July 12 2026 point 3): "Pop back to the Clips list. The
+    /// session no longer exists as a session." The toast is the
+    /// feedback; navigation is opt-in via its View button.
+    @Published var justCreatedMemoryId: UUID? = nil
+
+    /// Non-nil = the user explicitly asked to open Memory Detail for
+    /// this id — currently only fired when they tap **View** on the
+    /// created-memory toast. This is the signal `HiMemTabView`
+    /// (switches to Memories) and `JournalView` (pushes
+    /// `EntryExpandedView`) observe.
     @Published var pendingOpenMemoryId: UUID? = nil
 
     private init() {}

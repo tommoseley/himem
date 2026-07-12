@@ -62,24 +62,52 @@ struct ClipsTabView: View {
     /// See `ClipsStatusSheet` — the sheet fires a pending filter and
     /// this view consumes it into its own `filter` state.
     @ObservedObject private var filterBus = ClipsFilterBus.shared
+    /// Observed for the post-Create "Memory created" toast per
+    /// `Clip model · spec.md` §Create one memory (July 12 2026).
+    @ObservedObject private var memoryNav = MemoryNavigationBus.shared
+    /// Non-nil while the created-memory toast is on screen. Timer
+    /// clears it after ~3.5s; the View button also clears via the
+    /// nav-bus route.
+    @State private var toastAutoDismissTask: Task<Void, Never>? = nil
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ClipsHeader(
-                        status: $status,
-                        type: $type,
-                        onSearchTap: { showSearch = true },
-                        onSettingsTap: { showSettings = true },
-                        onHelpTap: { showTutorials = true }
+            ZStack(alignment: .bottom) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ClipsHeader(
+                            status: $status,
+                            type: $type,
+                            onSearchTap: { showSearch = true },
+                            onSettingsTap: { showSettings = true },
+                            onHelpTap: { showTutorials = true }
+                        )
+                        content
+                            .padding(.horizontal, 16)
+                            .padding(.top, 6)
+                            .padding(.bottom, 12)
+                    }
+                }
+                if let toastMemoryId = memoryNav.justCreatedMemoryId {
+                    MemoryCreatedToast(
+                        onView: {
+                            // Fire the actual navigation signal that
+                            // `HiMemTabView` (switches to Memories)
+                            // and `JournalView` (pushes detail)
+                            // observe. Clearing `justCreatedMemoryId`
+                            // dismisses this toast; the bus's
+                            // `pendingOpenMemoryId` drives the push.
+                            toastAutoDismissTask?.cancel()
+                            memoryNav.justCreatedMemoryId = nil
+                            memoryNav.pendingOpenMemoryId = toastMemoryId
+                        }
                     )
-                    content
-                        .padding(.horizontal, 16)
-                        .padding(.top, 6)
-                        .padding(.bottom, 12)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            .animation(.easeOut(duration: 0.22), value: memoryNav.justCreatedMemoryId)
             .background(Crucible.Color.paper.ignoresSafeArea())
             .navigationTitle("Clips")
             .navigationBarTitleDisplayMode(.inline)
@@ -91,6 +119,19 @@ struct ClipsTabView: View {
                 object: context
             )) { _ in
                 unplacedReload.fire { loadUnplaced() }
+            }
+            .onChange(of: memoryNav.justCreatedMemoryId) { _, newValue in
+                // 3.5s auto-dismiss on the toast when it's shown.
+                // Cancel any prior task so back-to-back creates
+                // extend the visible time correctly.
+                toastAutoDismissTask?.cancel()
+                guard newValue != nil else { return }
+                toastAutoDismissTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 3_500_000_000)
+                    if !Task.isCancelled {
+                        memoryNav.justCreatedMemoryId = nil
+                    }
+                }
             }
             .onChange(of: filterBus.pending) { _, pending in
                 if let pending {
@@ -209,6 +250,51 @@ struct ClipsTabView: View {
         }
         return grouped.map { (day: $0.key, refs: $0.value) }
             .sorted { $0.day > $1.day }
+    }
+}
+
+/// Post-create confirmation toast — `Clip model · spec.md` §Create
+/// one memory (July 12 2026): "dismiss the sheet and show a brief
+/// **confirmation toast — 'Memory created' with a 'View' action** that
+/// opens the new memory. The toast is the feedback; the user should
+/// never have to navigate to Memories to confirm the thing they just
+/// made exists." Auto-dismisses via a timer on
+/// `ClipsTabView.toastAutoDismissTask`; View button routes through
+/// `MemoryNavigationBus.pendingOpenMemoryId`.
+struct MemoryCreatedToast: View {
+    let onView: () -> Void
+
+    var body: some View {
+        HStack(spacing: 11) {
+            ZStack {
+                Circle()
+                    .fill(Crucible.Color.confirmed)
+                    .frame(width: 22, height: 22)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+            Text("Memory created")
+                .font(.system(size: 14.5, weight: .semibold))
+                .foregroundStyle(Crucible.Color.accentInk)
+            Spacer(minLength: 0)
+            Button(action: onView) {
+                Text("View")
+                    .font(.system(size: 14.5, weight: .bold))
+                    .foregroundStyle(Crucible.Color.accent)
+                    .padding(.horizontal, 6)
+                    .frame(minHeight: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 15)
+        .padding(.vertical, 13)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Crucible.Color.ink)
+                .shadow(color: Color.black.opacity(0.24), radius: 12, y: 6)
+        )
     }
 }
 
