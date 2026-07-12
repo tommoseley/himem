@@ -739,7 +739,12 @@ struct SessionListView: View {
                     // (`onTapDescriptionInvite = nil` so the invite
                     // stays visible but doesn't intercept — the
                     // outer link handles the push).
-                    showDescriptionInvite: true
+                    showDescriptionInvite: true,
+                    // CD 2026-07-12: session-triage row density.
+                    // Shrinks the 168pt billboard thumbnail to a
+                    // 52pt leading tile and adds the leading media
+                    // glyph so voice/note rows scan by type.
+                    isDenseContainer: true
                 )
                 .contentShape(Rectangle())
             }
@@ -797,6 +802,10 @@ struct SessionListView: View {
                 isPlayingEvidence: isPlaying,
                 pendingTranscript: !clip.transcriptionAttempted,
                 accidentalTranscript: accidental,
+                // CD 2026-07-12: leading media glyph + demoted
+                // offset stamp so the row scans as a triage line,
+                // not a reading surface.
+                isDenseContainer: true,
                 retryStatus: retryStatusText(for: clip)
             )
             .opacity(manuallyExcluded ? 0.55 : 1.0)

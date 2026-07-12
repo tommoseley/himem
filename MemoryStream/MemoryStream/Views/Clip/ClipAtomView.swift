@@ -132,6 +132,19 @@ struct ClipAtomView: View {
     /// and fires the closure instead.
     var onTapDescriptionInvite: (() -> Void)? = nil
 
+    /// Density hint for the operational register — the flat Clips
+    /// tab (browse-a-single-clip context) leaves this false and
+    /// gets the full-bleed thumbnail + billboard media render.
+    /// The session-expanded card (triage-many-clips context) sets
+    /// true and gets a scan-friendly skin: leading media glyph,
+    /// small horizontal thumbnail (~52pt) for media, offset stamp
+    /// demoted to 10pt subordinate weight, transcripts capped to
+    /// three lines. Same operational register, two densities —
+    /// the axis is intent (operational), the flag is scale.
+    /// Ignored in `.reflective` and `.reflectiveCompact` (those
+    /// registers already carry their own density).
+    var isDenseContainer: Bool = false
+
     /// Inline status text appended after the retry link
     /// (e.g. `"· Retrying…"` while a retry is in flight,
     /// `"· Retry failed"` after an error). Owned by the container
@@ -159,8 +172,22 @@ struct ClipAtomView: View {
         let evidence = ClipEvidenceProjection.project(model: model, register: .operational)
         return HStack(alignment: .top, spacing: 12) {
             ClipRing(binding: ring)
+            // Dense operational (session-expanded triage): leading
+            // media glyph — voice/note read too similarly without
+            // one, per CD 2026-07-12. Matches the glyph
+            // `reflectiveCompact` already ships. Not drawn on the
+            // flat Clips tab (`isDenseContainer: false`) because a
+            // browse row is showing one clip at a time — the media
+            // is its own type signal.
+            if isDenseContainer {
+                Image(systemName: mediaSFSymbol(model.media))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .frame(width: 16, alignment: .center)
+                    .padding(.top, 2)
+            }
             VStack(alignment: .leading, spacing: 4) {
-                ClipTimingHeader(timing: timing, register: .operational)
+                ClipTimingHeader(timing: timing, register: .operational, isDense: isDenseContainer)
                 ClipContentSlot(
                     content: content,
                     media: model.media,
@@ -171,7 +198,8 @@ struct ClipAtomView: View {
                     accidentalTranscript: accidentalTranscript,
                     emptyTranscriptCaption: emptyTranscriptCaption,
                     showDescriptionInvite: showDescriptionInvite,
-                    onTapDescriptionInvite: onTapDescriptionInvite
+                    onTapDescriptionInvite: onTapDescriptionInvite,
+                    isDenseContainer: isDenseContainer
                 )
                 if model.failed, let onRetry = onRetryTranscription {
                     ClipRetry(onTap: onRetry, status: retryStatus)
@@ -180,7 +208,7 @@ struct ClipAtomView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             ClipEvidenceControl(projection: evidence, onTap: onPlayEvidence, isPlaying: isPlayingEvidence)
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, isDenseContainer ? 8 : 12)
     }
 
     // MARK: - Reflective card
@@ -331,6 +359,14 @@ struct ClipRing: View {
 struct ClipTimingHeader: View {
     let timing: ClipTimingProjection
     let register: ClipRegister
+    /// Density hint from the atom (CD 2026-07-12). When true in
+    /// `.operational`, the offset demotes to a 10pt ink4
+    /// subordinate stamp — CD's diagnosis was that session-
+    /// triage rows shouldn't compete for the eye with the glyph
+    /// and transcript preview. Offset stays (still useful for
+    /// reconstructing "the first clip was quiet, then this one
+    /// 129s later") but stops being primary.
+    var isDense: Bool = false
 
     var body: some View {
         switch register {
@@ -346,11 +382,11 @@ struct ClipTimingHeader: View {
                 if let offset = timing.offsetString {
                     Text(offset)
                         .monospacedDigit()
-                        .frame(width: 44, alignment: .leading)
+                        .frame(width: isDense ? 36 : 44, alignment: .leading)
                 }
             }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(Crucible.Color.ink3)
+            .font(.system(size: isDense ? 10 : 11, weight: isDense ? .regular : .medium))
+            .foregroundStyle(isDense ? Crucible.Color.ink4 : Crucible.Color.ink3)
         case .reflective:
             // T3: mixed-case with location. Previously we
             // uppercased + letter-spaced this line, which
@@ -409,6 +445,11 @@ struct ClipContentSlot: View {
     /// invite. Nil = the invite renders as a static prompt (still
     /// visible per spec, but inert).
     var onTapDescriptionInvite: (() -> Void)? = nil
+    /// Density hint from `ClipAtomView` (CD 2026-07-12). When
+    /// true, `.transcriptFull` caps to three lines and `.media`
+    /// swaps from the full-bleed 168pt billboard to a leading
+    /// 52pt horizontal thumbnail — the session-triage skin.
+    var isDenseContainer: Bool = false
 
     var body: some View {
         switch content {
@@ -432,14 +473,25 @@ struct ClipContentSlot: View {
                     .foregroundStyle(Crucible.Color.ink3)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Text(text.isEmpty ? "(no transcript)" : "\u{201C}\(text)\u{201D}")
-                    .font(.system(size: 13.5))
+                let body = Text(text.isEmpty ? "(no transcript)" : "\u{201C}\(text)\u{201D}")
+                    .font(.system(size: isDenseContainer ? 13 : 13.5))
                     .foregroundStyle(Crucible.Color.ink2)
                     .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .onTapGesture { onTap?() }
+                if isDenseContainer {
+                    // Dense triage: cap transcripts so a long clip
+                    // doesn't push the row height past a scannable
+                    // line count. Full transcript still opens via
+                    // tap-to-edit / navigation, same as non-dense.
+                    body
+                        .lineLimit(3)
+                        .onTapGesture { onTap?() }
+                } else {
+                    body
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onTapGesture { onTap?() }
+                }
             }
         case .transcriptPreview:
             // Consumed by the atom's reflectiveCompact row inline —
@@ -452,6 +504,19 @@ struct ClipContentSlot: View {
 
     @ViewBuilder
     private func mediaBody(description: String?) -> some View {
+        if isDenseContainer {
+            denseMediaBody(description: description)
+        } else {
+            billboardMediaBody(description: description)
+        }
+    }
+
+    /// Full-bleed media body — the flat Clips tab render. Thumbnail
+    /// is the primary object (168pt block); the description hangs
+    /// underneath as its own row. Correct for a browse-single-clip
+    /// surface where the media *is* what's being consumed.
+    @ViewBuilder
+    private func billboardMediaBody(description: String?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if let thumbnailKey {
                 ClipThumbnailView(
@@ -474,33 +539,87 @@ struct ClipContentSlot: View {
                     .contentShape(Rectangle())
                     .onTapGesture { onTap?() }
             } else if showDescriptionInvite {
-                // C3: ochre dashed invite for the opened-context
-                // empty-description case. `Q2` decides where this
-                // fires (opened row = show; dense flat rows =
-                // silent).
-                Button {
-                    onTapDescriptionInvite?()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("Add a description")
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                    .foregroundStyle(Crucible.Color.accent)
-                    .frame(maxWidth: .infinity, minHeight: 40)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(
-                                Crucible.Color.accent,
-                                style: StrokeStyle(lineWidth: 1, dash: [5, 4])
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(onTapDescriptionInvite == nil)
-                .accessibilityLabel("Add a description")
+                inviteButton(compact: false)
             }
+        }
+    }
+
+    /// Dense media body — the session-triage render (CD 2026-07-12).
+    /// Small (52pt) horizontal thumbnail on the leading edge; the
+    /// description or invite reads inline to the right. The row now
+    /// scans at "one card of a triage list" instead of "a photo I'm
+    /// looking at." Same content, different scale.
+    @ViewBuilder
+    private func denseMediaBody(description: String?) -> some View {
+        let trimmed = description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        HStack(alignment: .top, spacing: 10) {
+            if let thumbnailKey {
+                ClipThumbnailView(
+                    key: thumbnailKey,
+                    provided: providedThumbnail,
+                    kind: media
+                )
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .onTapGesture { onTap?() }
+            }
+            if !trimmed.isEmpty {
+                Text(trimmed)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .lineSpacing(2)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onTap?() }
+            } else if showDescriptionInvite {
+                inviteButton(compact: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(kindLabel(for: media))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// C3 ochre-dashed "Add a description" — one call site, two
+    /// scales. `compact` sizes down for the dense triage row so it
+    /// nests inside the 52pt thumbnail's HStack without pushing the
+    /// row height.
+    @ViewBuilder
+    private func inviteButton(compact: Bool) -> some View {
+        Button {
+            onTapDescriptionInvite?()
+        } label: {
+            HStack(spacing: compact ? 4 : 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: compact ? 10 : 12, weight: .semibold))
+                Text("Add a description")
+                    .font(.system(size: compact ? 12 : 14, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.accent)
+            .frame(maxWidth: .infinity, minHeight: compact ? 32 : 40)
+            .background(
+                RoundedRectangle(cornerRadius: compact ? 8 : 10)
+                    .strokeBorder(
+                        Crucible.Color.accent,
+                        style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(onTapDescriptionInvite == nil)
+        .accessibilityLabel("Add a description")
+    }
+
+    private func kindLabel(for media: ClipDisplayModel.Media) -> String {
+        switch media {
+        case .voice: return "Voice"
+        case .photo: return "Photo"
+        case .video: return "Video"
+        case .note:  return "Note"
         }
     }
 }
