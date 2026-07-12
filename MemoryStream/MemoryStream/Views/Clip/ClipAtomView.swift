@@ -172,22 +172,12 @@ struct ClipAtomView: View {
         let evidence = ClipEvidenceProjection.project(model: model, register: .operational)
         return HStack(alignment: .top, spacing: 12) {
             ClipRing(binding: ring)
-            // Dense operational (session-expanded triage): leading
-            // media glyph — voice/note read too similarly without
-            // one, per CD 2026-07-12. Matches the glyph
-            // `reflectiveCompact` already ships. Not drawn on the
-            // flat Clips tab (`isDenseContainer: false`) because a
-            // browse row is showing one clip at a time — the media
-            // is its own type signal.
-            if isDenseContainer {
-                Image(systemName: mediaSFSymbol(model.media))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Crucible.Color.ink3)
-                    .frame(width: 16, alignment: .center)
-                    .padding(.top, 2)
-            }
+            // Leading media glyph is now owned by `ClipTimingHeader`
+            // in every register (July 12 2026 spec lock — see the
+            // header's `leadingGlyph` doc). The old dense-only
+            // outer glyph is retired; the header handles it inline.
             VStack(alignment: .leading, spacing: 4) {
-                ClipTimingHeader(timing: timing, register: .operational, isDense: isDenseContainer)
+                ClipTimingHeader(timing: timing, register: .operational, media: model.media, isDense: isDenseContainer)
                 ClipContentSlot(
                     content: content,
                     media: model.media,
@@ -218,7 +208,7 @@ struct ClipAtomView: View {
         let content = ClipContentProjection.project(content: model.content, register: .reflective)
         let evidence = ClipEvidenceProjection.project(model: model, register: .reflective)
         return VStack(alignment: .leading, spacing: 10) {
-            ClipTimingHeader(timing: timing, register: .reflective)
+            ClipTimingHeader(timing: timing, register: .reflective, media: model.media)
             ClipContentSlot(
                 content: content,
                 media: model.media,
@@ -242,9 +232,12 @@ struct ClipAtomView: View {
         let content = ClipContentProjection.project(content: model.content, register: .reflectiveCompact)
         return HStack(spacing: 10) {
             if let glyph = timing.mediaGlyph {
+                // Ochre for voice/audio (brand), ink3 for the rest
+                // — matches the header's `leadingGlyph` canon
+                // (July 12 2026 lock).
                 Image(systemName: mediaSFSymbol(glyph))
                     .font(.system(size: 12))
-                    .foregroundStyle(Crucible.Color.ink3)
+                    .foregroundStyle(glyph == .voice ? Crucible.Color.accent : Crucible.Color.ink3)
                     .frame(width: 16, alignment: .center)
             }
             if let time = timing.timeOnly {
@@ -359,6 +352,15 @@ struct ClipRing: View {
 struct ClipTimingHeader: View {
     let timing: ClipTimingProjection
     let register: ClipRegister
+    /// The clip's media type — drives the leading glyph the timing
+    /// header now carries in every register (`Clip model · spec.md`
+    /// §Clip model, July 12 2026):
+    /// > "The media-type glyph that LEADS every clip's timing header,
+    /// > in EVERY register — so a voice clip, note, photo, and video
+    /// > are instantly distinguishable before you read a word."
+    /// Audio = ochre (brand), the rest = quiet ink3. Informational,
+    /// never interactive.
+    let media: ClipDisplayModel.Media
     /// Density hint from the atom (CD 2026-07-12). When true in
     /// `.operational`, the offset demotes to a 10pt ink4
     /// subordinate stamp — CD's diagnosis was that session-
@@ -371,7 +373,8 @@ struct ClipTimingHeader: View {
     var body: some View {
         switch register {
         case .operational:
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                leadingGlyph(size: 12)
                 // T2: duration lives in the Play control only.
                 // Previously the row printed `+128s · 0:03` AND
                 // `▶ 0:03` on the same line — same value twice.
@@ -394,15 +397,39 @@ struct ClipTimingHeader: View {
             // Bluffton" cadence into a shout ("SAT JUL 4 · 9:37
             // PM"). The projection already returns the canonical
             // form — the view was the drift.
-            if let full = timing.dateTimePlace {
-                Text(full)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Crucible.Color.ink3)
+            HStack(spacing: 8) {
+                leadingGlyph(size: 13)
+                if let full = timing.dateTimePlace {
+                    Text(full)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
             }
         case .reflectiveCompact:
             // The atom's compact row draws its own header inline
             // (glyph + time + preview) — no separate header sub-view.
             EmptyView()
+        }
+    }
+
+    /// The leading media-type glyph — ochre for voice/audio (the
+    /// brand accent, matching the composition line's `MediaRow`
+    /// mic), quiet ink3 for photo/video/note. Sized to sit inline
+    /// with the register's timing text.
+    @ViewBuilder
+    private func leadingGlyph(size: CGFloat) -> some View {
+        Image(systemName: mediaSFSymbol(media))
+            .font(.system(size: size))
+            .foregroundStyle(media == .voice ? Crucible.Color.accent : Crucible.Color.ink3)
+            .frame(width: 16, alignment: .center)
+    }
+
+    private func mediaSFSymbol(_ media: ClipDisplayModel.Media) -> String {
+        switch media {
+        case .voice: return "waveform"
+        case .photo: return "camera"
+        case .video: return "video"
+        case .note:  return "text.alignleft"
         }
     }
 }
