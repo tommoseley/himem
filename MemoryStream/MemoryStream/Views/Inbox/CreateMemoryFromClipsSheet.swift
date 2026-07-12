@@ -490,16 +490,39 @@ struct CreateMemoryFromClipsSheet: View {
             let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
             let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
             do {
-                if FileManager.default.fileExists(atPath: voiceURL.path) {
-                    try FileManager.default.removeItem(at: voiceURL)
-                }
-                try FileManager.default.moveItem(at: inboxURL, to: voiceURL)
+                // Both URLs live inside the iCloud ubiquity container
+                // (Inbox/ → Audio/). A raw `FileManager.moveItem`
+                // between iCloud subdirectories can silently fail
+                // when a concurrent sync is reading the source or
+                // the destination — same class of bug task #59 fixed
+                // for PHPicker / WatchSession / Migration writes.
+                // `UbiquityStore.moveIntoStore` wraps the move in
+                // `NSFileCoordinator(writingItemAt:options:.forReplacing)`
+                // and clears the destination first.
+                _ = try UbiquityStore.shared.moveIntoStore(
+                    sourceURL: inboxURL,
+                    destinationURL: voiceURL
+                )
                 movedClips.append(clip)
             } catch {
-                // If the move fails, skip that clip — its inbox row stays
-                // for retry on the next attempt.
+                // Surface the failure instead of swallowing it — Tom
+                // hit this July 12 as "nothing creates" (memory saved
+                // with zero fragments because every move failed and
+                // the loop silently dropped every clip). Console
+                // filter: `[HiMem][CreateMemory] move failed`.
+                NSLog("[HiMem][CreateMemory] move failed for clip=\(clip.clipId.uuidString.prefix(8)) file=\(clip.audioFilename) error=\(error.localizedDescription)")
                 continue
             }
+        }
+        // Guardrail — if every move failed we would otherwise create
+        // an empty memory (transcript = "", no fragments). Bail
+        // instead so the user's clips stay on the bench for retry.
+        // The bus signal + dismiss below would otherwise land them
+        // on an empty Memory Detail, which is exactly the July 12
+        // dogfood symptom.
+        guard !movedClips.isEmpty else {
+            NSLog("[HiMem][CreateMemory] aborting — every clip's audio file failed to move; nothing to bundle")
+            return
         }
 
         let joinedTranscript = movedClips
@@ -611,16 +634,16 @@ struct CreateMemoryFromClipsSheet: View {
             let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
             let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
             do {
-                if FileManager.default.fileExists(atPath: voiceURL.path) {
-                    try FileManager.default.removeItem(at: voiceURL)
-                }
-                try FileManager.default.moveItem(at: inboxURL, to: voiceURL)
+                // Coordinated move — see `createMemory` for the
+                // rationale (task #59 pattern for iCloud writes).
+                _ = try UbiquityStore.shared.moveIntoStore(
+                    sourceURL: inboxURL,
+                    destinationURL: voiceURL
+                )
                 payload.append((clip.audioFilename, clip.transcript, clip.capturedAt))
                 locationStamps.append((clip.audioFilename, clip.latitude, clip.longitude))
             } catch {
-                // Skip clips whose audio failed to move — their inbox
-                // rows stay so the user can retry. Matches the
-                // create-new-memory path's tolerance.
+                NSLog("[HiMem][AppendMemory] move failed for clip=\(clip.clipId.uuidString.prefix(8)) file=\(clip.audioFilename) error=\(error.localizedDescription)")
                 continue
             }
         }
