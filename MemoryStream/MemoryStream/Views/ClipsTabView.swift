@@ -348,9 +348,16 @@ struct ClipsHeader: View {
         .padding(.bottom, 4)
     }
 
+    /// Toggle order: **All then New** (Tom, 2026-07-12) — reads
+    /// left-to-right as the "wider" view first, `New` as the
+    /// active-triage subset. Independent of the `ClipsStatus` enum
+    /// declaration order (which stays semantic: `new` is the default
+    /// state, `all` is the fallback).
+    private static let statusOrder: [ClipsStatus] = [.all, .new]
+
     private var statusToggle: some View {
         HStack(spacing: 2) {
-            ForEach(ClipsStatus.allCases) { s in
+            ForEach(Self.statusOrder) { s in
                 statusSegment(for: s)
             }
         }
@@ -395,25 +402,31 @@ struct ClipsHeader: View {
     }
 
     private func typeChip(for t: ClipsType) -> some View {
+        // Same ochre selection language as the status toggle above
+        // (Tom, 2026-07-12): accent fill + accentInk text + bold
+        // weight when selected; ink2 text with a hairline outline
+        // otherwise. The chip row has no wash1 track container (the
+        // status toggle's track marks it as the primary two-state
+        // control), but the button styling itself matches.
         let selected = type == t
         return Button {
             type = t
         } label: {
             Text(t.label)
-                .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                .font(.system(size: 13.5, weight: selected ? .bold : .medium))
                 .tracking(-0.1)
-                .foregroundStyle(selected ? Crucible.Color.ink : Crucible.Color.ink3)
-                .padding(.horizontal, 11)
-                .frame(minHeight: 30)
+                .foregroundStyle(selected ? Crucible.Color.accentInk : Crucible.Color.ink2)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 32)
                 .background(
-                    selected ? Crucible.Color.wash2 : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 9)
+                    selected ? Crucible.Color.accent : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 8)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9)
+                    RoundedRectangle(cornerRadius: 8)
                         .stroke(selected ? Color.clear : Crucible.Color.hairline, lineWidth: 1)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 9))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .frame(minHeight: 44)
