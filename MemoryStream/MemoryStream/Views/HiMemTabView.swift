@@ -206,6 +206,20 @@ struct HiMemTabView: View {
                 InboxManifest.shared.markAllSeen()
             }
         }
+        // Cold-launch onto Clips + arrivals while Clips is already
+        // visible (July 12 2026 stuck-dot fix). The `.onChange(of:
+        // selection)` above only fires on tab CHANGE — if the app
+        // boots straight onto Clips or the user records via the
+        // phone FAB while already on Clips (the July 10 lock:
+        // "capture returns to Clips"), the selection doesn't
+        // change and the dot never cleared. Observing the manifest
+        // flag lets us clear the moment it flips true while the
+        // user is looking at the bench.
+        .onChange(of: inbox.hasUnseenArrivals) { _, hasUnseen in
+            if hasUnseen && selection == .clips {
+                InboxManifest.shared.markAllSeen()
+            }
+        }
         // Siri backward-compat: `StartVoiceRecordingIntent` still sets
         // `pendingVoiceRecord`. Route it through the shared modality
         // pipeline. Cold-launch case (Siri set the flag before the view
@@ -217,6 +231,14 @@ struct HiMemTabView: View {
             }
         }
         .onAppear {
+            // Cold-launch onto Clips: the `.onChange(of: selection)`
+            // above only fires on a change, and cold-launch may init
+            // `selection` straight to `.clips` (last-used tab). Clear
+            // the arrival dot here so a boot straight into Clips
+            // doesn't leave it stuck.
+            if selection == .clips && inbox.hasUnseenArrivals {
+                InboxManifest.shared.markAllSeen()
+            }
             // Cold-launch session bump for the coachmark's "never on
             // first launch" guardrail (spec guardrail #4). Runs once
             // per cold launch — SwiftUI calls `onAppear` on the root
