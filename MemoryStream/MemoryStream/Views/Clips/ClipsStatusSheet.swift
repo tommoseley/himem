@@ -71,57 +71,35 @@ struct ClipsStatusSheet: View {
     // MARK: - Sections
 
     private var newArrivalsSection: some View {
-        // `screens-clips-page.jsx` §ScrClipsStatusSheet, locked
-        // July 12 2026:
-        // > "only sources that actually have arrivals appear — a
-        // > source at 0 is omitted entirely, never shown as a
-        // > 'Siri 0' zero row (census noise)."
-        // The section header itself hides when no source has any
-        // arrivals — an empty section reading only "NEW ARRIVALS"
-        // is worse than no section at all.
-        Group {
-            if hasAnyArrivals {
-                VStack(alignment: .leading, spacing: 0) {
-                    eyebrow("New arrivals")
-                    if data.watchArrivals > 0 {
-                        statusLine(
-                            systemImage: "applewatch",
-                            label: "Apple Watch",
-                            value: data.watchArrivals,
-                            tint: Crucible.Color.accent
-                        )
-                    }
-                    if data.phoneArrivals > 0 {
-                        statusLine(systemImage: "iphone", label: "iPhone", value: data.phoneArrivals)
-                    }
-                    if data.siriArrivals > 0 {
-                        statusLine(systemImage: "waveform", label: "Siri", value: data.siriArrivals)
-                    }
-                    // Media-type breakdown per Tom 2026-07-11: Photos /
-                    // Videos / Notes get their own presence rows so the
-                    // sheet reads the same media vocabulary the mixed
-                    // session card uses (`MediaRow`). Count = loose refs
-                    // of that kind (unattached to any memory). Glyphs
-                    // match the memory-card canon (`camera` / `video` /
-                    // `text.alignleft`) — same 2026-07-11 sync as
-                    // `MediaRow.sfSymbol(for:)`.
-                    if data.photoArrivals > 0 {
-                        statusLine(systemImage: "camera", label: "Photos", value: data.photoArrivals)
-                    }
-                    if data.videoArrivals > 0 {
-                        statusLine(systemImage: "video", label: "Videos", value: data.videoArrivals)
-                    }
-                    if data.noteArrivals > 0 {
-                        statusLine(systemImage: "text.alignleft", label: "Notes", value: data.noteArrivals)
-                    }
-                }
-            }
+        // Full-census view: every source row renders regardless of
+        // count. Tom, 2026-07-12: "I liked the 0s" — a zero row
+        // reads as "I haven't got anything from Siri yet," which is
+        // real information, not noise. This intentionally diverges
+        // from the July 12 spec's omit-zero rule
+        // (`screens-clips-page.jsx §ScrClipsStatusSheet`); revisit
+        // if the design doc gets updated to match.
+        VStack(alignment: .leading, spacing: 0) {
+            eyebrow("New arrivals")
+            statusLine(
+                systemImage: "applewatch",
+                label: "Apple Watch",
+                value: data.watchArrivals,
+                tint: data.watchArrivals > 0 ? Crucible.Color.accent : nil
+            )
+            statusLine(systemImage: "iphone", label: "iPhone", value: data.phoneArrivals)
+            statusLine(systemImage: "waveform", label: "Siri", value: data.siriArrivals)
+            // Media-type breakdown per Tom 2026-07-11: Photos /
+            // Videos / Notes get their own presence rows so the
+            // sheet reads the same media vocabulary the mixed
+            // session card uses (`MediaRow`). Count = loose refs
+            // of that kind (unattached to any memory). Glyphs match
+            // the memory-card canon (`camera` / `video` /
+            // `text.alignleft`) — same 2026-07-11 sync as
+            // `MediaRow.sfSymbol(for:)`.
+            statusLine(systemImage: "camera", label: "Photos", value: data.photoArrivals)
+            statusLine(systemImage: "video", label: "Videos", value: data.videoArrivals)
+            statusLine(systemImage: "text.alignleft", label: "Notes", value: data.noteArrivals)
         }
-    }
-
-    private var hasAnyArrivals: Bool {
-        data.watchArrivals + data.phoneArrivals + data.siriArrivals
-            + data.photoArrivals + data.videoArrivals + data.noteArrivals > 0
     }
 
     private var processingSection: some View {
