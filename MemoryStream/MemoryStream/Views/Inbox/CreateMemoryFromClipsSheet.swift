@@ -580,6 +580,16 @@ struct CreateMemoryFromClipsSheet: View {
 
         // Drop manifest rows — audio files were already moved out.
         InboxManifest.shared.removeBatch(clipIds: movedClips.map { $0.clipId })
+        // Land the user on the freshly-created memory (`Himem ·
+        // Memory Detail.html` §Just created, July 12 2026): a new
+        // memory is never empty; it contains its included clips as
+        // the body immediately. The bus tells `HiMemTabView` to
+        // switch to Memories and the memories-instance
+        // `JournalView` to push Memory Detail. Only fires on a
+        // successful save (`newId` non-nil above).
+        if let newId {
+            MemoryNavigationBus.shared.pendingOpenMemoryId = newId
+        }
         dismiss()
     }
 

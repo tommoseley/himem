@@ -40,6 +40,10 @@ struct JournalView: View {
     /// automatically. The composer auto-starts recording on appear,
     /// so flipping this flag is enough to land in mic-hot state.
     @ObservedObject private var captureRequests = CaptureRequestBus.shared
+    /// Signals "open Memory Detail for this id" from the Clips →
+    /// Sessions Create-one-memory flow. Only the memories-mode
+    /// instance responds (guarded in the `.onChange` handler).
+    @ObservedObject private var memoryNavigation = MemoryNavigationBus.shared
     @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var activeCaptureModality: CaptureModality? = nil
@@ -196,6 +200,20 @@ struct JournalView: View {
         .navigationBarHidden(true)
         .onChange(of: quickAction.pendingAction) { _, action in
             if let action { handleQuickAction(action) }
+        }
+        // Create-one-memory landing (`Himem · Memory Detail.html`
+        // §Just created, July 12 2026): consume the bus signal
+        // and push into `EntryExpandedView`. Only the memories-
+        // instance responds; the projects-instance ignores. Reloads
+        // the viewModel first so `entryDetailDestination(for:)` can
+        // resolve the just-saved entry (Clips-tab viewModel and
+        // this instance are separate `JournalViewModel`s — a save
+        // in one doesn't refresh the other unless we ask).
+        .onChange(of: memoryNavigation.pendingOpenMemoryId) { _, pending in
+            guard let pending, viewMode == .memories else { return }
+            viewModel.refresh()
+            selectedEntryId = pending
+            memoryNavigation.pendingOpenMemoryId = nil
         }
         } // NavigationStack
     }

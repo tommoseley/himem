@@ -55,6 +55,11 @@ struct HiMemTabView: View {
     /// §Clip triage (July 12 2026): "No FAB on an opened clip —
     /// it's an opened item, not a capture surface."
     @ObservedObject private var clipDetailPresence = ClipDetailPresentationContext.shared
+    /// Signals "open Memory Detail for this id" — the Create-one-
+    /// memory flow (`CreateMemoryFromClipsSheet`) sets it after a
+    /// successful save so the user lands on the freshly-created
+    /// memory instead of the calm Clips list.
+    @ObservedObject private var memoryNavigation = MemoryNavigationBus.shared
     /// Set true when `pendingReturnToClips` fires; consumed by the
     /// next Clips coachmark evaluation so guardrail #3 ("suppress the
     /// Clips coachmark when arriving from a capture") holds. Cleared
@@ -177,6 +182,19 @@ struct HiMemTabView: View {
                 justArrivedFromCapture = true
                 selection = .clips
                 captureLanding.pendingReturnToClips = false
+            }
+        }
+        // Create-one-memory landing (`Himem · Memory Detail.html`
+        // §Just created, July 12 2026): after
+        // `CreateMemoryFromClipsSheet` saves, jump to the Memories
+        // tab so `JournalView(initialMode: .memories)` can consume
+        // the same signal and push into `EntryExpandedView`. The
+        // bus id is deliberately NOT cleared here — the memories
+        // `JournalView` clears it after routing so the tab switch
+        // and the push don't race on nil.
+        .onChange(of: memoryNavigation.pendingOpenMemoryId) { _, pending in
+            if pending != nil {
+                selection = .memories
             }
         }
         .onChange(of: selection) { _, newTab in
