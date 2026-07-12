@@ -74,6 +74,13 @@ private struct MediaReferenceClipDetail: View {
 
     private let storage = StorageService.shared
 
+    /// True while the description editor is on-screen. `Clip model ·
+    /// spec.md` §Clip triage (July 12 2026): "Edit mode — words only:
+    /// the transcript field + Play + Cancel/Done. No fate actions,
+    /// no Referenced-in, no FAB." Everything below the editor hides
+    /// while editing so Delete clip never renders twice.
+    private var editing: Bool { descriptionDraft != nil }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -86,10 +93,12 @@ private struct MediaReferenceClipDetail: View {
                 if isMediaClip {
                     descriptionSection
                 }
-                referencedInSection
-                placementAffordance
-                Spacer(minLength: 40)
-                deleteSection
+                if !editing {
+                    referencedInSection
+                    placementAffordance
+                    Spacer(minLength: 40)
+                    deleteSection
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 24)
@@ -122,6 +131,12 @@ private struct MediaReferenceClipDetail: View {
                 .tracking(1.3)
                 .foregroundStyle(Crucible.Color.ink3)
             if descriptionDraft != nil {
+                // *Words only.* `showFates: false` drops the editor's
+                // internal Delete tier (`Clip model · spec.md` §Clip
+                // triage July 12 2026: "editing words is not a moment
+                // to delete or eject — Delete clip must never render
+                // twice"). `showLabel: false` avoids repeating the
+                // "DESCRIPTION" eyebrow the section already renders.
                 ClipEditor(
                     field: .description,
                     draft: Binding(
@@ -132,12 +147,11 @@ private struct MediaReferenceClipDetail: View {
                     editId: "description-\(ref.id.uuidString)",
                     evidence: nil,
                     fateActions: ClipEditorFateActions(
-                        onDelete: {
-                            descriptionDraft = nil
-                            confirmingDelete = true
-                        },
+                        onDelete: { },
                         onRelocate: nil
                     ),
+                    showLabel: false,
+                    showFates: false,
                     onCancel: { descriptionDraft = nil },
                     onDone: { newValue in
                         ref.mediaDescription = newValue.isEmpty ? nil : newValue
@@ -373,6 +387,13 @@ private struct InboxClipDetail: View {
         inbox.clips.first { $0.clipId == clipId }
     }
 
+    /// True while the transcript editor is on-screen. `Clip model ·
+    /// spec.md` §Clip triage (July 12 2026): "Edit mode — **words
+    /// only**: the transcript field + Play + Cancel/Done. No fate
+    /// actions, no Referenced-in, no FAB." Everything below the
+    /// editor hides while editing so Delete clip never renders twice.
+    private var editing: Bool { transcriptDraft != nil }
+
     var body: some View {
         Group {
             if let clip {
@@ -380,9 +401,11 @@ private struct InboxClipDetail: View {
                     VStack(alignment: .leading, spacing: 20) {
                         header(clip: clip)
                         transcriptSection(clip: clip)
-                        referencedInSection
-                        Spacer(minLength: 40)
-                        deleteSection
+                        if !editing {
+                            referencedInSection
+                            Spacer(minLength: 40)
+                            bottomFateStack
+                        }
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 24)
@@ -435,6 +458,11 @@ private struct InboxClipDetail: View {
                 .tracking(1.3)
                 .foregroundStyle(Crucible.Color.ink3)
             if transcriptDraft != nil {
+                // *Words only.* `showFates: false` drops the editor's
+                // internal Remove/Move/Delete tier — those live in the
+                // view-mode `bottomFateStack` (below), hidden while
+                // editing. `showLabel: false` avoids repeating the
+                // "TRANSCRIPT" eyebrow the section already renders.
                 ClipEditor(
                     field: .transcript,
                     draft: Binding(
@@ -445,30 +473,11 @@ private struct InboxClipDetail: View {
                     editId: "inbox-transcript-\(clip.clipId.uuidString)",
                     evidence: .audio(duration: clip.duration),
                     fateActions: ClipEditorFateActions(
-                        onDelete: {
-                            transcriptDraft = nil
-                            confirmingDelete = true
-                        },
-                        // Move-to-memory (promote a bench clip into an
-                        // existing memory) not yet wired — the audio-
-                        // file-move + edge-append plumbing lives in
-                        // `CreateMemoryFromClipsSheet.appendToExistingMemory`
-                        // and isn't cleanly single-clip-callable yet.
-                        // Deferred to a follow-up chunk; the fate row
-                        // hides the Move tier when this is nil.
-                        onRelocate: nil,
-                        // *Remove from session* — `Clip model · spec.md`
-                        // § "Clip triage" July 12 2026. Marks the clip
-                        // solo so `ClipSessionGrouper` emits it as its
-                        // own single-clip session on the bench. Hidden
-                        // when the clip is already solo (nothing to do).
-                        onRemoveFromCollection: inbox.soloClipIds.contains(clipId) ? nil : {
-                            transcriptDraft = nil
-                            InboxManifest.shared.markSolo(clipId: clipId)
-                            dismiss()
-                        },
-                        removeFromCollectionLabel: inbox.soloClipIds.contains(clipId) ? nil : "Remove from session"
+                        onDelete: { },
+                        onRelocate: nil
                     ),
+                    showLabel: false,
+                    showFates: false,
                     onCancel: { transcriptDraft = nil },
                     onDone: { newValue in
                         InboxManifest.shared.recordTranscriptionAttempt(
@@ -517,23 +526,61 @@ private struct InboxClipDetail: View {
         }
     }
 
-    // MARK: - Delete
+    // MARK: - Bottom fate stack (view mode only)
 
+    /// The opened-item bottom fate stack per `Clip model · spec.md`
+    /// §Clip triage July 12 2026:
+    /// > View mode — meta · transcript · Play · Referenced in, then
+    /// > a single bottom fate stack: Remove from session (neutral
+    /// > hairline) above Delete clip (danger red), one of each.
+    ///
+    /// Remove-from-session only renders when the clip is currently
+    /// grouped with siblings (i.e., not already solo). Both hide
+    /// during edit mode via the `!editing` gate up in `body`, so
+    /// Delete clip never renders twice.
     @ViewBuilder
-    private var deleteSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button(role: .destructive) {
-                confirmingDelete = true
-            } label: {
-                Text("Delete clip")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .foregroundStyle(Crucible.Color.danger)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Crucible.Color.danger, lineWidth: 1)
-                    )
+    private var bottomFateStack: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            if !inbox.soloClipIds.contains(clipId) {
+                removeFromSessionButton
             }
+            deleteClipButton
+        }
+    }
+
+    private var removeFromSessionButton: some View {
+        Button {
+            InboxManifest.shared.markSolo(clipId: clipId)
+            dismiss()
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Remove from session")
+                    .font(.body.weight(.semibold))
+            }
+            .foregroundStyle(Crucible.Color.ink2)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Crucible.Color.hairline, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var deleteClipButton: some View {
+        Button(role: .destructive) {
+            confirmingDelete = true
+        } label: {
+            Text("Delete clip")
+                .font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .foregroundStyle(Crucible.Color.danger)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Crucible.Color.danger, lineWidth: 1)
+                )
         }
     }
 

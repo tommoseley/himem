@@ -187,6 +187,24 @@ struct ClipEditor: View {
     /// Fate actions — delete required, relocate optional.
     let fateActions: ClipEditorFateActions
 
+    /// When `false`, the eyebrow section label (`TRANSCRIPT` /
+    /// `DESCRIPTION`) is suppressed — for surfaces whose screen
+    /// chrome already carries the same label a step up (Clip Detail).
+    /// Locked July 12 2026 (`Clip model · spec.md` §Clip triage):
+    /// "The editor also must not repeat the `TRANSCRIPT` section
+    /// label the screen already shows."
+    var showLabel: Bool = true
+
+    /// When `false`, the fate-action row (Remove / Move / Delete) is
+    /// dropped entirely — for surfaces whose view mode already owns
+    /// those actions in a bottom fate stack (Clip Detail). Locked
+    /// July 12 2026: "editing words is not a moment to delete or
+    /// eject — so those never appear here, which is why Delete clip
+    /// must never render twice." The default (`true`) preserves the
+    /// pre-July-12 behaviour for every existing memory-detail
+    /// call-site.
+    var showFates: Bool = true
+
     let onCancel: () -> Void
     let onDone: (String) -> Void
 
@@ -195,13 +213,17 @@ struct ClipEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            eyebrowLabel
+            if showLabel {
+                eyebrowLabel
+            }
             editField
             if let evidence {
                 evidenceRow(evidence)
                     .opacity(0.7)
             }
-            fateRow
+            if showFates {
+                fateRow
+            }
             commitBar
         }
         .padding(.vertical, 6)
