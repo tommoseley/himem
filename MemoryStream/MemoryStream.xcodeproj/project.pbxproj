@@ -111,6 +111,7 @@
 		A100000680 /* VoiceClipSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000680 /* VoiceClipSplitter.swift */; };
 		A100000681 /* VoiceCaptureOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000681 /* VoiceCaptureOrchestrator.swift */; };
 		A100000690 /* ClipSessionGrouper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000690 /* ClipSessionGrouper.swift */; };
+		A100000CFF /* ClipsUnplacedFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000CFF /* ClipsUnplacedFilter.swift */; };
 		A100000691 /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000691 /* SessionListView.swift */; };
 		A100000693 /* SwipeToDelete.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000693 /* SwipeToDelete.swift */; };
 		A100000694 /* SwipeToDiscard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000694 /* SwipeToDiscard.swift */; };
@@ -371,6 +372,7 @@
 		B100000680 /* VoiceClipSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClipSplitter.swift; sourceTree = "<group>"; };
 		B100000681 /* VoiceCaptureOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCaptureOrchestrator.swift; sourceTree = "<group>"; };
 		B100000690 /* ClipSessionGrouper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipSessionGrouper.swift; sourceTree = "<group>"; };
+		B100000CFF /* ClipsUnplacedFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipsUnplacedFilter.swift; sourceTree = "<group>"; };
 		B100000691 /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
 		B100000693 /* SwipeToDelete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDelete.swift; sourceTree = "<group>"; };
 		B100000694 /* SwipeToDiscard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDiscard.swift; sourceTree = "<group>"; };
@@ -751,6 +753,7 @@
 				B100000901 /* MediaResolver.swift */,
 				B100000902 /* MediaReferenceUbiquityMigration.swift */,
 				B100000690 /* ClipSessionGrouper.swift */,
+				B100000CFF /* ClipsUnplacedFilter.swift */,
 				B100000696 /* ClusterProposal.swift */,
 				B100000697 /* ClipClusterProposer.swift */,
 				B100000698 /* SortBatchCommit.swift */,
@@ -1313,6 +1316,7 @@
 				A100000901 /* MediaResolver.swift in Sources */,
 				A100000902 /* MediaReferenceUbiquityMigration.swift in Sources */,
 				A100000690 /* ClipSessionGrouper.swift in Sources */,
+				A100000CFF /* ClipsUnplacedFilter.swift in Sources */,
 				A100000696 /* ClusterProposal.swift in Sources */,
 				A100000697 /* ClipClusterProposer.swift in Sources */,
 				A100000698 /* SortBatchCommit.swift in Sources */,

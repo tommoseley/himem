@@ -133,7 +133,17 @@ struct ClipsTabView: View {
     /// again in the top stack.
     @ViewBuilder
     private var newFilterContent: some View {
-        let visibleUnplaced = unplacedRefs.filter { !absorbedBus.absorbedRefIds.contains($0.id) }
+        // Route through `ClipsUnplacedFilter.visible` so we skip
+        // Core-Data-invalidated rows before touching `.id`. The
+        // 250ms fetch debounce (added task #148 for CloudKit-churn
+        // main-thread perf) can leave `unplacedRefs` holding a
+        // deleted ref for a re-render window; `$0.id` on an
+        // invalidated fault traps with `EXC_BREAKPOINT`. Money-tested
+        // by `ClipsUnplacedFilterTests`.
+        let visibleUnplaced = ClipsUnplacedFilter.visible(
+            refs: unplacedRefs,
+            absorbed: absorbedBus.absorbedRefIds
+        )
         VStack(alignment: .leading, spacing: 12) {
             if !visibleUnplaced.isEmpty {
                 unplacedDayGroupedStack(refs: visibleUnplaced)
