@@ -84,18 +84,42 @@ private struct MediaReferenceClipDetail: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                header
-                if ref.mediaTypeEnum == .voice, let transcript = ref.transcript, !transcript.isEmpty {
-                    transcriptSection(transcript)
-                } else if ref.mediaTypeEnum == .note, let text = ref.text, !text.isEmpty {
-                    transcriptSection(text)
-                }
-                if isMediaClip {
-                    descriptionSection
-                }
-                if !editing {
-                    referencedInSection
-                    placementAffordance
+                if editing {
+                    header
+                    if isMediaClip {
+                        descriptionSection
+                    }
+                } else {
+                    // Tap-anywhere-to-edit (Tom, 2026-07-12): only
+                    // meaningful when the clip has a description slot
+                    // (photo/video); voice/note refs display their
+                    // transcript read-only here — editing lives in
+                    // the Memory Detail path. `contentShape` covers
+                    // the empty padding between subviews so the
+                    // whole viewing region is one hit target for the
+                    // description editor when applicable.
+                    let viewingBody = VStack(alignment: .leading, spacing: 20) {
+                        header
+                        if ref.mediaTypeEnum == .voice, let transcript = ref.transcript, !transcript.isEmpty {
+                            transcriptSection(transcript)
+                        } else if ref.mediaTypeEnum == .note, let text = ref.text, !text.isEmpty {
+                            transcriptSection(text)
+                        }
+                        if isMediaClip {
+                            descriptionSection
+                        }
+                        referencedInSection
+                        placementAffordance
+                    }
+                    if isMediaClip {
+                        viewingBody
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                descriptionDraft = ref.mediaDescription ?? ""
+                            }
+                    } else {
+                        viewingBody
+                    }
                     Spacer(minLength: 40)
                     deleteSection
                 }
@@ -399,10 +423,31 @@ private struct InboxClipDetail: View {
             if let clip {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        header(clip: clip)
-                        transcriptSection(clip: clip)
-                        if !editing {
-                            referencedInSection
+                        if editing {
+                            header(clip: clip)
+                            transcriptSection(clip: clip)
+                        } else {
+                            // Tap-anywhere-to-edit (Tom, 2026-07-12):
+                            // hunting for the transcript row to open
+                            // the editor read as friction — the whole
+                            // viewing region above the fate stack is
+                            // now one hit target. `contentShape`
+                            // includes the empty padding between
+                            // subviews. Individual `Text.onTapGesture`
+                            // affordances inside still fire (Buttons
+                            // and Text-taps take precedence over the
+                            // outer gesture) but tapping the header
+                            // meta, Referenced-in list, or any empty
+                            // vertical space also opens the editor.
+                            VStack(alignment: .leading, spacing: 20) {
+                                header(clip: clip)
+                                transcriptSection(clip: clip)
+                                referencedInSection
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                transcriptDraft = clip.transcript
+                            }
                             Spacer(minLength: 40)
                             bottomFateStack
                         }
