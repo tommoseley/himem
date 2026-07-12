@@ -72,6 +72,59 @@ struct SessionCollapsedBodyVariantTests {
         #expect(text == "real thought")
     }
 
+    /// Money test for `Clip model · spec.md` §Model (July 12 2026):
+    /// > "preview of the FIRST clip's words (capture order, never a
+    /// > concatenation of all clips)."
+    ///
+    /// The pre-July-12 grouper joined every clip's transcript with
+    /// " … " into a single preview string — a stack of quoted lines
+    /// that read out of order (the grouper stores clips newest-first
+    /// while a reader expects the sitting to unfold oldest-first).
+    /// Dogfood pain: a three-clip sitting where clip 3 said "and
+    /// finally…" opened the preview, not "the whole thing started
+    /// like this…" from clip 1.
+    ///
+    /// This test fails pre-fix because the pre-fix preview reads
+    /// "third … second … first" (concatenated in array order), and
+    /// passes post-fix because the preview reads "first" — the
+    /// earliest clip's words alone.
+    @Test func multipleClipsWithTranscripts_previewShowsFirstClipOnly_notConcatenation() {
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        // Grouper stores clips newest-first — mirror that array
+        // order in the fixture so `ClipGroup(clips:)` receives what
+        // production would hand it.
+        let group = makeGroup([
+            makeClip(transcript: "third", attempted: true, capturedAt: t0.addingTimeInterval(240)),
+            makeClip(transcript: "second", attempted: true, capturedAt: t0.addingTimeInterval(120)),
+            makeClip(transcript: "first", attempted: true, capturedAt: t0)
+        ])
+        guard case .preview(let text) = group.collapsedBodyVariant else {
+            Issue.record("Expected .preview, got \(group.collapsedBodyVariant)")
+            return
+        }
+        #expect(text == "first",
+                "preview must be the FIRST clip's words in capture order — never a concatenation")
+    }
+
+    /// When the earliest clip has no transcript, the preview falls
+    /// through to the next earliest clip with words. Same
+    /// no-concatenation rule — just picking the earliest fragment,
+    /// never joining across clips.
+    @Test func firstClipMissingTranscript_previewFallsThroughToNextEarliest() {
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        let group = makeGroup([
+            makeClip(transcript: "third", attempted: true, capturedAt: t0.addingTimeInterval(240)),
+            makeClip(transcript: "middle words", attempted: true, capturedAt: t0.addingTimeInterval(120)),
+            makeClip(transcript: "", attempted: true, capturedAt: t0)
+        ])
+        guard case .preview(let text) = group.collapsedBodyVariant else {
+            Issue.record("Expected .preview, got \(group.collapsedBodyVariant)")
+            return
+        }
+        #expect(text == "middle words",
+                "empty earliest → fall through to the next earliest clip with words — still no join")
+    }
+
     // MARK: - .allAccidental — the bug case
 
     /// THE BUG: one clip, attempted, empty transcript. Pre-fix

@@ -177,12 +177,20 @@ struct ClipGroup: Identifiable, Hashable {
     ///   - At least one clip is still pending (attempted == false)
     ///     → `.transcribing`, the legitimate in-flight state
     var collapsedBodyVariant: CollapsedBodyVariant {
-        let fragments = clips.compactMap { clip -> String? in
-            let t = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            return t.isEmpty ? nil : t
+        // Locked July 12 2026 (`Clip model · spec.md` §Model):
+        // "preview of the FIRST clip's words (capture order, never a
+        // concatenation of all clips)." The grouper stores clips
+        // newest-first; capture-order first = oldest = the end of
+        // the array. Falls through to the next-earliest clip with
+        // words when the earliest one has an empty transcript — same
+        // rule, just picking a later fragment, never joining across
+        // clips.
+        let earliestFirst = clips.sorted { $0.capturedAt < $1.capturedAt }
+        let firstWithWords = earliestFirst.first { clip in
+            !clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        if !fragments.isEmpty {
-            return .preview(fragments.joined(separator: " \u{2026} "))
+        if let firstWithWords {
+            return .preview(firstWithWords.transcript.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         if isAllAccidental {
             return .allAccidental
