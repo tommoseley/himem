@@ -585,6 +585,14 @@ struct LooseClipRow: View {
             RoundedRectangle(cornerRadius: 13)
                 .stroke(Crucible.Color.hairline, lineWidth: 1)
         )
+        // Tap-anywhere-on-the-card (Tom, 2026-07-12): the
+        // parent `NavigationLink` label without an explicit
+        // hit-testable shape only registers taps on rendered
+        // content — `Spacer(minLength: 0)` and the padding regions
+        // silently dropped taps, so the user reported having to
+        // aim for the media glyph. Making the whole rounded card
+        // a hit target routes every tap to the NavigationLink.
+        .contentShape(RoundedRectangle(cornerRadius: 13))
     }
 
     private var iconTile: some View {
@@ -688,6 +696,8 @@ struct MediaClipRow: View {
             RoundedRectangle(cornerRadius: 13)
                 .stroke(Crucible.Color.hairline, lineWidth: 1)
         )
+        // See LooseClipRow — same tap-anywhere-on-the-card fix.
+        .contentShape(RoundedRectangle(cornerRadius: 13))
         .task(id: ref.id) {
             if thumbnail == nil {
                 if let name = await ThumbnailService.shared.cacheThumbnail(
@@ -767,6 +777,8 @@ struct BurstRow: View {
             RoundedRectangle(cornerRadius: 13)
                 .stroke(Crucible.Color.hairline, lineWidth: 1)
         )
+        // See LooseClipRow — same tap-anywhere-on-the-card fix.
+        .contentShape(RoundedRectangle(cornerRadius: 13))
         .task(id: refs.map(\.id)) {
             // Slice 6: batch-fetch through `BurstThumbnailPrefetcher`
             // with bounded concurrency (default 3). Retires the
