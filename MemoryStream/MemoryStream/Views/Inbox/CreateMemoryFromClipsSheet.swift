@@ -526,6 +526,13 @@ struct CreateMemoryFromClipsSheet: View {
                 // Log with source hint for diagnosis. Console
                 // filter: `[HiMem][CreateMemory] move failed`.
                 NSLog("[HiMem][CreateMemory] move failed for clip=\(clip.clipId.uuidString.prefix(8)) source=\(clip.source) file=\(clip.audioFilename) error=\(error.localizedDescription)")
+                // Path-level diagnostic — the "the former doesn't
+                // exist, or the folder containing the latter doesn't
+                // exist" error is ambiguous (source? destination?
+                // folder? unclear). Dump both paths, whether they
+                // exist, and whether the target directory is present
+                // so the next log has enough signal to isolate.
+                Self.dumpPathDiagnostic(inboxURL: inboxURL, voiceURL: voiceURL, fm: fm)
                 continue
             }
         }
@@ -711,5 +718,40 @@ struct CreateMemoryFromClipsSheet: View {
 
         InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
         dismiss()
+    }
+
+    /// Emits a per-clip path diagnostic when the move fails. Dumps
+    /// the source / destination URLs, whether either file exists,
+    /// whether each parent directory exists, and — most usefully —
+    /// looks for the filename in the sandbox `Documents/Audio/`
+    /// path. If the file ended up in the sandbox instead of the
+    /// iCloud container (warmUp race, migration edge case), the
+    /// sandbox check tells us so instantly.
+    /// Console filter: `[HiMem][CreateMemory][pathDx]`.
+    private static func dumpPathDiagnostic(
+        inboxURL: URL,
+        voiceURL: URL,
+        fm: FileManager
+    ) {
+        let sandboxDocs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let sandboxAudio = sandboxDocs
+            .appendingPathComponent("Audio", isDirectory: true)
+            .appendingPathComponent(voiceURL.lastPathComponent)
+        let sandboxInbox = sandboxDocs
+            .appendingPathComponent("Inbox", isDirectory: true)
+            .appendingPathComponent(inboxURL.lastPathComponent)
+        NSLog("[HiMem][CreateMemory][pathDx] voiceURL=\(voiceURL.path) exists=\(fm.fileExists(atPath: voiceURL.path))")
+        NSLog("[HiMem][CreateMemory][pathDx] voiceDir=\(voiceURL.deletingLastPathComponent().path) exists=\(fm.fileExists(atPath: voiceURL.deletingLastPathComponent().path))")
+        NSLog("[HiMem][CreateMemory][pathDx] inboxURL=\(inboxURL.path) exists=\(fm.fileExists(atPath: inboxURL.path))")
+        NSLog("[HiMem][CreateMemory][pathDx] inboxDir=\(inboxURL.deletingLastPathComponent().path) exists=\(fm.fileExists(atPath: inboxURL.deletingLastPathComponent().path))")
+        NSLog("[HiMem][CreateMemory][pathDx] sandboxAudio=\(sandboxAudio.path) exists=\(fm.fileExists(atPath: sandboxAudio.path))")
+        NSLog("[HiMem][CreateMemory][pathDx] sandboxInbox=\(sandboxInbox.path) exists=\(fm.fileExists(atPath: sandboxInbox.path))")
+        // Directory listing of the current Audio dir — bounded to
+        // 20 entries so we don't spam Console.
+        let audioDir = voiceURL.deletingLastPathComponent()
+        if let contents = try? fm.contentsOfDirectory(atPath: audioDir.path) {
+            let sample = contents.prefix(20).joined(separator: ", ")
+            NSLog("[HiMem][CreateMemory][pathDx] audioDir contents (\(contents.count) total): \(sample)")
+        }
     }
 }
