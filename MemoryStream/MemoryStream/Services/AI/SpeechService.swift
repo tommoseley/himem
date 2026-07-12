@@ -296,9 +296,10 @@ final class SpeechService: ObservableObject {
 
         do {
             audioFile = try AVAudioFile(forWriting: fileURL, settings: recordingFormat.settings)
-            NSLog("[HiMem][Speech] audio file ready: \(filename)")
+            let existsAfterInit = FileManager.default.fileExists(atPath: fileURL.path)
+            NSLog("[HiMem][Speech][fileTrace] audio file init OK filename=\(filename) exists=\(existsAfterInit) path=\(fileURL.path)")
         } catch {
-            NSLog("[HiMem][Speech] failed to create audio file: \(error.localizedDescription)")
+            NSLog("[HiMem][Speech][fileTrace] audio file init FAILED filename=\(filename) error=\(error.localizedDescription) path=\(fileURL.path)")
             audioFile = nil
         }
 
@@ -440,9 +441,17 @@ final class SpeechService: ObservableObject {
         // refcount guard treats release with count==0 as a no-op.
         WakeLock.shared.release()
 
-        if let url = currentRecordingURL, FileManager.default.fileExists(atPath: url.path) {
-            lastRecordingPath = url.lastPathComponent
+        if let url = currentRecordingURL {
+            let exists = FileManager.default.fileExists(atPath: url.path)
+            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+            NSLog("[HiMem][Speech][fileTrace] stopRecording url=\(url.path) exists=\(exists) size=\(size)")
+            if exists {
+                lastRecordingPath = url.lastPathComponent
+            } else {
+                lastRecordingPath = nil
+            }
         } else {
+            NSLog("[HiMem][Speech][fileTrace] stopRecording currentRecordingURL=nil")
             lastRecordingPath = nil
         }
         currentRecordingURL = nil

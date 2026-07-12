@@ -66,7 +66,17 @@ enum PhoneCaptureBenchDispatcher {
             // matching the watch roll behavior. Reuse the roll id the
             // composer already produced so the phone-splitter side
             // and bench view agree on grouping.
-            for c in clips {
+            // Per-clip existence trace so we can see whether the
+            // audio file is on disk at the moment the clip enters
+            // the manifest. Filter Console for `[HiMem][Dispatcher]`
+            // to see the write chain.
+            let fm = FileManager.default
+            for (idx, c) in clips.enumerated() {
+                let url = InboxManifest.audioURL(for: c.audioFilename)
+                let voiceURL = SpeechService.audioURL(for: c.audioFilename)
+                let inboxExists = fm.fileExists(atPath: url.path)
+                let voiceExists = fm.fileExists(atPath: voiceURL.path)
+                NSLog("[HiMem][Dispatcher] voiceSession[\(idx)/\(clips.count)] rollGroup=\(rollGroupId.uuidString.prefix(8)) file=\(c.audioFilename) inbox=\(inboxExists) audio=\(voiceExists)")
                 let clip = InboxClip(
                     clipId: UUID(),
                     capturedAt: c.capturedAt,
