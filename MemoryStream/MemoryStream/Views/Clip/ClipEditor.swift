@@ -125,8 +125,30 @@ struct ClipEditorFateActions {
     let onDelete: () -> Void
     let onRelocate: (() -> Void)?
 
+    /// Non-destructive ejection from the surrounding collection
+    /// (locked July 12 2026, spec § "Clip triage — operational
+    /// fate actions"). A session clip's Remove sends it back to the
+    /// bench as a loose clip; a memory clip's Remove strips its
+    /// edge to that memory while the clip itself survives. Parallel
+    /// of "Remove from project" for memories. Optional — a
+    /// standalone Clip Detail (no collection above it) leaves it
+    /// nil and the tier disappears.
+    var onRemoveFromCollection: (() -> Void)? = nil
+
+    /// Label for the Remove tier — context-driven per spec:
+    /// `"Remove from session"` on a session's clip, `"Remove from
+    /// memory"` on a memory's clip. Nil = the tier doesn't render
+    /// even if `onRemoveFromCollection` is provided.
+    var removeFromCollectionLabel: String? = nil
+
     /// `true` when a `Move to…` button should render.
     var showsMove: Bool { onRelocate != nil }
+
+    /// `true` when the neutral Remove tier should render — both
+    /// the callback and the label must be present.
+    var showsRemoveFromCollection: Bool {
+        onRemoveFromCollection != nil && removeFromCollectionLabel != nil
+    }
 }
 
 // MARK: - The view (inline editor)
@@ -247,14 +269,24 @@ struct ClipEditor: View {
         return "\(prefix) · \(total / 60):\(String(format: "%02d", total % 60))"
     }
 
+    /// Fate row per spec § "Clip triage" (locked July 12 2026): the
+    /// tiers stack top-to-bottom by escalating consequence — Remove
+    /// (neutral, if wired) → Move (blue, if wired) → Delete (red,
+    /// always, bottom-most). Was a single horizontal row with Delete
+    /// beside Move; the spec is explicit that Delete is bottom-most
+    /// and Remove sits above Move to keep the eye escalating.
     private var fateRow: some View {
-        HStack(spacing: 10) {
-            Button(role: .destructive, action: fateActions.onDelete) {
-                Label("Delete clip", systemImage: "trash")
-                    .font(.system(size: 13, weight: .medium))
+        VStack(alignment: .leading, spacing: 8) {
+            if fateActions.showsRemoveFromCollection,
+               let onRemove = fateActions.onRemoveFromCollection,
+               let removeLabel = fateActions.removeFromCollectionLabel {
+                Button(action: onRemove) {
+                    Label(removeLabel, systemImage: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Crucible.Color.ink2)
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(Crucible.Color.danger)
             if let onRelocate = fateActions.onRelocate {
                 Button(action: onRelocate) {
                     Label("Move to…", systemImage: "arrow.up.forward")
@@ -263,7 +295,12 @@ struct ClipEditor: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(Crucible.Color.aiBlue)
             }
-            Spacer(minLength: 0)
+            Button(role: .destructive, action: fateActions.onDelete) {
+                Label("Delete clip", systemImage: "trash")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(Crucible.Color.danger)
         }
     }
 

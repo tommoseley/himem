@@ -710,7 +710,6 @@ struct SessionListView: View {
         let model = ClipDisplayModel(mediaReference: ref, duration: nil, sessionStart: sessionStart)
         let refId = ref.id
         let sessionId = session.id
-        let isIncluded = !(sessionExcludedMediaIds[sessionId]?.contains(refId) ?? false)
         // Real ring binding — reads/writes `sessionExcludedMediaIds`
         // so the user can toggle absorbed media in/out of the bundle.
         // Getter returns "included" (i.e. NOT excluded); setter
@@ -723,6 +722,12 @@ struct SessionListView: View {
                 sessionExcludedMediaIds[sessionId] = set
             }
         )
+        // Single-clip session hides the ring per spec §Clip triage.
+        // Absorbed-media rows count with voice clips because the
+        // ring is meaningful when the session has more than one
+        // clip in any form.
+        let totalClips = session.clips.count + (absorbedMediaBySessionId[session.id]?.count ?? 0)
+        let effectiveRing: Binding<Bool>? = totalClips > 1 ? ringBinding : nil
         VStack(spacing: 0) {
             NavigationLink {
                 ClipDetailView(ref: ref)
@@ -730,7 +735,7 @@ struct SessionListView: View {
                 ClipAtomView(
                     model: model,
                     register: .operational,
-                    ring: ringBinding,
+                    ring: effectiveRing,
                     // C3: expanded session card is an opened
                     // context — light the ochre "Add a description"
                     // invite when the media clip's description is
@@ -749,7 +754,10 @@ struct SessionListView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .opacity(isIncluded ? 1.0 : 0.55)
+            // No row-level opacity dim on excluded rows: spec §Clip
+            // triage forbids greying the content (dim = failed-clip
+            // vocabulary, which pairs a Retry link — a media clip
+            // has neither). Hollow ring is the sole excluded signal.
             if !isLast {
                 Rectangle()
                     .fill(Crucible.Color.hairline)
@@ -770,13 +778,6 @@ struct SessionListView: View {
     private func clipRow(_ clip: InboxClip, indexInSession: Int, session: ClipGroup, isSelected: Bool, isLast: Bool) -> some View {
         let accidental = clip.transcript.isEmpty && clip.transcriptionAttempted
         let isPlaying = playingClipId == clip.clipId
-        // Manually-excluded clips (user toggled off) dim to 0.55.
-        // Auto-excluded (accidental) clips keep full opacity — the
-        // italic "No speech detected" line reads as informational,
-        // not deselected. Container chrome: opacity + divider live
-        // outside the atom because they're session-scoped, not
-        // clip-scoped.
-        let manuallyExcluded = !isSelected && !accidental
         let model = ClipDisplayModel(inboxClip: clip, sessionStart: session.capturedAt)
         // Ring binding — `toggleClipSelection` handles both directions
         // (insert or remove), so the setter ignores the incoming value
@@ -785,12 +786,25 @@ struct SessionListView: View {
             get: { isSelected },
             set: { _ in toggleClipSelection(clipId: clip.clipId, in: session) }
         )
+        // Single-clip session hides the ring per spec §Clip triage
+        // ("excluding the sole clip equals deleting the session — so
+        // inclusion selection is meaningless"). Count includes
+        // absorbed media because the ring is meaningful whenever
+        // there's more than one clip on the card.
+        let totalClips = session.clips.count + (absorbedMediaBySessionId[session.id]?.count ?? 0)
+        let effectiveRing: Binding<Bool>? = totalClips > 1 ? ringBinding : nil
         VStack(spacing: 0) {
             ClipAtomView(
                 model: model,
                 register: .operational,
-                ring: ringBinding,
-                onTapContent: { toggleClipSelection(clipId: clip.clipId, in: session) },
+                ring: effectiveRing,
+                // Voice content-tap is inert here (Chunk B follow-up
+                // will route it to ClipDetail with an empty
+                // Referenced-in section). Was firing
+                // `toggleClipSelection` — same act as the ring —
+                // which conflated the ring's job with content-tap
+                // per the July 12 spec's explicit split.
+                onTapContent: nil,
                 onPlayEvidence: {
                     if isPlaying {
                         stopPlayback()
@@ -808,7 +822,11 @@ struct SessionListView: View {
                 isDenseContainer: true,
                 retryStatus: retryStatusText(for: clip)
             )
-            .opacity(manuallyExcluded ? 0.55 : 1.0)
+            // No row-level opacity dim on excluded rows: spec §Clip
+            // triage forbids greying the transcript because it
+            // collides with the failed-clip style. The hollow ring
+            // is the sole excluded-state signal; a failed clip is
+            // the one that dims (and pairs a Retry link).
             if !isLast {
                 Rectangle()
                     .fill(Crucible.Color.hairline)
