@@ -506,18 +506,33 @@ struct ClipContentSlot: View {
                     .lineSpacing(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
+                // Only attach the `onTapGesture` when a handler was
+                // supplied. `.onTapGesture { onTap?() }` with a nil
+                // handler still consumes the tap (recognized-then-
+                // no-op) and blocks propagation to an enclosing
+                // `NavigationLink` — that's why tapping the row's
+                // bottom half in a session's clipRow dropped: the
+                // transcript body swallowed it. Now, when the caller
+                // passes `onTapContent: nil` (as `SessionListView.
+                // clipRow` does), the gesture is absent and the tap
+                // propagates up to the NavigationLink label.
                 if isDenseContainer {
                     // Dense triage: cap transcripts so a long clip
                     // doesn't push the row height past a scannable
-                    // line count. Full transcript still opens via
-                    // tap-to-edit / navigation, same as non-dense.
-                    body
-                        .lineLimit(3)
-                        .onTapGesture { onTap?() }
+                    // line count.
+                    let capped = body.lineLimit(3)
+                    if let onTap {
+                        capped.onTapGesture { onTap() }
+                    } else {
+                        capped
+                    }
                 } else {
-                    body
-                        .fixedSize(horizontal: false, vertical: true)
-                        .onTapGesture { onTap?() }
+                    let fixed = body.fixedSize(horizontal: false, vertical: true)
+                    if let onTap {
+                        fixed.onTapGesture { onTap() }
+                    } else {
+                        fixed
+                    }
                 }
             }
         case .transcriptPreview:
