@@ -181,6 +181,7 @@
 		A200000036 /* SessionMediaAbsorber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000036 /* SessionMediaAbsorber.swift */; };
 		A200000037 /* BenchAbsorbedMediaBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000037 /* BenchAbsorbedMediaBus.swift */; };
 		A200000038 /* MemoryDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000038 /* MemoryDetailPresentationContext.swift */; };
+		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000039 /* ClipDisplayModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000039 /* ClipDisplayModel.swift */; };
 		A200000040 /* ClipEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000040 /* ClipEditor.swift */; };
 		A200000041 /* ClipRegister.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000041 /* ClipRegister.swift */; };
@@ -441,6 +442,7 @@
 		B200000036 /* SessionMediaAbsorber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SessionMediaAbsorber.swift; path = MemoryStream/Services/Storage/SessionMediaAbsorber.swift; sourceTree = SOURCE_ROOT; };
 		B200000037 /* BenchAbsorbedMediaBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BenchAbsorbedMediaBus.swift; path = MemoryStream/Services/Storage/BenchAbsorbedMediaBus.swift; sourceTree = SOURCE_ROOT; };
 		B200000038 /* MemoryDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryDetailPresentationContext.swift; path = MemoryStream/Services/MemoryDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
+		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000039 /* ClipDisplayModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDisplayModel.swift; path = MemoryStream/Views/Clip/ClipDisplayModel.swift; sourceTree = SOURCE_ROOT; };
 		B200000040 /* ClipEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipEditor.swift; path = MemoryStream/Views/Clip/ClipEditor.swift; sourceTree = SOURCE_ROOT; };
 		B200000041 /* ClipRegister.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipRegister.swift; path = MemoryStream/Views/Clip/ClipRegister.swift; sourceTree = SOURCE_ROOT; };
@@ -661,6 +663,7 @@
 				B200000028 /* DebouncedTrigger.swift */,
 				B200000032 /* CaptureLandingRouter.swift */,
 				B200000038 /* MemoryDetailPresentationContext.swift */,
+				B200000D00 /* ClipDetailPresentationContext.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1380,6 +1383,7 @@
 				A200000036 /* SessionMediaAbsorber.swift in Sources */,
 				A200000037 /* BenchAbsorbedMediaBus.swift in Sources */,
 				A200000038 /* MemoryDetailPresentationContext.swift in Sources */,
+				A200000D00 /* ClipDetailPresentationContext.swift in Sources */,
 				A200000039 /* ClipDisplayModel.swift in Sources */,
 				A200000040 /* ClipEditor.swift in Sources */,
 				A200000041 /* ClipRegister.swift in Sources */,

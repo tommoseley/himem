@@ -50,6 +50,11 @@ struct HiMemTabView: View {
     /// above the Memory Detail's own append FAB — the "two RABs"
     /// bug Tom hit July 11 2026.
     @ObservedObject private var memoryDetailPresence = MemoryDetailPresentationContext.shared
+    /// Non-nil while a Clip Detail (`ClipDetailView`) is on screen.
+    /// Suppresses the tab-shell FAB per `Clip model · spec.md`
+    /// §Clip triage (July 12 2026): "No FAB on an opened clip —
+    /// it's an opened item, not a capture surface."
+    @ObservedObject private var clipDetailPresence = ClipDetailPresentationContext.shared
     /// Set true when `pendingReturnToClips` fires; consumed by the
     /// next Clips coachmark evaluation so guardrail #3 ("suppress the
     /// Clips coachmark when arriving from a capture") holds. Cleared
@@ -108,7 +113,7 @@ struct HiMemTabView: View {
             // Projects at the list level + opens the New Project
             // sheet (no modality picker), on every other case +
             // opens the ad-hoc modality stack.
-            if memoryDetailPresence.currentMemoryId == nil {
+            if memoryDetailPresence.currentMemoryId == nil && clipDetailPresence.currentClipId == nil {
                 switch currentIntent {
                 case .openNewProjectSheet:
                     NewProjectFAB(onTap: {

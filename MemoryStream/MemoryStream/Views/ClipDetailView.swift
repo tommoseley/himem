@@ -133,6 +133,17 @@ private struct MediaReferenceClipDetail: View {
         .sheet(isPresented: $showingPlacement) {
             PlaceClipSheet(ref: ref)
         }
+        // Suppress the tab-shell FAB while the opened clip is on
+        // screen — `Clip model · spec.md` §Clip triage (July 12
+        // 2026): "No FAB on an opened clip — it's an opened item,
+        // not a capture surface." Same enter/exit pattern as
+        // `EntryExpandedView`.
+        .onAppear {
+            ClipDetailPresentationContext.shared.enter(clipId: ref.id)
+        }
+        .onDisappear {
+            ClipDetailPresentationContext.shared.exit(clipId: ref.id)
+        }
     }
 
     private var isMediaClip: Bool {
@@ -150,10 +161,7 @@ private struct MediaReferenceClipDetail: View {
     @ViewBuilder
     private var descriptionSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("DESCRIPTION")
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(1.3)
-                .foregroundStyle(Crucible.Color.ink3)
+            ClipDetailEditEyebrow(title: "DESCRIPTION", editing: editing)
             if descriptionDraft != nil {
                 // *Words only.* `showFates: false` drops the editor's
                 // internal Delete tier (`Clip model · spec.md` §Clip
@@ -471,6 +479,15 @@ private struct InboxClipDetail: View {
                     .onAppear { dismiss() }
             }
         }
+        // Suppress the tab-shell FAB while the opened bench clip
+        // is on screen — spec July 12 2026 "no FAB on an opened
+        // clip." Same enter/exit pattern as `MediaReferenceClipDetail`.
+        .onAppear {
+            ClipDetailPresentationContext.shared.enter(clipId: clipId)
+        }
+        .onDisappear {
+            ClipDetailPresentationContext.shared.exit(clipId: clipId)
+        }
     }
 
     // MARK: - Header
@@ -498,10 +515,7 @@ private struct InboxClipDetail: View {
     @ViewBuilder
     private func transcriptSection(clip: InboxClip) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("TRANSCRIPT")
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(1.3)
-                .foregroundStyle(Crucible.Color.ink3)
+            ClipDetailEditEyebrow(title: "TRANSCRIPT", editing: editing)
             if transcriptDraft != nil {
                 // *Words only.* `showFates: false` drops the editor's
                 // internal Remove/Move/Delete tier — those live in the
@@ -632,5 +646,36 @@ private struct InboxClipDetail: View {
     private func performDelete() {
         InboxManifest.shared.remove(clipId: clipId)
         dismiss()
+    }
+}
+
+/// The section eyebrow (`TRANSCRIPT` / `DESCRIPTION`) with a small
+/// `pencil + "Edit"` affordance on the trailing edge that signals
+/// tap-to-edit — `Clip model · spec.md` §Clip triage (July 12 2026):
+/// > "the transcript is tap-to-edit in place (a small 'Edit'
+/// > affordance signals it)"
+/// Hidden in edit mode since the editor itself carries the
+/// Cancel/Done row.
+private struct ClipDetailEditEyebrow: View {
+    let title: String
+    let editing: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1.3)
+                .foregroundStyle(Crucible.Color.ink3)
+            Spacer(minLength: 0)
+            if !editing {
+                HStack(spacing: 4) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Edit")
+                        .font(.system(size: 12.5, weight: .semibold))
+                }
+                .foregroundStyle(Crucible.Color.ink3)
+            }
+        }
     }
 }
