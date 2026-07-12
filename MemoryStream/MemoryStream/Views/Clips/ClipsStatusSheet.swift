@@ -201,15 +201,20 @@ struct ClipsStatusSheet: View {
     private var actionsRow: some View {
         HStack(spacing: 8) {
             reviewNewButton
-            filterPill(label: "Voice", filter: .voice)
-            filterPill(label: "Photos", filter: .photos)
+            // Type shortcuts jump to status=All so the user sees
+            // every clip of that type, not just the un-shaped subset.
+            // "Show me the voice clips" reads as full-history intent;
+            // if they wanted only new voice, that's what the header's
+            // two-axis control expresses.
+            filterPill(label: "Voice", type: .voice)
+            filterPill(label: "Photos", type: .photos)
         }
         .padding(.top, 16)
     }
 
     private var reviewNewButton: some View {
         Button {
-            ClipsFilterBus.shared.pendingFilter = .new
+            ClipsFilterBus.shared.pending = .init(status: .new, type: .all)
             onDismiss()
         } label: {
             Text("Review new")
@@ -222,9 +227,9 @@ struct ClipsStatusSheet: View {
         .buttonStyle(.plain)
     }
 
-    private func filterPill(label: String, filter: ClipsFilter) -> some View {
+    private func filterPill(label: String, type: ClipsType) -> some View {
         Button {
-            ClipsFilterBus.shared.pendingFilter = filter
+            ClipsFilterBus.shared.pending = .init(status: .all, type: type)
             onDismiss()
         } label: {
             Text(label)
@@ -392,12 +397,21 @@ enum ClipsStatusDataSource {
 
 // MARK: - Filter bus
 
-/// Session-scoped signal: the Clips status sheet's action buttons set
-/// a pending filter; `ClipsTabView` observes and swaps its filter
-/// state. Not persisted; a one-shot signal per user tap.
+/// Session-scoped signal: the Clips status sheet's action buttons
+/// set a pending filter request; `ClipsTabView` observes and swaps
+/// its status/type state atomically. Not persisted; a one-shot signal
+/// per user tap. Both axes always specified so the caller declares
+/// the intended view in one shot (never leaving type stale from a
+/// prior selection).
 @MainActor
 final class ClipsFilterBus: ObservableObject {
     static let shared = ClipsFilterBus()
-    @Published var pendingFilter: ClipsFilter? = nil
+
+    struct Pending: Equatable {
+        let status: ClipsStatus
+        let type: ClipsType
+    }
+
+    @Published var pending: Pending? = nil
     private init() {}
 }

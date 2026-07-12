@@ -35,7 +35,13 @@ struct ClipsTabView: View {
     @ObservedObject private var inbox = InboxManifest.shared
     @ObservedObject private var absorbedBus = BenchAbsorbedMediaBus.shared
     @StateObject private var viewModel = JournalViewModel()
-    @State private var filter: ClipsFilter = .new
+    /// Status axis — `New ⟷ All`, the primary lens. Ochre toggle.
+    /// See `ClipsStatus` for the July 12 2026 lock.
+    @State private var status: ClipsStatus = .new
+    /// Type axis — media kind (independent of status). Neutral chip
+    /// row. `.all` = every media type; `.video` is a first-class case
+    /// (was folded into `.photos` in the retired single-row filter).
+    @State private var type: ClipsType = .all
     @State private var unplacedRefs: [MediaReference] = []
     /// Coalesces a burst of `NSManagedObjectContextObjectsDidChange`
     /// notifications (which flood the main thread during CloudKit
@@ -62,7 +68,8 @@ struct ClipsTabView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     ClipsHeader(
-                        filter: $filter,
+                        status: $status,
+                        type: $type,
                         onSearchTap: { showSearch = true },
                         onSettingsTap: { showSettings = true },
                         onHelpTap: { showTutorials = true }
@@ -85,10 +92,11 @@ struct ClipsTabView: View {
             )) { _ in
                 unplacedReload.fire { loadUnplaced() }
             }
-            .onChange(of: filterBus.pendingFilter) { _, pending in
+            .onChange(of: filterBus.pending) { _, pending in
                 if let pending {
-                    filter = pending
-                    filterBus.pendingFilter = nil
+                    status = pending.status
+                    type = pending.type
+                    filterBus.pending = nil
                 }
             }
             .navigationDestination(for: UUID.self) { refId in
@@ -115,11 +123,17 @@ struct ClipsTabView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch filter {
+        switch status {
         case .new:
+            // Status=New shows the workbench (sessions + unplaced
+            // stack). Type filter is not applied to the New view in
+            // this cut — the workbench renders mixed sessions by
+            // design; narrowing to a single type there is a follow-
+            // up when the July 12 spec's "new videos only" case
+            // gets an on-device use pattern to design against.
             newFilterContent
-        case .all, .voice, .photos, .notes:
-            FlatClipsListView(filter: filter)
+        case .all:
+            FlatClipsListView(type: type)
         }
     }
 
@@ -198,10 +212,22 @@ struct ClipsTabView: View {
     }
 }
 
-// MARK: - Filter
+// MARK: - Filter — two independent axes (locked July 12 2026)
 
-enum ClipsFilter: String, CaseIterable, Identifiable, Hashable {
-    case new, all, voice, photos, notes
+/// The **status** filter axis on the Clips tab — a two-state toggle
+/// picking connected-ness, per `CLAUDE.md` §Phone (July 12 2026):
+///
+/// > "The filter is TWO independent axes, never one control: a
+/// > **status** toggle (New ⟷ All) and a **type** filter (All /
+/// > Voice / Photos / Video / Notes), so 'new videos only' is
+/// > expressible. Status is the ochre two-state toggle (the primary
+/// > lens); type is a neutral chip row (secondary refinement)."
+///
+/// The old single-row `ClipsFilter` (which mixed status and type
+/// into `New · All · Voice · Photos · Notes`) is retired — it
+/// hid Video entirely and conflated two orthogonal decisions.
+enum ClipsStatus: String, CaseIterable, Identifiable, Hashable {
+    case new, all
 
     var id: String { rawValue }
 
@@ -209,9 +235,25 @@ enum ClipsFilter: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .new: return "New"
         case .all: return "All"
-        case .voice: return "Voice"
+        }
+    }
+}
+
+/// The **type** filter axis on the Clips tab — media kind, per the
+/// same July 12 2026 lock. Video is a first-class case here (was
+/// folded into `.photos` before, invisible in the UI).
+enum ClipsType: String, CaseIterable, Identifiable, Hashable {
+    case all, voice, photos, video, notes
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all:    return "All"
+        case .voice:  return "Voice"
         case .photos: return "Photos"
-        case .notes: return "Notes"
+        case .video:  return "Video"
+        case .notes:  return "Notes"
         }
     }
 }
@@ -280,58 +322,102 @@ struct HomeTopBar: View {
 /// serif "Clips" title on this surface was retired 2026-07-10 when
 /// the three-tab home model unified.
 ///
-/// The filter chip row (New · All · Voice · Photos · Notes) sits
-/// below the top bar as the tab's Context row.
+/// Locked July 12 2026 (`CLAUDE.md` §Phone + `HiMem · the shaping
+/// model.md`): two independent axes, **never** one control mixing them.
+/// The status axis (New ⟷ All) is an ochre two-state toggle — the
+/// primary lens. The type axis (All / Voice / Photos / Video / Notes)
+/// is a neutral chip row — the secondary refinement.
 struct ClipsHeader: View {
-    @Binding var filter: ClipsFilter
+    @Binding var status: ClipsStatus
+    @Binding var type: ClipsType
     let onSearchTap: () -> Void
     let onSettingsTap: () -> Void
     let onHelpTap: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 9) {
             HomeTopBar(
                 onSearchTap: onSearchTap,
                 onSettingsTap: onSettingsTap,
                 onHelpTap: onHelpTap
             )
-            chipRow
+            statusToggle
+            typeChipRow
         }
         .padding(.top, 8)
         .padding(.bottom, 4)
     }
 
-    private var chipRow: some View {
+    private var statusToggle: some View {
+        HStack(spacing: 2) {
+            ForEach(ClipsStatus.allCases) { s in
+                statusSegment(for: s)
+            }
+        }
+        .padding(3)
+        .background(Crucible.Color.wash1, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func statusSegment(for s: ClipsStatus) -> some View {
+        let selected = status == s
+        return Button {
+            status = s
+        } label: {
+            Text(s.label)
+                .font(.system(size: 13.5, weight: selected ? .bold : .medium))
+                .tracking(-0.1)
+                .foregroundStyle(selected ? Crucible.Color.accentInk : Crucible.Color.ink2)
+                .padding(.horizontal, 20)
+                .frame(minHeight: 32)
+                .background(
+                    selected ? Crucible.Color.accent : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 8)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(s.label)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    private var typeChipRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 7) {
-                ForEach(ClipsFilter.allCases) { f in
-                    chip(for: f)
+                ForEach(ClipsType.allCases) { t in
+                    typeChip(for: t)
                 }
             }
             .padding(.horizontal, 14)
         }
     }
 
-    private func chip(for f: ClipsFilter) -> some View {
-        let selected = filter == f
+    private func typeChip(for t: ClipsType) -> some View {
+        let selected = type == t
         return Button {
-            filter = f
+            type = t
         } label: {
-            Text(f.label)
+            Text(t.label)
                 .font(.system(size: 13, weight: selected ? .semibold : .medium))
                 .tracking(-0.1)
-                .foregroundStyle(selected ? Crucible.Color.accentInk : Crucible.Color.ink2)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 32)
+                .foregroundStyle(selected ? Crucible.Color.ink : Crucible.Color.ink3)
+                .padding(.horizontal, 11)
+                .frame(minHeight: 30)
                 .background(
-                    selected ? Crucible.Color.accent : Crucible.Color.hairline.opacity(0.35),
+                    selected ? Crucible.Color.wash2 : Color.clear,
                     in: RoundedRectangle(cornerRadius: 9)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9)
+                        .stroke(selected ? Color.clear : Crucible.Color.hairline, lineWidth: 1)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 9))
         }
         .buttonStyle(.plain)
         .frame(minHeight: 44)
-        .accessibilityLabel(f.label)
+        .accessibilityLabel(t.label)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
@@ -846,7 +932,11 @@ func clipTimeString(_ ref: MediaReference) -> String {
 /// day-grouped clip list with burst-of-media collapse and real
 /// thumbnails.
 struct FlatClipsListView: View {
-    let filter: ClipsFilter
+    /// The type axis (voice / photos / video / notes / all). `.photos`
+    /// narrows to images ONLY here — the old shape lumped video into
+    /// photos (invisibly), which retired July 12 2026 when Video
+    /// became a first-class filter.
+    let type: ClipsType
     @Environment(\.managedObjectContext) private var context
     @State private var groups: [(day: Date, refs: [MediaReference])] = []
     /// Same debounce as `ClipsTabView.unplacedReload` — coalesces
@@ -873,7 +963,7 @@ struct FlatClipsListView: View {
         }
         .onAppear { reload() }
         .onDisappear { groupsReload.cancel() }
-        .onChange(of: filter) { _, _ in reload() }
+        .onChange(of: type) { _, _ in reload() }
         .onReceive(NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
             object: context
@@ -883,27 +973,33 @@ struct FlatClipsListView: View {
     }
 
     private var emptyMessage: String {
-        switch filter {
+        switch type {
         case .all:    return "No clips yet."
         case .voice:  return "No voice clips yet."
-        case .photos: return "No photos or videos yet."
+        case .photos: return "No photos yet."
+        case .video:  return "No videos yet."
         case .notes:  return "No notes yet."
-        case .new:    return ""
         }
     }
 
     private func reload() {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-        switch filter {
+        switch type {
         case .voice:
             req.predicate = NSPredicate(
                 format: "mediaType == %@",
                 MediaReference.MediaType.voice.rawValue
             )
         case .photos:
+            // Split from Video (July 12 2026 lock). `.photos` = images
+            // only here; videos have their own case.
             req.predicate = NSPredicate(
-                format: "mediaType == %@ OR mediaType == %@",
-                MediaReference.MediaType.image.rawValue,
+                format: "mediaType == %@",
+                MediaReference.MediaType.image.rawValue
+            )
+        case .video:
+            req.predicate = NSPredicate(
+                format: "mediaType == %@",
                 MediaReference.MediaType.video.rawValue
             )
         case .notes:
@@ -911,7 +1007,7 @@ struct FlatClipsListView: View {
                 format: "mediaType == %@",
                 MediaReference.MediaType.note.rawValue
             )
-        case .all, .new:
+        case .all:
             break
         }
         req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
