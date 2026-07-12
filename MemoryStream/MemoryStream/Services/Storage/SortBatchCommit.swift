@@ -82,20 +82,40 @@ enum SortBatchCommit {
         storage: StorageService
     ) -> UUID? {
         // Move audio files out of the inbox into the voice store —
-        // same handoff as `CreateMemoryFromClipsSheet.commit`.
-        // Failed moves skip the clip; its inbox row stays for
-        // retry on the next attempt.
+        // same handoff as `CreateMemoryFromClipsSheet.commit`. Failed
+        // moves skip the clip; its inbox row stays for retry on the
+        // next attempt.
+        //
+        // **Where the audio lives depends on source.** Watch clips
+        // land at `InboxManifest.audioURL` (`Documents/Inbox/`) and
+        // need the move to `SpeechService.audioURL` (`Documents/
+        // Audio/`). Phone clips are written directly at
+        // `SpeechService.audioURL` — they were never in the inbox
+        // directory. Pre-fix (July 2026 troika-diagnosed data-loss
+        // bug) this code assumed every clip was watch-origin: it
+        // unconditionally `removeItem(voiceURL)` before the move.
+        // For phone clips `voiceURL` IS the actual audio, so the
+        // pre-move remove deleted the user's recording; the move
+        // then failed silently because `inboxURL` never existed.
+        // Net effect: audio lost, clip silently dropped from the
+        // batch, memory created with no fragments (or Sort commit
+        // silently no-oped).
         var movedClips: [InboxClip] = []
+        let fm = FileManager.default
         for clip in clips {
             let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
             let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
+            if fm.fileExists(atPath: voiceURL.path) {
+                // Already at the destination (phone clip, or a prior
+                // partial run). No file move needed.
+                movedClips.append(clip)
+                continue
+            }
             do {
-                if FileManager.default.fileExists(atPath: voiceURL.path) {
-                    try FileManager.default.removeItem(at: voiceURL)
-                }
-                try FileManager.default.moveItem(at: inboxURL, to: voiceURL)
+                try fm.moveItem(at: inboxURL, to: voiceURL)
                 movedClips.append(clip)
             } catch {
+                NSLog("[HiMem][SortBatch] move failed for clip=\(clip.clipId.uuidString.prefix(8)) source=\(clip.source) file=\(clip.audioFilename) error=\(error.localizedDescription)")
                 continue
             }
         }
