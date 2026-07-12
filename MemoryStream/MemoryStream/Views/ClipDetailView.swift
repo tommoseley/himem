@@ -1,15 +1,66 @@
 import SwiftUI
 import CoreData
 
-/// Clip as primary object — Phase 7. Shows the transcript / media,
-/// timestamp, and the memories that reference this clip ("Referenced in").
-/// Delete Clip at the bottom in danger red; warns if the clip is
-/// attached to memories before it goes to Recently Deleted.
+/// Clip as primary object — the "opened item" view for any clip
+/// on any surface. Shows the transcript / media, timestamp, the
+/// memories that reference this clip ("Referenced in", empty
+/// when the clip is still loose on the bench), and a bottom
+/// Delete.
 ///
-/// See `docs/design/HiMem · evidence and context.md` (edge ontology)
-/// and `docs/architecture/2026-07-08-evidence-context-ontology-plan.md`
+/// Chunk B (July 12 2026) — `ClipDetailView` now accepts either
+/// a `MediaReference` (a clip that's been bundled and lives in
+/// Core Data) OR an `InboxClip` (a bench voice clip that's still
+/// on the manifest, waiting to be bundled). A loose bench clip
+/// is legitimately referenced in nothing yet — the referenced-in
+/// section renders its empty state rather than routing to a
+/// separate view. Both paths render the same chrome; only the
+/// data source and the save/delete plumbing differ.
+///
+/// See `docs/design/HiMem · evidence and context.md` (edge
+/// ontology), `docs/design/Clip model · spec.md` §"Clip triage"
+/// (July 12 2026 fate-actions lock), and
+/// `docs/architecture/2026-07-08-evidence-context-ontology-plan.md`
 /// § Phase 7.
 struct ClipDetailView: View {
+
+    /// The clip being rendered. Managed = live Core Data
+    /// `MediaReference` (observed for updates). Inbox = a
+    /// snapshot of an on-manifest voice clip that hasn't been
+    /// bundled into a memory yet; the body observes
+    /// `InboxManifest.shared` and looks up the live row by id.
+    enum Source {
+        case managed(MediaReference)
+        case inbox(InboxClip)
+    }
+
+    let source: Source
+
+    /// Managed-source init — matches the old signature so every
+    /// pre-Chunk-B callsite (`ClipDetailView(ref:)`) keeps working.
+    init(ref: MediaReference) {
+        self.source = .managed(ref)
+    }
+
+    /// Inbox-source init — used by the bench when a loose voice
+    /// clip is tapped. Delete routes through `InboxManifest.remove`;
+    /// save routes through `InboxManifest.recordTranscriptionAttempt`.
+    init(inboxClip: InboxClip) {
+        self.source = .inbox(inboxClip)
+    }
+
+    var body: some View {
+        switch source {
+        case .managed(let ref):
+            MediaReferenceClipDetail(ref: ref)
+        case .inbox(let clip):
+            InboxClipDetail(clipId: clip.clipId)
+        }
+    }
+}
+
+/// The Core-Data-backed detail — the existing chrome, unchanged.
+/// Rendered when `ClipDetailView.source == .managed`.
+private struct MediaReferenceClipDetail: View {
     @ObservedObject var ref: MediaReference
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -290,6 +341,186 @@ struct ClipDetailView: View {
     private func performDelete() {
         let service = EntryLifecycleService(storage: storage, processingEngine: ProcessingEngine.shared)
         service.deleteMediaReference(refId: ref.id)
+        dismiss()
+    }
+}
+
+/// The bench-clip detail — rendered for a voice `InboxClip`
+/// that's still on the manifest, waiting to be bundled. Chrome
+/// mirrors `MediaReferenceClipDetail`: header, transcript with
+/// tap-to-edit via the shared `ClipEditor`, empty Referenced-in
+/// section ("Not attached to a memory yet"), bottom Delete.
+/// Save goes through `InboxManifest.recordTranscriptionAttempt`;
+/// delete through `InboxManifest.remove`. Move-to-memory and
+/// Remove-from-session are Chunk C wire-ups.
+private struct InboxClipDetail: View {
+
+    /// Stable identity — the view looks the clip up on the
+    /// manifest each render. If the clip is removed elsewhere
+    /// (Delete session, bundled into a memory), the view detects
+    /// its absence and dismisses.
+    let clipId: UUID
+
+    @ObservedObject private var inbox: InboxManifest = .shared
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var transcriptDraft: String? = nil
+    @State private var confirmingDelete = false
+
+    /// Live lookup. Nil = the clip has left the manifest (deleted
+    /// or promoted into a memory); the body dismisses.
+    private var clip: InboxClip? {
+        inbox.clips.first { $0.clipId == clipId }
+    }
+
+    var body: some View {
+        Group {
+            if let clip {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        header(clip: clip)
+                        transcriptSection(clip: clip)
+                        referencedInSection
+                        Spacer(minLength: 40)
+                        deleteSection
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 24)
+                }
+                .background(Crucible.Color.paper.ignoresSafeArea())
+                .navigationTitle("Clip")
+                .navigationBarTitleDisplayMode(.inline)
+                .alert("Delete clip?", isPresented: $confirmingDelete) {
+                    Button("Delete", role: .destructive) { performDelete() }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("This clip goes to Recently Deleted for 30 days.")
+                }
+            } else {
+                // Clip vanished from the manifest while this view
+                // was open. Dismiss immediately.
+                Color.clear
+                    .onAppear { dismiss() }
+            }
+        }
+    }
+
+    // MARK: - Header
+
+    @ViewBuilder
+    private func header(clip: InboxClip) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(dateLine(clip.capturedAt))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink2)
+            // Bench InboxClips don't carry a resolved place name
+            // yet (that happens at bundle time via
+            // `ClipLocationResolver`). No place line here.
+        }
+    }
+
+    private func dateLine(_ date: Date) -> String {
+        let df = DateFormatter()
+        df.dateFormat = "EEE MMM d · h:mm a"
+        return df.string(from: date)
+    }
+
+    // MARK: - Transcript
+
+    @ViewBuilder
+    private func transcriptSection(clip: InboxClip) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("TRANSCRIPT")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1.3)
+                .foregroundStyle(Crucible.Color.ink3)
+            if transcriptDraft != nil {
+                ClipEditor(
+                    field: .transcript,
+                    draft: Binding(
+                        get: { transcriptDraft ?? "" },
+                        set: { transcriptDraft = $0 }
+                    ),
+                    initialValue: clip.transcript,
+                    editId: "inbox-transcript-\(clip.clipId.uuidString)",
+                    evidence: .audio(duration: clip.duration),
+                    fateActions: ClipEditorFateActions(
+                        onDelete: {
+                            transcriptDraft = nil
+                            confirmingDelete = true
+                        },
+                        onRelocate: nil // Chunk C: Move-to-memory
+                    ),
+                    onCancel: { transcriptDraft = nil },
+                    onDone: { newValue in
+                        InboxManifest.shared.recordTranscriptionAttempt(
+                            clipId: clip.clipId,
+                            transcript: newValue
+                        )
+                        transcriptDraft = nil
+                    }
+                )
+            } else if !clip.transcript.isEmpty {
+                Text("\u{201C}\(clip.transcript)\u{201D}")
+                    .font(.system(size: 15, design: .serif))
+                    .foregroundStyle(Crucible.Color.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        transcriptDraft = clip.transcript
+                    }
+            } else {
+                // Empty transcript — same tap-to-edit affordance so
+                // the user can add words to a clip that didn't
+                // transcribe.
+                Text("(no transcript)")
+                    .font(.system(size: 15))
+                    .italic()
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { transcriptDraft = "" }
+            }
+        }
+    }
+
+    // MARK: - Referenced in (always empty for a bench clip)
+
+    @ViewBuilder
+    private var referencedInSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Referenced in")
+                .font(.caption.weight(.semibold))
+                .tracking(0.8)
+                .foregroundStyle(Crucible.Color.ink3)
+            Text("Not attached to a memory yet.")
+                .font(.system(size: 13))
+                .foregroundStyle(Crucible.Color.ink3)
+        }
+    }
+
+    // MARK: - Delete
+
+    @ViewBuilder
+    private var deleteSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(role: .destructive) {
+                confirmingDelete = true
+            } label: {
+                Text("Delete clip")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .foregroundStyle(Crucible.Color.danger)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Crucible.Color.danger, lineWidth: 1)
+                    )
+            }
+        }
+    }
+
+    private func performDelete() {
+        InboxManifest.shared.remove(clipId: clipId)
         dismiss()
     }
 }

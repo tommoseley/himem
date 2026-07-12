@@ -794,34 +794,42 @@ struct SessionListView: View {
         let totalClips = session.clips.count + (absorbedMediaBySessionId[session.id]?.count ?? 0)
         let effectiveRing: Binding<Bool>? = totalClips > 1 ? ringBinding : nil
         VStack(spacing: 0) {
-            ClipAtomView(
-                model: model,
-                register: .operational,
-                ring: effectiveRing,
-                // Voice content-tap is inert here (Chunk B follow-up
-                // will route it to ClipDetail with an empty
-                // Referenced-in section). Was firing
-                // `toggleClipSelection` — same act as the ring —
-                // which conflated the ring's job with content-tap
-                // per the July 12 spec's explicit split.
-                onTapContent: nil,
-                onPlayEvidence: {
-                    if isPlaying {
-                        stopPlayback()
-                    } else {
-                        playClip(clip)
-                    }
-                },
-                onRetryTranscription: model.failed ? { retryClipTranscription(clip) } : nil,
-                isPlayingEvidence: isPlaying,
-                pendingTranscript: !clip.transcriptionAttempted,
-                accidentalTranscript: accidental,
-                // CD 2026-07-12: leading media glyph + demoted
-                // offset stamp so the row scans as a triage line,
-                // not a reading surface.
-                isDenseContainer: true,
-                retryStatus: retryStatusText(for: clip)
-            )
+            // Chunk B: voice content-tap opens ClipDetailView with the
+            // clip's InboxClip source — the referenced-in section
+            // renders its "not attached to a memory yet" empty state.
+            // Ring stays a Button inside the label so it toggles
+            // independently of the navigation push (SwiftUI's Button-
+            // in-NavigationLink pattern the media row already uses).
+            NavigationLink {
+                ClipDetailView(inboxClip: clip)
+            } label: {
+                ClipAtomView(
+                    model: model,
+                    register: .operational,
+                    ring: effectiveRing,
+                    // The NavigationLink label handles content taps;
+                    // `onTapContent: nil` prevents a competing gesture.
+                    onTapContent: nil,
+                    onPlayEvidence: {
+                        if isPlaying {
+                            stopPlayback()
+                        } else {
+                            playClip(clip)
+                        }
+                    },
+                    onRetryTranscription: model.failed ? { retryClipTranscription(clip) } : nil,
+                    isPlayingEvidence: isPlaying,
+                    pendingTranscript: !clip.transcriptionAttempted,
+                    accidentalTranscript: accidental,
+                    // CD 2026-07-12: leading media glyph + demoted
+                    // offset stamp so the row scans as a triage
+                    // line, not a reading surface.
+                    isDenseContainer: true,
+                    retryStatus: retryStatusText(for: clip)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
             // No row-level opacity dim on excluded rows: spec §Clip
             // triage forbids greying the transcript because it
             // collides with the failed-clip style. The hollow ring

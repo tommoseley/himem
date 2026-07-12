@@ -120,6 +120,67 @@ One object, three states of maturity:
 "Create one memory" is exactly: take this collection, add the derived layer. The
 clips never change; only what surrounds them does.
 
+## Clip triage — the operational fate actions (locked July 12 2026)
+
+On the Clips surface a session is a **proposal from idle-gap clustering**, and
+triage is the user grooming that proposal. Three distinct jobs act on a clip
+here; each is one affordance with one meaning (Crucible: "one affordance, one
+meaning"). Getting these confused is why the ring alone felt like it was doing
+too much.
+
+**1 · The inclusion ring — `ClipRing` — scopes the bundle, nothing else.**
+- Meaning: *"this clip is part of the memory this session will become."* On by
+  default for every clip. Off = the clip won't join the memory when you tap
+  **Create one memory**.
+- It is a **bundle-time selection**, not a structural edit. Turning a ring off
+  does **not** move the clip out of the session — the clip stays in the card,
+  it's simply out of scope for the Create action. (Contrast Remove, below.)
+- **Excluded-state visual = choice, not failure.** Ring hollow; the transcript
+  stays at legible ink (a light de-emphasis is fine — do **not** grey it to the
+  point it reads disabled/broken, because that collides with the failed-clip
+  style, which is dimmed **and** pairs a Retry link). An excluded clip has no
+  Retry; a failed clip does. Never let the two look the same.
+- At Create time the session is consumed. Any still-excluded clips **return to
+  the bench as loose clips** — they are not deleted, not silently folded in.
+
+**2 · Remove from session — ejects the clip from the cluster.**
+- Meaning: *"this clip doesn't belong in this grouping at all."* The clip
+  **survives as a loose clip on the bench**, un-grouped — for when idle-gap
+  mis-grouped it (a stray photo that landed in the dinner session). It is
+  **non-destructive**, so it is a neutral/ink hairline full-width button, never
+  red. This is the direct parallel of **Remove from project** (the memory
+  survives; only the membership is cut).
+- **Where it lives:** in the **opened clip**, not as a per-row button in the
+  triage card. Tapping a clip in the session opens the clip
+  (detail/`ClipEditor`); its fate-action row carries, top to bottom by
+  escalating consequence: **Remove from session** (neutral) → optional **Move to
+  memory…** (relocate straight into an existing memory) → **Delete clip** (danger
+  red, bottom-most). Same "fate actions live at the bottom of the opened item"
+  rule that governs memory/project deletion; keeps the triage card calm (one
+  ochre primary + one red Delete session). The couple taps to open a clip before
+  ejecting it are deliberate, not friction to optimise away.
+- **Why this is not redundant with the ring.** The ring scopes *this bundling*;
+  Remove edits *the cluster structure*. Their end-states differ: an excluded
+  clip **stays in the session**; a removed clip **leaves it**. They converge only
+  at Create time (both land any left-out clip loose on the bench) — before that
+  moment they answer two different questions ("what's in this memory?" vs "what's
+  in this cluster?").
+
+**3 · Delete clip / Delete session — destruction.**
+- **Delete clip** (in the opened clip, bottom-most, danger red) trashes that one
+  clip → Recently Deleted, 30 days. **Delete session** (in the triage card,
+  full-width danger red under Create one memory) trashes the whole cluster.
+  Both follow the retired-swipe / open-to-act / no-confirm-dialog deletion rule.
+
+**Single-clip session.** A session holding one clip renders through the **same
+`ClipAtom(register="operational")` with `ring={false}`** — inclusion selection
+is meaningless when excluding the sole clip equals deleting the session — and it
+**keeps its Play/evidence control** (a voice clip always offers its original
+recording). It must **not** render a bespoke bare-transcript card; it is the atom
+minus the ring. Its triage collapses accordingly: **Create one memory** +
+**Delete session**, with no per-clip Remove (Remove and Delete are the same act
+when there's one clip).
+
 ## Shared components (`screens-clip-model.jsx`) — the single definitions
 
 **This file is the ONLY place a clip's view or editor is defined.** A surface
@@ -138,7 +199,7 @@ stop — the component already exists here.
 - `ClipDivider()`.
 
 **The editor (locked July 11 2026 — one editor, two fields):**
-- `ClipEditor({ field, value, media, duration, showMove, onCancel, onDone })` — the ONE clip editor. `field='transcript'` edits a voice/note clip's words; `field='description'` edits a photo/video clip's words. Both are *the clip's words* — the same act on the same slot — so they are the same component, differing only by which field label and media evidence they show. Owns the edit field (mirrors displayed text, auto-grows), the quiet Play/evidence control kept visible while editing, the fate-action row (`Delete clip`, optional `Move to…`), and the `Cancel`/`Done` commit row. This replaces the three former editors: `MDClipV2`'s editing branch, `MDClipCompactRow`'s editing branch, and the standalone `DescriptionEmpty`/`DescriptionFilled` edit path.
+- `ClipEditor({ field, value, media, duration, showMove, onCancel, onDone })` — the ONE clip editor. `field='transcript'` edits a voice/note clip's words; `field='description'` edits a photo/video clip's words. Both are *the clip's words* — the same act on the same slot — so they are the same component, differing only by which field label and media evidence they show. Owns the edit field (mirrors displayed text, auto-grows), the quiet Play/evidence control kept visible while editing, the fate-action row (escalating consequence: `Remove from session` → optional `Move to memory…` → `Delete clip`; a memory's clip shows `Move to…`/`Remove from memory`, a session's clip shows `Remove from session`), and the `Cancel`/`Done` commit row. This replaces the three former editors: `MDClipV2`'s editing branch, `MDClipCompactRow`'s editing branch, and the standalone `DescriptionEmpty`/`DescriptionFilled` edit path.
 
 **Load requirement (the mechanical fix — was the root of the drift).** Because
 these are the single definitions, **`screens-clip-model.jsx` must be loaded on
@@ -219,54 +280,45 @@ surface-by-surface; the slice tag says where the fix lands. This is the pass/fai
 gate for "clip is converged" — not the prose above.
 
 ### Part 1 · Evidence control (the Play affordance)
-- [x] **E1 · One Play glyph across registers.** `ClipEvidenceControl` now uses
-  `play` for both operational and reflective — same shape, register-styled
-  (operational 12pt ink3, reflective 14pt semibold accent). No more
-  `play.circle.fill` filled disc.
-- [x] **E2 · Reflective Full-stream clips carry the evidence line.** The
-  atom's `reflectiveCard` renders `ClipEvidenceControl` when
-  `ClipEvidenceProjection.project(model:register:) != .none`, and voice
-  clips project to `.namedPlay(label: "Original recording", durationString:)`
-  regardless of surface (single-clip memory vs Full stream). Locked by
-  `voice_evidence_reflective_isNamedPlay` at the projection level.
-  `TranscriptClipController.readState` (Slice 9b) is the single reflective
-  render path for voice clips on Memory Detail — no divergent single-clip
-  vs multi-clip code path exists to fork behavior.
-- [x] **E3 · Compact expanded body carries evidence.** `CompactClipRow`'s
-  expanded voice footer now uses the same `play` glyph + accent-triangle /
-  ink3-label tint pair as the atom's `.namedPlay` render.
+- [ ] **E1 · One Play glyph across registers.** Build ships a filled ochre disc
+  in Memory (`▶ Original recording · 0:16`) and a hairline outline triangle in
+  Clips (`▷ 0:05`). One `ClipEvidence`, register-*styled* — not two glyphs.
+  *(Slice 3 atom; rollout 7/9.)*
+- [ ] **E2 · Reflective Full-stream clips must carry the evidence line.** The
+  single-clip memory shows `▶ Original recording · 0:16`; the Full-stream clip
+  shows header + transcript with **no Play control**. Every audio clip carries it
+  in reflective. *(Slice 9.)*
+- [ ] **E3 · Compact expanded body carries evidence.** The expanded body *is* the
+  reflective body, so it must show `▶ Original recording · …`. Build shows none.
+  *(Slice 10.)*
 
 ### Part 2 · Timing header
-- [x] **T1 · One operational offset notation.** `formatOffset` always emits
-  `+Ns` — first clip is `+0s`, never `0:00`. Locked by
-  `timing_operational_firstClip_is_plusZeroSeconds`.
-- [x] **T2 · Duration once, not twice.** Operational `ClipTimingHeader` no
-  longer renders `durationString`; duration lives on the Play control only.
-- [x] **T3 · Reflective header is mixed-case with location.** Dropped
-  `.uppercased()` + `.tracking(0.4)` in the atom's reflective branch; the
-  projection already returned the canonical
-  `Sun May 17 · 6:12 PM · Bishop St, Bluffton` form — the view was the drift.
-- [x] **T4 · One date format per surface.** `EntryExpandedView.fullTimestamp`
-  now uses `EEE MMM d · h:mm a` (with `, yyyy` for prior years) — same shape
-  as `ClipTimingProjection.formatDateTimePlace`. Memory Detail's memory-meta
-  line and clip-header line share vocabulary; `July 5 · 3:44 PM` (long month
-  name) is retired.
-- [x] **T5 · Compact row time is one treatment.** Removed the `isEmphasized`
-  time-color swap; the chevron rotation is the accordion cue.
+- [ ] **T1 · One operational offset notation.** Build mixes `0:00` (mm:ss) and
+  `+129s` (delta-seconds) inside one session. Canonical is one form (`+128s`).
+  *(Slice 6/8.)*
+- [ ] **T2 · Duration once, not twice.** Operational voice rows print duration as
+  a column *and* in the Play control. One place. *(Slice 3 atom + 6/8.)*
+- [ ] **T3 · Reflective header is mixed-case with location.** Build ships
+  UPPERCASE, letter-spaced, location-less (`SAT JUL 4 · 9:37 PM`). Spec is
+  `Sun May 17 · 6:12 PM · Bishop St, Bluffton`. Location is absent on every
+  reflective clip and must return. *(Slice 3 atom; rollout 7/9.)*
+- [ ] **T4 · One date format per surface.** Build collides `July 5 · 3:44 PM`
+  (memory meta) with `SUN JUL 5 · 3:44 PM` (clip header) on one screen. *(Slice 9.)*
+- [ ] **T5 · Compact row time is one treatment.** Build flips it gray when
+  collapsed, ochre when expanded. Same element, one color. *(Slice 10.)*
 
 ### Part 3 · Content
-- [x] **C1 · No double-printed lead line.** `ClipAtomView` gains
-  `hidePreview: Bool` — `CompactClipRow` passes `hidePreview: isOpen`, so the
-  collapsed preview sentence stops printing above the same sentence in the
-  expanded transcript body.
-- [x] **C2 · One quotation rule.** `CompactClipRow`'s expanded body now wraps
-  the transcript in `"…"` — matches the atom's `.reflective` / `.operational`
-  transcript render.
-- [x] **C3 · Photo clip in an expanded session shows "Add a description."**
-  `ClipAtomView.showDescriptionInvite` (with optional
-  `onTapDescriptionInvite`). Session-expanded `mediaClipRow` passes true; the
-  surrounding `NavigationLink` handles tap routing to Clip Detail's inline
-  editor.
+- [ ] **C1 · No double-printed lead line.** Compact expanded row repeats the
+  collapsed preview sentence in the body. Long-memory spec: the lead line is a
+  collapsed-state preview only; expanded, the header collapses to time-only and
+  the body carries the full transcript. *(Slice 3 atom / Slice 10 — this is the
+  13th-assertion bug, confirmed in the wild.)*
+- [ ] **C2 · One quotation rule.** Transcript is quoted in the reflective single
+  clip, the Full stream, and operational rows — but **not** in the compact
+  expanded body. Pick one and apply everywhere. *(Slice 3 atom.)*
+- [ ] **C3 · Photo clip in an expanded session shows "Add a description."** Per
+  Q2 the ochre invite appears once the row is opened/expanded (the mock renders
+  it; the build omits it). A media clip's description is its words. *(Slice 6/8.)*
 
 ### Correct today — protect from regression
 - [x] **Rings** present on operational rows, absent on reflective/compact.
