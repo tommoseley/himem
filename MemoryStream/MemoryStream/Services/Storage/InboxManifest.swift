@@ -211,6 +211,20 @@ final class InboxManifest: ObservableObject {
     /// Money-tested by `InboxManifestDismissedClustersTests.dismissCluster_firesObjectWillChange_soSwiftUIRerenders`.
     @Published private(set) var dismissedClusters: [DismissedCluster] = []
 
+    /// Voice clip ids the user has *Removed from session* via the
+    /// Clip Detail fate row (`Clip model · spec.md` § "Clip triage"
+    /// July 12 2026). A solo clip survives on the bench but the
+    /// grouper emits it as its own single-clip session — the user
+    /// declared it doesn't belong in the cluster the clock would
+    /// otherwise form. Persistent across launches via the
+    /// `solo-clip-ids.json` companion file.
+    ///
+    /// `@Published` for the same reason as `dismissedClusters`:
+    /// removing a clip from a session doesn't mutate `clips`, so
+    /// SwiftUI would never re-run the session grouper without an
+    /// explicit publish here.
+    @Published private(set) var soloClipIds: Set<UUID> = []
+
     /// Folders. Created lazily on first access. Marked `nonisolated` so the
     /// WatchSessionDelegate can resolve paths off the main actor — the
     /// delegate's `didReceive` callback runs on a background queue, and we
@@ -246,6 +260,15 @@ final class InboxManifest: ObservableObject {
     /// file so the manifest's own JSON schema stays unchanged.
     nonisolated static var dismissedClustersURL: URL {
         inboxRoot.appendingPathComponent("dismissed-clusters.json")
+    }
+    /// Companion file to `manifestURL` holding the per-clip "keep
+    /// this loose, don't group into any session" flag set
+    /// (`Clip model · spec.md` § "Clip triage" July 12 2026:
+    /// *Remove from session* is a structural edit that survives
+    /// across app launches). Separate file so the manifest JSON
+    /// schema stays unchanged.
+    nonisolated static var soloClipIdsURL: URL {
+        inboxRoot.appendingPathComponent("solo-clip-ids.json")
     }
     nonisolated static func audioURL(for filename: String) -> URL {
         UbiquityStore.shared.inboxURL(for: filename)
@@ -543,6 +566,7 @@ final class InboxManifest: ObservableObject {
         // those records before persisting. Spec § "Sort is the
         // bench's resting state" + Tom's Q3 answer.
         pruneDeadDismissedClusters()
+        pruneDeadSoloClipIds()
         persist()
         // Home-screen numeric badge retired 2026-07-10 per `CLAUDE.md`
         // §Phone ("App-icon badge: none. iOS only supports a numeric
@@ -619,6 +643,39 @@ final class InboxManifest: ObservableObject {
         }
     }
 
+    /// Persists `soloClipIds` to its companion file. Called from
+    /// `markSolo` / `unmarkSolo` and from the prune path in
+    /// `replace(with:)` when stale ids get filtered out.
+    private func persistSoloClipIds() {
+        let url = Self.soloClipIdsURL
+        let tmp = url.appendingPathExtension("tmp")
+        do {
+            let data = try JSONEncoder.iso8601.encode(Array(soloClipIds))
+            try data.write(to: tmp, options: .atomic)
+            _ = try? FileManager.default.replaceItemAt(url, withItemAt: tmp)
+        } catch {
+            ErrorState.shared.report(.saveFailed("Solo clip ids persist failed: \(error.localizedDescription)"))
+        }
+    }
+
+    /// Loads the solo-clip-ids companion file. Called from
+    /// `load()`. Missing file → empty set (fresh install / user
+    /// never removed a clip from a session).
+    private func loadSoloClipIds() {
+        let url = Self.soloClipIdsURL
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            soloClipIds = []
+            return
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            let array = try JSONDecoder.iso8601.decode([UUID].self, from: data)
+            soloClipIds = Set(array)
+        } catch {
+            soloClipIds = []
+        }
+    }
+
     // MARK: - Sort dismissal (spec § "Sort is the bench's resting state")
 
     /// Fingerprints the workbench's Sort proposer should suppress.
@@ -661,6 +718,40 @@ final class InboxManifest: ObservableObject {
         persistDismissedClusters()
     }
 
+    /// Records the user's *Remove from session* fate action for a
+    /// voice clip. Idempotent — marking an already-solo clip is a
+    /// no-op. The grouper (`ClipSessionGrouper.group`) reads the
+    /// set and emits solo clips as their own single-clip sessions.
+    /// Persists immediately so the state survives an app relaunch.
+    func markSolo(clipId: UUID) {
+        guard !soloClipIds.contains(clipId) else { return }
+        soloClipIds.insert(clipId)
+        persistSoloClipIds()
+    }
+
+    /// Inverse of `markSolo` — restores a clip to normal grouping.
+    /// Not currently wired to any UI (Chunk C only ships the
+    /// forward direction), but present so the state store is
+    /// symmetric and future "Undo Remove" can hook in without
+    /// growing the API.
+    func unmarkSolo(clipId: UUID) {
+        guard soloClipIds.contains(clipId) else { return }
+        soloClipIds.remove(clipId)
+        persistSoloClipIds()
+    }
+
+    /// Prunes solo-clip-id entries whose clipIds are no longer in
+    /// the current inbox (bundled, deleted, or promoted to a
+    /// memory). Called from `replace(with:)` alongside the
+    /// dismissed-clusters prune.
+    private func pruneDeadSoloClipIds() {
+        let liveIds = Set(clips.map(\.clipId))
+        let filtered = soloClipIds.intersection(liveIds)
+        guard filtered.count != soloClipIds.count else { return }
+        soloClipIds = filtered
+        persistSoloClipIds()
+    }
+
     private func load() {
         // Fast path: read + partition `manifest.json` only. No
         // backup write, no legacy `InboxProcessedClipIds.json`
@@ -689,6 +780,9 @@ final class InboxManifest: ObservableObject {
             // Load the companion Sort-dismissals file. Missing file
             // → empty set, safe on fresh install.
             loadDismissedClusters()
+            // Load the companion solo-clip-ids file (Chunk C, Clip
+            // triage July 12 2026). Missing → empty set.
+            loadSoloClipIds()
         }
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {

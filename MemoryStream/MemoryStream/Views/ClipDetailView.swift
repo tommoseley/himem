@@ -449,7 +449,25 @@ private struct InboxClipDetail: View {
                             transcriptDraft = nil
                             confirmingDelete = true
                         },
-                        onRelocate: nil // Chunk C: Move-to-memory
+                        // Move-to-memory (promote a bench clip into an
+                        // existing memory) not yet wired — the audio-
+                        // file-move + edge-append plumbing lives in
+                        // `CreateMemoryFromClipsSheet.appendToExistingMemory`
+                        // and isn't cleanly single-clip-callable yet.
+                        // Deferred to a follow-up chunk; the fate row
+                        // hides the Move tier when this is nil.
+                        onRelocate: nil,
+                        // *Remove from session* — `Clip model · spec.md`
+                        // § "Clip triage" July 12 2026. Marks the clip
+                        // solo so `ClipSessionGrouper` emits it as its
+                        // own single-clip session on the bench. Hidden
+                        // when the clip is already solo (nothing to do).
+                        onRemoveFromCollection: inbox.soloClipIds.contains(clipId) ? nil : {
+                            transcriptDraft = nil
+                            InboxManifest.shared.markSolo(clipId: clipId)
+                            dismiss()
+                        },
+                        removeFromCollectionLabel: inbox.soloClipIds.contains(clipId) ? nil : "Remove from session"
                     ),
                     onCancel: { transcriptDraft = nil },
                     onDone: { newValue in

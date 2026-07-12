@@ -133,6 +133,14 @@ struct SessionListView: View {
             sessions = computeSessions()
             recomputeAbsorbedMedia()
         }
+        .onChange(of: inbox.soloClipIds) { _, _ in
+            // The user *Removed a clip from session* on Clip Detail
+            // (Chunk C, Clip triage July 12 2026). The manifest's
+            // publish fires here even though `clips` didn't change;
+            // re-group so the removed clip snaps into its own
+            // single-clip card without waiting for another mutation.
+            sessions = computeSessions()
+        }
         .onReceive(NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
             object: context
@@ -186,12 +194,14 @@ struct SessionListView: View {
     /// "Transcribing…" body variant.
     private func computeSessions() -> [ClipGroup] {
         let inFlight = arrivals.clipsInFlight.keys
+        let solo = inbox.soloClipIds
         guard !inFlight.isEmpty else {
-            return ClipSessionGrouper.group(inbox.clips)
+            return ClipSessionGrouper.group(inbox.clips, soloClipIds: solo)
         }
         let inFlightSet = Set(inFlight)
         return ClipSessionGrouper.group(
-            inbox.clips.filter { !inFlightSet.contains($0.clipId) }
+            inbox.clips.filter { !inFlightSet.contains($0.clipId) },
+            soloClipIds: solo
         )
     }
 

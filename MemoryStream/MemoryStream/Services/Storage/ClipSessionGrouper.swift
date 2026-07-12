@@ -35,18 +35,40 @@ enum ClipSessionGrouper {
     static let sessionTimeWindowSeconds: TimeInterval = 10 * 60
 
     /// Groups newest-first.
-    static func group(_ clips: [InboxClip]) -> [ClipGroup] {
+    ///
+    /// `soloClipIds` — voice clip ids the user has *Removed from
+    /// session* (`Clip model · spec.md` § "Clip triage" July 12
+    /// 2026). Each solo clip becomes its own single-clip group
+    /// regardless of neighbours in the idle window; the remaining
+    /// clips still session together across the removed one. This
+    /// lets the user pull a stray clip out of the middle of a
+    /// three-clip sitting without splitting the surviving pair.
+    /// Empty set (default) preserves the pre-July-12 behaviour.
+    static func group(_ clips: [InboxClip], soloClipIds: Set<UUID> = []) -> [ClipGroup] {
         let sorted = clips.sorted { $0.capturedAt > $1.capturedAt }
-        var groups: [[InboxClip]] = []
+        var regularGroups: [[InboxClip]] = []
+        var soloGroups: [[InboxClip]] = []
         for clip in sorted {
-            if let lastGroup = groups.last, let lastClip = lastGroup.last,
+            if soloClipIds.contains(clip.clipId) {
+                soloGroups.append([clip])
+                continue
+            }
+            if let lastGroup = regularGroups.last, let lastClip = lastGroup.last,
                sameSession(lastClip, clip) {
-                groups[groups.count - 1].append(clip)
+                regularGroups[regularGroups.count - 1].append(clip)
             } else {
-                groups.append([clip])
+                regularGroups.append([clip])
             }
         }
-        return groups.map { ClipGroup(clips: $0) }
+        // Merge regular + solo, then sort by the group's first
+        // (newest) clip so the bench stays reverse-chronological
+        // regardless of where the solo clip fell in time.
+        let combined = (regularGroups + soloGroups).map { ClipGroup(clips: $0) }
+        return combined.sorted { lhs, rhs in
+            let l = lhs.clips.first?.capturedAt ?? .distantPast
+            let r = rhs.clips.first?.capturedAt ?? .distantPast
+            return l > r
+        }
     }
 
     /// True when two clips belong to the same capture session.
