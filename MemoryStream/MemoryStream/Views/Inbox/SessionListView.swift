@@ -26,7 +26,6 @@ struct SessionListView: View {
     /// parent `ClipsTabView` can filter these out of its top
     /// day-grouped stack (avoids double-rendering).
     @State private var absorbedMediaBySessionId: [UUID: [MediaReference]] = [:]
-    @State private var expandedSessionId: UUID? = nil
     @State private var bundleSession: BundleRequest? = nil
     @State private var playingClipId: UUID? = nil
     @State private var player: AVAudioPlayer? = nil
@@ -103,6 +102,14 @@ struct SessionListView: View {
                 viewModel: viewModel
             )
         }
+        // `Clip model · spec.md` §Model (July 12 2026 lock): the
+        // Clips list is calm. Tapping a session card pushes into an
+        // opened-session screen where Create/Delete live. The
+        // destination auto-dismisses if the session vanishes from
+        // the manifest mid-flight (all clips placed, all deleted).
+        .navigationDestination(for: ClipGroup.self) { session in
+            openedSessionContent(sessionId: session.id)
+        }
         .onAppear {
             sessions = computeSessions()
             recomputeAbsorbedMedia()
@@ -118,11 +125,6 @@ struct SessionListView: View {
         .onChange(of: inbox.clips) { _, _ in
             sessions = computeSessions()
             recomputeAbsorbedMedia()
-            // If a session expanded its last clip away, collapse.
-            if let id = expandedSessionId,
-               !sessions.contains(where: { $0.id == id }) {
-                expandedSessionId = nil
-            }
         }
         .onChange(of: arrivals.clipsInFlight) { _, _ in
             // In-flight clips are rendered as IncomingCard, NOT as
@@ -433,50 +435,44 @@ struct SessionListView: View {
         }
     }
 
-    // MARK: - Session card (collapsed + expanded variants)
+    // MARK: - Session card (calm collapsed row + push to OpenedSession)
 
-    /// One session card. Collapsed shows time + clip count + transcript
-    /// snippets + Make a Memory + play. Tapping the card body expands
-    /// in place to reveal full per-clip transcripts and per-clip
-    /// swipe-to-delete. No navigation push. No bottom action bar.
+    /// A calm session card in the list. Composition + first-clip
+    /// preview + "Tap to review" chevron; no Create / Delete
+    /// buttons. Tapping pushes into `openedSessionContent` (via the
+    /// `.navigationDestination(for: ClipGroup.self)` at `body` level)
+    /// where Create / Delete live at the bottom of the opened item.
+    /// Locked July 12 2026 (`Clip model · spec.md` §Model):
+    /// > "a list of eight sessions must not be eight pairs of
+    /// > shouting buttons. Tapping opens the session, and *that* is
+    /// > where Create one memory (the ochre primary, at the action
+    /// > position) and Delete session (red, bottom-most) live."
     @ViewBuilder
     private func sessionCard(_ session: ClipGroup) -> some View {
-        let isExpanded = expandedSessionId == session.id
-        VStack(alignment: .leading, spacing: 0) {
-            sessionMetaRow(session)
-            if isExpanded {
-                expandedBody(session)
-            } else {
+        NavigationLink(value: session) {
+            VStack(alignment: .leading, spacing: 0) {
+                sessionMetaRow(session)
                 collapsedBody(session)
+                tapToReviewFooter
             }
-            // v3 (July 4 2026): the "Make a Memory" pill is folded
-            // into the expander — it appears only when the card is
-            // expanded, right above the delete zone. Collapsed cards
-            // carry no ochre; the transcript is the loudest thing on
-            // them. Tapping the collapsed card body → expands →
-            // reveals the pill as the primary action.
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Crucible.Color.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Crucible.Color.hairline, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Crucible.Color.card)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Crucible.Color.hairline, lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.22)) {
-                toggleExpand(session)
-            }
-        }
+        .buttonStyle(.plain)
         // Swipe-to-discard and long-press Trash both retired per
         // `HiMem · Buttons & Actions.html` §3 (June 12 2026). The
         // session is "opened" by tapping the card; the bottom `Delete
-        // session` button inside the expanded body is the sole
-        // destruction path.
+        // session` button inside the pushed opened-session view is
+        // the sole destruction path.
         .contextMenu {
             Button {
                 let selected = selectionFor(session)
@@ -493,6 +489,51 @@ struct SessionListView: View {
                 // docs/design/Kingfisher Language.md. Retired: "Make a Memory."
                 Label("Create one memory", systemImage: "sparkles")
             }
+        }
+    }
+
+    /// The quiet "Tap to review" affordance at the bottom of a
+    /// collapsed session card. The full-card `NavigationLink`
+    /// already carries the tap; this is signal for the reader, not
+    /// a second button. Matches `SessionCard` in
+    /// `docs/design/screens-clips-page.jsx` (July 12 lock).
+    private var tapToReviewFooter: some View {
+        HStack(spacing: 5) {
+            Text("Tap to review")
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+        }
+        .font(.system(size: 12.5, weight: .semibold))
+        .foregroundStyle(Crucible.Color.ink3)
+        .padding(.top, 12)
+    }
+
+    // MARK: - Opened session (pushed screen)
+
+    /// The pushed opened-session screen — the composition + all
+    /// clip rows + Create-one-memory (ochre primary) + Delete-
+    /// session (red, bottom-most). Reuses the existing
+    /// `sessionMetaRow` + `expandedBody` helpers verbatim; the only
+    /// new pieces are the scroll container, the paper background,
+    /// and a nav title. Auto-dismisses via `AutoDismissView` when
+    /// the underlying session leaves the manifest mid-flight (all
+    /// clips placed into a memory, all deleted, or bundled by Sort).
+    @ViewBuilder
+    private func openedSessionContent(sessionId: UUID) -> some View {
+        if let session = sessions.first(where: { $0.id == sessionId }) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    sessionMetaRow(session)
+                    expandedBody(session)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 20)
+            }
+            .background(Crucible.Color.paper.ignoresSafeArea())
+            .navigationTitle("Session")
+            .navigationBarTitleDisplayMode(.inline)
+        } else {
+            AutoDismissView()
         }
     }
 
@@ -1052,14 +1093,6 @@ struct SessionListView: View {
 
     // MARK: - Behavior
 
-    private func toggleExpand(_ session: ClipGroup) {
-        if expandedSessionId == session.id {
-            expandedSessionId = nil
-        } else {
-            expandedSessionId = session.id
-        }
-    }
-
     private func deleteSession(_ session: ClipGroup) {
         // Stop playback first: if any clip in this session is
         // currently playing, leaving the AVAudioPlayer pointed at a
@@ -1072,7 +1105,10 @@ struct SessionListView: View {
         for id in ids {
             inbox.remove(clipId: id)
         }
-        if expandedSessionId == session.id { expandedSessionId = nil }
+        // Session vanishing from `sessions` after `computeSessions()`
+        // re-runs triggers `AutoDismissView` in `openedSessionContent`
+        // (Chunk E2, July 12 2026) — the opened-session pushed screen
+        // pops back to the calm list.
     }
 
     // MARK: - Helpers
@@ -1116,6 +1152,18 @@ struct SessionListView: View {
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             sessionActivated = false
         }
+    }
+}
+
+/// Renders nothing and immediately pops itself off the navigation
+/// stack. Used by `SessionListView.openedSessionContent` when the
+/// pushed session vanishes from the manifest (all clips placed,
+/// bundled by Sort, or deleted mid-flight) — the user shouldn't be
+/// stranded on a screen whose data source is gone.
+private struct AutoDismissView: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        Color.clear.onAppear { dismiss() }
     }
 }
 
