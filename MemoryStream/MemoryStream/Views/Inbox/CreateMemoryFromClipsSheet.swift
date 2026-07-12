@@ -486,31 +486,46 @@ struct CreateMemoryFromClipsSheet: View {
     /// see `docs/architecture/2026-07-08-evidence-context-ontology-plan.md`).
     private func createMemory() {
         var movedClips: [InboxClip] = []
+        let fm = FileManager.default
         for clip in clips {
             let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
             let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
+            // **Where the audio lives depends on the source.** Watch
+            // clips land at `InboxManifest.audioURL` (`Documents/Inbox/`)
+            // and need the move to `SpeechService.audioURL`
+            // (`Documents/Audio/`). Phone clips are written directly
+            // by `VoiceCaptureScreen` at `SpeechService.audioURL` —
+            // they were NEVER in the inbox directory. Pre-fix the
+            // create-memory code assumed every clip was watch-origin
+            // and always tried to move from Inbox → Audio; for phone
+            // clips the source didn't exist, and the coordinated
+            // move (which pre-deletes the destination as
+            // `.forReplacing`) was **deleting the actual audio file**
+            // the phone had just written. That's how a fresh phone-
+            // recorded session failed to attach any clips.
+            if fm.fileExists(atPath: voiceURL.path) {
+                // Already at the destination (phone clip, or a
+                // previous partial run that got the file there).
+                // Nothing to move.
+                movedClips.append(clip)
+                continue
+            }
             do {
-                // Both URLs live inside the iCloud ubiquity container
-                // (Inbox/ → Audio/). A raw `FileManager.moveItem`
-                // between iCloud subdirectories can silently fail
-                // when a concurrent sync is reading the source or
-                // the destination — same class of bug task #59 fixed
-                // for PHPicker / WatchSession / Migration writes.
-                // `UbiquityStore.moveIntoStore` wraps the move in
-                // `NSFileCoordinator(writingItemAt:options:.forReplacing)`
-                // and clears the destination first.
+                // Not at destination — try to move from the inbox
+                // (watch case). Uses `NSFileCoordinator` per
+                // `UbiquityStore.moveIntoStore`.
                 _ = try UbiquityStore.shared.moveIntoStore(
                     sourceURL: inboxURL,
                     destinationURL: voiceURL
                 )
                 movedClips.append(clip)
             } catch {
-                // Surface the failure instead of swallowing it — Tom
-                // hit this July 12 as "nothing creates" (memory saved
-                // with zero fragments because every move failed and
-                // the loop silently dropped every clip). Console
+                // Neither at destination nor at inbox — audio is
+                // genuinely absent (iCloud hasn't downloaded a watch
+                // clip yet, or the file was deleted out of band).
+                // Log with source hint for diagnosis. Console
                 // filter: `[HiMem][CreateMemory] move failed`.
-                NSLog("[HiMem][CreateMemory] move failed for clip=\(clip.clipId.uuidString.prefix(8)) file=\(clip.audioFilename) error=\(error.localizedDescription)")
+                NSLog("[HiMem][CreateMemory] move failed for clip=\(clip.clipId.uuidString.prefix(8)) source=\(clip.source) file=\(clip.audioFilename) error=\(error.localizedDescription)")
                 continue
             }
         }
@@ -630,12 +645,19 @@ struct CreateMemoryFromClipsSheet: View {
 
         var payload: [(audioFilename: String, transcript: String, capturedAt: Date)] = []
         var locationStamps: [(audioFilename: String, latitude: Double?, longitude: Double?)] = []
+        let fm = FileManager.default
         for clip in clips {
             let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
             let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
+            // Same phone-vs-watch source logic as `createMemory` —
+            // phone clips are already at the destination; watch
+            // clips live in the inbox and need the move.
+            if fm.fileExists(atPath: voiceURL.path) {
+                payload.append((clip.audioFilename, clip.transcript, clip.capturedAt))
+                locationStamps.append((clip.audioFilename, clip.latitude, clip.longitude))
+                continue
+            }
             do {
-                // Coordinated move — see `createMemory` for the
-                // rationale (task #59 pattern for iCloud writes).
                 _ = try UbiquityStore.shared.moveIntoStore(
                     sourceURL: inboxURL,
                     destinationURL: voiceURL
@@ -643,7 +665,7 @@ struct CreateMemoryFromClipsSheet: View {
                 payload.append((clip.audioFilename, clip.transcript, clip.capturedAt))
                 locationStamps.append((clip.audioFilename, clip.latitude, clip.longitude))
             } catch {
-                NSLog("[HiMem][AppendMemory] move failed for clip=\(clip.clipId.uuidString.prefix(8)) file=\(clip.audioFilename) error=\(error.localizedDescription)")
+                NSLog("[HiMem][AppendMemory] move failed for clip=\(clip.clipId.uuidString.prefix(8)) source=\(clip.source) file=\(clip.audioFilename) error=\(error.localizedDescription)")
                 continue
             }
         }
