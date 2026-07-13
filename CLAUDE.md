@@ -14,6 +14,19 @@ These rules are derived from battle-tested governance in The Combine (`~/dev/The
 
 ---
 
+## Design Authority (read first)
+
+**The designs and specs in `docs/design/` are decisions, not suggestions.** You build what they specify. Your latitude is *how*, never *what*: view structure, state plumbing, file organization, internal naming, the mechanics of making the specified behavior work. Behavior, copy, verbs, ontology, layout intent, and interaction model are already decided.
+
+- **Raise concerns, don't deviate.** If a spec looks wrong, impossible, contradictory, or costly, stop and say so with reasoning, and wait for a ruling — that's wanted. Quietly building something different, "improving" a design in passing, or resolving an ambiguity by inventing a new *what* is not. A raised concern is cheap; a silent deviation gets caught in review three screens later and costs a day.
+- **Escalation chain: Agent → CC → Tom.** Sub-agents escalate to you. You resolve *implementation* questions inside the locked architecture (coherence fixes — wording/mechanics that make the build match an existing decision). Anything that changes a *what* — vocabulary, architecture, principle, ontology — goes to Tom.
+- **Two classes of edit:** a *coherence fix* (build matches an existing decision) is fine to apply; a *vocabulary / architecture / principle change* requires explicit approval, even when it seems obviously better.
+- **Definition of done:** first *"does this express the design as specified?"*, then *"does it work?"* A green build that deviates from the design is a regression, not done.
+
+Source of truth: `docs/design/CLAUDE.md` PART 0 and `docs/design/HiMem · Locked Decisions.html` (Architectural Invariants). Multi-agent execution is orchestrated per `AGENTS.md` (repo root).
+
+---
+
 ## Development Governance
 
 ### Bug-First Testing Rule (Mandatory)
@@ -217,6 +230,10 @@ If something goes wrong during execution, **STOP and re-plan**. Do not push thro
 - Run tests, check logs, demonstrate correctness.
 - "Does this look right?" is not verification. Tests passing is verification.
 
+### Multi-Agent Orchestration
+
+For change sets large enough to warrant parallel work, follow `AGENTS.md` (repo root): **sequential by default**; dependency-aware parallel cycles only when the work is genuinely independent; centralized integration; **re-plan each cycle from the actual repository state.** You are the head implementer and integration owner — agents implement bounded slices; you own architecture, sequencing, schema/migrations, shared interfaces, integration, and the **design-fidelity diff review** (green tests are necessary, not sufficient — a toast in the wrong voice passes every test). Don't stand up a swarm for a two-file change.
+
 ---
 
 ## Autonomous Bug Fixing
@@ -232,6 +249,7 @@ Escalate only when:
 - The bug cannot be reproduced in a test.
 - The fix would require changes outside the current scope.
 - The root cause is ambiguous and multiple fixes are plausible.
+- The fix would change a *what* (behavior, copy, verb, ontology, layout intent). That's a design decision, not a bug fix — escalate per Design Authority. Autonomous fixing is for *implementation* defects only.
 
 ---
 
@@ -269,28 +287,32 @@ Session summaries are **immutable logs**. Never edit after writing.
 
 The design-system CLAUDE.md is the source of truth for product architecture; this section mirrors its locked decisions so the two stay coherent. If a decision changes there, sync here in the same PR.
 
+### Three primary objects (Clips · Memories · Projects)
+
+The app is three tabs in capture→shape→build order: **Clips · Memories · Projects = Evidence · Context · Intent.** A **clip** is the atom (voice/photo/video/note), stored once. A **memory** references 1–N clips and adds a derived layer (title · summary · topics); clip↔memory is many-to-many. A **project** connects memories (many-to-many) — it does not contain or own them. **Cold launch lands on Memories** (what you open HiMem for); **Clips is a first-class tab**, and the standalone "Captured Clips" window is **retired** — its bench is now the Clips tab's default (New) view.
+
 ### Two capture paradigms
 
 HiMem has two distinct capture modes. These are properties of **intent**, not platform — a surface can host either, though each surface has a current default.
 
 - **Structured capture** — User intentionally creates a Memory. Reflective space. Clips and media flow into a container that already exists or is created on the spot. Memory-oriented from the first tap. *Today: phone direct-voice composer, phone append composer, iPad (when it ships).*
-- **Ad-hoc capture** — User catches fragments. Brainstorms. Doesn't organize yet. Session-oriented; structure comes later via consolidation. *Today: watch.* *Future possibilities (don't design for these now): Studio quick-capture, phone widget, Siri shortcut into the session inbox.*
+- **Ad-hoc capture** — User catches fragments. Brainstorms. Doesn't organize yet. Session-oriented; structure comes later via consolidation. *Today: watch, **and the phone Clips-tab + (ad-hoc)** (July 10 2026).* *Future possibilities (don't design for these now): Studio quick-capture, phone widget, Siri shortcut into the session inbox.*
 
 The boundary isn't watch-vs-phone. It's "I'm capturing inside a container I'm building" vs "I'm catching something to sort out later." Don't bake "watch = ad-hoc" into anything fundamental.
 
-**Captured Clips is the consolidation seam for ad-hoc captures**, regardless of which surface produced them. Sessions are proto-memories; that's why they're the right primary unit there.
+**Captured Clips is the consolidation seam for ad-hoc captures**, regardless of which surface produced them — it is the Clips tab's default view, not a standalone window. The **session** is the right primary unit there: the natural grouping of what the user is moving through, and any session *may* become a memory (though it needn't).
 
 ### The consolidation ladder
 
 Three layers, same dance at each scale:
 
-1. **Clips → Session → Memory.** Done on Captured Clips. Bundling a session is consolidation at the smallest scale.
+1. **Clips → Session → Memory.** Done on the Clips tab. Bundling a session (**Start a Memory**) is consolidation at the smallest scale.
 2. **Memories → Project membership.** Manual tagging. Mid-scale grouping.
 3. **Project + Memories → Project summary.** Project Assist. High-scale synthesis.
 
 At each layer: messy input → recognition → structure. Brainstorming is messy; reflection creates structure; memory formation is editorial. The product models that explicitly.
 
-**The normal vs edge inversion on Captured Clips.** Most users, most of the time, see a session and bundle it. That's the normal flow. Clip-level tools (delete one, retry transcription, exclude accidental) are *exception handling*, accessed by expanding a session card. Don't put everyone in granular-management mode by default.
+**The normal vs edge inversion on the Clips bench.** Most users, most of the time, see a session and bundle it. That's the normal flow. Clip-level tools (delete one, retry transcription, exclude accidental) are *exception handling*, accessed by expanding a session card. Don't put everyone in granular-management mode by default.
 
 ### Crucible token contract
 

@@ -540,22 +540,22 @@
   <!-- 1b. FRESH-START COUNTDOWN — STEAL FROM WORKOUT                    -->
   <!-- ──────────────────────────────────────────────────────────────── -->
   <section class="section band band-cream band-record">
-    <div class="section-label">1b · Fresh-start countdown · 3 · 2 · 1 · Listening</div>
+    <div class="section-label">1b · Fresh-start breath · one second</div>
     <p class="section-sub">
-      A <strong>3-second gather-yourself pause</strong> after the user taps to start. Borrowed wholesale from
-      Apple Workout: bright ochre ring draws in clockwise from 180° while "Ready" sits centered, then a
-      dim ochre overlay <em>overwrites</em> it counter-clockwise from 180° during the 3-second countdown.
-      Continuous sweep. Soft haptic per second. No loud counting, no ticking, no "Listening" beat — the ring
-      closing at the top is the "go." Tap anywhere to cancel instantly.
-      <strong>Fresh starts only.</strong> The <em>Next</em> button on a roll bypasses the countdown
-      &mdash; the whole point of Next is the mic never pauses, and a 3-second wait would kill that contract.
+      A <strong>one-second "breath"</strong> after the user taps to start &mdash; revised May 27 2026, replacing
+      the old 3·2·1 countdown, which felt like theater for an interaction already committed to. A single bright
+      ochre ring <strong>fills clockwise from 12 o'clock</strong> over ~800ms, holds for a 200ms tail, and the
+      moment it closes at the top, recording begins. No second phase, no numbers. An italic Source Serif caption
+      sits inside the ring &mdash; a gentle beat to gather a thought, rotating across recordings.
+      <strong>Fresh starts only.</strong> The <em>Next</em> button on a roll bypasses the breath &mdash; the mic
+      never pauses, and any wait would kill that contract.
     </p>
 
     <div class="row">
 
-      <!-- C0: "Ready" — ring drawing in clockwise from 180° -->
+      <!-- B1: ring mid-fill (~60%), caption centered -->
       <div class="specimen">
-        <div class="specimen-label"><span class="specimen-num">C0</span> "Ready" · ring drawing in (cw from 180°)</div>
+        <div class="specimen-label"><span class="specimen-num">B1</span> Breath · ring filling (cw from 12)</div>
         <div class="watch">
           <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
             <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
@@ -563,25 +563,28 @@
           <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
           <div class="w-body" style="padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:0;">
             <div style="position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;margin-top:6px;">
-              <!-- Ring drawing in: clockwise from 180° (bottom). At ~70% drawn. -->
-              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(90deg);">
-                <circle cx="64" cy="64" r="60" fill="none" stroke="#E55A22" stroke-width="12" stroke-linecap="round" stroke-dasharray="377" stroke-dashoffset="113"/>
+              <!-- Faint track -->
+              <svg width="128" height="128" style="position:absolute;inset:0;">
+                <circle cx="64" cy="64" r="60" fill="none" stroke="rgba(198,74,28,0.22)" stroke-width="10"/>
               </svg>
-              <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:30px;letter-spacing:-0.6px;font-weight:500;line-height:1;">Ready</div>
+              <!-- Bright ochre fill, clockwise from 12 o'clock. ~60% filled. -->
+              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(-90deg);">
+                <circle cx="64" cy="64" r="60" fill="none" stroke="#C64A1C" stroke-width="10" stroke-linecap="round" stroke-dasharray="377" stroke-dashoffset="151"/>
+              </svg>
+              <div style="font-family:'Source Serif 4',Georgia,serif;font-style:italic;font-weight:400;color:#fff;font-size:15px;letter-spacing:-0.1px;line-height:1.2;max-width:96px;text-align:center;">Catch the thought.</div>
             </div>
           </div>
         </div>
         <span class="verdict recommend">Frame 1</span>
         <p class="specimen-caption">
-          <strong>Bright ochre ring draws in clockwise from 180°</strong> (6 o'clock) over ~600ms while
-          "Ready" sits centered. Steal from Apple Workout's pre-countdown beat. Anchoring the
-          eye before the numbers arrive.
+          One <strong>bright ochre ring fills clockwise from 12 o'clock</strong> over ~800ms. Italic
+          Source Serif caption (15pt) centered inside. One soft <code>.click</code> haptic at the start.
         </p>
       </div>
 
-      <!-- C1: "3" — bright ring full, dim sweep starts counter-clockwise from 180° -->
+      <!-- B2: ring nearly full (~95%), about to close at the top -->
       <div class="specimen">
-        <div class="specimen-label"><span class="specimen-num">C1</span> "3" · dim sweep starts (ccw from 180°)</div>
+        <div class="specimen-label"><span class="specimen-num">B2</span> Breath · ring closing → mic hot</div>
         <div class="watch">
           <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
             <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
@@ -590,94 +593,35 @@
           <div class="w-body" style="padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:0;">
             <div style="position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;margin-top:6px;">
               <svg width="128" height="128" style="position:absolute;inset:0;">
-                <!-- Bright ochre full ring (base) -->
-                <circle cx="64" cy="64" r="60" fill="none" stroke="#E55A22" stroke-width="12"/>
+                <circle cx="64" cy="64" r="60" fill="none" stroke="rgba(198,74,28,0.22)" stroke-width="10"/>
               </svg>
-              <!-- Dim ochre overlay sweeping CCW from 180°. At ~8% (just starting). -->
-              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(90deg) scaleX(-1);">
-                <circle cx="64" cy="64" r="60" fill="none" stroke="#9A3815" stroke-width="12" stroke-linecap="butt" stroke-dasharray="377" stroke-dashoffset="347"/>
+              <!-- ~95% filled — crescent left to close at the apex. -->
+              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(-90deg);">
+                <circle cx="64" cy="64" r="60" fill="none" stroke="#C64A1C" stroke-width="10" stroke-linecap="round" stroke-dasharray="377" stroke-dashoffset="19"/>
               </svg>
-              <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:64px;letter-spacing:-2.2px;font-weight:200;line-height:1;font-variant-numeric:tabular-nums;position:relative;">3</div>
+              <div style="font-family:'Source Serif 4',Georgia,serif;font-style:italic;font-weight:400;color:#fff;font-size:15px;letter-spacing:-0.1px;line-height:1.2;max-width:96px;text-align:center;">Catch the thought.</div>
             </div>
           </div>
         </div>
         <span class="verdict recommend">Frame 2</span>
         <p class="specimen-caption">
-          Bright ochre ring is now <strong>full</strong>. As the user reads "3", the dim ochre
-          overlay <strong>starts sweeping counter-clockwise from 180°</strong>, eating into the
-          bright ring as time elapses. Continuous sweep, not steps.
-        </p>
-      </div>
-
-      <!-- C2: "2" — dim sweep at ~38% (one second elapsed) -->
-      <div class="specimen">
-        <div class="specimen-label"><span class="specimen-num">C2</span> "2" · dim sweep at ~38%</div>
-        <div class="watch">
-          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
-            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
-          </div>
-          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
-          <div class="w-body" style="padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:0;">
-            <div style="position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;margin-top:6px;">
-              <svg width="128" height="128" style="position:absolute;inset:0;">
-                <circle cx="64" cy="64" r="60" fill="none" stroke="#E55A22" stroke-width="12"/>
-              </svg>
-              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(90deg) scaleX(-1);">
-                <circle cx="64" cy="64" r="60" fill="none" stroke="#9A3815" stroke-width="12" stroke-linecap="butt" stroke-dasharray="377" stroke-dashoffset="234"/>
-              </svg>
-              <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:64px;letter-spacing:-2.2px;font-weight:200;line-height:1;font-variant-numeric:tabular-nums;position:relative;">2</div>
-            </div>
-          </div>
-        </div>
-        <span class="verdict neutral">Frame 3</span>
-        <p class="specimen-caption">
-          One second in. Dim ochre has eaten ~38% of the ring, sweeping symmetrically up both
-          sides from 180°. Soft <code>.click</code> haptic on each second-tick. Numeral changes
-          from 3 to 2 to 1 — the ring keeps sweeping smoothly through the transitions.
-        </p>
-      </div>
-
-      <!-- C3: "1" — dim sweep at ~72%, just a bright crescent at the top -->
-      <div class="specimen">
-        <div class="specimen-label"><span class="specimen-num">C3</span> "1" · bright crescent at top</div>
-        <div class="watch">
-          <div style="position:absolute;top:18px;left:22px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:rgba(247,241,232,0.7);z-index:2;">
-            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
-          </div>
-          <div class="w-time" style="color:rgba(247,241,232,0.7);top:20px;right:22px;">9:41</div>
-          <div class="w-body" style="padding-top:24px;display:flex;flex-direction:column;align-items:center;gap:0;">
-            <div style="position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;margin-top:6px;">
-              <svg width="128" height="128" style="position:absolute;inset:0;">
-                <circle cx="64" cy="64" r="60" fill="none" stroke="#E55A22" stroke-width="12"/>
-              </svg>
-              <svg width="128" height="128" style="position:absolute;inset:0;transform:rotate(90deg) scaleX(-1);">
-                <circle cx="64" cy="64" r="60" fill="none" stroke="#9A3815" stroke-width="12" stroke-linecap="butt" stroke-dasharray="377" stroke-dashoffset="106"/>
-              </svg>
-              <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro',system-ui,sans-serif;color:#fff;font-size:64px;letter-spacing:-2.2px;font-weight:200;line-height:1;font-variant-numeric:tabular-nums;position:relative;">1</div>
-            </div>
-          </div>
-        </div>
-        <span class="verdict neutral">Frame 4</span>
-        <p class="specimen-caption">
-          Two seconds in. Only a bright ochre <strong>crescent at 12 o'clock</strong> remains — the
-          eye is naturally drawn upward as the bright shrinks toward the apex. When the crescent
-          closes at 0°, recording begins. No "Listening" beat needed; the ring closing is the "go."
+          The ring closes at 12 o'clock and recording begins &mdash; a slightly stronger <code>.success</code>
+          haptic is the "go." No "Listening" beat; the ring closing <em>is</em> the signal. Tap anywhere to cancel.
         </p>
       </div>
 
     </div>
 
     <div class="notes">
-      <h4>Countdown rules</h4>
+      <h4>Breath rules</h4>
       <ul>
-        <li><strong>Two-phase ring, Workout-style.</strong> Phase 1 (~600ms): bright ochre ring <em>draws in clockwise from 180°</em> while "Ready" is centered. Phase 2 (~3000ms): dim ochre <em>overwrites</em> the bright ring counter-clockwise from 180°, eating it down to a crescent at 12 o'clock. Continuous sweep, not steps. When the crescent closes at 0°, recording begins.</li>
+        <li><strong>Single phase, ~1 second.</strong> One bright ochre ring (<code>var(--accent)</code>, 10pt stroke on watch / 14pt on phone) fills clockwise from 12 o'clock over ~800ms, then holds ~200ms. When it reaches the top, recording begins. No second phase, no number countdown.</li>
+        <li><strong>Caption inside the ring.</strong> Source Serif 4 italic, weight 400, 15pt on watch / 22pt on phone. Centered, single line. Rotates across recordings (13-entry array, locked in <code>Watch · spec.md</code>). <strong>Advance the index on commit, not cancel</strong> — otherwise canceling burns through captions the user never read.</li>
         <li><strong>No "Listening" beat.</strong> The ring closing at the top <em>is</em> the "go." Don't double the signal.</li>
-        <li><strong>Numerals are passengers.</strong> 3 → 2 → 1 swap in time with the second-ticks, but the ring's continuous sweep is the primary signal. The numbers help the user count down; the ring is what the eye actually tracks.</li>
-        <li><strong>Fresh-start only.</strong> Tapping the mic complication / app icon / Siri opens directly into the countdown. The on-a-roll <em>Next</em> button bypasses it &mdash; the mic-never-pauses contract holds.</li>
-        <li><strong>Soft haptic per second.</strong> <code>.click</code> on watch, <code>UISelectionFeedbackGenerator.selectionChanged</code> on phone. Three pulses total. <em>Not</em> a buzz, <em>not</em> ticking audio.</li>
+        <li><strong>Fresh-start only.</strong> Tapping the mic complication / app icon / Siri opens into the breath. The on-a-roll <em>Next</em> button bypasses it &mdash; the mic-never-pauses contract holds.</li>
+        <li><strong>Haptics.</strong> One soft <code>.click</code> at the start of the breath, one slightly stronger <code>.success</code> at the moment recording begins. No tick-tick-tick.</li>
         <li><strong>Tap anywhere to cancel.</strong> No ✕ press required &mdash; the whole screen is the cancel target. Returns to the previous surface (Capture page on watch, Today on phone, parent Memory on append).</li>
-        <li><strong>Color palette.</strong> Bright = <code>#E55A22</code> (a brightened ochre, more saturated than the brand <code>--accent</code> for countdown readability on cream). Dim = <code>#9A3815</code>. Clear contrast between the two so the sweep edge reads.</li>
-        <li><strong>Settings opt-out.</strong> Power users can disable in <em>Settings → Capture → Skip countdown</em>. Default on. Reduced Motion users see the numbers without ring animation but countdown still runs.</li>
+        <li><strong>Settings opt-out.</strong> Power users can disable in <em>Settings → Capture → Skip the breath</em>. Default on. Reduced Motion users see the caption + filled ring without the fill animation; recording still starts after the same ~1-second total, preserving the "a beat before mic-hot" rhythm.</li>
       </ul>
     </div>
 
@@ -1043,7 +987,7 @@
     <p class="section-sub">
       Reachable from the app home, or from the failure-state CTA. <strong>Lists only locally-stored,
       unsynced recordings</strong> &mdash; once synced, they leave this list (they live on the phone
-      from then on). Swipe left on a row to delete.
+      from then on). Tap a row to open its detail, where Delete lives at the foot.
     </p>
 
     <div class="row">
@@ -1095,7 +1039,7 @@
         </div>
         <p class="specimen-caption">
           Each row: <strong>capture time, status, duration</strong>. No transcript on watch.
-          Tap a row to play back &amp; confirm; swipe-left to delete.
+          Tap a row to open its detail &mdash; playback and Delete live there.
         </p>
       </div>
 
@@ -1118,38 +1062,29 @@
         </p>
       </div>
 
-      <!-- Swipe to delete -->
+      <!-- Clip detail · play + delete at foot -->
       <div class="specimen">
-        <div class="specimen-label"><span class="specimen-num">D</span> Swipe · delete affordance</div>
+        <div class="specimen-label"><span class="specimen-num">D</span> Clip detail · play + delete</div>
         <div class="watch">
           <div class="w-time">9:41</div>
-          <div class="w-mark">PENDING · 2</div>
-          <div class="w-body" style="padding-top:8px;">
-            <div class="w-row-swipe">
-              <div class="row-inner">
-                <span class="pip"></span>
-                <div class="meta">
-                  <div class="t" style="color:#fff;">9:32 AM · today</div>
-                  <div class="s" style="color:rgba(255,255,255,0.55);">Saved on watch</div>
-                </div>
-                <span class="dur" style="color:rgba(255,255,255,0.7);">0:14</span>
-              </div>
-              <div class="delete">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6 17.5 20A2 2 0 0 1 15.5 22h-7A2 2 0 0 1 6.5 20L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-              </div>
+          <div class="w-body" style="display:flex;flex-direction:column;gap:9px;padding-top:6px;">
+            <div style="text-align:center;">
+              <div style="color:#fff;font-size:13px;font-weight:600;">9:32 AM · today</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.55);margin-top:2px;">Saved on watch · 0:14</div>
             </div>
-            <div class="w-row">
-              <span class="pip"></span>
-              <div class="meta">
-                <div class="t">8:18 AM · today</div>
-              </div>
-              <span class="dur">0:42</span>
+            <div style="display:flex;justify-content:center;">
+              <button style="width:40px;height:40px;border-radius:999px;background:var(--accent);display:flex;align-items:center;justify-content:center;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+              </button>
             </div>
+            <div style="flex:1;min-height:6px;"></div>
+            <button class="w-btn danger" style="font-size:12px;padding:9px;">Delete</button>
           </div>
         </div>
+        <span class="verdict recommend">One delete path</span>
         <p class="specimen-caption">
-          Drag-left to reveal delete. Standard watchOS swipe. Required tap on red icon to confirm
-          (no auto-delete).
+          Tap a row to open its detail &mdash; <strong>Play plus a full-width Delete at the foot</strong>,
+          the same delete pattern as the phone. No swipe, no row gesture.
         </p>
       </div>
 
@@ -1188,15 +1123,12 @@
               <button style="width:34px;height:34px;border-radius:999px;background:rgba(255,255,255,0.10);display:flex;align-items:center;justify-content:center;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
               </button>
-              <button style="width:34px;height:34px;border-radius:999px;background:rgba(232,90,70,0.16);display:flex;align-items:center;justify-content:center;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF8A75" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6 17.5 20A2 2 0 0 1 15.5 22h-7A2 2 0 0 1 6.5 20L5 6"/></svg>
-              </button>
             </div>
           </div>
         </div>
         <p class="specimen-caption">
-          Quick playback peek &mdash; pause / delete. Audio routes to AirPods if connected, watch
-          speaker otherwise.
+          Playback in progress &mdash; tap to pause. Delete isn't here; it's the full-width
+          button at the foot of the clip detail (D).
         </p>
       </div>
 

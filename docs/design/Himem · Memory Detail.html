@@ -34,6 +34,12 @@ function App() {
       title="Memory Detail · two changes"
       subtitle="Date + location on every clip header. Mentions promoted out of the bottom expander, sitting between clips and the Organized · review card."
     >
+      <DCSection id="fresh" title="Just created — before Organize" subtitle="The memory the moment it's made from a session. It is NEVER empty: it already CONTAINS its included clip(s) as the body (transcript + Play). Empty Topics/Mentions + the blue 'Organize this memory' card come next. Fixes the July 12 build bug where a freshly created memory rendered with no clip content at all.">
+        <DCArtboard id="md-fresh" label="Fresh memory · has its clip body immediately · empty Topics/Mentions · Organize card" width={340} height={900}>
+          <ScrMemoryFresh />
+        </DCArtboard>
+      </DCSection>
+
       <DCSection id="page" title="Full page" subtitle="Top-to-bottom view of the updated Memory detail.">
         <DCArtboard id="md-full" label="Memory detail · with changes" width={340} height={1460}>
           <ScrMemoryDetailFull />

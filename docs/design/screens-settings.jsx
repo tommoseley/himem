@@ -379,7 +379,7 @@ function ScrCapturedClipsEmpty() {
       </div>
       <div style={{ padding: '14px 22px' }}>
         <div style={{ fontFamily: PX.serif, fontSize: 27, fontWeight: 400, color: PX.ink, letterSpacing: -0.5, lineHeight: 1.15 }}>Nothing new yet</div>
-        <div style={{ fontSize: 14, color: PX.ink3, marginTop: 8, lineHeight: 1.5 }}>Thoughts you catch on your Watch or with the + button land here.</div>
+        <div style={{ fontSize: 14, color: PX.ink3, marginTop: 8, lineHeight: 1.5 }}>Thoughts you catch — with the + button, on your Watch, or with Siri — land here.</div>
       </div>
     </div>
   );

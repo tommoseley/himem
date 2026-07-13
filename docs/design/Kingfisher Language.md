@@ -48,7 +48,7 @@ The same raw material (a captured clip) is addressed by a **different question a
 | Context | The user's question | What the UI says |
 |---|---|---|
 | **Loose clip** (workbench) | *Where does this belong?* | **"Where does this belong?"** — sheet title. Options: *New memory · Suggested · Recent · Projects.* Placement, not operation. |
-| **Idle-gap session** (already grouped) | *What should this become?* | **"Create one memory"** / *Review clips · Add to existing · Not yet.* Now it's shaping, not placing — the recognition already happened. |
+| **Idle-gap session** (already grouped) | *What should this become?* | **"Start a Memory"** / *Review clips · Add to existing · Not yet.* Now it's shaping, not placing — the recognition already happened. |
 | **AI cluster** (Sort suggestion) | *Is this useful?* | Observation + **Review**. *"These seem to belong together — Pennsylvania."* The AI states; the human concludes. Never "Accept," never "Create." |
 | **The workbench itself** | *What needs my attention?* | **"Review"** the day's raw material. Not "Process," not "Organize," not "Clear." A bench of materials, not a queue to zero. |
 | **Memory editor** | *How do I improve this?* | Concrete verbs — **Add clips, Remove clips, Rename, Reflect, Share.** Abstraction is gone; the user is working on a specific thing they can see. |

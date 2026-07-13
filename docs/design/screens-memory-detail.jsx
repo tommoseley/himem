@@ -554,7 +554,7 @@ function MDClipCompactRow({ time, lead, transcript, media, duration, open, last,
         // flow, pushes siblings, never overlays. No "Move to…" in the compact
         // index (that lives on the full card). FAB hidden at the screen level.
         <div style={{ padding: '2px 4px 14px', background: PX.card }}>
-          <ClipEditor field="transcript" value={transcript} media={media || 'audio'} duration={duration || '0:42'} showLabel={false} showMove={false} />
+          <ClipEditor field="transcript" value={transcript} media={media || 'audio'} duration={duration || '0:42'} showLabel={false} showMove={false} scope="memory" />
         </div>
       )}
     </div>
@@ -754,7 +754,7 @@ function MDClipV2({ day, date, year, time, location, transcript, editing }) {
         // EDIT STATE — the ONE canonical ClipEditor (field="transcript"). The
         // full card includes "Move to…" (relocate the clip); the card header
         // above already carries the date, so no label inside the editor.
-        <ClipEditor field="transcript" value={transcript} media="audio" duration="0:48" showLabel={false} showMove />
+        <ClipEditor field="transcript" value={transcript} media="audio" duration="0:48" showLabel={false} showMove scope="memory" />
       ) : (
         <MDClipContent transcript={transcript} media="audio" duration="0:48"/>
       )}
@@ -833,6 +833,69 @@ function ScrMemoryUnified({ editingClip = false }) {
 
 function ScrMemoryUnifiedRest()    { return <ScrMemoryUnified/>; }
 function ScrMemoryUnifiedEditing() { return <ScrMemoryUnified editingClip/>; }
+
+// The "Organize this memory" card — the AI CTA on a not-yet-organized memory.
+// Blue (invokes AI), on-device. The whole card is the tap target.
+function MDOrganizePrompt() {
+  return (
+    <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 16, padding: '15px 16px', display: 'flex', gap: 13, alignItems: 'flex-start' }}>
+      <span style={{ width: 40, height: 40, borderRadius: 11, background: PX.ai, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/></svg>
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.2 }}>Organize this memory</div>
+        <div style={{ fontSize: 13, color: PX.ink3, lineHeight: 1.45, marginTop: 3 }}>Suggests a title, summary, and topics — drafted right on your device.</div>
+        <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 9, fontWeight: 600 }}>On-device · private · free</div>
+      </div>
+    </div>
+  );
+}
+
+// A memory the MOMENT it's created from a session — before any Organize pass.
+// The whole point: a new memory is NEVER empty. It contains its included
+// clip(s) as the body (transcript + Play) right away, with empty Topics/Mentions
+// and the Organize card. Fixes CC's July 12 bug (screenshot 7 rendered the
+// memory with NO clip body). Memory = clips + derived; the clips come first.
+function ScrMemoryFresh() {
+  return (
+    <div style={{ width: 340, minHeight: 900, background: PX.paper, position: 'relative', fontFamily: PX.sans, color: PX.ink, overflow: 'hidden' }}>
+      <div style={{ padding: '14px 22px 4px', display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600 }}>
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>9:41</span>
+        <span style={{ fontSize: 11 }}>●●●</span>
+      </div>
+
+      <MDNavV2 date="Today" editing={false}/>
+
+      <div style={{ padding: '0 18px 80px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <MDTitle>New</MDTitle>
+        <div style={{ fontSize: 12.5, color: PX.ink3, marginTop: -6, letterSpacing: -0.1 }}>Sun Jul 12 · 3:27 PM · 18 Columbus Cir, Bluffton</div>
+
+        <div>
+          <MDFieldLabel>Topics</MDFieldLabel>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            <MDAddChip/>
+          </div>
+        </div>
+
+        {/* THE FIX — the included clip IS the memory's content, present immediately */}
+        <MDClipV2 day="Sat" date="Jul 11" time="10:32 AM" location="18 Columbus Cir, Bluffton" transcript="Here picture of my new camera." />
+
+        <div>
+          <MDFieldLabel>Mentions</MDFieldLabel>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+            <MDAddChip/>
+          </div>
+        </div>
+
+        <MDOrganizePrompt/>
+
+        <MDDeleteButton verb="Delete" noun="memory"/>
+      </div>
+
+      <MDFAB/>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────
 // MENTION · managed-chip edit state (mentions only — topics keep their sheet)
@@ -1037,4 +1100,5 @@ Object.assign(window, {
   ScrClipMoveSheet, ScrClipEmptyAfterMove, MoveDestRow,
   MDNavV2, MDEditField, MDAddChip, MDClipV2,
   MDMentionChip, ScrMentionEditState,
+  MDOrganizePrompt, ScrMemoryFresh,
 });

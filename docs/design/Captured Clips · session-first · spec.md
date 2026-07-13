@@ -2,11 +2,11 @@
 
 Operational surface. May 2026. Locked for v1.
 
-> **v4, July 8 2026 — this surface is now the `Clips` tab's default view.** "Captured Clips" is no longer a standalone window reached from Settings; it's the **default (New) view of the first-class `Clips` page** (Clips · Memories · Projects). See `HiMem · the shaping model.md` and `HiMem · evidence and context.md`. Two consequences that override older prose below: (1) the **per-card "Make a Memory" pill is retired** — the workbench/Sort model (below) is the resting state, and the vocabulary is intent-language ("Where does this belong?" / "Create one memory" / "Keep these · N memories") per `Kingfisher Language.md` §Vocabulary; wherever the v2 prose below says "Make a Memory pill inside every card," read it as the retired model. (2) There is **no "Settings → Captured Clips" entry** — the page is a tab. The mechanics (idle-gap grouping, expand-in-place, auto-exclude, day headers, Sort, dedup, set-aside) all stand.
+> **v4, July 8 2026 — this surface is now the `Clips` tab's default view.** "Captured Clips" is no longer a standalone window reached from Settings; it's the **default (New) view of the first-class `Clips` page** (Clips · Memories · Projects). See `HiMem · the shaping model.md` and `HiMem · evidence and context.md`. Two consequences that override older prose below: (1) the **per-card "Make a Memory" pill is retired** — the workbench/Sort model (below) is the resting state, and the vocabulary is intent-language ("Where does this belong?" / "Start a Memory" / "Keep these · N memories") per `Kingfisher Language.md` §Vocabulary; wherever the v2 prose below says "Make a Memory pill inside every card," read it as the retired model. (2) There is **no "Settings → Captured Clips" entry** — the page is a tab. The mechanics (idle-gap grouping, expand-in-place, auto-exclude, day headers, Sort, dedup, set-aside) all stand.
 
 > **v2 of this spec, May 19 2026.** The earlier version described a session-detail screen with multi-select rings, a sliding bottom action bar, and "Bundle as memory" verbs. Building that produced screens we hated. This rewrite kills the drill-in screen, kills clip-level multi-select, and renames the action everywhere. If older code or design references contradict this doc, this doc wins.
 
-> **v3, July 4 2026 — the workbench model + Sort.** After several days of real dogfood use (20 clips across 3 days), the one-card-one-pill session list proved unusable: a wall of ochre, plus a road trip scattered across a dozen single-clip sessions with no way to combine them. This version reframes Captured Clips from a *queue* to a *workbench*, makes **Sort** (AI-proposed groupings) the bench's resting state, and **restores multi-select** as a relational "where does this belong" affordance — explicitly superseding v2's "no multi-select" rule (see *The workbench + Sort* below). v2's session-first mechanics (idle-gap grouping, expand-in-place, auto-exclude, Make-a-Memory verb) all still stand; v3 is a layer on top, not a replacement.
+> **v3, July 4 2026 — the workbench model + Sort.** After several days of real dogfood use (20 clips across 3 days), the one-card-one-pill session list proved unusable: a wall of ochre, plus a road trip scattered across a dozen single-clip sessions with no way to combine them. This version reframes Captured Clips from a *queue* to a *workbench*, makes **Sort** (AI-proposed groupings) the bench's resting state, and **restores multi-select** as a relational "where does this belong" affordance — explicitly superseding v2's "no multi-select" rule (see *The workbench + Sort* below). v2's session-first mechanics (idle-gap grouping, expand-in-place, auto-exclude) all still stand; v3 is a layer on top, not a replacement. *(The "Make a Memory" verb v2 introduced is retired — see Vocabulary; the mechanic stands, the word doesn't.)*
 
 ## Why this exists
 
@@ -18,7 +18,7 @@ This is also where the **operational vs reflective** principle gets cashed: Memo
 
 ## What it is, in one line
 
-Captured Clips shows ad-hoc clips grouped into sessions. Each session is one card with a single primary verb: **Make a Memory**. One tap and the session becomes a Memory — or, opt-in on the bundle sheet, gets appended to an existing one. Clip-level triage lives inside the card, accessed by tapping the body — never on a separate screen.
+Captured Clips shows ad-hoc clips grouped into sessions. Each session is one card with a single primary verb: **Start a Memory**. One tap and the session becomes a Memory — or, opt-in on the bundle sheet, gets appended to an existing one. Clip-level triage lives inside the card, accessed by tapping the body — never on a separate screen.
 
 ## Model
 
@@ -41,7 +41,7 @@ Captured Clips shows ad-hoc clips grouped into sessions. Each session is one car
 - **`rollGroupId` always overrides.** An On-a-roll roll is one session regardless of gaps — the user already declared it as continuous.
 - **Still deterministic, still no AI.** The threshold is a clock, not a classifier. This replaces “by time + location” with a named, testable boundary; location stays only as a tiebreaker when two rolls overlap in time.
 - **Retroactive on sync.** Grouping runs on the phone after clips arrive, so late-syncing watch clips fold into the correct session by their capture timestamps, not their arrival order.
-- **Side benefit:** fewer cards means fewer full-width ochre *Make a Memory* pills stacked down the list — directly easing the “wall of ochre” the per-card pill produces on a busy day.
+- **Side benefit:** fewer cards means fewer full-width ochre *Start a Memory* pills stacked down the list — directly easing the “wall of ochre” the per-card pill produces on a busy day.
 
 ### The explicit affordance — “hold a block open” (candidate, not v1)
 
@@ -55,7 +55,7 @@ For moments the user *knows* are one sitting but that span longer-than-threshold
 
 ## The workbench + Sort (locked July 4 2026)
 
-**Origin (dogfood, July 4):** 20 clips accumulated across three days. Processing them one card at a time — twenty identical *Make a Memory* cycles — was emotionally exhausting, and a road trip (Nazareth, Martin Guitar, Milford) was scattered across a dozen non-adjacent single-clip sessions with no way to combine them. The fix is not a new object; it's a reframe of what Captured Clips *is*, plus an AI proposal layer.
+**Origin (dogfood, July 4):** 20 clips accumulated across three days. Processing them one card at a time — twenty identical *Start a Memory* cycles — was emotionally exhausting, and a road trip (Nazareth, Martin Guitar, Milford) was scattered across a dozen non-adjacent single-clip sessions with no way to combine them. The fix is not a new object; it's a reframe of what Captured Clips *is*, plus an AI proposal layer.
 
 ### Captured Clips is a workbench, not a queue
 
@@ -144,12 +144,11 @@ HiMem has two capture modes. **Structured** = user intentionally creates a Memor
   - **Meta row.** "3:36 PM · 4 clips · 0:12" in SF Pro 12 ink2. (Date comes from the day header above; a floated cluster card prefixes the date — see day-grouping above.)
   - **Transcript preview.** A single block of quoted speech, joined with "… " between clips, capped at ~3 lines and ellipsized. Not a list of separate quoted lines.
   - **Auto-exclude note** (when relevant). "1 clip auto-excluded · no speech." Muted ink2. Not a chip, not amber, not a warning — it's a note that we already handled it. Tappable to expand.
-  - **Primary action.** `Make a Memory →` as a full-width pill *inside the card*, ochre tinted (cream text on ochre at 100%, OR ochre text on 8% ochre tint — pick the contrast level by hierarchy; on light cards we want the heavy variant). One verb. One tap. This is the action of the card.
+  - **Primary action.** `Start a Memory →` as a full-width pill *inside the card*, ochre tinted (cream text on ochre at 100%, OR ochre text on 8% ochre tint — pick the contrast level by hierarchy; on light cards we want the heavy variant). One verb. One tap. This is the action of the card.
 - **No play button on the card.** Preview is not a primary list-level affordance — keep the card visually quiet. Playback lives inside the expanded view.
-- **Tap the card body** (anywhere except the Make a Memory pill) → **expand in place.** No screen transition. The card grows downward to reveal per-clip rows. Other cards stay where they are.
-- **Tap Make a Memory** → bundle confirm sheet directly. The 80% case.
-- **Swipe-left on the card** → red `Discard` action slides in. Tapping it expands the action to `Discard N clips?` — a second tap commits. Two-tap because hard delete. No undo toast.
-- **Long-press the card** → contextual menu: "Make a Memory," "Discard session," "Cancel." Power-user shortcut; not the primary path.
+- **Tap the card body** (anywhere except the Start a Memory pill) → **expand in place.** No screen transition. The card grows downward to reveal per-clip rows. Other cards stay where they are.
+- **Tap Start a Memory** → bundle confirm sheet directly. The 80% case.
+- **No swipe-to-delete, no long-press-to-delete** (June 12 2026 deletion lock). Deletion is not a gesture on this surface. To delete a session, expand the card and use the full-width **Delete session** button at its foot (see *Deleting sessions*). Expanding the card *is* the deliberation the gesture used to skip.
 
 ### Card expand (in place — replaces the session-detail screen)
 
@@ -159,10 +158,10 @@ HiMem has two capture modes. **Structured** = user intentionally creates a Memor
   - Center: relative offset + duration ("0:00 · 0:03", "+3s · 0:02"), and transcript on the next line.
   - Right: small play glyph (12pt outline, ink2). Tap = inline play; does not navigate.
 - **Excluded clip styling.** Empty ring, transcript text at 50% opacity. For auto-excluded clips: italic "No speech detected · likely accidental" in ink2 instead of transcript.
-- **Swipe-left on a clip** → red `Delete` action slides in. Hard delete.
-- **No multi-select.** No "N selected." No "Bundle N as memory" action that changes copy with selection count. The user toggles inclusion on individual clips as needed; **the card's Make a Memory pill always says the same thing** and always bundles the currently-included clips. If everything is excluded, the pill disables.
-- **`Discard session` link** sits inline in the bottom-left of the expanded card's action row — text only, ink2 SF Pro 13, demoted. Paired across from the `Make a Memory` pill. This is the discoverable path for users who don't know the swipe gesture. Tap once → the link swaps to a red `Discard N clips?` confirm; second tap commits. Same two-tap pattern as the swipe action.
-- **No bottom action bar.** The primary action is still the card's own pill, which stays anchored to the bottom of the expanded card content.
+- **Deleting a single clip is not a swipe.** Tap the clip row → the clip opens as its own object (Clip Detail); its full-width **Delete** button lives at the foot of that detail, per the deletion lock. On the bench a clip is more often *excluded* (the inclusion ring) than deleted — exclusion keeps the clip, it just leaves it out of this memory.
+- **No multi-select.** No "N selected." No "Bundle N as memory" action that changes copy with selection count. The user toggles inclusion on individual clips as needed; **the card's Start a Memory pill always says the same thing** and always bundles the currently-included clips. If everything is excluded, the pill disables.
+- **`Delete session` button** sits at the **foot of the expanded card**, below all clip rows — full-width, danger red, hairline-bordered, ≥50px (the standard deletion affordance, per CLAUDE.md). It moves the session to **Recently Deleted** (30 days). **No confirm dialog** — expanding the card and scrolling past every clip to reach it *is* the deliberation. This is the one and only delete path; there is no swipe and no long-press alternative.
+- **No bottom action bar.** The primary action is still the card's own `Start a Memory` pill, anchored to the bottom of the expanded card content; the `Delete session` button sits below it as the demoted destructive action — never a peer beside the pill.
 - **Tap card chrome** (the meta row) → collapse. Or tap another card → that one expands and this one collapses.
 
 ### Bundle confirm sheet
@@ -195,24 +194,25 @@ The bundle sheet is **where voice softens** from operational to reflective. Seri
 
 ## Vocabulary (locked · reconciled to `Kingfisher Language.md` July 7 2026)
 
-> **"Make a Memory" is retired along with the one-card-one-pill session list it lived on.** The workbench model speaks the intent language (`Kingfisher Language.md`): a loose clip asks **"Where does this belong?"** (placement), a recognized session's action is **"Create one memory"** (shaping — "Create" is the allowed conscious-creation exception), and a Sort cluster batch commits with **"Keep these · N memories."** "Make" is a banned software verb. The old rejected-variants below still hold — *and now "Make a Memory" joins them.*
+> **"Make a Memory" is retired along with the one-card-one-pill session list it lived on.** The workbench model speaks the intent language (`Kingfisher Language.md`): a loose clip asks **"Where does this belong?"** (placement), a recognized session's action is **"Start a Memory"** (shaping — "Create" is the allowed conscious-creation exception), and a Sort cluster batch commits with **"Keep these · N memories."** "Make" is a banned software verb. The old rejected-variants below still hold — *and now "Make a Memory" joins them.*
 
 | Use | Don't use |
 |---|---|
 | **Where does this belong?** (loose-clip placement — sheet title + the relational action) | Make a Memory, Make or Add to Memory, Assign, File |
-| **Create one memory** (turning a recognized session into a memory) | Make a Memory, Make Memory, Bundle, Save as memory |
+| **Start a Memory** (turning a recognized session into a memory) | Make a Memory, Make Memory, Bundle, Save as memory |
 | **Keep these · N memories** (Sort batch commit) | Accept, Confirm, Make memories |
 | **Review** (an AI cluster's affordance — the AI observed, the human decides) | Accept, Approve, Create Memory |
-| **Captured Clips** (chrome name) | Inbox, Pending, Watch queue |
+| **Captured Clips** (this spec's title only) / **Clips** (the UI tab name, v4) | Inbox, Pending, Watch queue |
+| **Clips** (the user-facing surface name) | workbench, bench, holding surface — internal metaphors only (July 8 lock), never in UI copy |
 | **N new clips** (title copy when N > 0 — source-agnostic) | N from your Watch, Captured clips ready, Pending clips |
 | **Auto-excluded** (status word for accidentals) | Accidental, Likely accidental as a primary label, Invalid |
-| **Session** (internal noun — appears in long-press menu as "Delete session") | Capture session, Recording, Batch |
+| **Session** (internal noun — surfaces to the user only as the "Delete session" button) | Capture session, Recording, Batch |
 
 The words **Bundle** and **Make** are retired in user-facing copy. They survive in this spec as engineering shorthand only.
 
 ## Color (locked, restated)
 
-- **Ochre `#C64A1C`** is the only chromatic accent on this surface, used on the primary commit (*Create one memory* / *Keep these*) and nothing else at rest. Not on rings. Not on play glyphs. Not on borders.
+- **Ochre `#C64A1C`** is the only chromatic accent on this surface, used on the primary commit (*Start a Memory* / *Keep these*) and nothing else at rest. Not on rings. Not on play glyphs. Not on borders.
 - **Amber `#B87322`** does **not** appear on this surface in normal state. "Auto-excluded · no speech" is muted ink2, not amber. Amber is reserved for things the user must act on; auto-exclusion is something we *already handled.*
 - **AI blue `#1E5C8E`** does not appear on the list. It enters when the bundle sheet opens (suggested title).
 - **Confirmed green** is for "Memory created" toast, not for inclusion toggles.
@@ -221,35 +221,36 @@ The words **Bundle** and **Make** are retired in user-facing copy. They survive 
 
 | State | What it looks like |
 |---|---|
-| **Empty inbox** | "Nothing new yet" title, sub-line "Thoughts you catch on your Watch or the + button land here." No action button. Reached from Settings → Captured Clips even when count = 0. No eyebrow. |
+| **Empty inbox** | "Nothing new" title, sub-line **source-agnostic** (locked July 12 2026): "Clips you capture — with the + button, on your Watch, or with Siri — land here." NEVER "from your Watch" / "Audio you record on your Apple Watch lands here" — clips arrive from multiple sources; source is per-clip metadata, never the headline. No action button. No eyebrow. |
 | **Inbox with sessions** | Default session list. |
-| **All-excluded session** | Card shows "All clips auto-excluded · no speech" instead of transcript preview. Make a Memory pill is disabled (60% opacity, non-tappable). The `Discard session` link appears on the *collapsed* card here — the only state where it does — because the primary action is dead and the user needs a visible exit. Same two-tap confirm. |
+| **All-excluded session** | Card shows "All clips auto-excluded · no speech" instead of transcript preview. Start a Memory pill is disabled (60% opacity, non-tappable). Because the primary action is dead, tapping the card still expands it so the user can reach the foot-of-card `Delete session` button — the visible exit. |
 | **Single-clip session** | Same card shape. Meta row reads "3:36 PM · 1 clip · 0:01". Transcript preview is just that one quote. No regression to a different layout for N=1. |
 | **Sync in progress** | Card greys to 60% opacity while clips are still uploading. Sub-line "Syncing · N of M". Expand allowed; only already-synced clips show inside. |
 | **Stale (no recent capture)** | List shows in reverse-chrono regardless of age. No "old vs new" partitioning in MVP. |
 
-## Discarding sessions
+## Deleting sessions
 
-Three paths, ordered by discoverability:
+> **Retired July 11 2026 — swipe, the demoted text link, and the long-press menu.** They violated the June 12 2026 deletion lock (CLAUDE.md: *"Swipe-to-delete is retired everywhere… the user opens the item and scrolls past everything to reach Delete, and that scroll is the deliberation, so there is no confirm dialog"*). The word **Discard** is retired too (`Kingfisher Language.md`) — it's **Delete** everywhere. What follows is the single, current path; it matches the shipping mock.
 
-1. **Swipe-left on the card** → red `Discard` slides in. Tap expands to `Discard N clips?`; second tap commits. Native iOS pattern; mirrors per-clip swipe-to-delete inside the expanded card.
-2. **`Discard session` link** in the expanded card's action row, bottom-left, demoted text-only across from the ochre pill. Visible exit for users who don't know the gesture. Two-tap confirm.
-3. **Long-press the card** → contextual menu with `Discard session`. Power-user shortcut.
+**One path: the full-width `Delete session` button at the foot of the expanded card.**
 
-The link **does not appear on collapsed cards in normal state** — swipe handles that case, and we don't want every card carrying a visible destructive affordance at rest. The single exception is the all-excluded edge state (see States), where the primary action is dead and the user needs an exit without expanding.
+- Danger red, hairline-bordered, ≥50px, **below every clip row** — the last thing in the card, never a peer beside the `Start a Memory` pill.
+- **Deletes to Recently Deleted (30 days).** Recoverable; that window is the safety net.
+- **No confirm dialog.** Expanding the card and scrolling past all its clips to reach the button *is* the deliberation — the same principle as the phone's open-and-scroll-to-Delete model. A confirm sheet on top would be redundant ceremony.
+- **Reachable in the all-excluded edge state** by tapping the (dead-primary) card to expand it — the button is the visible exit.
 
-Why not other shapes:
+Why not the retired shapes:
 
-- **Not a corner ✕ on every card.** Adds destructive chrome to every rest state. Same anti-pattern as the original clip-cards.
-- **Not a trash icon beside Make a Memory.** Peer destructive action next to primary verb. The exact rule we broke in v1.
-- **Not Edit mode + multi-select for discard.** The surface is one-thing-at-a-time. If a user wants to clear everything, they discard sessions one at a time — not a common enough flow to add a mode for.
-- **No undo toast.** Two-tap confirm is the safety net. A toast on a triage surface adds chrome the user has to dismiss; the confirm tap is more honest.
+- **Not swipe-left.** Retired everywhere June 12; it hides destruction behind an undiscoverable gesture and skips the deliberation the open-and-scroll gives.
+- **Not a corner ✕ on every card.** Adds destructive chrome to every rest state.
+- **Not a trash icon beside `Start a Memory`.** Peer destructive action next to the primary verb — the exact rule v1 broke.
+- **Not a demoted text link.** A destructive action gets the standard full-width Delete button, not a quiet link that reads like navigation.
 
 ## What this is *not*
 
 - **Not a per-clip list at the top level.** Clip-level UI is the *contents of an expanded card*, never its own screen.
 - **Not a drill-in flow.** There is no second screen between the inbox and the bundle sheet. If you find yourself drawing one, stop.
-- **Not a multi-select surface.** No "N selected," no action bar that changes copy with selection count, no select-all. The user toggles individual clip inclusion; the Make-a-Memory action is always present and always means "bundle the currently-included clips."
+- **Not a multi-select surface.** No "N selected," no action bar that changes copy with selection count, no select-all. The user toggles individual clip inclusion; the Start a Memory action is always present and always means "bundle the currently-included clips."
 - **Not an Edit mode.** No Edit button. Selection chrome (the inclusion ring) is the row's own affordance, always live, never modal.
 - **Not a multi-screen drill-in inside the inbox.** No "Session detail" page. No "Clips" page. Card expand replaces both.
 - **Not a reflective surface.** No Source Serif on the inbox title. No cream-paper-with-poetic-margins. Operational throughout, until the bundle sheet, where voice softens.
@@ -260,16 +261,16 @@ Why not other shapes:
 
 These all came back in successive Code passes. Calling them out by name so they stop:
 
-1. **"Bundle" verb survived.** Every list iteration shipped with "Bundle as memory →" somewhere. The verb is mechanical, breaks at N=1, and doesn't match the rest of the app vocabulary. **Use "Make a Memory" everywhere.**
+1. **"Bundle" verb survived.** Every list iteration shipped with "Bundle as memory →" somewhere. The verb is mechanical, breaks at N=1, and doesn't match the rest of the app vocabulary. **Use "Start a Memory" for a recognized session; "Where does this belong?" for a loose clip** (per Vocabulary). "Make a Memory" is *also* retired — don't reintroduce it.
 2. **Selection = check, not ring.** Filled ochre checkmark circles for selected clips. Crucible rule (CLAUDE.md): selection is a ring, completion is a check. Inclusion in the bundle is a *selection*; the clip isn't "done." Use rings.
-3. **Instructional helper copy.** "Tap to select. Swipe to delete." Banned. If you need to teach the gesture, the affordance is wrong. Make the toggle visible and obvious; let swipe-to-delete teach itself.
+3. **Instructional helper copy.** "Tap to select. Swipe to delete." Banned. If you need to teach the gesture, the affordance is wrong. Make the inclusion toggle visible and obvious; deletion is the full-width `Delete session` button, which teaches itself by being plainly labelled.
 4. **Centered eyebrows over left-aligned titles.** Visually disjointed and adds chrome the title already carries. Drop them.
 5. **Two dismiss controls.** Back `<` AND `✕` in the same chrome strip. One. Back if you came from somewhere; ✕ if you're in a modal. Captured Clips isn't a modal — back only.
-6. **Stripe-checkout-style full-width ochre pill floating at the bottom of an otherwise quiet screen.** The Make-a-Memory action belongs *inside the card*, not docked. A floating dock conflates the screen-level action with the per-session action and reads e-commerce, not reflective-tier.
+6. **Stripe-checkout-style full-width ochre pill floating at the bottom of an otherwise quiet screen.** The `Start a Memory` action belongs *inside the card*, not docked. A floating dock conflates the screen-level action with the per-session action and reads e-commerce, not reflective-tier.
 7. **Play button heavier than the primary action.** A filled triangle in a tinted circle out-weighs an ochre text link. If they're peers, both should be heavy or both should be quiet — but they're not peers. Play is secondary at most; on the list view, it's absent entirely.
 8. **Transcripts shown as stacked separate quoted lines.** ("One, two, three." / "One, two, three, four, five." each on its own line.) Reads like a status log. Use a single block of quoted speech with " … " joins. Reads like the thought it was.
 9. **Granular-management surface presented as the default.** Pre-checked checkboxes, "3 selected" indicator at the bottom — this puts the user in exception-handling mode on entry. Most users, most times, see a session and bundle it. Granular tools live behind a tap (card expand), not in front.
-10. **No visible way to discard.** Hiding discard behind long-press alone is undiscoverable. Discard now has three paths: swipe (native), inline link in expanded card (visible), long-press (shortcut). See Discarding sessions.
+10. **No visible way to delete.** Hiding deletion behind long-press alone was undiscoverable. Deletion now has **one** visible path: the full-width `Delete session` button at the foot of the expanded card. See *Deleting sessions*. (The old "three paths — swipe, link, long-press" answer is retired with the June 12 deletion lock.)
 
 ## Tier behavior
 
@@ -289,7 +290,7 @@ Deferred — none block shipping:
 - Manual session split ("this clip belongs to a different thought").
 - Search within the inbox itself (session list).
 - Bulk delete by criteria (e.g. "delete all auto-excluded from yesterday").
-- "Discard all" — considered, deprioritized. Discard-all addresses a worst case (a bad day where nothing was worth keeping); add-to-existing addresses the common case the v1 spec missed. Worth revisiting if user research shows users routinely have piles of sessions they want to nuke wholesale.
+- **"Delete all"** — considered, deprioritized. Delete-all addresses a worst case (a bad day where nothing was worth keeping); add-to-existing addresses the common case the v1 spec missed. Worth revisiting if user research shows users routinely have piles of sessions they want to clear wholesale.
 - A separate "Older" partition for clips > 48h unprocessed.
 - Per-clip retry-transcription affordance. (Re-sync the whole session if transcription fails; clip-level retry is post-MVP.)
 
@@ -299,7 +300,7 @@ Deferred — none block shipping:
 - **Auto-exclude detection** runs on phone after sync, not on watch. Heuristics: zero speech tokens in transcription, total amplitude below threshold, clip duration < 2s with no detected speech. Recoverable from the expanded card.
 - **Session card transcript preview** — a single SF Pro block in ink2 with straight quotes, capped at 3 lines, ~60 chars per joined fragment, ellipsized. **No serif italic for transcripts at this level.** The operational register holds until the bundle sheet.
 - **Card expand** is a self-contained accordion within the card. No portal, no sheet, no nav-stack push. State held in component, not in route. Expand state is single-cardinal: at most one card expanded at a time (tapping another card collapses the first).
-- **No bottom action bar.** The Make-a-Memory pill is anchored to the bottom *of the card*, not of the screen. Safe-area is the bottom of the scrollview, not a fixed dock.
+- **No bottom action bar.** The Start a Memory pill is anchored to the bottom *of the card*, not of the screen. Safe-area is the bottom of the scrollview, not a fixed dock.
 - **Reuse the existing bundle sheet** — the New-memory composer is already wired. Session-first list just changes how the user gets to it; the bundle flow downstream is identical.
 - **The "Done" button** dismisses the screen, returning the user to wherever they came from (Today or Settings). It does not snooze, dismiss notifications, or change clip routing. Clips stay in pending; banner stays on Today next launch. Same as today.
 
@@ -313,8 +314,8 @@ Deferred — none block shipping:
 - **Idle-gap threshold value.** Default 10 min (see Idle-gap sessioning). A real dinner has 10-min+ lulls between courses, so a strict automatic 10-min close would split one sitting in two — which is precisely the case the explicit *hold-a-block* affordance exists to catch. Open: is 10 min right for the automatic rule, or should it be longer (15–20) to better match real sittings, accepting that longer gaps risk merging genuinely separate moments? Needs dogfood data on real inter-clip gaps before locking the number. The *rule* is locked; the *constant* is not.
 - **Day-group headers (resolved July 4 2026).** Earlier this was punted ("no day headers, reverse-chrono only, revisit if pending-clip counts get large"). Dogfood made it large — 20 sessions across 3 days — and time-only cards became ambiguous. **Resolved: day-group headers** ("Today / Yesterday / Jun 30"), matching the Memories-list pattern; cards under a header stay time-only, floated cluster cards carry the date in meta. See *The interaction → Session list*.
 - **What's the "share session" affordance?** None in MVP. Sessions don't ship as their own thing; Memories do.
-- **Disabled-state copy on Make a Memory.** When all clips are excluded, what does the pill say — "Make a Memory" greyed, or "Nothing to bundle"? Lean toward staying greyed with the normal label, since "Nothing to bundle" uses the retired verb and is more text than the disabled state needs.
-- **Discard confirm copy.** `Discard 4 clips?` reads cleanly for N>1 but `Discard 1 clip?` is slightly awkward. Acceptable; the count grounds the action. Alternative `Discard this session?` drops the count but loses the "this is permanent" weight that the number carries. Sticking with the count for now.
+- **Disabled-state copy on the primary pill.** When all clips are excluded, does the pill say "Start a Memory" greyed, or "Nothing to bundle"? Lean toward the greyed normal label — "Nothing to bundle" uses the retired *bundle* verb and is more text than the disabled state needs.
+- **~~Discard confirm copy.~~ (Resolved July 11 2026 — no confirm.)** With the full-width `Delete session` button + Recently-Deleted safety net, there is **no confirm dialog** and therefore no confirm copy to word. Opening the card and scrolling past its clips to reach the button is the deliberation.
 
 ## Files
 

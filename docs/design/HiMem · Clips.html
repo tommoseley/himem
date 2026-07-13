@@ -38,8 +38,14 @@ function App() {
         <DCArtboard id="clips-all" label="Clips · All · placed clips show Referenced in" width={340} height={735}>
           <ScrClipsAll />
         </DCArtboard>
-        <DCArtboard id="clip-detail" label="Voice clip as primary object · transcript · media · Referenced in" width={340} height={735}>
-          <ScrClipDetail />
+        <DCArtboard id="clip-detail" label="Clip · VIEW (attached) · transcript (tap to edit) · Play · Referenced in · one Delete clip at bottom" width={340} height={735}>
+          <ScrClipDetail attached={true} />
+        </DCArtboard>
+        <DCArtboard id="clip-detail-loose" label="Clip · VIEW (loose, in a session) · empty Referenced-in · Remove from session + Delete clip (one each)" width={340} height={735}>
+          <ScrClipDetail attached={false} inSession={true} />
+        </DCArtboard>
+        <DCArtboard id="clip-detail-editing" label="Clip · EDIT is INLINE (same screen, tap the transcript) — field + Play + Cancel/Done · Session→Clip = 2 screens, never 3 · no fate row, no FAB" width={340} height={735}>
+          <ScrClipDetail editing={true} />
         </DCArtboard>
         <DCArtboard id="media-clip-empty" label="Photo clip · Description empty → prompts (the clip's words, editable here)" width={340} height={735}>
           <ScrMediaClipDetail described={false} />
@@ -47,8 +53,23 @@ function App() {
         <DCArtboard id="media-clip-described" label="Photo clip · Description written → reads as the clip's body, like a transcript" width={340} height={735}>
           <ScrMediaClipDetail described={true} />
         </DCArtboard>
-        <DCArtboard id="clips-mixed-session" label="Mixed session · idle-gap is media-agnostic · voice + photo + voice in ONE card (🎙2 · 📷1)" width={340} height={880}>
+        <DCArtboard id="clips-sessions" label="Clips · New · CALM session list — bundles of evidence, first-clip preview, tap to review (no buttons in the list)" width={340} height={735}>
+          <ScrClipsSessions />
+        </DCArtboard>
+        <DCArtboard id="clips-mixed-session" label="Session OPENED · composition + clips + Start a Memory (primary) + Delete session (bottom) · idle-gap is media-agnostic (🎙2 · 📷1)" width={340} height={880}>
           <ScrMixedSession />
+        </DCArtboard>
+        <DCArtboard id="clips-after-create" label="AFTER Create · session consumed → back on the list · included clip LEFT New · excluded clip returned loose · 'Memory created · View' toast" width={340} height={735}>
+          <ScrClipsAfterCreate />
+        </DCArtboard>
+        <DCArtboard id="clips-empty" label="Clips · New · EMPTY · source-agnostic copy (not 'from your Watch') — clips arrive from +, Watch, Siri" width={340} height={735}>
+          <ScrClipsEmpty />
+        </DCArtboard>
+        <DCArtboard id="clips-session-excluded" label="Ring OFF = excluded (a choice, not failure) · hollow ring, legible text, no Retry · stays in card, won't join memory" width={340} height={820}>
+          <ScrSessionExcluded />
+        </DCArtboard>
+        <DCArtboard id="clips-single-session" label="Single-clip session · same atom, ring={false}, Play kept · Start a Memory + Delete session" width={340} height={735}>
+          <ScrSingleClipSession />
         </DCArtboard>
         <DCArtboard id="clips-status" label="Active Navigation Tap · tap the active Clips tab → status sheet (dot = presence, sheet = detail)" width={340} height={735}>
           <ScrClipsStatusSheet />

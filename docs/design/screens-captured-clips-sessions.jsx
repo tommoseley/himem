@@ -17,7 +17,7 @@
 //  • Auto-excluded clips are a muted note, never amber, never a chip.
 //  • Operational surface — SF Pro throughout, no Source Serif on the list.
 //  • Vocabulary: intent language per `Kingfisher Language.md` — a recognized
-//    session → "Create one memory"; a loose clip → "Where does this belong?".
+//    session → "Start a Memory"; a loose clip → "Where does this belong?".
 //    "Make a Memory" and "Bundle" are retired.
 
 // ─────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ function MakeAMemoryPill({ disabled = false }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
       fontSize: 14, fontWeight: 600, letterSpacing: -0.1,
     }}>
-      Create one memory
+      Start a Memory
       <svg width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2 1l5 6-5 6"/>
       </svg>
@@ -967,7 +967,7 @@ function ScrCCSelectMode() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           fontSize: 15.5, fontWeight: 600, letterSpacing: -0.15,
         }}>
-          Create one memory · 4 clips
+          Start a Memory · 4 clips
           <svg width="9" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 1l6 6-6 6"/></svg>
         </div>
       </div>

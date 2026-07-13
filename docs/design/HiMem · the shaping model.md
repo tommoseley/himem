@@ -92,7 +92,7 @@ Every flow either stays the same or collapses into the single placement primitiv
 ## What this reframes (already decided, now explained by one model)
 
 - **Projects are continuity, not containers** — a memory is *placed* first, and joining a project is a separate optional act of "building something over time." (Locked in `Projects · MVP spec.md` framing note.)
-- **A memory emerges, it isn't "made"** — hence "Make a Memory" retired for "Where does this belong?" / "Create one memory." (Locked in `Kingfisher Language.md`.)
+- **A memory emerges, it isn't "made"** — hence "Make a Memory" retired for "Where does this belong?" / "Start a Memory." (Locked in `Kingfisher Language.md`.)
 - **The holding surface is a bench, not a queue** — no guilt, no "clear it," badge-as-materials. (Drives the notification + badge decisions.)
 - **Capture defers all structure** — the model puts *every* placement decision downstream of capture, which is the perishability principle expressed as an architecture.
 
@@ -105,7 +105,7 @@ The naming problem **dissolved** rather than got answered. We were hunting for a
 **The holding surface is the default view of a permanent, first-class `Clips` page** — one of the three primary objects (Clips · Memories · Projects = Evidence · Context · Intent). "Workbench" survives only as an **internal metaphor for a state**, never user chrome. A clip isn't "on the Workbench"; it's simply *not yet connected*, shown in the default view of Clips. No new noun to teach.
 
 - **`Clips`** is the UI word; **Evidence** is the architecture word (same UI/architecture split as Memories/Narrative). "Captured Clips" is retired — it named an *event*; the page is about what *exists*.
-- The default view shows AI suggestions + everything not-yet-connected (no "why" exposed); it reveals to All / Voice / Photos / Notes. Capture returns to Clips.
+- The default view shows AI suggestions + everything not-yet-connected (no "why" exposed). The filter is **two independent axes**: a **status** toggle (New ⟷ All) and a **type** filter (All / Voice / Photos / Video / Notes) — so "new videos only" is expressible. Capture returns to Clips.
 
 ---
 

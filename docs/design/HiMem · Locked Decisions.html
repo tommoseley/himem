@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<title>HiMem · Architectural Invariants</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="crucible.css" />
+<style>
+  html, body { margin: 0; padding: 0; background: var(--sunk); }
+  * { box-sizing: border-box; }
+
+  .page {
+    width: 880px;
+    margin: 28px auto;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    padding: 52px 56px 40px;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+  }
+
+  /* ── Masthead ── */
+  .eyebrow {
+    font-size: 11.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 600; font-size: 42px; letter-spacing: -0.8px;
+    color: var(--ink); margin: 0 0 12px; line-height: 1.02;
+  }
+  .lede {
+    font-size: 14.5px; line-height: 1.5; color: var(--ink2); max-width: 620px; margin: 0;
+  }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .tagline {
+    font-family: var(--serif); font-size: 16px; font-style: italic; line-height: 1.45;
+    color: var(--ink2); margin: 14px 0 0; max-width: 620px;
+  }
+  .tagline b { font-style: normal; font-weight: 600; color: var(--ink); }
+  .rule { height: 2px; background: var(--accent); width: 54px; margin: 26px 0 30px; border-radius: 2px; }
+
+  /* ── Grid of categories ── */
+  .grid { columns: 2; column-gap: 48px; }
+  .cat { break-inside: avoid; margin: 0 0 26px; }
+  .cat h2 {
+    font-size: 11.5px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--ink3); margin: 0 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--hairline);
+  }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li {
+    position: relative; padding: 0 0 0 26px; margin: 0 0 10px;
+    font-size: 13.5px; line-height: 1.42; color: var(--ink2); letter-spacing: -0.1px;
+  }
+  li::before {
+    content: "✓"; position: absolute; left: 0; top: 0;
+    color: var(--accent); font-weight: 700; font-size: 13px;
+  }
+  li b { color: var(--ink); font-weight: 600; }
+  li .g { color: var(--ink3); }
+
+  /* ── Footer ── */
+  .foot {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--hairline);
+    font-size: 12px; color: var(--ink3); letter-spacing: -0.05px;
+  }
+  .foot b { color: var(--ink2); font-weight: 600; }
+
+  /* ── Review rule band ── */
+  .review {
+    break-inside: avoid; margin: 4px 0 30px; padding: 22px 26px;
+    background: var(--card); border: 1px solid var(--hairline);
+    border-radius: 12px;
+  }
+  .review h2 {
+    font-size: 11.5px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 12px;
+  }
+  .review p { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ink2); }
+  .review .q1 { font-family: var(--serif); font-size: 19px; font-weight: 600; color: var(--ink); letter-spacing: -0.3px; }
+  .review .q2 { color: var(--ink3); }
+  .review .edit-class { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--hairline); font-size: 13px; line-height: 1.5; color: var(--ink2); }
+  .review .edit-class b { color: var(--ink); font-weight: 600; }
+
+  @media print {
+    html, body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { margin: 0 auto; border: none; border-radius: 0; }
+  }
+  @media (max-width: 900px) {
+    .page { width: 100%; margin: 0; border: none; border-radius: 0; padding: 32px 22px; }
+    .grid { columns: 1; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">HiMem · Architecture</p>
+    <h1>Architectural Invariants</h1>
+    <p class="lede"><b>Everything else depends on these.</b> Every design must express them — it may not quietly redesign around them. To change one, raise it as an <b>explicit challenge to the architecture</b>, and leave it in force until it's ruled on.</p>
+    <p class="tagline">The architecture is optimized for <b>understanding</b>, not organization — HiMem helps people build meaning, not file information.</p>
+    <div class="rule"></div>
+
+    <div class="grid">
+
+      <div class="cat">
+        <h2>Ontology</h2>
+        <ul>
+          <li><b>Clip = evidence</b> <span class="g">— the atomic unit of HiMem; everything else is built by referencing clips</span></li>
+          <li><b>Memory = context</b> <span class="g">— an interpretation formed over one or more referenced clips, plus a derived layer (title · summary · topics)</span></li>
+          <li><b>Project = intent</b> <span class="g">— a long-running effort around a name and a goal</span></li>
+          <li><b>Clip ↔ Memory is many-to-many</b> <span class="g">· Memory ↔ Project is many-to-many</span></li>
+          <li><b>Session = a grouping of captured clips awaiting review</b> <span class="g">— it need not become a memory</span></li>
+          <li><b>Audio is the source of truth</b> <span class="g">— transcripts are derivative, regeneratable</span></li>
+        </ul>
+      </div>
+
+      <div class="cat">
+        <h2>First principles</h2>
+        <ul>
+          <li><b>Memories are perishable</b> <span class="g">— never make the user carry one while navigating</span></li>
+          <li><b>Capture is one action from anywhere</b> <span class="g">— defer every decision but "record now"</span></li>
+          <li><b>Capture once, connect many</b> <span class="g">— one clip can be evidence in many memories</span></li>
+          <li><b>No user content in HiMem's custody</b> <span class="g">— it lives in the user's own iCloud</span></li>
+        </ul>
+      </div>
+
+      <div class="cat">
+        <h2>Interaction</h2>
+        <ul>
+          <li><b>Surfaces create their own objects</b> <span class="g">— the + is context-aware to the tab</span></li>
+          <li><b>No magic navigation</b> <span class="g">— capture stays where you are; nothing teleports</span></li>
+          <li><b>Capture now, decide later</b> <span class="g">— structure forms on reflection, never at the catch</span></li>
+          <li><b>One surface per concept</b> <span class="g">— modes (view ↔ edit), not extra screens</span></li>
+          <li><b>Tap the active tab → status sheet</b> <span class="g">— what needs me, not how much I have</span></li>
+        </ul>
+      </div>
+
+      <div class="cat">
+        <h2>AI</h2>
+        <ul>
+          <li><b>AI observes, never concludes</b> <span class="g">— describe, don't interpret (Honest Label)</span></li>
+          <li><b>Under-suggest</b> <span class="g">— a confident wrong proposal is worse than none</span></li>
+          <li><b>AI is blue, always</b> <span class="g">— never ochre or amber</span></li>
+          <li><b>Named actions, trailing ✦</b> <span class="g">— "Organize with AI," "Find the thread"; never "Regenerate"</span></li>
+          <li><b>The draft is editable, never authoritative</b> <span class="g">— Free on tap, Plus automatically</span></li>
+        </ul>
+      </div>
+
+      <div class="cat">
+        <h2>Navigation</h2>
+        <ul>
+          <li><b>Three tabs: Clips • Memories • Projects</b> <span class="g">= Evidence · Context · Intent</span></li>
+          <li><b>Memories is the reflective home surface</b> <span class="g">— what you open HiMem for; cold launch lands here</span></li>
+          <li><b>Clips is the operational evidence surface, first-class</b> <span class="g">— the standalone Captured Clips window is retired</span></li>
+          <li><b>Projects is the intent surface</b> <span class="g">— long-running efforts, entered deliberately</span></li>
+        </ul>
+      </div>
+
+      <div class="cat">
+        <h2>Affordances</h2>
+        <ul>
+          <li><b>Colour maps to who acts</b> <span class="g">— ochre = you · blue = AI · red = destruction</span></li>
+          <li><b>Three signals, one meaning each</b> <span class="g">— real button · managed pill · quiet label</span></li>
+          <li><b>Delete = one button, bottom of an opened item</b> <span class="g">— no confirm; swipe-to-delete retired</span></li>
+          <li><b>44px hit-target floor</b> <span class="g">· toggle on-state ochre (never green) · status never colour alone</span></li>
+        </ul>
+      </div>
+
+      <div class="cat">
+        <h2>Clips surface</h2>
+        <ul>
+          <li><b>Two filter axes</b> <span class="g">— New ⟷ All (status) · All / Voice / Photos / Video / Notes (type)</span></li>
+          <li><b>Source-agnostic copy</b> <span class="g">— "N new clips," never "from your Watch"</span></li>
+          <li><b>The list is calm</b> <span class="g">— Create / Delete live inside the opened session</span></li>
+          <li><b>Start a Memory</b> <span class="g">— connects the session's clips to a new memory (which shows them at once) · confirm · session consumed · connected clips no longer appear in New</span></li>
+        </ul>
+      </div>
+
+      <div class="cat">
+        <h2>Voice</h2>
+        <ul>
+          <li><b>Quiet over loud</b> <span class="g">· specific over clever · warm over neutral</span></li>
+          <li><b>Plain English</b> <span class="g">— no jargon, no emoji</span></li>
+          <li><b>Never blame the user</b> <span class="g">— "We couldn't reach…," never "You are offline"</span></li>
+        </ul>
+      </div>
+
+    </div>
+
+    <div class="review">
+      <h2>The review rule</h2>
+      <p><span class="q1">Does this express the architecture?</span><br/><span class="q2">— asked first, before "Is there a better design?"</span></p>
+      <p class="edit-class"><b>Two classes of edit.</b> A <b>coherence fix</b> may be applied freely when it reconciles two existing invariants without changing either one — making the words stop contradicting the model (e.g. "contains" → "connects"). A <b>vocabulary, architectural, or principle change</b> alters an invariant itself and requires explicit approval — raise it as a challenge and leave the invariant in force until it's ruled on.</p>
+      <p class="edit-class"><b>The ontology changes rarely; the mechanics evolve continuously.</b> Architecture is optimized for stability, mechanics through dogfooding — don't reopen the ontology because a mechanic feels awkward. Fix the mechanic first.</p>
+    </div>
+
+    <div class="foot">
+      <span>Source of truth · <b>CLAUDE.md</b> + the spec set</span>
+      <span>Locked as of Jul 12 2026</span>
+    </div>
+  </div>
+</body>
+</html>

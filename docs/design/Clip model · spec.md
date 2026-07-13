@@ -113,12 +113,26 @@ One object, three states of maturity:
 
 | State | What renders | Where |
 |---|---|---|
-| **Session** | composition + body + triage actions (Create one memory / Delete) | Clips tab |
+| **Session (collapsed)** | composition + first-clip preview + "tap to review" — **no action buttons** | Clips tab (the calm list) |
+| **Session (opened)** | composition + full clip body + **Start a Memory** (ochre primary) + **Delete session** (red, bottom) | pushed from the list |
 | **Memory card** | derived layer + composition, **body collapsed** | Memories list |
 | **Memory detail** | derived layer + composition + **full body** | Memory Detail |
 
-"Create one memory" is exactly: take this collection, add the derived layer. The
+"Start a Memory" is exactly: take this collection, add the derived layer. The
 clips never change; only what surrounds them does.
+
+**The Clips list is calm; actions live in the opened session (locked July 12
+2026).** A session in the list is a **bundle of evidence, not a decision** — the
+collapsed card shows only its composition (time · per-media counts · duration),
+a preview of the **first clip's words** (capture order — never a concatenation of
+all clips), and a quiet *"tap to review"* affordance. It carries **no Create /
+Delete buttons**: a list of eight sessions must not be eight pairs of shouting
+buttons. Tapping opens the session, and *that* is where **Start a Memory**
+(the ochre primary, at the action position) and **Delete session** (red,
+bottom-most) live — the same "fate actions live at the bottom of the opened item"
+rule that governs memory and clip deletion. Recognition-over-generation is still
+satisfied: the *proposal* (the clustered bundle) is what the list shows;
+approving it is one tap in. We hide the button, never the bundle.
 
 ## Clip triage — the operational fate actions (locked July 12 2026)
 
@@ -131,7 +145,7 @@ too much.
 **1 · The inclusion ring — `ClipRing` — scopes the bundle, nothing else.**
 - Meaning: *"this clip is part of the memory this session will become."* On by
   default for every clip. Off = the clip won't join the memory when you tap
-  **Create one memory**.
+  **Start a Memory**.
 - It is a **bundle-time selection**, not a structural edit. Turning a ring off
   does **not** move the clip out of the session — the clip stays in the card,
   it's simply out of scope for the Create action. (Contrast Remove, below.)
@@ -150,15 +164,25 @@ too much.
   **non-destructive**, so it is a neutral/ink hairline full-width button, never
   red. This is the direct parallel of **Remove from project** (the memory
   survives; only the membership is cut).
-- **Where it lives:** in the **opened clip**, not as a per-row button in the
-  triage card. Tapping a clip in the session opens the clip
-  (detail/`ClipEditor`); its fate-action row carries, top to bottom by
-  escalating consequence: **Remove from session** (neutral) → optional **Move to
-  memory…** (relocate straight into an existing memory) → **Delete clip** (danger
-  red, bottom-most). Same "fate actions live at the bottom of the opened item"
-  rule that governs memory/project deletion; keeps the triage card calm (one
-  ochre primary + one red Delete session). The couple taps to open a clip before
-  ejecting it are deliberate, not friction to optimise away.
+- **Where it lives:** in the **opened clip** (a full pushed screen), not as a
+  per-row button in the triage card. The opened clip has two modes on **one
+  surface** (Crucible: one surface per concept, use modes not screens):
+  - **View mode** — meta · transcript · Play · Referenced in, then a single
+    **bottom fate stack**: **Remove from session** (neutral hairline) above
+    **Delete clip** (danger red), one of each. This is the "fate actions at the
+    bottom of the opened item" rule that governs memory/project deletion.
+  - **Edit mode is INLINE, not a third screen (locked July 12 2026).** Tapping
+    the transcript focuses it *in place* on the same clip screen — keyboard up,
+    edit, Done in the keyboard bar commits and dismisses. It is **not** a
+    separate pushed editor. So editing a clip's words from a session is **two
+    screens — Session → Clip — never three** (the July 12 dogfood bug: CC pushed
+    a distinct editor screen, making it Session → Clip-view → Clip-edit). While
+    the keyboard is up it naturally covers the lower content, so the field +
+    Play + Cancel/Done are all that show — **no fate actions, no Referenced-in,
+    no FAB** are rendered in the edit affordance, which is why **Delete clip
+    never appears twice** and the `TRANSCRIPT` label never repeats.
+  - **No FAB on an opened clip** — it's an opened item, not a capture surface.
+    (CC's build still shows it; it must be hidden.)
 - **Why this is not redundant with the ring.** The ring scopes *this bundling*;
   Remove edits *the cluster structure*. Their end-states differ: an excluded
   clip **stays in the session**; a removed clip **leaves it**. They converge only
@@ -167,19 +191,57 @@ too much.
   in this cluster?").
 
 **3 · Delete clip / Delete session — destruction.**
-- **Delete clip** (in the opened clip, bottom-most, danger red) trashes that one
-  clip → Recently Deleted, 30 days. **Delete session** (in the triage card,
-  full-width danger red under Create one memory) trashes the whole cluster.
-  Both follow the retired-swipe / open-to-act / no-confirm-dialog deletion rule.
+- **Delete clip** appears **exactly once** — the danger-red button at the bottom
+  of the opened clip's **view mode** (never inside the transcript editor) →
+  Recently Deleted, 30 days. **Delete session** (at the bottom of the **opened**
+  session, full-width danger red under Start a Memory — never on the collapsed
+  list card) trashes the whole cluster. Both follow the retired-swipe /
+  open-to-act / no-confirm-dialog deletion rule.
 
 **Single-clip session.** A session holding one clip renders through the **same
 `ClipAtom(register="operational")` with `ring={false}`** — inclusion selection
 is meaningless when excluding the sole clip equals deleting the session — and it
 **keeps its Play/evidence control** (a voice clip always offers its original
 recording). It must **not** render a bespoke bare-transcript card; it is the atom
-minus the ring. Its triage collapses accordingly: **Create one memory** +
+minus the ring. Its triage collapses accordingly: **Start a Memory** +
 **Delete session**, with no per-clip Remove (Remove and Delete are the same act
 when there's one clip).
+
+## Start a Memory — the post-create transition (locked July 12 2026)
+
+Tapping **Start a Memory** (then **Create** in the sheet) must do four things.
+CC's July 12 build got all four wrong; they are the acceptance criteria.
+
+**1 · The memory SHOWS the included clips immediately — it is never empty.** A memory *is*
+a clip collection plus a derived layer (`Memory = ClipCollection + derived`), so
+the very first thing a new memory references is **its clips as content**. The memory
+detail must render the included clips' body (transcript + Play) immediately —
+**before** any Organize pass. A freshly created memory shows: title (the user's,
+or a neutral date placeholder), **the clip body**, empty Topics/Mentions (`+ Add`),
+and the **Organize this memory** card. A memory detail with no clip body is a bug
+(CC's screenshot 7: only Topics/Mentions/Organize, the transcript nowhere). The
+included clips are attached to the memory; the excluded ones are not.
+
+**2 · Confirm that it worked.** Creation currently gives *no* feedback — the sheet
+just closes. After Create: dismiss the sheet and show a brief **confirmation
+toast — "Memory created" with a "View" action** that opens the new memory. The
+toast is the feedback; the user should never have to navigate to Memories to
+confirm the thing they just made exists. (Toast, not a blocking dialog — it
+auto-dismisses; View is the one affordance.)
+
+**3 · The session is consumed — leave it.** Create consumes the session, so the
+app must **not** stay on the now-stale session screen (CC popped back to the
+session with both clips still there). Pop back to the **Clips list**. The session
+no longer exists as a session.
+
+**4 · Connected clips leave New; excluded clips return to the bench.** The
+included clips are now **referenced in a memory → connected → they leave the New
+filter** (they show under All with "Referenced in: [memory]"). Any **excluded**
+clips **return to the bench as loose New clips** (still unconnected). So after
+creating a memory from a 2-clip session with 1 excluded: New drops that session
+and now shows the 1 excluded clip as a loose entry; the New count decreases by
+the number of *included* clips, not the whole session. A clip that became a
+memory must not still sit in New (CC's bug #3).
 
 ## Shared components (`screens-clip-model.jsx`) — the single definitions
 
@@ -199,7 +261,7 @@ stop — the component already exists here.
 - `ClipDivider()`.
 
 **The editor (locked July 11 2026 — one editor, two fields):**
-- `ClipEditor({ field, value, media, duration, showMove, onCancel, onDone })` — the ONE clip editor. `field='transcript'` edits a voice/note clip's words; `field='description'` edits a photo/video clip's words. Both are *the clip's words* — the same act on the same slot — so they are the same component, differing only by which field label and media evidence they show. Owns the edit field (mirrors displayed text, auto-grows), the quiet Play/evidence control kept visible while editing, the fate-action row (escalating consequence: `Remove from session` → optional `Move to memory…` → `Delete clip`; a memory's clip shows `Move to…`/`Remove from memory`, a session's clip shows `Remove from session`), and the `Cancel`/`Done` commit row. This replaces the three former editors: `MDClipV2`'s editing branch, `MDClipCompactRow`'s editing branch, and the standalone `DescriptionEmpty`/`DescriptionFilled` edit path.
+- `ClipEditor({ field, value, media, duration, showMove, scope, showFates, onCancel, onDone })` — the ONE clip editor, and it edits **words only**: the field + Play + Cancel/Done. It renders **inline, in place** where the transcript/description sits (same surface) — it is **never a pushed route of its own**, so it never adds a screen. `showFates={false}` drops the fate-action row entirely — pass it on any surface whose *view mode* already owns Remove/Delete at the bottom of the opened item (the Clips clip detail), so editing never duplicates them. When `showFates` is on (default), `scope='session'|'memory'` adds the neutral Remove action and `showMove` adds Move — used where the editor is inline in a list row and there is no competing bottom fate stack (e.g. a memory-detail clip row). `field='transcript'` edits a voice/note clip's words; `field='description'` edits a photo/video clip's words. Both are *the clip's words* — the same act on the same slot — so they are the same component, differing only by which field label and media evidence they show. Owns the edit field (mirrors displayed text, auto-grows), the quiet Play/evidence control kept visible while editing, the fate-action row (escalating consequence: `Remove from session` → optional `Move to memory…` → `Delete clip`; a memory's clip shows `Move to…`/`Remove from memory`, a session's clip shows `Remove from session`), and the `Cancel`/`Done` commit row. This replaces the three former editors: `MDClipV2`'s editing branch, `MDClipCompactRow`'s editing branch, and the standalone `DescriptionEmpty`/`DescriptionFilled` edit path.
 
 **Load requirement (the mechanical fix — was the root of the drift).** Because
 these are the single definitions, **`screens-clip-model.jsx` must be loaded on

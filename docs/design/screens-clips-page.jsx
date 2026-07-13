@@ -43,27 +43,52 @@ function TabBar({ active = 'clips', dot = null }) {
   );
 }
 
-// ── Clips-page header: title + segmented filter reveal ──
-function ClipsHeader({ filter = 'new' }) {
-  const segs = [['new', 'New'], ['all', 'All'], ['voice', 'Voice'], ['photos', 'Photos'], ['notes', 'Notes']];
+// ── Clips-page header: title + TWO independent filter axes. STATUS (New ⟷
+// All) and TYPE (All / Voice / Photos / Video / Notes) are orthogonal, so
+// "new videos only" is expressible. Status is a two-state toggle (ochre, the
+// primary lens); type is a neutral chip row (secondary refinement). Never a
+// single control mixing the two — that hid Video and made the axes collide. ──
+function ClipsHeader({ status = 'new', type = 'all' }) {
+  const statuses = [['new', 'New'], ['all', 'All']];
+  const types = [['all', 'All'], ['voice', 'Voice'], ['photos', 'Photos'], ['video', 'Video'], ['notes', 'Notes']];
   return (
     <div style={{ flexShrink: 0, padding: '4px 0 8px' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', padding: '2px 18px 8px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', padding: '2px 18px 10px' }}>
         <span style={{ fontFamily: PX.serif, fontSize: 30, fontWeight: 400, letterSpacing: -0.5, color: PX.ink }}>Clips</span>
         <span style={{ flex: 1 }} />
         <span style={{ color: PX.ink3 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
         </span>
       </div>
+      {/* STATUS axis — a two-state toggle (New ⟷ All), iOS segmented control. */}
+      <div style={{ padding: '0 14px', marginBottom: 9 }}>
+        <div style={{ display: 'inline-flex', background: PX.wash1, borderRadius: 10, padding: 3, gap: 2 }}>
+          {statuses.map(([id, label]) => {
+            const on = id === status;
+            return (
+              <span key={id} style={{
+                fontSize: 13.5, fontWeight: on ? 700 : 500, letterSpacing: -0.1,
+                color: on ? PX.accentInk : PX.ink2,
+                background: on ? PX.accent : 'transparent',
+                borderRadius: 8, padding: '6px 20px', minHeight: 32, boxSizing: 'border-box',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}>{label}</span>
+            );
+          })}
+        </div>
+      </div>
+      {/* TYPE axis — filter by media (All = every type). Neutral selection so it
+          reads as a secondary refinement, distinct from the ochre status toggle. */}
       <div style={{ display: 'flex', gap: 7, padding: '0 14px', overflow: 'hidden' }}>
-        {segs.map(([id, label]) => {
-          const on = id === filter;
+        {types.map(([id, label]) => {
+          const on = id === type;
           return (
             <span key={id} style={{
               fontSize: 13, fontWeight: on ? 600 : 500, letterSpacing: -0.1,
-              color: on ? PX.accentInk : PX.ink2,
-              background: on ? PX.accent : PX.wash1,
-              borderRadius: 9, padding: '6px 12px', minHeight: 32, boxSizing: 'border-box',
+              color: on ? PX.ink : PX.ink3,
+              background: on ? PX.wash2 : 'transparent',
+              border: '1px solid ' + (on ? 'transparent' : PX.hairline),
+              borderRadius: 9, padding: '5px 11px', minHeight: 30, boxSizing: 'border-box',
               display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap',
             }}>{label}</span>
           );
@@ -201,7 +226,7 @@ function MediaClipRow({ time, place, hue, video, desc }) {
 function ScrClipsDefault() {
   return (
     <PhoneScreen>
-      <ClipsHeader filter="new" />
+      <ClipsHeader status="new" type="all" />
       <div style={{ flex: 1, overflow: 'hidden', padding: '2px 14px 10px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* AI suggestion (Sort) leads — you triage a GROUP, not 40 loose rows */}
         <div style={{ background: PX.aiTint, border: '1px solid ' + PX.ai, borderRadius: 14, padding: '12px 13px' }}>
@@ -263,7 +288,7 @@ function PlacedClipRow({ mediaIcon, time, preview, refs }) {
 function ScrClipsAll() {
   return (
     <PhoneScreen>
-      <ClipsHeader filter="all" />
+      <ClipsHeader status="all" type="all" />
       <div style={{ flex: 1, overflow: 'hidden', padding: '2px 14px 10px', display: 'flex', flexDirection: 'column', gap: 9 }}>
         <PlacedClipRow mediaIcon={MIC} time="Jun 30 · 6:12 PM" preview="Ben explained the cheesecake starts at 400°, then finishes at 250°." refs={['CIA Dinner', 'Leadership', 'Cooking']} />
         <PlacedClipRow mediaIcon={CAM} time="Jun 30 · 6:18 PM" preview="Basque burnt top — the whole point is you don't fight the scorch." refs={['CIA Dinner', 'Cooking']} />
@@ -276,9 +301,36 @@ function ScrClipsAll() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Clip as primary object — transcript · media · date · Referenced in · Projects
-// ═══════════════════════════════════════════════════════════════
-function ScrClipDetail() {
+// Clip as primary object — ONE screen, editing is INLINE (no separate editor
+// screen). Tapping a clip from a session or the list opens this; the transcript
+// is tap-to-edit in place (a small "Edit" affordance signals it), so the path to
+// editing a clip's words is two screens — Session → Clip — never three. View:
+// meta · transcript (tap to edit) · Play · Referenced in · a single bottom fate
+// stack (Remove from session? · Delete clip). Edit (keyboard up): the transcript
+// field + Play + Cancel/Done only — fate actions and Referenced-in sit below and
+// are covered by the keyboard. No FAB on an opened clip.
+//   · editing   — the inline transcript-edit state (keyboard up).
+//   · inSession — clip sits in a session → show "Remove from session".
+//   · attached  — referenced in ≥1 memory (else the empty state).
+function ClipFateStack({ inSession }) {
+  const trash = <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={PX.danger} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/></svg>;
+  const eject = <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={PX.ink2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 4H6a2 2 0 00-2 2v12a2 2 0 002 2h4"/><path d="M16 16l4-4-4-4"/><path d="M20 12H10"/></svg>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 28 }}>
+      {inSession && (
+        <div style={{ minHeight: 50, borderRadius: 14, border: '1px solid ' + PX.hairline, color: PX.ink2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 15.5, fontWeight: 600, letterSpacing: -0.2 }}>
+          {eject} Remove from session
+        </div>
+      )}
+      <div style={{ minHeight: 50, borderRadius: 14, border: '1px solid ' + PX.danger, color: PX.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 15.5, fontWeight: 600, letterSpacing: -0.2 }}>
+        {trash} Delete clip
+      </div>
+    </div>
+  );
+}
+
+function ScrClipDetail({ editing = false, inSession = false, attached = true }) {
+  const transcript = "Ben said the Basque cheesecake starts hot — around four hundred — to get that burnt top, then drops to two-fifty to set the center without drying it. He was so easy about it, no performance, just “here's how it works.”";
   return (
     <PhoneScreen>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '6px 14px 8px' }}>
@@ -288,49 +340,64 @@ function ScrClipDetail() {
         </span>
         <span style={{ flex: 1 }} />
       </div>
-      <div style={{ flex: 1, overflow: 'hidden', padding: '0 18px', display: 'flex', flexDirection: 'column' }}>
-        {/* meta */}
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 8 }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 12px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 12 }}>
           Voice · Jun 30, 6:12 PM · Culinary Institute
         </div>
-        {/* media — original recording, first-class */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 13, padding: '11px 13px', marginBottom: 14 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 17, background: PX.accent, color: PX.accentInk, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"/></svg>
-          </span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>Original recording</div>
-            <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 1 }}>0:42 · the source of truth</div>
-          </div>
-          <svg width="60" height="20" viewBox="0 0 60 20" fill="none"><g fill={PX.ink4}>{[4,9,6,13,8,15,7,11,5,10,14,6,9,4,12,7,10,5].map((h,i)=><rect key={i} x={i*3.2} y={(20-h)/2} width="1.6" height={h} rx="0.8"/>)}</g></svg>
+
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3 }}>Transcript</span>
+          <span style={{ flex: 1 }} />
+          {!editing && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 600, color: PX.ink3 }}>
+              <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l4-1L17 6l-3-3L4 13l-1 4z"/></svg>
+              Edit
+            </span>
+          )}
         </div>
-        {/* transcript — the working object (evidence, immutable record) */}
-        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 6 }}>Transcript</div>
-        <div style={{ fontFamily: PX.serif, fontSize: 15, lineHeight: 1.5, color: PX.ink, letterSpacing: -0.1, marginBottom: 18 }}>
-          Ben said the Basque cheesecake starts hot — around four hundred — to get that burnt top, then drops to two-fifty to set the center without drying it. He was so easy about it, no performance, just “here's how it works.”
-        </div>
-        {/* Referenced in — the ontology, visible without a word taught */}
-        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 8 }}>Referenced in</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 16 }}>
-          {[['CIA Dinner', 'One of the best meals we\u2019ve had in years.'], ['Leadership', 'Expertise without ego — he was comfortable saying \u201cI don\u2019t know.\u201d'], ['Active listening', 'I caught every detail because I recorded instead of memorizing.']].map(([m, note]) => (
-            <div key={m} style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 12, padding: '10px 12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <Mem size={13} color={PX.accent} />
-                <span style={{ fontSize: 13.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.15 }}>{m}</span>
-                <span style={{ flex: 1 }} />
-                <svg width="6" height="11" viewBox="0 0 8 14" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
-              </div>
-              <div style={{ fontSize: 12, color: PX.ink3, lineHeight: 1.4, marginTop: 4, fontStyle: 'italic', fontFamily: PX.serif }}>{note}</div>
+
+        {editing ? (
+          // EDIT MODE — INLINE on this same screen (not a pushed editor): tap the
+          // transcript → it focuses in place. Words only: field + Play +
+          // Cancel/Done. No fate actions (showFates=false), no duplicate label
+          // (showLabel=false). Path stays Session → Clip (two screens).
+          <ClipEditor field="transcript" value={transcript} media="audio" duration="0:42" showLabel={false} showFates={false} />
+        ) : (
+          <>
+            {/* transcript is the working object — tap anywhere in it to edit in place */}
+            <div style={{ fontFamily: PX.serif, fontSize: 15.5, lineHeight: 1.5, color: PX.ink, letterSpacing: -0.1, marginBottom: 16 }}>
+              {transcript}
             </div>
-          ))}
-        </div>
-        {/* placement affordance */}
-        <div style={{
-          minHeight: 44, borderRadius: 12, border: '1px dashed ' + PX.accent, color: PX.accent,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 14, fontWeight: 600,
-        }}>
-          <Plus size={13} color={PX.accent} /> Where else does this belong?
-        </div>
+            {/* original recording — quiet evidence control */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+              <span style={{ width: 30, height: 30, borderRadius: 15, background: PX.accent, color: PX.accentInk, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"/></svg>
+              </span>
+              <span style={{ fontSize: 13, color: PX.ink3, letterSpacing: -0.05 }}>Original recording · 0:42</span>
+            </div>
+
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 8 }}>Referenced in</div>
+            {attached ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {[['CIA Dinner', 'One of the best meals we\u2019ve had in years.'], ['Leadership', 'Expertise without ego — comfortable saying \u201cI don\u2019t know.\u201d']].map(([m, note]) => (
+                  <div key={m} style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 12, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <Mem size={13} color={PX.accent} />
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: PX.ink, letterSpacing: -0.15 }}>{m}</span>
+                      <span style={{ flex: 1 }} />
+                      <svg width="6" height="11" viewBox="0 0 8 14" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
+                    </div>
+                    <div style={{ fontSize: 12, color: PX.ink3, lineHeight: 1.4, marginTop: 4, fontStyle: 'italic', fontFamily: PX.serif }}>{note}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13.5, color: PX.ink3, letterSpacing: -0.1 }}>Not attached to a memory yet.</div>
+            )}
+
+            <ClipFateStack inSession={inSession} />
+          </>
+        )}
       </div>
     </PhoneScreen>
   );
@@ -352,23 +419,24 @@ function ScrMediaClipDetail({ described = false, video = false, editing = false 
         </span>
         <span style={{ flex: 1 }} />
       </div>
-      <div style={{ flex: 1, overflow: 'hidden', padding: '0 18px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 12px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 10 }}>
           {video ? 'Video' : 'Photo'} · May 11, 5:30 PM · Tybee Island
         </div>
         {/* media hero — the thumbnail IS the evidence, first-class */}
         <MediaThumb kind={video ? 'video' : 'photo'} duration={video ? '0:18' : undefined} height={190} />
         {/* DESCRIPTION — the clip's words. Empty invites; filled reads as body;
-            editing routes through the ONE canonical ClipEditor (field="description"). */}
+            editing routes through the ONE canonical ClipEditor (field="description",
+            showFates=false — the fate actions live in the bottom stack, view mode). */}
         {editing
-          ? <ClipEditor field="description" media={video ? 'video' : 'photo'}
-              value="Waves coming in at dusk — the low gold light I want for the opening shot. Shot wide so the horizon sits on the lower third." />
+          ? <div style={{ marginTop: 14 }}><ClipEditor field="description" media={video ? 'video' : 'photo'} showFates={false}
+              value="Waves coming in at dusk — the low gold light I want for the opening shot. Shot wide so the horizon sits on the lower third." /></div>
           : described
             ? <DescriptionFilled>Waves coming in at dusk — the low gold light I want for the opening shot. Shot wide so the horizon sits on the lower third.</DescriptionFilled>
             : <DescriptionEmpty />}
-        {/* Referenced in — same ontology as a voice clip */}
-        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, margin: '18px 0 8px' }}>Referenced in</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 16 }}>
+        {!editing && <>
+          {/* Referenced in — same ontology as a voice clip */}
+          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, margin: '18px 0 8px' }}>Referenced in</div>
           <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 12, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <Mem size={13} color={PX.accent} />
@@ -377,14 +445,8 @@ function ScrMediaClipDetail({ described = false, video = false, editing = false 
               <svg width="6" height="11" viewBox="0 0 8 14" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
             </div>
           </div>
-        </div>
-        {/* placement affordance */}
-        <div style={{
-          minHeight: 44, borderRadius: 12, border: '1px dashed ' + PX.accent, color: PX.accent,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 14, fontWeight: 600,
-        }}>
-          <Plus size={13} color={PX.accent} /> Where else does this belong?
-        </div>
+          <ClipFateStack inSession={false} />
+        </>}
       </div>
     </PhoneScreen>
   );
@@ -428,9 +490,13 @@ function ScrClipsStatusSheet() {
         <div style={{ fontFamily: PX.serif, fontSize: 22, fontWeight: 400, color: PX.ink, letterSpacing: -0.4, marginBottom: 14 }}>Clips</div>
 
         <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 2 }}>New arrivals</div>
+        {/* Reversed July 12 2026 (was: omit zero rows): the FULL source roster
+            shows every time, including sources at 0 — a stable, scannable list is
+            more predictable than one that changes shape, and "0 from Siri today"
+            is real information. */}
         <StatusLine glyph={watch} label="Apple Watch" value="3" tint={PX.accent} />
         <StatusLine glyph={phone} label="iPhone" value="2" />
-        <StatusLine glyph={siri} label="Siri" value="1" />
+        <StatusLine glyph={siri} label="Siri" value="0" />
 
         <div style={{ height: 1, background: PX.divider, margin: '10px 0' }} />
         <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 2 }}>Processing</div>
@@ -438,8 +504,10 @@ function ScrClipsStatusSheet() {
         <StatusLine glyph={<Spark size={15} color={PX.ai} />} label="Organizing" value="1" tint={PX.ai} />
 
         <div style={{ height: 1, background: PX.divider, margin: '10px 0' }} />
-        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 2 }}>Available to shape</div>
-        <StatusLine glyph={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8a2 2 0 012-2h9l3 3v7a2 2 0 01-2 2H6a2 2 0 01-2-2z"/></svg>} label="Loose clips" value="18" />
+        {/* "Not yet connected" — plain English, not internal jargon ("loose /
+            available to shape"). It's the count of unshaped clips. */}
+        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, marginBottom: 2 }}>Not yet connected</div>
+        <StatusLine glyph={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8a2 2 0 012-2h9l3 3v7a2 2 0 01-2 2H6a2 2 0 01-2-2z"/></svg>} label="Clips" value="18" />
 
         {/* quick filter shortcuts — mirror the header filter vocabulary exactly */}
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
@@ -459,7 +527,7 @@ function ScrClipsStatusSheet() {
 // NOT a separate top-level "Photo" row above it. The card's
 // composition reads as per-media glyphs + counts — 2 voice · 1
 // photo — the shared ClipComposition line (identical to the memory
-// card, register-styled), never a flat "3 clips". Create one memory
+// card, register-styled), never a flat "3 clips". Start a Memory
 // yields ONE memory holding all
 // three. Fixes the July 11 dogfood bug: a photo at 10:34 floated
 // above the voice-only "2 clips" session it belonged to by time.
@@ -470,69 +538,135 @@ function ScrClipsStatusSheet() {
 //   • Rows sort by capture timestamp: voice(0:00) → photo(+128s)
 //     → voice(+180s), one continuous sitting.
 // ═══════════════════════════════════════════════════════════════
-// Session clip rows — the operational register of the canonical ClipAtom.
-// These wrap ClipAtom (register="operational", inclusion ring) and add only the
-// session-body chrome: a divider between stacked rows. No duplicate ring/retry/
-// play primitives — those live once in screens-clip-model.jsx.
-function SessionVoiceRow({ offset, dur, text, divider, failed = false }) {
+// ── Per-media glyph + count, the composition summary shared by the session
+// card and the memory card. Ochre mic (audio/brand), quiet ink for the rest.
+// A media type at 0 is omitted — never a "photo 0". ──
+function SessionCounts({ media = {} }) {
+  const items = [];
+  if (media.audio) items.push([MIC, PX.accent, media.audio]);
+  if (media.photo) items.push([CAM, PX.ink3, media.photo]);
+  if (media.note) items.push([NOTE, PX.ink3, media.note]);
   return (
-    <div style={{ borderTop: divider ? '1px solid ' + PX.hairline : 'none', paddingTop: divider ? 14 : 0 }}>
-      <ClipAtom media="audio" register="operational" ring meta={offset} duration={dur} transcript={text} failed={failed} />
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+      {items.map(([g, c, n], i) => (
+        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, color: PX.ink2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ color: c, display: 'inline-flex' }}>{g}</span>{n}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// ── Collapsed session card — the CALM default in the New list. A BUNDLE OF
+// EVIDENCE, not a decision: composition header (time · per-media counts ·
+// duration) + a preview of the FIRST clip's words (capture order, never a
+// concatenation) + a quiet "tap to review". NO Create/Delete here — those
+// live inside the opened session (fate actions at the bottom of the opened
+// item). A list of N sessions must not be N pairs of shouting buttons. ──
+function SessionCard({ time, day, media, dur, preview }) {
+  return (
+    <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 18, padding: '15px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: PX.ink, fontVariantNumeric: 'tabular-nums' }}>{time}</span>
+        <span style={{ color: PX.ink4 }}>·</span>
+        <SessionCounts media={media} />
+        <span style={{ color: PX.ink4 }}>·</span>
+        <span style={{ fontSize: 13.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums' }}>{dur}</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: PX.ink3, marginBottom: 12 }}>{day}</div>
+      <div style={{ fontSize: 15, color: PX.ink2, lineHeight: 1.45, letterSpacing: -0.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        “{preview}”
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 12, fontSize: 12.5, fontWeight: 600, color: PX.ink3 }}>
+        Tap to review
+        <svg width="6" height="11" viewBox="0 0 8 14" fill="none" stroke={PX.ink3} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
+      </div>
     </div>
   );
 }
 
-// A photo/video clip inside the session — the same atom, media register. The
-// empty-description invite is rendered by ClipAtom itself (operational media),
-// so nothing here duplicates it.
-function SessionMediaRow({ offset, hue, label = 'Photo', video, divider, desc }) {
-  return (
-    <div style={{ borderTop: divider ? '1px solid ' + PX.hairline : 'none', paddingTop: divider ? 14 : 0 }}>
-      <ClipAtom media={video ? 'video' : 'photo'} register="operational" ring meta={offset} hue={hue} description={desc} />
-    </div>
-  );
-}
-
-function ScrMixedSession() {
+// ═══════════════════════════════════════════════════════════════
+// Clips · New — the CALM session list. Sessions read as bundles of
+// evidence ("here's what arrived"), not decisions requiring a button.
+// Preview = the FIRST clip's words (fixes the dogfood bug where the
+// collapsed preview concatenated clips out of order). Tap opens the
+// session (ScrMixedSession), where Create/Delete live.
+// ═══════════════════════════════════════════════════════════════
+function ScrClipsSessions() {
   return (
     <PhoneScreen>
-      <ClipsHeader filter="new" />
-      <div style={{ flex: 1, overflow: 'hidden', padding: '2px 16px 10px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: PX.ink3, padding: '2px 2px 8px' }}>Today</div>
-        <div style={{ fontFamily: PX.serif, fontSize: 27, fontWeight: 400, letterSpacing: -0.5, color: PX.ink, lineHeight: 1.1 }}>3 new clips</div>
-        <div style={{ fontSize: 13.5, color: PX.ink3, letterSpacing: -0.1, margin: '5px 0 16px' }}>1 session · today, 10:32 AM–10:35 AM</div>
+      <ClipsHeader status="new" type="all" />
+      <div style={{ flex: 1, overflow: 'hidden', padding: '2px 16px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <div style={{ fontFamily: PX.serif, fontSize: 27, fontWeight: 400, letterSpacing: -0.5, color: PX.ink, lineHeight: 1.1 }}>4 new clips</div>
+          <div style={{ fontSize: 13.5, color: PX.ink3, letterSpacing: -0.1, marginTop: 5 }}>2 sessions · yesterday, 10:32 AM–5:29 PM</div>
+        </div>
+        <SessionCard time="5:29 PM" day="Yesterday" media={{ audio: 1 }} dur="0:05" preview="And here is another voice clip coming from my watch." />
+        <SessionCard time="10:32 AM" day="Yesterday" media={{ audio: 2, photo: 1 }} dur="0:06" preview="This is a test voice clip" />
+      </div>
+      <TabBar active="clips" />
+    </PhoneScreen>
+  );
+}
 
-        {/* one session card, THREE clips: voice · photo · voice */}
-        <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 18, padding: '15px 16px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: PX.ink, fontVariantNumeric: 'tabular-nums' }}>10:32 AM</span>
-            <span style={{ color: PX.ink4 }}>·</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, color: PX.ink2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}><span style={{ color: PX.accent, display: 'inline-flex' }}>{MIC}</span>2</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, color: PX.ink2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}><span style={{ color: PX.ink3, display: 'inline-flex' }}>{CAM}</span>1</span>
-            </span>
-            <span style={{ color: PX.ink4 }}>·</span>
-            <span style={{ fontSize: 13.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums' }}>0:05</span>
-          </div>
-          <div style={{ fontSize: 12.5, color: PX.ink3, marginBottom: 15 }}>Today · voice + photo</div>
+// ── Confirmation toast — the feedback that was missing. After Create, the
+// sheet dismisses and this lands briefly: a check + "Memory created" + a "View"
+// action that opens the new memory. Auto-dismisses; not a blocking dialog. ──
+function CreatedToast({ label = 'Memory created' }) {
+  return (
+    <div style={{ position: 'absolute', left: 16, right: 16, bottom: 92, display: 'flex', alignItems: 'center', gap: 11, background: PX.ink, color: PX.accentInk, borderRadius: 14, padding: '13px 15px', boxShadow: '0 10px 34px rgba(0,0,0,0.24)' }}>
+      <span style={{ width: 22, height: 22, borderRadius: 11, background: PX.confirmed, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
+      </span>
+      <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, letterSpacing: -0.1 }}>{label}</span>
+      <span style={{ fontSize: 14.5, fontWeight: 700, color: PX.accentBright, letterSpacing: -0.1 }}>View</span>
+    </div>
+  );
+}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <SessionVoiceRow offset="0:00" dur="0:03" text="This is a test voice clip" />
-            <SessionMediaRow offset="+128s" hue={35} label="Photo" divider />
-            <SessionVoiceRow offset="+180s" dur="0:02" text="Here, picture of my new camera." divider />
-          </div>
+// ═══════════════════════════════════════════════════════════════
+// Clips · New — AFTER creating a memory from the 10:32 session (1 of 2
+// clips included, 1 excluded). The four post-create truths, made visible:
+//   • the session is consumed → we're back on the Clips LIST (not the
+//     stale session screen);
+//   • the included clip is connected → it LEFT New (gone from here);
+//   • the excluded clip RETURNED to the bench as a loose New clip;
+//   • a "Memory created · View" toast confirms it worked.
+// New count dropped 3 → 2 (by the ONE included clip, not the whole session).
+// ═══════════════════════════════════════════════════════════════
+function ScrClipsAfterCreate() {
+  return (
+    <PhoneScreen>
+      <ClipsHeader status="new" type="all" />
+      <div style={{ flex: 1, overflow: 'hidden', padding: '2px 16px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <div style={{ fontFamily: PX.serif, fontSize: 27, fontWeight: 400, letterSpacing: -0.5, color: PX.ink, lineHeight: 1.1 }}>2 new clips</div>
+          <div style={{ fontSize: 13.5, color: PX.ink3, letterSpacing: -0.1, marginTop: 5 }}>yesterday</div>
+        </div>
+        <SessionCard time="5:29 PM" day="Yesterday" media={{ audio: 1 }} dur="0:05" preview="And here is another voice clip coming from my watch." />
+        {/* the excluded clip, returned to the bench as a loose New clip */}
+        <SessionCard time="10:32 AM" day="Yesterday" media={{ audio: 1 }} dur="0:03" preview="This is a test voice clip y'all" />
+      </div>
+      <CreatedToast />
+      <TabBar active="clips" />
+    </PhoneScreen>
+  );
+}
 
-          {/* one ochre commit — user acts. No sparkle (not an AI action). */}
-          <div style={{ minHeight: 52, borderRadius: 14, background: PX.accent, color: PX.accentInk, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 16, fontWeight: 600, letterSpacing: -0.2, marginTop: 18 }}>
-            Create one memory
-            <svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke={PX.accentInk} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
-          </div>
-          {/* destruction — full-width, danger red, hairline (per buttons spec) */}
-          <div style={{ minHeight: 52, borderRadius: 14, border: '1px solid ' + PX.danger, color: PX.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 16, fontWeight: 600, letterSpacing: -0.2, marginTop: 11 }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={PX.danger} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/></svg>
-            Delete session
-          </div>
-          <div style={{ fontSize: 12, color: PX.ink3, textAlign: 'center', marginTop: 10 }}>Moves to Recently Deleted · kept for 30 days.</div>
+// ═══════════════════════════════════════════════════════════════
+// Clips · New · EMPTY — source-agnostic copy. Clips now arrive from
+// the phone + button, the Watch, and Siri, so the empty state must NOT
+// say "from your Watch" / "Audio you record on your Apple Watch lands
+// here" (CC's build). Source is per-clip metadata, never the headline.
+// ═══════════════════════════════════════════════════════════════
+function ScrClipsEmpty() {
+  return (
+    <PhoneScreen>
+      <ClipsHeader status="new" type="all" />
+      <div style={{ flex: 1, overflow: 'hidden', padding: '2px 18px 10px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontFamily: PX.serif, fontSize: 27, fontWeight: 400, letterSpacing: -0.5, color: PX.ink, lineHeight: 1.1 }}>Nothing new</div>
+        <div style={{ fontSize: 14, color: PX.ink3, letterSpacing: -0.1, marginTop: 8, lineHeight: 1.5, maxWidth: 300 }}>
+          Clips you capture — with the + button, on your Watch, or with Siri — land here.
         </div>
       </div>
       <TabBar active="clips" />
@@ -540,9 +674,174 @@ function ScrMixedSession() {
   );
 }
 
+// Session clip rows — the operational register of the canonical ClipAtom.
+// These wrap ClipAtom (register="operational", inclusion ring) and add only the
+// session-body chrome: a divider between stacked rows. No duplicate ring/retry/
+// play primitives — those live once in screens-clip-model.jsx.
+function SessionVoiceRow({ offset, dur, text, divider, failed = false, included = true }) {
+  return (
+    <div style={{ borderTop: divider ? '1px solid ' + PX.hairline : 'none', paddingTop: divider ? 14 : 0 }}>
+      <ClipAtom media="audio" register="operational" ring included={included} meta={offset} duration={dur} transcript={text} failed={failed} />
+    </div>
+  );
+}
+
+// A photo/video clip inside the session — the same atom, media register. The
+// empty-description invite is rendered by ClipAtom itself (operational media),
+// so nothing here duplicates it.
+function SessionMediaRow({ offset, hue, label = 'Photo', video, divider, desc, included = true }) {
+  return (
+    <div style={{ borderTop: divider ? '1px solid ' + PX.hairline : 'none', paddingTop: divider ? 14 : 0 }}>
+      <ClipAtom media={video ? 'video' : 'photo'} register="operational" ring included={included} meta={offset} hue={hue} description={desc} />
+    </div>
+  );
+}
+
+// The OPENED session — pushed from the calm list (tap a SessionCard). This is
+// where the actions live: the composition sits at the top, the clip body in the
+// middle, and Start a Memory (ochre primary) + Delete session (red,
+// bottom-most) at the end — the "fate actions at the bottom of the opened item"
+// rule. The list card carries NONE of this; it's a bundle of evidence, not a
+// decision.
+function ScrMixedSession() {
+  return (
+    <PhoneScreen>
+      {/* back to the calm list, not the page title */}
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '6px 14px 8px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: PX.accent, fontSize: 15 }}>
+          <svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 8l7 7"/></svg>
+          Clips
+        </span>
+        <span style={{ flex: 1 }} />
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 10px', display: 'flex', flexDirection: 'column' }}>
+        {/* composition header — the bundle, at the top of the opened item */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+          <span style={{ fontSize: 17, fontWeight: 700, color: PX.ink, fontVariantNumeric: 'tabular-nums' }}>10:32 AM</span>
+          <span style={{ color: PX.ink4 }}>·</span>
+          <SessionCounts media={{ audio: 2, photo: 1 }} />
+          <span style={{ color: PX.ink4 }}>·</span>
+          <span style={{ fontSize: 13.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums' }}>0:06</span>
+        </div>
+        <div style={{ fontSize: 12.5, color: PX.ink3, marginBottom: 20 }}>Yesterday · one sitting</div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <SessionVoiceRow offset="0:00" dur="0:03" text="This is a test voice clip" />
+          <SessionMediaRow offset="+128s" hue={35} label="Photo" divider />
+          <SessionVoiceRow offset="+180s" dur="0:02" text="Here, picture of my new camera." divider />
+        </div>
+
+        {/* Start a Memory — the ochre PRIMARY, at the action position. No
+            sparkle (the user acts; not an AI action). */}
+        <div style={{ minHeight: 52, borderRadius: 14, background: PX.accent, color: PX.accentInk, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 16, fontWeight: 600, letterSpacing: -0.2, marginTop: 24 }}>
+          Start a Memory
+          <svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke={PX.accentInk} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
+        </div>
+        {/* Delete session — red, bottom-most (fate action) */}
+        <div style={{ minHeight: 52, borderRadius: 14, border: '1px solid ' + PX.danger, color: PX.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 16, fontWeight: 600, letterSpacing: -0.2, marginTop: 11 }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={PX.danger} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/></svg>
+          Delete session
+        </div>
+        <div style={{ fontSize: 12, color: PX.ink3, textAlign: 'center', marginTop: 10 }}>Moves to Recently Deleted · kept for 30 days.</div>
+      </div>
+      <TabBar active="clips" />
+    </PhoneScreen>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Session with one clip EXCLUDED — the inclusion ring OFF.
+// The excluded clip's ring is a hollow ink hairline (a choice), its
+// transcript de-emphasised one step but fully legible — deliberately
+// UNLIKE the failed-clip style (dimmed + Retry). It stays IN the card;
+// it just won't join the memory when you Start a Memory.
+// ═══════════════════════════════════════════════════════════════
+function ScrSessionExcluded() {
+  return (
+    <PhoneScreen>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '6px 14px 8px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: PX.accent, fontSize: 15 }}>
+          <svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 8l7 7"/></svg>
+          Clips
+        </span>
+        <span style={{ flex: 1 }} />
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 10px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+          <span style={{ fontSize: 17, fontWeight: 700, color: PX.ink, fontVariantNumeric: 'tabular-nums' }}>10:32 AM</span>
+          <span style={{ color: PX.ink4 }}>·</span>
+          <SessionCounts media={{ audio: 2, photo: 1 }} />
+        </div>
+        <div style={{ fontSize: 12.5, color: PX.ink3, marginBottom: 18 }}>Yesterday · tap a ring to include or leave out</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <SessionVoiceRow offset="0:00" dur="0:03" text="This is a test voice clip" />
+          <SessionMediaRow offset="+128s" hue={35} divider />
+          <SessionVoiceRow offset="+180s" dur="0:02" text="Ignore this one — I bumped record by accident." divider included={false} />
+        </div>
+        <div style={{ minHeight: 52, borderRadius: 14, background: PX.accent, color: PX.accentInk, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 16, fontWeight: 600, letterSpacing: -0.2, marginTop: 24 }}>
+          Start a Memory · 2 clips
+          <svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke={PX.accentInk} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
+        </div>
+        <div style={{ fontSize: 12, color: PX.ink3, textAlign: 'center', marginTop: 10 }}>The left-out clip stays on your bench.</div>
+      </div>
+      <TabBar active="clips" />
+    </PhoneScreen>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Single-clip session — the SAME atom with ring={false} (excluding the
+// sole clip = deleting the session, so inclusion is meaningless) and it
+// KEEPS its Play/evidence control. No bespoke bare-transcript card.
+// Triage collapses to Start a Memory + Delete session.
+// ═══════════════════════════════════════════════════════════════
+function ScrSingleClipSession() {
+  return (
+    <PhoneScreen>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '6px 14px 8px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: PX.accent, fontSize: 15 }}>
+          <svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 8l7 7"/></svg>
+          Clips
+        </span>
+        <span style={{ flex: 1 }} />
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 10px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+          <span style={{ fontSize: 17, fontWeight: 700, color: PX.ink, fontVariantNumeric: 'tabular-nums' }}>5:29 PM</span>
+          <span style={{ color: PX.ink4 }}>·</span>
+          <SessionCounts media={{ audio: 1 }} />
+          <span style={{ color: PX.ink4 }}>·</span>
+          <span style={{ fontSize: 13.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums' }}>0:11</span>
+        </div>
+        <div style={{ fontSize: 12.5, color: PX.ink3, marginBottom: 18 }}>Yesterday</div>
+        {/* the atom, ring OFF, Play kept */}
+        <ClipAtom media="audio" register="operational" meta="0:00" duration="0:11" transcript="Remind me to email the framer about the Naples print before Friday." />
+        <div style={{ minHeight: 52, borderRadius: 14, background: PX.accent, color: PX.accentInk, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 16, fontWeight: 600, letterSpacing: -0.2, marginTop: 24 }}>
+          Start a Memory
+          <svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke={PX.accentInk} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
+        </div>
+        <div style={{ minHeight: 52, borderRadius: 14, border: '1px solid ' + PX.danger, color: PX.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 16, fontWeight: 600, letterSpacing: -0.2, marginTop: 11 }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={PX.danger} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/></svg>
+          Delete session
+        </div>
+      </div>
+      <TabBar active="clips" />
+    </PhoneScreen>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// A session clip OPENED — this is now just ScrClipDetail with
+// inSession (Remove from session in the bottom fate stack) and its
+// editing mode (words-only editor). No bespoke editor-with-fate-row
+// screen exists anymore; see ScrClipDetail.
+// ═══════════════════════════════════════════════════════════════
+
 Object.assign(window, {
   TabBar, ClipsHeader, LooseClipRow, PlacedClipRow, Thumb, BurstRow, MediaClipRow,
-  AddDescHint, SessionMediaRow, ScrMediaClipDetail,
-  StatusLine, ScrClipsStatusSheet,
+  AddDescHint, SessionMediaRow, ScrMediaClipDetail, ClipFateStack,
+  StatusLine, ScrClipsStatusSheet, SessionCounts, SessionCard, ScrClipsSessions,
+  CreatedToast, ScrClipsAfterCreate, ScrClipsEmpty,
   ScrClipsDefault, ScrClipsAll, ScrClipDetail, ScrMixedSession,
+  ScrSessionExcluded, ScrSingleClipSession,
 });
