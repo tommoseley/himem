@@ -32,7 +32,7 @@ final class MemoryNavigationBus: ObservableObject {
 
     /// Non-nil = a memory was just materialised from a session and the
     /// **"Memory created" toast** should show on Clips. The user stays
-    /// on the Clips list per `Clip model · spec.md` §Create one memory
+    /// on the Clips list per `Clip model · spec.md` §Start a Memory
     /// (July 12 2026 point 3): "Pop back to the Clips list. The
     /// session no longer exists as a session." The toast is the
     /// feedback; navigation is opt-in via its View button.

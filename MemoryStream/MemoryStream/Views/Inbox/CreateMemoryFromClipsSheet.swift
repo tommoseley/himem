@@ -131,11 +131,13 @@ struct CreateMemoryFromClipsSheet: View {
     // MARK: - Header / commit (mode-aware)
 
     private var headerTitle: String {
-        // Kingfisher Language.md §Vocabulary: "Idle-gap session (already
-        // grouped) | *What should this become?* | 'Create one memory' /
-        // *Review clips · Add to existing · Not yet.*" — the session
-        // pill verb is "Create one memory" (see SessionListView).
-        destination == .newMemory ? "Create one memory" : "Add to a memory"
+        // `docs/design/Kingfisher Language.md` §Vocabulary — Idle-gap
+        // session (already grouped): **"Start a Memory"** /
+        // *Review clips · Add to existing · Not yet.*  The session pill
+        // verb is "Start a Memory" (see `SessionListView`); the sheet
+        // is the continuation of that action, so it carries the same
+        // header. `Clip model · spec.md` §Start a Memory (July 12 2026).
+        destination == .newMemory ? "Start a Memory" : "Add to a memory"
     }
 
     private var commitLabel: String {
@@ -626,7 +628,7 @@ struct CreateMemoryFromClipsSheet: View {
         // Drop manifest rows — audio files were already moved out.
         InboxManifest.shared.removeBatch(clipIds: movedClips.map { $0.clipId })
         // Post-create acceptance criteria per `Clip model · spec.md`
-        // §Create one memory (July 12 2026): the sheet dismisses,
+        // §Start a Memory (July 12 2026): the sheet dismisses,
         // the session is consumed (the manifest publish above
         // triggers `OpenedSessionView` to auto-dismiss back to the
         // calm Clips list), and a **"Memory created" toast** with a

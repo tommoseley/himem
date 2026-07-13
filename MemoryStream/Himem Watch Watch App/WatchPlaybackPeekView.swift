@@ -15,6 +15,15 @@ struct WatchPlaybackPeekView: View {
     @State private var ticker: Timer?
 
     var body: some View {
+        // Layout per Locked Decisions § Affordances ("Delete = one
+        // button, bottom of an opened item") and the July 13 2026
+        // Handoff punch list P2. Play/Pause is the primary content
+        // action (hero, centered). Delete is demoted from an equal-
+        // weight peer circle to a full-width danger-red button at
+        // the foot — the sole destruction path from this detail.
+        // Two-tap `WatchDeleteConfirmView` follows (the documented
+        // Watch-only exception because unsynced audio has no
+        // Recently-Deleted net).
         VStack(spacing: 10) {
             HStack {
                 Button(action: onClose) {
@@ -43,29 +52,32 @@ struct WatchPlaybackPeekView: View {
                 .font(.system(size: 14).monospacedDigit())
                 .foregroundStyle(.white)
 
-            HStack(spacing: 14) {
-                Button {
-                    togglePlayback()
-                } label: {
-                    Image(systemName: player?.isPlaying == true ? "pause.fill" : "play.fill")
-                        .font(.system(size: 14, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.white.opacity(0.10))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WatchTheme.danger)
-                        .frame(width: 34, height: 34)
-                        .background(WatchTheme.danger.opacity(0.16))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
+            Button {
+                togglePlayback()
+            } label: {
+                Image(systemName: player?.isPlaying == true ? "pause.fill" : "play.fill")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Circle())
             }
+            .buttonStyle(.plain)
+
             Spacer(minLength: 0)
+
+            Button(action: onDelete) {
+                Text("Delete")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(WatchTheme.danger)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 4)
         }
         .onAppear { setupPlayer() }
         .onDisappear { teardownPlayer() }

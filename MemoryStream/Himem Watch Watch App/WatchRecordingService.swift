@@ -434,10 +434,11 @@ final class WatchRecordingService: NSObject, ObservableObject {
     // MARK: - Permissions
 
     /// Async mic-permission check. Public so callers can pre-fetch
-    /// permission *before* presenting the 3-2-1-Listening countdown
-    /// — without this, the system prompt can pop in the middle of
-    /// the countdown sweep on first launch, which interrupts the
-    /// gather-yourself rhythm.
+    /// permission *before* presenting the fresh-start breath —
+    /// without this, the system prompt can pop during the one-second
+    /// ochre ring sweep on first launch, which interrupts the
+    /// gather-yourself rhythm. (May 27 2026: the 3-2-1 countdown
+    /// was retired in favor of a single one-second breath.)
     func ensureMicPermission() async -> Bool {
         await ensurePermissions()
     }

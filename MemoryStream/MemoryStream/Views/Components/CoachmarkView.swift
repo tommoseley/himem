@@ -110,10 +110,16 @@ extension CoachmarkOrchestrator.Kind {
     }
 
     /// Body copy — one plain sentence about what the tab is for.
+    ///
+    /// **Clips body is source-agnostic** per Locked Decisions § Clips
+    /// surface + `CLAUDE.md` Phone corollary — no headline leads with
+    /// one source (Watch, +, or Siri). Wording matches the empty-state
+    /// pattern in `SessionListView.emptyState` so the two educational
+    /// surfaces speak the same sentence.
     var body: String {
         switch self {
         case .clips:
-            return "Thoughts from your Watch and the phone FAB land here. Sort what belongs together, or just leave them — nothing's lost."
+            return "Clips you capture — with the + button, on your Watch, or with Siri — land here. Sort what belongs together, or just leave them — nothing's lost."
         case .memories:
             return "Each card is one memory. Tap it to open, edit, or reorganize. Cold launch always lands here."
         case .projects:

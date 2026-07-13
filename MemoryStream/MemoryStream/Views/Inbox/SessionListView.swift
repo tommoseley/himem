@@ -2,16 +2,20 @@ import SwiftUI
 import CoreData
 import AVFoundation
 
-/// Session-first Captured Clips · v2. One surface. Cards expand in
-/// place. Per-clip triage lives **inside** the expanded card — never
-/// on a new screen. Per `docs/Himem · Captured Clips (session-first)-2.html`
-/// and the 2026-05-19 critique that drove the rebuild.
+/// Session-first Captured Clips · workbench. Now rendered as the
+/// default (New) view of the Clips tab via `ClipsTabView`. Per-clip
+/// triage lives **inside** the pushed opened-session screen — never
+/// on a new screen from the list. Per `docs/design/Captured Clips ·
+/// session-first · spec.md` v3 and the 2026-05-19 critique that
+/// drove the rebuild.
 ///
 /// Visual register: operational throughout (SF Pro, denser layout,
 /// no editorial type). The voice softens to reflective only at the
-/// confirm sheet. No selection rings, no "Bundle as memory" verb,
-/// no bottom action bar, no amber badges. "Make a Memory" is the
-/// primary verb and lives inside every card.
+/// confirm sheet. No selection rings, no bottom action bar, no
+/// amber badges. **"Start a Memory"** is the primary verb, ochre
+/// pill, at the action position inside the opened session — locked
+/// by `docs/design/Clip model · spec.md` §Model and `docs/design/
+/// Kingfisher Language.md` (Idle-gap session row).
 struct SessionListView: View {
     @ObservedObject var inbox: InboxManifest = .shared
     @ObservedObject var arrivals: InboxArrivalTracker = .shared
@@ -445,11 +449,11 @@ struct SessionListView: View {
     /// preview + "Tap to review" chevron; no Create / Delete
     /// buttons. Tapping pushes into `openedSessionContent` (via the
     /// `.navigationDestination(for: ClipGroup.self)` at `body` level)
-    /// where Create / Delete live at the bottom of the opened item.
+    /// where Start / Delete live at the bottom of the opened item.
     /// Locked July 12 2026 (`Clip model · spec.md` §Model):
     /// > "a list of eight sessions must not be eight pairs of
     /// > shouting buttons. Tapping opens the session, and *that* is
-    /// > where Create one memory (the ochre primary, at the action
+    /// > where Start a Memory (the ochre primary, at the action
     /// > position) and Delete session (red, bottom-most) live."
     @ViewBuilder
     private func sessionCard(_ session: ClipGroup) -> some View {
@@ -488,10 +492,15 @@ struct SessionListView: View {
                     absorbedMediaRefs: includedAbsorbedMedia(in: session)
                 )
             } label: {
-                // "Create one memory" is the placement primitive for an
-                // already-grouped (idle-gap) session per
-                // docs/design/Kingfisher Language.md. Retired: "Make a Memory."
-                Label("Create one memory", systemImage: "sparkles")
+                // "Start a Memory" is the locked verb for an already-
+                // grouped (idle-gap) session per
+                // `docs/design/Kingfisher Language.md` (row: Idle-gap
+                // session) and `docs/design/Clip model · spec.md`
+                // §Model. Retired: "Make a Memory," "Create one memory."
+                // `plus.circle` (neutral user-action icon) — not
+                // `sparkles`, which the Crucible button rule reserves
+                // for AI-blue buttons and drops from ochre user actions.
+                Label("Start a Memory", systemImage: "plus.circle")
             }
         }
     }
@@ -515,13 +524,13 @@ struct SessionListView: View {
     // MARK: - Opened session (pushed screen)
 
     /// The pushed opened-session screen — the composition + all
-    /// clip rows + Create-one-memory (ochre primary) + Delete-
-    /// session (red, bottom-most). Reuses the existing
-    /// `sessionMetaRow` + `expandedBody` helpers verbatim; the only
-    /// new pieces are the scroll container, the paper background,
-    /// and a nav title. Auto-dismisses via `AutoDismissView` when
-    /// the underlying session leaves the manifest mid-flight (all
-    /// clips placed into a memory, all deleted, or bundled by Sort).
+    /// clip rows + Start-a-Memory (ochre primary) + Delete-session
+    /// (red, bottom-most). Reuses the existing `sessionMetaRow` +
+    /// `expandedBody` helpers verbatim; the only new pieces are the
+    /// scroll container, the paper background, and a nav title.
+    /// Auto-dismisses via `AutoDismissView` when the underlying
+    /// session leaves the manifest mid-flight (all clips placed into
+    /// a memory, all deleted, or bundled by Sort).
     @ViewBuilder
     private func openedSessionContent(sessionId: UUID) -> some View {
         if let session = sessions.first(where: { $0.id == sessionId }) {
@@ -675,8 +684,10 @@ struct SessionListView: View {
                     mediaClipRow(ref, session: session, isLast: idx == rows.count - 1)
                 }
             }
-            // v3 (July 4 2026): the "Make a Memory" pill lives here,
-            // folded into the expander. One primary verb, one tap.
+            // v3 (July 4 2026): the primary pill lives here, folded
+            // into the expander. One primary verb ("Start a Memory"),
+            // one tap. Verb locked by `Clip model · spec.md` §Model
+            // and `Kingfisher Language.md` (Idle-gap session row).
             sessionActionRow(session, isExpanded: true)
                 .padding(.top, 18)
             // Bottom `Delete session` — the session is the opened item
@@ -1000,36 +1011,38 @@ struct SessionListView: View {
         }
     }
 
-    // MARK: - Action row (Make a Memory + optional Discard link)
+    // MARK: - Action row (Start a Memory)
 
     /// Action row layout per v2.2 (June 12 2026 delete sweep): the
-    /// Make a Memory pill is the only action-row affordance. The
+    /// Start-a-Memory pill is the only action-row affordance. The
     /// session's own destruction lives at the bottom of the expanded
     /// body — same bottom-Delete rule as everywhere else; swipe and
-    /// Action row rendered under both collapsed and expanded bodies.
-    /// Per `Captured Clips · session-first · spec.md` v3 § "Session card
-    /// anatomy": one full-width `Make a Memory` pill, one primary verb,
-    /// one tap. Line 172 explicitly rejects "Create memory" /
-    /// "Bundle" / "Save as memory" / "Bundle as memory" — do not drift.
+    /// long-press Trash are retired. Per `Captured Clips · session-
+    /// first · spec.md` v3 § "Session card anatomy": one full-width
+    /// primary pill, one primary verb, one tap. `Kingfisher Language.md`
+    /// (Idle-gap session row) and `Clip model · spec.md` §Model lock
+    /// the verb as **"Start a Memory"**. Explicitly rejected in the
+    /// spec: "Create memory," "Bundle," "Save as memory," "Bundle as
+    /// memory," "Create one memory," "Make a Memory" — do not drift.
     @ViewBuilder
     private func sessionActionRow(_ session: ClipGroup, isExpanded: Bool) -> some View {
         let selected = selectionFor(session)
         let selectedClips = session.clips.filter { selected.contains($0.clipId) }
         let isDisabled = selectedClips.isEmpty
         HStack(spacing: 12) {
-            makeAMemoryPill(session, selectedClips: selectedClips, isDisabled: isDisabled)
+            startAMemoryPill(session, selectedClips: selectedClips, isDisabled: isDisabled)
         }
     }
 
-    /// Placement pill — full capsule (height 40, radius 20),
-    /// 14pt semibold paper-color text, trailing chevron arrow.
-    /// Matches `MakeAMemoryPill` in the JSX exactly (JSX symbol name
-    /// preserved; visible copy is "Create one memory" per Kingfisher
-    /// Language.md — the placement primitive for an idle-gap session).
-    /// Disabled state drops the ochre to 35% alpha so it reads as
-    /// inert rather than dimmed (per JSX: `rgba(198,74,28,0.35)`).
+    /// Primary pill — full capsule (height 40, radius 20), 14pt
+    /// semibold paper-color text, trailing chevron arrow. Verb:
+    /// **"Start a Memory"** — the locked label for an already-grouped
+    /// (idle-gap) session per `docs/design/Kingfisher Language.md`
+    /// (row: Idle-gap session) and `docs/design/Clip model · spec.md`
+    /// §Model. Disabled state drops the ochre to 35% alpha so it reads
+    /// as inert rather than dimmed (per JSX: `rgba(198,74,28,0.35)`).
     @ViewBuilder
-    private func makeAMemoryPill(_ session: ClipGroup, selectedClips: [InboxClip], isDisabled: Bool) -> some View {
+    private func startAMemoryPill(_ session: ClipGroup, selectedClips: [InboxClip], isDisabled: Bool) -> some View {
         Button {
             bundleSession = BundleRequest(
                 session: session,
@@ -1038,7 +1051,7 @@ struct SessionListView: View {
             )
         } label: {
             HStack(spacing: 8) {
-                Text("Create one memory")
+                Text("Start a Memory")
                     .font(.system(size: 14, weight: .semibold))
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .bold))

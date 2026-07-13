@@ -63,7 +63,7 @@ struct ClipsTabView: View {
     /// this view consumes it into its own `filter` state.
     @ObservedObject private var filterBus = ClipsFilterBus.shared
     /// Observed for the post-Create "Memory created" toast per
-    /// `Clip model · spec.md` §Create one memory (July 12 2026).
+    /// `Clip model · spec.md` §Start a Memory (July 12 2026).
     @ObservedObject private var memoryNav = MemoryNavigationBus.shared
     /// Non-nil while the created-memory toast is on screen. Timer
     /// clears it after ~3.5s; the View button also clears via the

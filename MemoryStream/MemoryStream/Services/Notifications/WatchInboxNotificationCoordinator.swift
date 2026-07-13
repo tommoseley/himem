@@ -461,9 +461,14 @@ final class WatchInboxNotificationCoordinator {
     /// Passive single-clip body. Single clip reads naturally; multi-
     /// clip uses the count so the user sees the in-place update when
     /// a new arrival re-renders the existing notification body.
+    ///
+    /// **Source-agnostic** per `CLAUDE.md` §Phone / Locked Decisions
+    /// § Clips surface: clips arrive from +, Watch, and Siri, so the
+    /// headline names none of them. Handoff · code-anchored punch list
+    /// (2026-07-13) P1 · Source-agnostic Clips copy.
     private func passiveBody(count: Int) -> String {
         count <= 1
-            ? "New voice clip from your Watch"
+            ? "There are new clips you can review"
             : "\(count) voice clips waiting"
     }
 

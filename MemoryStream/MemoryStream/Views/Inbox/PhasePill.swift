@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Phase-state pill for the sync surface (spec § SYNC / INCOMING in
 /// `screens-captured-clips-sessions.jsx`). Renders the same role on
-/// an `IncomingCard` that "Make a Memory" plays on a ready
+/// an `IncomingCard` that "Start a Memory" plays on a ready
 /// `SessionCard` — the at-a-glance signal for what the card is doing.
 ///
 /// Status is never color alone (Crucible accessibility rule): each

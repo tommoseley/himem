@@ -74,7 +74,7 @@ struct SessionMediaAbsorberTests {
         )
         // Overlapping windows → photo shows in both. Not ideal, but
         // safer than dropping the photo entirely; the user's
-        // "Create one memory" choice on either card resolves it.
+        // "Start a Memory" choice on either card resolves it.
         let inSession1 = (result.mediaBySessionId[session1.id] ?? []).count
         let inSession2 = (result.mediaBySessionId[session2.id] ?? []).count
         #expect(inSession1 + inSession2 >= 1, "photo must appear in at least one session")

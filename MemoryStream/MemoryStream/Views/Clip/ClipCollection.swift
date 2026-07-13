@@ -54,9 +54,9 @@ struct ClipCollection<Derived: View, Actions: View>: View {
     let derived: () -> Derived
 
     /// Actions slot at the bottom of the body. Session cards pass
-    /// the "Create one memory" pill + "Delete session" button.
-    /// Memory Detail passes `EmptyView()` (Memory Detail's actions
-    /// live on the containing view — bottom Delete + reorganize).
+    /// the "Start a Memory" pill + "Delete session" button. Memory
+    /// Detail passes `EmptyView()` (Memory Detail's actions live on
+    /// the containing view — bottom Delete + reorganize).
     let actions: () -> Actions
 
     /// Per-atom callback for tapping the content area (transcript,

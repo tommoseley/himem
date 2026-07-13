@@ -110,9 +110,15 @@ struct WatchPendingListView: View {
             header
                 .padding(.bottom, 4)
             capacityChip
-            // List (not LazyVStack) so `.swipeActions(edge: .trailing)`
-            // works. watchOS swipe-to-reveal-delete is List-row-only;
-            // LazyVStack rows ignore the modifier silently.
+            // `List` is retained so row insets, animation, and the
+            // trailing footer read as one scrollable surface. Swipe-
+            // to-delete is retired (July 13 2026, Handoff · code-
+            // anchored punch list P2 / Locked Decisions § Affordances:
+            // "Delete = one button, bottom of an opened item"). Tap
+            // the row → `WatchPlaybackPeekView` → full-width Delete
+            // at the foot → `WatchDeleteConfirmView` two-tap confirm
+            // (the documented Watch-only exception — unsynced audio
+            // has no Recently-Deleted safety net).
             List {
                 ForEach(pending.clips) { clip in
                     rowView(for: clip)
@@ -221,18 +227,6 @@ struct WatchPendingListView: View {
                 removal: .move(edge: .leading).combined(with: .opacity)
             )
         )
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            // Text-only label: the system collapses Label into a
-            // huge edge-filling trash glyph on watchOS, which looks
-            // disproportionate at chip-row scale. Matches Mail and
-            // Messages' watchOS swipe-delete idiom — short word in
-            // destructive red, no icon.
-            Button(role: .destructive) {
-                clipPendingDelete = clip
-            } label: {
-                Text("Delete")
-            }
-        }
     }
 
     // MARK: - Formatters
