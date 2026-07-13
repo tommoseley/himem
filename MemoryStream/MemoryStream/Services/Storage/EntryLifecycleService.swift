@@ -630,6 +630,73 @@ final class EntryLifecycleService {
         }
     }
 
+    // MARK: - Create memory from N voice clips (Captured Clips → Start a Memory)
+
+    /// Creates a new memory whose evidence is the supplied voice clips.
+    /// Used by `CreateMemoryFromClipsSheet` for the "Start a Memory"
+    /// path. Absorbed media, project assignment, title, and location
+    /// stamping stay in the sheet — this primitive owns only the
+    /// entry + voice fragments + reconciled `entry.content`.
+    ///
+    /// **The reconcile matters.** Voice fragments store
+    /// `JournalEntry.cleanedTranscript(transcript)` — leading ASR noise
+    /// (`.`, `,`, `…`, whitespace) is stripped at ingest. If we let
+    /// `entry.content` remain the raw joined transcript, it drifts
+    /// from `joinedContent(from: entry)` (which trims + reads cleaned
+    /// fragment text), and `migrateOrphanedContentIfNeeded` — fired on
+    /// Memory Detail onAppear — mints a `.note` MediaReference to
+    /// "preserve" the orphaned text. Result: N voice clips become N+1
+    /// clips in the memory, the extra being a synthesized note
+    /// duplicating the audio's own transcripts. Dogfood 2026-07-13.
+    /// Money-tested by
+    /// `CreateMemoryFromClipsAssemblyTests
+    /// .createMemoryFromNVoiceClips_yieldsExactlyNClips_zeroSynthesizedNotes`.
+    @discardableResult
+    func createMemoryFromVoiceClips(
+        _ clips: [(audioFilename: String, transcript: String, capturedAt: Date)],
+        topicName: String?
+    ) -> UUID? {
+        guard !clips.isEmpty else { return nil }
+        do {
+            // Start with an empty content field — the voice fragments
+            // themselves carry the words. Below, `entry.content` is
+            // re-derived from the joined-of-fragments so it stays
+            // byte-equal to what `joinedContent(from: entry)` returns.
+            let entry = try storage.createEntry(content: "", inputType: .voiceInApp)
+            try storage.save(context: storage.viewContext)
+            let _ = try storage.createProcessingTask(for: entry)
+
+            let ordered = clips.sorted { $0.capturedAt < $1.capturedAt }
+            for clip in ordered {
+                _ = try storage.createVoiceFragment(
+                    for: entry,
+                    audioFilename: clip.audioFilename,
+                    transcript: clip.transcript,
+                    createdAt: clip.capturedAt
+                )
+            }
+
+            // Reconcile — same shape as `save(voiceFilename:)` at ~L425
+            // and `appendClips` at ~L624. Without this, orphan-content
+            // migration on detail-view open mints a duplicate `.note`
+            // to "preserve" `entry.content` — the 2026-07-13 defect.
+            entry.content = Self.joinedContent(from: entry)
+
+            if let topicName {
+                let paletteKey = TopicPaletteStore.shared.key(for: topicName)
+                let topic = try storage.findOrCreateTopic(name: topicName, paletteKey: paletteKey)
+                entry.addToTopics(topic)
+            }
+
+            try storage.save(context: storage.viewContext)
+            processEntry(entry)
+            return entry.id
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+            return nil
+        }
+    }
+
     // MARK: - Delete / Recycle
 
     /// Returns true when an entry has no media fragments left — i.e. every

@@ -549,22 +549,26 @@ struct CreateMemoryFromClipsSheet: View {
             return
         }
 
-        let joinedTranscript = movedClips
-            .map { $0.transcript }
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n\n")
-
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Create the entry with no `mediaCaptures` — voice fragments
-        // are written explicitly below so each carries its own
-        // per-clip capturedAt at creation time and creates its edge
-        // atomically.
-        let newId = viewModel.saveEntry(
-            content: joinedTranscript,
-            inputType: .voiceInApp,
+        // Delegate the "N voice clips → 1 new memory" assembly to the
+        // lifecycle primitive so the reconcile between `entry.content`
+        // and the joined-of-fragments happens on the same code path as
+        // `save(voiceFilename:)` and `appendClips`. Without it, orphan-
+        // content migration on Memory Detail open mints a duplicate
+        // `.note` (2026-07-13 dogfood defect). Money-tested by
+        // `CreateMemoryFromClipsAssemblyTests`.
+        let voiceClips = movedClips
+            .sorted { $0.capturedAt < $1.capturedAt }
+            .map { (audioFilename: $0.audioFilename, transcript: $0.transcript, capturedAt: $0.capturedAt) }
+        let newId = lifecycle.createMemoryFromVoiceClips(
+            voiceClips,
             topicName: selectedTopic
         )
+        // No explicit `loadEntries` — `JournalViewModel.observeStorage
+        // Changes` is subscribed to `NSManagedObjectContextObjectsDid
+        // Change` on the same viewContext and reloads on the debounced
+        // tick after the lifecycle save.
 
         if let newId {
             let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
@@ -573,14 +577,6 @@ struct CreateMemoryFromClipsSheet: View {
             if let entry = try? storage.viewContext.fetch(request).first {
                 if !trimmedTitle.isEmpty {
                     entry.title = trimmedTitle
-                }
-                for clip in movedClips.sorted(by: { $0.capturedAt < $1.capturedAt }) {
-                    _ = try? storage.createVoiceFragment(
-                        for: entry,
-                        audioFilename: clip.audioFilename,
-                        transcript: clip.transcript,
-                        createdAt: clip.capturedAt
-                    )
                 }
                 // July 11 2026 media-agnostic idle-gap lock: absorbed
                 // photo/video refs on the bench session card get
