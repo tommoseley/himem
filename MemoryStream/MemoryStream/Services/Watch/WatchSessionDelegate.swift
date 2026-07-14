@@ -65,6 +65,11 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         Task { @MainActor in
             if reachable {
                 InboxArrivalTracker.shared.recordReachabilityRestored()
+                // P1 (2026-07-14): reachability returning is the phone's
+                // cue to kick a backgrounded watch's stalled transfer
+                // queue. Gated on an actual pending inbound transfer so
+                // we don't pay the wake cost on every reachability flip.
+                kickWatchIfPendingInbound()
             } else {
                 InboxArrivalTracker.shared.recordReachabilityLost()
             }
@@ -768,6 +773,67 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             NSLog("[HiMem][WC] iPhone — flush request failed: \(error.localizedDescription)")
         }
         NSLog("[HiMem][WC] iPhone — flush request sent")
+    }
+
+    // MARK: - P1 · durable-wake kick (2026-07-14)
+
+    /// Whether the phone should fire a durable wake when it comes to
+    /// foreground / regains reachability. Extracted as a pure function so
+    /// the trigger wiring is unit-testable without a live `WCSession`
+    /// (`WatchDurableWakeTests`).
+    ///
+    /// The gate is condition 1 of the P1 handoff: only wake when a clip
+    /// is genuinely pending inbound. The wake costs battery on both
+    /// devices and is invisible to unit tests, so we don't fire it on
+    /// every foreground with an empty inbox.
+    enum DurableWakeDecision: Equatable { case wake, skip }
+
+    static func durableWakeDecision(hasPendingInbound: Bool) -> DurableWakeDecision {
+        hasPendingInbound ? .wake : .skip
+    }
+
+    /// The payload a durable wake carries. Same `flushPending` command
+    /// the manual pull-to-refresh uses — the watch re-drives its pending
+    /// `transferFile` queue on receipt. The *transport* is what differs
+    /// (durable `transferUserInfo`, not `sendMessage`), so it reaches a
+    /// backgrounded watch.
+    static func durableWakePayload() -> [String: Any] { ["command": "flushPending"] }
+
+    /// Phone-initiated durable wake for a stalled watch→phone transfer.
+    ///
+    /// Why `transferUserInfo`, not `sendMessage`: `sendMessage` requires
+    /// `isReachable`, which is false exactly when we need it (watch app
+    /// backgrounded). `transferUserInfo` is durable and **wakes the
+    /// backgrounded watch app** to receive it; that wake is itself the
+    /// scheduling opportunity the queued `transferFile` needs. The
+    /// `sendMessage` fast path is a best-effort optimization for the
+    /// already-reachable case; the durable path is the actual lever.
+    ///
+    /// Supersedes the assumption behind `requestWatchPendingFlush`'s
+    /// "we don't queue this via transferUserInfo because the system has
+    /// already retried" — the P1 dogfood bug is the counter-evidence.
+    @MainActor
+    func kickWatchIfPendingInbound() {
+        let hasPending = InboxArrivalTracker.shared.hasAnyInFlight
+        guard Self.durableWakeDecision(hasPendingInbound: hasPending) == .wake else {
+            NSLog("[HiMem][WC] iPhone — durable wake skipped: no pending inbound transfer")
+            return
+        }
+        let session = WCSession.default
+        guard session.activationState == .activated else {
+            NSLog("[HiMem][WC] iPhone — durable wake skipped: session not activated")
+            return
+        }
+        let payload = Self.durableWakePayload()
+        // Best-effort fast path when the watch is already reachable.
+        if session.isReachable {
+            session.sendMessage(payload, replyHandler: nil) { error in
+                NSLog("[HiMem][WC] iPhone — durable wake sendMessage failed: \(error.localizedDescription) (transferUserInfo backup queued)")
+            }
+        }
+        // The durable lever — always queued.
+        let transfer = session.transferUserInfo(payload)
+        NSLog("[HiMem][WC] iPhone — durable wake queued via transferUserInfo, transferring=\(transfer.isTransferring)")
     }
 
     /// Pure construction of the ack wire payload. Extracted so unit

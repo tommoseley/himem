@@ -209,11 +209,30 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// the fast-path case (e.g., user actively interacting with both).
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         NSLog("[HiMem][WC] watch — didReceiveMessage keys=\(Array(message.keys))")
-        if message["command"] as? String == "flushPending" {
+        routeIncoming(message)
+    }
+
+    /// Routes an inbound phone payload: a `flushPending` command
+    /// re-drives the pending manifest; anything else is an ack.
+    /// Shared by the `sendMessage` and `transferUserInfo` delivery
+    /// paths so a **durable** flush (the P1 durable-wake kick, which
+    /// arrives via `transferUserInfo` to reach a backgrounded watch)
+    /// is honored, not silently dropped into `handleAckPayload` and
+    /// logged as IGNORED.
+    nonisolated func routeIncoming(_ payload: [String: Any]) {
+        if payload["command"] as? String == "flushPending" {
             Task { @MainActor in self.flushPendingManifest() }
             return
         }
-        handleAckPayload(message)
+        handleAckPayload(payload)
+    }
+
+    /// Pure classifier for the routing decision above — extracted so the
+    /// durable-path fix is unit-checkable. `true` iff the payload is a
+    /// flush command (re-drive), `false` iff it should be treated as an
+    /// ack.
+    nonisolated static func isFlushCommand(_ payload: [String: Any]) -> Bool {
+        payload["command"] as? String == "flushPending"
     }
 
     /// Re-attempts `transferFile` for every clip in the manifest. Wired
@@ -237,7 +256,10 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// queued an ack for the next time the watch app activates.
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         NSLog("[HiMem][WC] watch — didReceiveUserInfo keys=\(Array(userInfo.keys))")
-        handleAckPayload(userInfo)
+        // P1 (2026-07-14): route through the shared handler so a durable
+        // `flushPending` (the phone's durable-wake kick) re-drives the
+        // queue instead of being misread as a malformed ack.
+        routeIncoming(userInfo)
     }
 
     /// Diagnostic — fires when a queued transferFile finishes (success or

@@ -352,6 +352,11 @@ struct MemoryStreamApp: App {
                 // when the user opens the app. Watch's `pending.remove`
                 // is idempotent — already-removed clips are no-ops.
                 WatchSessionDelegate.shared.reconcileWatchAcks()
+                // P1 (2026-07-14): opening the phone is the other cue to
+                // kick a backgrounded watch's stalled transfer queue.
+                // Gated on an actual pending inbound transfer inside the
+                // call, so this is a cheap no-op when the inbox is empty.
+                WatchSessionDelegate.shared.kickWatchIfPendingInbound()
                 // Reset the home-screen icon badge to the live inbox
                 // count. Defensive against state drift — push payloads
                 // set the badge when they fire, but if the user
