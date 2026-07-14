@@ -169,6 +169,18 @@ Setting configuration properties like `cameraCaptureMode` or `mediaTypes` on a l
 
 ---
 
+### Watch Audio Transfer Format (locked 2026-07-14)
+
+The watch transcodes every clip to **mono · 16 kHz · AAC (`.m4a`) before `transferFile` — it never ships the raw recording.** The hardware input is 3-channel / 48 kHz / Float32 PCM (~576 KB/s of audio): a 59 s clip is ~33 MB raw vs ~230 KB compressed (~144×), and the raw payload takes minutes over WatchConnectivity — the ~50× sync-slowness bug (dogfood 2026-07-14).
+
+- **Whole-file transcode, after stop — never per-callback.** Per-callback resampling inside the record tap starves the resampler's continuity filter and produces silence (the July 5 2026 saga, reverted twice — see `feedback_avaudioconverter_nodatanow_starves_resampler`). Use a single stateful `AVAudioConverter` pass over the finished file; `AVAudioFile` does the AAC encode (no `AVAssetWriter` — unavailable on watchOS, which is why `AudioCompressor` can't be reused here).
+- **Timing (watchdog-sensitive).** `WatchRecordingService.stop` deliberately does NOT sync-drain the write queue (a sync drain on the main thread trips the watchOS watchdog — a documented QA crash), so the transcode runs **off-main, on the send path, after the file finalizes**, idempotent across the retry triggers — never synchronously in `stop()`.
+- **Explicit mono downmix.** `setVoiceProcessingEnabled(false)` does not collapse the watch input to mono on device (still 3 channels) — downmix explicitly.
+- **Guard.** The file handed to `transferFile` MUST be mono / 16 kHz / AAC. An automated assertion (`WatchTransferAudioTranscoderTests`) enforces it; that test failing IS the oversized-transfer bug.
+- **Transport is WatchConnectivity, permanently.** The watch never writes to CloudKit or an iCloud container; the phone is the sole iCloud writer (media → iCloud Files, metadata → private DB), off the capture path. "Watch uploads to CloudKit" is retired, not deferred.
+
+Source of truth: `docs/design/Watch · spec.md §2`, `docs/design/HiMem · Locked Decisions.html`, `docs/architecture/2026-07-14-watch-audio-compression.md`.
+
 ### Wake Lock (Idle Timer)
 
 HiMem holds the system wake lock (iOS: `UIApplication.shared.isIdleTimerDisabled`; watchOS equivalent) **only during active capture** — recording in progress, photo composer open, video composer active. Everything else respects the system idle timer.
