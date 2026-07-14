@@ -122,14 +122,35 @@ enum ClipSessionGrouper {
 struct ClipGroup: Identifiable, Hashable {
     let clips: [InboxClip]
 
-    static func == (lhs: ClipGroup, rhs: ClipGroup) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    /// Equality/hash reflect **membership + content**, not just `id`
+    /// (P0 2026-07-14). `id` is the `rollGroupId`, which is stable no
+    /// matter how many clips remain — so id-only equality made a
+    /// 3-clip group and a post-delete 2-clip group compare *equal*,
+    /// and SwiftUI (which uses `Equatable`/`Hashable` for
+    /// change-detection and `navigationDestination` identity) skipped
+    /// the re-render: the opened session kept showing every clip, both
+    /// waveform badges stuck at the old count, and the deleted clip's
+    /// row stayed tappable → a blank detail that self-dismissed. The
+    /// header escaped it only because it reads `InboxManifest.count`
+    /// directly. Comparing the clips fixes change-detection while `id`
+    /// (below) stays stable so `ForEach` row identity survives a
+    /// delete. Same disease + cure as `EntryDisplayModel`
+    /// (`DisplayModels.swift`), which had the identical id-only
+    /// staleness bug.
+    static func == (lhs: ClipGroup, rhs: ClipGroup) -> Bool {
+        lhs.clips == rhs.clips
+    }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(clips.map(\.clipId))
+    }
 
     /// Stable identity for SwiftUI ForEach. Sessions are
     /// re-grouped on every `InboxManifest` change, so the id needs
     /// to be deterministic per-content rather than per-build.
     /// `rollGroupId` (when present) or the earliest clipId is
-    /// stable across re-groups of the same content.
+    /// stable across re-groups of the same content — deliberately
+    /// membership-*independent* so a row keeps its identity across an
+    /// add/delete (equality, above, carries the change).
     var id: UUID {
         clips.first?.rollGroupId ?? clips.first?.clipId ?? UUID()
     }

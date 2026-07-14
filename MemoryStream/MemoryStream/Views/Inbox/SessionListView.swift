@@ -533,7 +533,15 @@ struct SessionListView: View {
     /// a memory, all deleted, or bundled by Sort).
     @ViewBuilder
     private func openedSessionContent(sessionId: UUID) -> some View {
-        if let session = sessions.first(where: { $0.id == sessionId }) {
+        // Derive the session **live** from the manifest, not the
+        // `sessions` @State snapshot (P0 2026-07-14 · "all counts read
+        // from one reconciled source"). `computeSessions()` reads
+        // `inbox.clips` / `arrivals.clipsInFlight` directly, so this
+        // pushed screen re-renders the instant a clip is deleted or
+        // arrives inside it — the snapshot could lag behind a mutation
+        // made two navigation levels deep. Cheap: one grouping pass over
+        // a small inbox per render of a single opened session.
+        if let session = computeSessions().first(where: { $0.id == sessionId }) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     sessionMetaRow(session)
