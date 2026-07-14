@@ -153,6 +153,27 @@ final class EntryLifecycleService {
                     && ($0.transcript?.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed)
             }) { return }
 
+            // P3 (2026-07-14, Option A): recognize `entry.content` as the
+            // joined VOICE transcripts under the same per-segment ASR-noise
+            // normalization used at ingest, even when byte-unequal to
+            // `joined` above. Voice fragments store CLEANED transcripts
+            // (`StorageService.createVoiceFragment` →
+            // `JournalEntry.cleanedTranscript`), so `joined` is the cleaned
+            // join; the `077de8c` defect class is a *future* write path that
+            // leaves `entry.content` as the RAW join, which the exact
+            // `trimmed == joined` check misses. Normalizing both sides the
+            // way `cleanedTranscript` does closes that drift WITHOUT
+            // suppressing a genuinely-orphaned typed body — that never
+            // reduces to the transcripts, so it still mints (see
+            // `SynthesizedNoteRenderGuardTests` + the legacy
+            // `..._legacyVoiceOnly_mintsNoteForOrphanedContent`). This is
+            // the render-seam fail-safe: the point fix cured the current
+            // write paths; this guards the next one.
+            if refs.contains(where: { $0.mediaTypeEnum == .voice }),
+               Self.normalizedTranscriptBlob(trimmed) == Self.normalizedTranscriptBlob(joined) {
+                return
+            }
+
             // Genuine orphan content — text in `entry.content` that no
             // fragment covers. Mint a `.note` and regenerate so future
             // calls see content == joined and skip.
@@ -326,6 +347,23 @@ final class EntryLifecycleService {
     /// Walks `entry.edgesArray` so a clip shared with another memory
     /// can appear in a different position in each memory's joined
     /// content, per the v1 ontology.
+    /// Normalizes a joined-transcript blob for orphan-content comparison:
+    /// strips leading ASR noise (`.`, `,`, `…`, whitespace) from each
+    /// `\n\n`-separated segment — the same cleaning
+    /// `JournalEntry.cleanedTranscript` applies at ingest — and drops
+    /// empties. Lets `migrateOrphanedContentIfNeeded` recognize
+    /// `entry.content` as the joined voice transcripts even when a write
+    /// path stored the RAW join while the fragments hold cleaned text (the
+    /// `077de8c` drift class). P3 · `Handoff · carry-forward punch list ·
+    /// 2026-07-14`.
+    static func normalizedTranscriptBlob(_ text: String) -> String {
+        text
+            .components(separatedBy: "\n\n")
+            .map { JournalEntry.cleanedTranscript($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+    }
+
     static func joinedContent(from entry: JournalEntry) -> String {
         var parts: [String] = []
         for edge in entry.edgesArray {
