@@ -112,8 +112,6 @@
 		A100000681 /* VoiceCaptureOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000681 /* VoiceCaptureOrchestrator.swift */; };
 		A100000690 /* ClipSessionGrouper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000690 /* ClipSessionGrouper.swift */; };
 		A100000691 /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000691 /* SessionListView.swift */; };
-		A100000693 /* SwipeToDelete.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000693 /* SwipeToDelete.swift */; };
-		A100000694 /* SwipeToDiscard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000694 /* SwipeToDiscard.swift */; };
 		A100000696 /* ClusterProposal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000696 /* ClusterProposal.swift */; };
 		A100000697 /* ClipClusterProposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000697 /* ClipClusterProposer.swift */; };
 		A100000698 /* SortBatchCommit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000698 /* SortBatchCommit.swift */; };
@@ -375,8 +373,6 @@
 		B100000681 /* VoiceCaptureOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCaptureOrchestrator.swift; sourceTree = "<group>"; };
 		B100000690 /* ClipSessionGrouper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipSessionGrouper.swift; sourceTree = "<group>"; };
 		B100000691 /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
-		B100000693 /* SwipeToDelete.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDelete.swift; sourceTree = "<group>"; };
-		B100000694 /* SwipeToDiscard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToDiscard.swift; sourceTree = "<group>"; };
 		B100000696 /* ClusterProposal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterProposal.swift; sourceTree = "<group>"; };
 		B100000697 /* ClipClusterProposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipClusterProposer.swift; sourceTree = "<group>"; };
 		B100000698 /* SortBatchCommit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SortBatchCommit.swift; sourceTree = "<group>"; };
@@ -738,8 +734,6 @@
 				B100000323 /* Linkify.swift */,
 				B100000302 /* AppendFAB.swift */,
 				B100000305 /* CaptureFlowHost.swift */,
-				B100000693 /* SwipeToDelete.swift */,
-				B100000694 /* SwipeToDiscard.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -1329,8 +1323,6 @@
 				A100000699 /* ClusterCardStack.swift in Sources */,
 				A100000312 /* WatchSessionDelegate.swift in Sources */,
 				A100000691 /* SessionListView.swift in Sources */,
-				A100000693 /* SwipeToDelete.swift in Sources */,
-				A100000694 /* SwipeToDiscard.swift in Sources */,
 				A100000315 /* CreateMemoryFromClipsSheet.swift in Sources */,
 				A100000316 /* ExistingMemoryPickerView.swift in Sources */,
 				A100000002 /* JournalEntry.swift in Sources */,

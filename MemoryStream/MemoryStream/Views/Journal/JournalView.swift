@@ -336,8 +336,10 @@ struct JournalView: View {
     // MARK: - Memories list
 
     /// The List of grouped memory entries. Mirrors the original inline
-    /// layout: empty-state placeholder, grouped Sections with swipe
-    /// actions, and a summary footer with the Recently-Deleted count.
+    /// layout: empty-state placeholder, grouped Sections, and a summary
+    /// footer with the Recently-Deleted count. (Swipe actions retired —
+    /// see the per-row comment below; the card is a tap target and
+    /// destruction lives inside the opened memory.)
     private var memoriesList: some View {
         List {
             emptyMemoriesState

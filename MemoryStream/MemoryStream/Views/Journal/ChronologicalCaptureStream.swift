@@ -5,20 +5,19 @@ import AVFoundation
 /// Chronological capture stream: emits one List row per capture in
 /// `createdAt` order. The parent view embeds this inside a `List`, which
 /// is why each row carries `.listRowSeparator`, `.listRowBackground`, and
-/// `.listRowInsets` modifiers — List is responsible for both scrolling
-/// and swipe-action coordination, so vertical drags scroll while
-/// horizontal drags reveal the swipe pills.
+/// `.listRowInsets` modifiers — List owns the scrolling. Row deletion is
+/// the fate row's Delete; swipe-to-delete was retired June 12 2026
+/// (`HiMem · Buttons & Actions §3`), so there are no swipe pills here.
 ///
 /// Three panel kinds:
 ///   - **Voice clip**: timestamp + transcript text. Tap the transcript to
-///     edit in place; trailing swipe deletes; "Original recording · Play"
-///     footer plays back the audio.
+///     edit in place; "Original recording · Play" footer plays back the
+///     audio. Delete via the fate row.
 ///   - **Note** (typed): timestamp + text. Tap the body to edit in place;
-///     trailing swipe deletes.
+///     delete via the fate row.
 ///   - **Photo / video card**: thumbnail + optional description. Photo
 ///     tap consumes (opens description sheet); video play-overlay plays.
-///     Trailing swipe deletes; leading swipe on video opens its description
-///     editor (no tap-to-consume path on video yet).
+///     Delete via the fate row (no tap-to-consume path on video yet).
 ///
 /// Photo grouping rule: walk captures sorted by createdAt, accumulate
 /// consecutive image/video items into the current strip; flush the strip
@@ -518,9 +517,9 @@ struct MediaDescriptionEmpty: View {
 
 /// Filled-state description. The description becomes the card's body
 /// text — parallel to a voice clip's transcript. No inline Edit
-/// affordance: the whole card is tappable, and the swipe action says
-/// Edit. That matches the voice clip panel (which also has no inline
-/// Edit affordance) and the unified edit-sheet contract.
+/// affordance: the whole card is tappable to edit. That matches the
+/// voice clip panel (which also has no inline Edit affordance) and the
+/// unified edit-sheet contract.
 struct MediaDescriptionFilled: View {
     let text: String
 

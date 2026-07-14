@@ -6,8 +6,8 @@ import CoreData
 /// rows are dropped; lifecycle.save creates the entry with the clips
 /// attached as MediaReferences of type .voice.
 ///
-/// Visual layout per `docs/Himem · Captured Clips (session-first)-2.html` §3
-/// (Make a Memory · confirm sheet). Operational-to-reflective seam: this
+/// Visual layout per `docs/design/HiMem · Clips.html` §3
+/// (Start a Memory · confirm sheet). Operational-to-reflective seam: this
 /// sheet softens from triage into Memory creation. Ochre summary chip
 /// names the scope at the top; AI-suggested title renders in AI blue
 /// with an AI tag.
