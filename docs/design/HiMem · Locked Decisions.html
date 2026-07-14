@@ -125,8 +125,16 @@
           <li><b>Capture is one action from anywhere</b> <span class="g">— defer every decision but "record now"</span></li>
           <li><b>Capture once, connect many</b> <span class="g">— one clip can be evidence in many memories</span></li>
           <li><b>No user content in HiMem's custody</b> <span class="g">— it lives in the user's own iCloud</span></li>
-          <li><b>Watch clips ship compressed</b> <span class="g">— mono · 16 kHz · AAC before transfer, never raw PCM; an encoding fix, not a transport change (guard: the file handed to transferFile is mono/16k/AAC — that test failing is the bug)</span></li>
-          <li><b>Watch→phone is WatchConnectivity, permanently</b> <span class="g">— the watch never touches CloudKit/iCloud; the phone is the sole iCloud writer, off the capture path</span></li>
+        </ul>
+      </div>
+
+      <div class="cat">
+        <h2>Transport &amp; media</h2>
+        <ul>
+          <li><b>Every clip transfers as mono / 16 kHz / AAC</b> <span class="g">— raw multi-channel PCM never leaves the watch; guarded by an assertion, not a log</span></li>
+          <li><b>Watch→phone is WatchConnectivity, permanently</b> <span class="g">— the watch never touches CloudKit or an iCloud container</span></li>
+          <li><b>The phone is the sole writer to the user's iCloud</b> <span class="g">— media→Files, metadata→private DB, at its leisure off the capture path</span></li>
+          <li><b>"iCloud as transfer transport" is retired</b> <span class="g">— not deferred; perishability is satisfied the moment a clip reaches the phone</span></li>
         </ul>
       </div>
 

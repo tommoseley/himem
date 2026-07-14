@@ -39,6 +39,8 @@ These are locked at the product level and aren't up for debate inside this spec:
 - **Wrist-off auto-stops and saves.** We never discard work the user walked away from.
 - **Hard cap: 5 min per recording, 50 unsynced clips local storage.**
 - **Counter never pauses mid-recording.** It's the user's contract that audio is rolling.
+- **Audio-format invariant (locked 2026-07-14).** Every clip handed to transfer is **mono / 16 kHz / AAC**. Raw multi-channel PCM must never leave the watch. The pre-transfer artifact asserts `channelCount == 1 && sampleRate == 16000 && codec == AAC`; a transferred clip's `bytesPerAudioSec < ~8000`. This is a **real assertion test, not a log line** — a log didn't catch 33 MB clips for weeks; an assertion fails on dogfood #1. 3-channel device audio is downmixed to mono explicitly through the same converter.
+- **Transport invariant (locked 2026-07-14).** Watch→phone clip transfer is **WatchConnectivity, permanently** — the watch **never** touches CloudKit and **never** writes an iCloud container. Stage 1 (watch→phone): record → transcode to mono/16k/AAC → `WCSession.transferFile`; a ~230 KB compressed clip is near-instant, so WC is not a bottleneck once the payload is right. Stage 2 (phone→iCloud): the **phone is the sole writer to the user's iCloud** (media→Files container, metadata→private DB), done at its leisure off the capture hot path. "iCloud as the transfer transport" is **retired, not deferred** — perishability is satisfied at stage 1; iCloud durability is a background concern. Keeps the phone as the single writer of the user's iCloud (matches the locked data-custody model) and moots the "can watchOS write the Files container / CKAsset-in-private-DB vs media-in-Files" wrinkle entirely.
 
 ## 1 · Entry points
 
@@ -151,21 +153,6 @@ The previous canonical (per the on-a-roll spec, May 2026 v0) put the counter ins
 - **"Clip 2 · ROLLING" all-caps transient eyebrow (v0 on-a-roll).** 1.5s flash that disappears. Replaced by persistent `Clip N · on a roll` line.
 - **Walkie-talkie press-and-hold to record on the complication.** Fast but accidental-prone. Rejected.
 
-### Audio format & pre-transfer transcode (locked 2026-07-14)
-
-**The watch transcodes every clip to mono · 16 kHz · AAC (~32 kbps, `.m4a`) before `transferFile`. It never ships the raw recording.** The hardware input is 3-channel 48 kHz Float32 PCM (~576 KB/s of audio), so a 59 s clip is **~33 MB** raw — which over WatchConnectivity takes minutes to reach the phone (dogfood 2026-07-14: 33 MB still transferring after 3 min; `reachable=true`). Compressed, the same clip is **~230 KB — ~144× smaller** — and lands in seconds. This is the fix for the "capture feels broken" slowness; it keeps the perishability promise that a caught thought reaches the phone quickly.
-
-- **Encoding, not transport.** WatchConnectivity stays; the payload shrinks. This is *not* a move to an iCloud/CloudKit transport — compression removes any need for one.
-- **Whole-file, after stop — never per-callback.** The transcode runs once on the finished file before enqueueing. Per-callback / inline-converter resampling inside the record tap starves the resampler's continuity filter and produces silence — the July 5 2026 audio saga, shipped twice and reverted twice. Do not reintroduce it. The proven shape is a single stateful `convert()` over the whole file (as the phone's `TranscriptionService` does).
-- **Downmix to mono explicitly — do not assume the recording is already mono.** `setVoiceProcessingEnabled(false)` does **not** collapse the watch input to mono (dogfood 2026-07-14: the input node reports 3 channels even after disabling VPIO). The transcode averages to one channel; the earlier "mono after VPIO disable" assumption is false on device.
-- **Assertion (the guard): the file handed to `transferFile` is mono, 16 kHz, AAC.** An automated test asserts this; **that test failing IS the oversized-transfer bug.** It is the regression lock so the format can't silently drift back to raw PCM.
-
-Encoder options + rollout: `docs/architecture/2026-07-14-watch-audio-compression.md`. Encoder: **AVAudioConverter, whole-file, post-stop** (locked 2026-07-14).
-
-### Transport (locked 2026-07-14)
-
-**Watch→phone transfer is WatchConnectivity, permanently.** The watch **never** writes to CloudKit or an iCloud container. It hands clips to the phone over `transferFile`; **the phone is the sole iCloud writer** — media → iCloud Files, metadata → the private DB — at its leisure, off the capture path. The watch is a capture device, not an iCloud client. The "watch uploads to CloudKit directly" idea is **retired, not deferred**: once clips ship compressed (~230 KB), WatchConnectivity is fast enough that the transport never needed replacing, and keeping the watch off iCloud preserves the phone-as-sole-writer custody model. Do not reopen this as a "someday" path.
-
 ## 3 · On a roll · Next-clip
 
 The most precious state in capture is **on a roll** — one thought unspooling into the next. Next is the primitive that protects it.
@@ -197,8 +184,8 @@ Cream-on-ochre. Drawn at 18×18 inside the 52×52 disc.
 Reachable by swiping right from Capture, or from a failure-state CTA. Lists **only locally-stored, unsynced clips** — once synced, they leave this list (they live on phone from then on).
 
 - **Empty state**: "All caught up. Recordings appear here when phone isn't near."
-- **Populated**: one row per clip, time-stamped, duration shown. Tappable to play (single tap → inline audio playback).
-- **Swipe-left → Delete.** Confirm sheet: "Delete this recording? 0:14 · not synced yet." Two-tap confirm.
+- **Populated**: one row per clip, time-stamped, duration shown. **Tap a row → per-clip detail** (Play control + metadata). Playback lives in that detail, not on the list row.
+- **Delete lives in the per-clip detail — never a swipe** (swipe-to-delete is retired everywhere, June 12 2026). The detail carries a full-width **Delete** at its foot; a **two-tap confirm** stands in for the phone's scroll-past-content deliberation, since a watch screen has no long scroll to serve as it (*"Delete this recording? 0:14 · not synced yet."*). Unsynced clips also clear themselves once they reach the phone.
 - **Pending count** surfaces on complications **only when > 0**. Calm by default.
 - **Sync indicator**: when phone is reachable and clips are mid-upload, a small ochre progress glyph appears at the top of the list. Doesn't block interaction.
 
