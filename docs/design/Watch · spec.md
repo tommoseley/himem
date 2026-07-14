@@ -155,12 +155,16 @@ The previous canonical (per the on-a-roll spec, May 2026 v0) put the counter ins
 
 **The watch transcodes every clip to mono · 16 kHz · AAC (~32 kbps, `.m4a`) before `transferFile`. It never ships the raw recording.** The hardware input is 3-channel 48 kHz Float32 PCM (~576 KB/s of audio), so a 59 s clip is **~33 MB** raw — which over WatchConnectivity takes minutes to reach the phone (dogfood 2026-07-14: 33 MB still transferring after 3 min; `reachable=true`). Compressed, the same clip is **~230 KB — ~144× smaller** — and lands in seconds. This is the fix for the "capture feels broken" slowness; it keeps the perishability promise that a caught thought reaches the phone quickly.
 
-- **Encoding, not transport.** WatchConnectivity stays; the payload shrinks. This is *not* a move to an iCloud/CloudKit transport — that was evaluated and set aside because compression removes the need. iCloud transport survives only as a possible *future* ceiling-remover, not the fix here.
+- **Encoding, not transport.** WatchConnectivity stays; the payload shrinks. This is *not* a move to an iCloud/CloudKit transport — compression removes any need for one.
 - **Whole-file, after stop — never per-callback.** The transcode runs once on the finished file before enqueueing. Per-callback / inline-converter resampling inside the record tap starves the resampler's continuity filter and produces silence — the July 5 2026 audio saga, shipped twice and reverted twice. Do not reintroduce it. The proven shape is a single stateful `convert()` over the whole file (as the phone's `TranscriptionService` does).
 - **Downmix to mono explicitly — do not assume the recording is already mono.** `setVoiceProcessingEnabled(false)` does **not** collapse the watch input to mono (dogfood 2026-07-14: the input node reports 3 channels even after disabling VPIO). The transcode averages to one channel; the earlier "mono after VPIO disable" assumption is false on device.
 - **Assertion (the guard): the file handed to `transferFile` is mono, 16 kHz, AAC.** An automated test asserts this; **that test failing IS the oversized-transfer bug.** It is the regression lock so the format can't silently drift back to raw PCM.
 
-Encoder options + rollout: `docs/architecture/2026-07-14-watch-audio-compression.md` (encoder shape pending Tom's pick).
+Encoder options + rollout: `docs/architecture/2026-07-14-watch-audio-compression.md`. Encoder: **AVAudioConverter, whole-file, post-stop** (locked 2026-07-14).
+
+### Transport (locked 2026-07-14)
+
+**Watch→phone transfer is WatchConnectivity, permanently.** The watch **never** writes to CloudKit or an iCloud container. It hands clips to the phone over `transferFile`; **the phone is the sole iCloud writer** — media → iCloud Files, metadata → the private DB — at its leisure, off the capture path. The watch is a capture device, not an iCloud client. The "watch uploads to CloudKit directly" idea is **retired, not deferred**: once clips ship compressed (~230 KB), WatchConnectivity is fast enough that the transport never needed replacing, and keeping the watch off iCloud preserves the phone-as-sole-writer custody model. Do not reopen this as a "someday" path.
 
 ## 3 · On a roll · Next-clip
 

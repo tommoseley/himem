@@ -126,6 +126,7 @@
           <li><b>Capture once, connect many</b> <span class="g">— one clip can be evidence in many memories</span></li>
           <li><b>No user content in HiMem's custody</b> <span class="g">— it lives in the user's own iCloud</span></li>
           <li><b>Watch clips ship compressed</b> <span class="g">— mono · 16 kHz · AAC before transfer, never raw PCM; an encoding fix, not a transport change (guard: the file handed to transferFile is mono/16k/AAC — that test failing is the bug)</span></li>
+          <li><b>Watch→phone is WatchConnectivity, permanently</b> <span class="g">— the watch never touches CloudKit/iCloud; the phone is the sole iCloud writer, off the capture path</span></li>
         </ul>
       </div>
 

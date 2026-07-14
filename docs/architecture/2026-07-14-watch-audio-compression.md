@@ -1,7 +1,7 @@
 # Watch audio compression — decision doc (2026-07-14)
 
-**Status:** SCOPED, awaiting Tom's pick of encoder shape. **Do not implement until the encoder is chosen.**
-**Owner:** CC (implementation) · **Decision:** Tom (encoder shape is a capture-pipeline *what*).
+**Status:** LOCKED 2026-07-14 — **encoder = Option 1 (AVAudioConverter, whole-file, post-stop)**; **transport = WatchConnectivity, permanently.** Implementing 4a Bug-First.
+**Owner:** CC (implementation) · **Decision:** Tom (both *whats* locked).
 
 ## 1 · Problem + evidence
 
@@ -22,7 +22,9 @@ The rate is exactly **3 ch × 48,000 Hz × 4 B (Float32) = 576,000 B/s**, confir
 
 ## 2 · Verdict — compress, don't migrate
 
-**Fix the encoding on the watch; keep WatchConnectivity.** A ~230 KB clip is near-instant over WCSession, so the iCloud/CloudKit transport migration is **not** needed as the fix for this bug. iCloud transport remains a possible *future* ceiling-remover (aligns with the data-custody model), evaluated separately — not gated to this P0.
+**Fix the encoding on the watch; keep WatchConnectivity.** A ~230 KB clip is near-instant over WCSession, so the encoding fix alone resolves the P0.
+
+**Transport locked (2026-07-14): watch→phone is WatchConnectivity, permanently.** The watch never writes to CloudKit or an iCloud container — it hands clips to the phone over `transferFile`, and **the phone is the sole iCloud writer** (media → iCloud Files, metadata → the private DB) at its leisure, off the capture path. The watch is a capture device, not an iCloud client. The "watch uploads to CloudKit directly" idea is **retired, not deferred**: compression makes WCSession fast enough that the transport never needed replacing, and keeping the watch off iCloud preserves the phone-as-sole-writer custody model. Do not reopen this as a "someday ceiling-remover."
 
 ## 3 · The invariant (now locked)
 
@@ -48,7 +50,7 @@ The dogfood log shows **dozens** of repeated:
 ```
 for the *same* clipIds, via both `didReceiveMessage` and `didReceiveUserInfo`, plus `WCFileStorage … could not load user info data … ENOENT`. Looks like an ack loop / re-delivery churn (the buffered-ack "replay on next mutation" may be self-perpetuating). **Separate investigation — not part of the compression fix.** Logged here so it isn't lost.
 
-## 5 · Encoder options — Tom picks the shape
+## 5 · Encoder options — **Option 1 chosen (locked 2026-07-14)**
 
 All keep WatchConnectivity; all target mono/16k/AAC. `AudioCompressor` (the phone's compressor) is **not** an option — it uses `AVAssetWriter`/`AVAssetReader`, which are **unavailable on watchOS**.
 
