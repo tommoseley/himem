@@ -16,6 +16,15 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// Closes § 8.7 of the system reference doc.
     @Published var lastAckedRollGroupId: UUID?
 
+    /// Transfer-speed instrumentation (2026-07-14, `[XferPerf]`). Per
+    /// clipId: the wall-clock at `transferFile` enqueue + the file's
+    /// byte size, so `didFinish` can log elapsed + throughput. Single
+    /// device / single clock — avoids watch↔phone skew. Diagnostic
+    /// only; confirms whether the ~50× slowness is payload size
+    /// (encoding) or bytes/sec (WCSession throttling) before we decide
+    /// on watch-side compression vs an iCloud transport.
+    private var xferStart: [UUID: (at: Date, bytes: Int)] = [:]
+
     func start() {
         guard WCSession.isSupported() else {
             NSLog("[HiMem][WC] watch — WCSession not supported")
@@ -159,6 +168,20 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         let metadata = clip.metadata.asWireDict()
         let transfer = session.transferFile(fileURL, metadata: metadata)
         NSLog("[HiMem][WC] watch — transferFile queued for clipId=\(clip.clipId) (compressed \(fileSize) B), reachable=\(session.isReachable), transferring=\(transfer.isTransferring)")
+
+        // [XferPerf] instrumentation — moved here on the 4a rebase: this
+        // (enqueueReadyTransfer) is the real transferFile site now, after the
+        // transcode. `fileSize` is the COMPRESSED artifact; `didFinish`
+        // computes elapsed + throughput against the stamp below. On a healthy
+        // 4a build these read ~230 KB / seconds — not ~33 MB / minutes.
+        xferStart[clip.clipId] = (Date(), fileSize)
+        let kb = Double(fileSize) / 1024.0
+        NSLog(String(
+            format: "[HiMem][WC][XferPerf] enqueued clipId=%@ bytes=%d (%.0f KB) audio=%.1fs bytesPerAudioSec=%.0f reachable=%@",
+            clip.clipId.uuidString, fileSize, kb, clip.duration,
+            clip.duration > 0 ? Double(fileSize) / clip.duration : 0,
+            session.isReachable ? "true" : "false"
+        ))
     }
 
     /// Short backoff retry for the "transcoded but source hadn't finalized"
@@ -330,10 +353,28 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// iPhone explicitly acks, regardless of transferFile completion, so
     /// this is purely observational.
     nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
+        // Capture the completion instant + clipId before hopping actors,
+        // so the elapsed measurement isn't polluted by scheduling delay.
+        let finishedAt = Date()
+        let clipId = (fileTransfer.file.metadata?["clipId"] as? String).flatMap(UUID.init)
         if let error {
             NSLog("[HiMem][WC] watch — transferFile FAILED: \(error.localizedDescription)")
         } else {
             NSLog("[HiMem][WC] watch — transferFile delivered to iPhone")
+        }
+        // [XferPerf] elapsed + throughput for this clip. This is THE
+        // number that answers the ~50× question: high bytes but low
+        // KB/s ⇒ throttled transport; small elapsed once it starts ⇒
+        // the delay was wait-to-begin (P1 territory), not throughput.
+        Task { @MainActor [weak self] in
+            guard let self, let clipId, let start = self.xferStart.removeValue(forKey: clipId) else { return }
+            let elapsed = finishedAt.timeIntervalSince(start.at)
+            let kbps = elapsed > 0 ? (Double(start.bytes) / 1024.0) / elapsed : 0
+            NSLog(String(
+                format: "[HiMem][WC][XferPerf] delivered clipId=%@ bytes=%d elapsed=%.1fs throughput=%.1f KB/s outcome=%@",
+                clipId.uuidString, start.bytes, elapsed, kbps,
+                error == nil ? "ok" : "failed"
+            ))
         }
     }
 
