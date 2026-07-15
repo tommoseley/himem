@@ -76,8 +76,6 @@
 		A100000304 /* NoteCaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000304 /* NoteCaptureScreen.swift */; };
 		A100000305 /* CaptureFlowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000305 /* CaptureFlowHost.swift */; };
 		A100000310 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
-		A100000802 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
-		A100000803 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
 		A100000311 /* InboxManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000311 /* InboxManifest.swift */; };
 		A100000312 /* WatchSessionDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000312 /* WatchSessionDelegate.swift */; };
 		A100000313 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
@@ -143,6 +141,10 @@
 		A100000763 /* ProjectAssistViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000763 /* ProjectAssistViewModel.swift */; };
 		A100000770 /* LaunchSignposter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000770 /* LaunchSignposter.swift */; };
 		A100000780 /* PermissionWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000780 /* PermissionWizardView.swift */; };
+		A100000802 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
+		A100000803 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
+		A100000811 /* WatchAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* WatchAudioSessionConfig.swift */; };
+		A100000812 /* WatchAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* WatchAudioSessionConfig.swift */; };
 		A100000900 /* UbiquityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000900 /* UbiquityStore.swift */; };
 		A100000901 /* MediaResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000901 /* MediaResolver.swift */; };
 		A100000902 /* MediaReferenceUbiquityMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000902 /* MediaReferenceUbiquityMigration.swift */; };
@@ -343,7 +345,6 @@
 		B100000304 /* NoteCaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCaptureScreen.swift; sourceTree = "<group>"; };
 		B100000305 /* CaptureFlowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFlowHost.swift; sourceTree = "<group>"; };
 		B100000310 /* ClipMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipMetadata.swift; path = Shared/ClipMetadata.swift; sourceTree = "<group>"; };
-		B100000801 /* WatchTransferAudioTranscoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchTransferAudioTranscoder.swift; path = Shared/WatchTransferAudioTranscoder.swift; sourceTree = "<group>"; };
 		B100000311 /* InboxManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxManifest.swift; sourceTree = "<group>"; };
 		B100000312 /* WatchSessionDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionDelegate.swift; sourceTree = "<group>"; };
 		B100000315 /* CreateMemoryFromClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateMemoryFromClipsSheet.swift; sourceTree = "<group>"; };
@@ -404,6 +405,8 @@
 		B100000763 /* ProjectAssistViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistViewModel.swift; sourceTree = "<group>"; };
 		B100000770 /* LaunchSignposter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSignposter.swift; sourceTree = "<group>"; };
 		B100000780 /* PermissionWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionWizardView.swift; sourceTree = "<group>"; };
+		B100000801 /* WatchTransferAudioTranscoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchTransferAudioTranscoder.swift; path = Shared/WatchTransferAudioTranscoder.swift; sourceTree = "<group>"; };
+		B100000810 /* WatchAudioSessionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchAudioSessionConfig.swift; path = Shared/WatchAudioSessionConfig.swift; sourceTree = "<group>"; };
 		B100000900 /* UbiquityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UbiquityStore.swift; sourceTree = "<group>"; };
 		B100000901 /* MediaResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaResolver.swift; sourceTree = "<group>"; };
 		B100000902 /* MediaReferenceUbiquityMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReferenceUbiquityMigration.swift; sourceTree = "<group>"; };
@@ -905,6 +908,7 @@
 			children = (
 				B100000310 /* ClipMetadata.swift */,
 				B100000801 /* WatchTransferAudioTranscoder.swift */,
+				B100000810 /* WatchAudioSessionConfig.swift */,
 				B100000320 /* WatchSharedState.swift */,
 				B100000670 /* MinClipDebouncer.swift */,
 				B100000671 /* NextClipController.swift */,
@@ -1263,6 +1267,7 @@
 			files = (
 				A100000313 /* ClipMetadata.swift in Sources */,
 				A100000803 /* WatchTransferAudioTranscoder.swift in Sources */,
+				A100000812 /* WatchAudioSessionConfig.swift in Sources */,
 				A100000320 /* WatchSharedState.swift in Sources */,
 				A100000672 /* MinClipDebouncer.swift in Sources */,
 				A100000673 /* NextClipController.swift in Sources */,
@@ -1299,6 +1304,7 @@
 				A100000001 /* MemoryStreamApp.swift in Sources */,
 				A100000310 /* ClipMetadata.swift in Sources */,
 				A100000802 /* WatchTransferAudioTranscoder.swift in Sources */,
+				A100000811 /* WatchAudioSessionConfig.swift in Sources */,
 				A100000700 /* AudioCompressor.swift in Sources */,
 				A100000730 /* BreathCaption.swift in Sources */,
 				A100000732 /* TopicColorPicker.swift in Sources */,

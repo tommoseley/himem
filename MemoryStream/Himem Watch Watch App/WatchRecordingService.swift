@@ -142,7 +142,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
             // so warm and record configure the same mode — no reconfigure.
             try session.setCategory(
                 .playAndRecord,
-                mode: .default,
+                mode: WatchAudioSessionConfig.recordMode,
                 options: [.allowBluetoothHFP, .mixWithOthers]
             )
             try session.setActive(true, options: [])
@@ -208,7 +208,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
             // the system apply normal input gain. Independent of the July-5
             // VPIO/clean-channel fix (that's `setVoiceProcessingEnabled` below,
             // a different knob) — this does not touch it.
-            try session.setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .allowBluetoothHFP])
+            try session.setCategory(.playAndRecord, mode: WatchAudioSessionConfig.recordMode, options: [.duckOthers, .allowBluetoothHFP])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             NSLog("[HiMem][REC] start: AVAudioSession active in \(Int(Date().timeIntervalSince(sessionStart) * 1000))ms")
 
