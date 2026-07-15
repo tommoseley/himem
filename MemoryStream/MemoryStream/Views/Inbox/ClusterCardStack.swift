@@ -207,11 +207,17 @@ struct ClusterCardStack: View {
     private func clipEditorRow(proposal: ClusterProposal, clip: InboxClip, anchor: Date, isRemoved: Bool) -> some View {
         let model = ClipDisplayModel(inboxClip: clip, sessionStart: anchor)
         HStack(alignment: .top, spacing: 10) {
-            ClipAtomView(model: model, register: .operational, isDenseContainer: true)
+            // Dim the CLIP CONTENT only on a set-aside row — never the
+            // affordance. Fuller transcript (raised line cap) so "does
+            // this belong" is decidable at trim time (§87).
+            ClipAtomView(model: model, register: .operational,
+                         isDenseContainer: true, transcriptLineLimit: 8)
                 .opacity(isRemoved ? 0.45 : 1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             // Subtractive vocabulary (§187): Remove on a kept row, the
-            // reversible Add back on a set-aside row.
+            // reversible Add back on a set-aside row. FULL-STRENGTH and
+            // ≥44px even when the row content is dimmed — a status or
+            // affordance is never opacity-alone (Crucible).
             Button {
                 if isRemoved { onReAddClip(proposal, clip.clipId) }
                 else { onRemoveClip(proposal, clip.clipId) }
@@ -219,10 +225,12 @@ struct ClusterCardStack: View {
                 Text(isRemoved ? "Add back" : "Remove")
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(Crucible.Color.aiBlue)
+                    .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 2)
     }
 
     // MARK: - Secondary row (Adjust toggle + Not together)
@@ -286,7 +294,7 @@ struct ClusterCardStack: View {
     }
 
     private func commitLabel(_ n: Int) -> String {
-        guard n > 0 else { return "Nothing kept" }
+        guard n > 0 else { return "Nothing found to keep" }
         let noun = n == 1 ? "memory" : "memories"
         return "Keep these · \(n) \(noun)"
     }
