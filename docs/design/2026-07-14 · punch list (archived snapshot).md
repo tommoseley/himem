@@ -1,3 +1,5 @@
+> **Frozen snapshot (archived).** Live truth is `Watch · spec.md §2` + decision doc §4e (`docs/architecture/2026-07-14-watch-audio-compression.md`). Do not treat as current.
+
 # Handoff · carry-forward punch list — 2026-07-14
 
 **For:** Claude Code · **From:** design/spec side (read-only on the repo).
