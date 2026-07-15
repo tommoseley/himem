@@ -108,11 +108,19 @@ enum WatchTransferAudioTranscoder {
             throw TranscodeError.bufferAllocFailed
         }
 
-        // Amplitude instrumentation — splits "silent in" from "silent out" on
-        // device. `[Amp]` line at the end: real input energy but zero output
-        // = a downmix/encode bug; zero input = a capture/read bug.
-        final class Peak { var v: Float = 0 }
-        let inPeak = Peak()
+        // Amplitude instrumentation — the capture-layer discriminator
+        // (capture-gain P0, 2026-07-15). The `[Amp]` line reports PER-CHANNEL
+        // input peaks (which channels carry the mic vs which are dead
+        // reference — quantifies the downmix's ~1/N averaging loss), the
+        // overall input peak (does the recorded level scale with input →
+        // gain-too-low vs mic-route-broken), and the converter output peak
+        // (silent-in vs silent-out). Read-only measurement over the captured
+        // file — it does not change transcode behavior.
+        final class ChannelPeaks {
+            var v: [Float]
+            init(_ n: Int) { v = Array(repeating: 0, count: max(n, 0)) }
+        }
+        let inPeaks = ChannelPeaks(srcChannels)
 
         // Single stateful pass — the input block reads the source in chunks,
         // averages N→1, and signals `.endOfStream` at EOF. It does NOT
@@ -129,22 +137,21 @@ enum WatchTransferAudioTranscoder {
             if n == 0 {
                 eof.reached = true; outStatus.pointee = .endOfStream; return nil
             }
-            // Downmix: mono[i] = mean over channels; track input peak.
+            // Downmix: mono[i] = mean over channels; track per-channel peak.
             let inCh = inputBuffer.floatChannelData!
             let out = monoBuffer.floatChannelData![0]
             let scale = 1.0 / Float(srcChannels)
-            var localPeak: Float = 0
             for i in 0..<n {
                 var acc: Float = 0
                 for ch in 0..<srcChannels {
                     let s = inCh[ch][i]
                     acc += s
-                    localPeak = max(localPeak, abs(s))
+                    let a = abs(s)
+                    if a > inPeaks.v[ch] { inPeaks.v[ch] = a }
                 }
                 out[i] = acc * scale
             }
             monoBuffer.frameLength = inputBuffer.frameLength
-            if localPeak > inPeak.v { inPeak.v = localPeak }
             outStatus.pointee = .haveData
             return monoBuffer
         }
@@ -167,8 +174,10 @@ enum WatchTransferAudioTranscoder {
             }
             if status == .endOfStream || status == .error { break }
         }
-        NSLog(String(format: "[HiMem][WC][Amp] transcode srcCh=%d in_peak=%.4f conv_out_peak=%.4f",
-                     srcChannels, inPeak.v, outPeak))
+        let perCh = inPeaks.v.map { String(format: "%.4f", $0) }.joined(separator: ",")
+        let overallIn = inPeaks.v.max() ?? 0
+        NSLog("[HiMem][WC][Amp] transcode srcCh=\(srcChannels) inCh=[\(perCh)] "
+              + String(format: "in_peak=%.4f conv_out_peak=%.4f", overallIn, outPeak))
         // `dest` finalizes the AAC container on dealloc (end of scope).
     }
 
