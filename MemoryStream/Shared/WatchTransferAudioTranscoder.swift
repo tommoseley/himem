@@ -36,9 +36,9 @@ enum WatchTransferAudioTranscoder {
 
     /// The transfer-format contract. The assertion test asserts the output
     /// file matches these; that test failing IS the oversized-transfer bug.
-    static let targetSampleRate: Double = 16_000
-    static let targetChannels: AVAudioChannelCount = 1
-    static let targetBitRate: Int = 32_000
+    nonisolated static let targetSampleRate: Double = 16_000
+    nonisolated static let targetChannels: AVAudioChannelCount = 1
+    nonisolated static let targetBitRate: Int = 32_000
 
     enum TranscodeError: Error, CustomStringConvertible {
         case openSourceFailed(String)
@@ -61,7 +61,7 @@ enum WatchTransferAudioTranscoder {
     /// Transcodes `source` (any PCM `.caf`) → mono 16 kHz AAC `.m4a` at
     /// `destination`. Throws on failure so the caller keeps `source` and
     /// ships raw rather than losing audio (audio-is-truth > speed).
-    static func transcodeToTransferFormat(source: URL, destination: URL) throws {
+    nonisolated static func transcodeToTransferFormat(source: URL, destination: URL) throws {
         let src: AVAudioFile
         do { src = try AVAudioFile(forReading: source) }
         catch { throw TranscodeError.openSourceFailed(error.localizedDescription) }
@@ -99,14 +99,20 @@ enum WatchTransferAudioTranscoder {
         // proven pattern (mirrors `TranscriptionService` on the phone);
         // it does NOT restart the converter per chunk, so the resampler's
         // continuity filter is preserved.
-        var sourceExhausted = false
+        // Boxed EOF flag so the input block captures a `let` (reference),
+        // not a mutable `var`. The block runs *synchronously* inside
+        // `convert()`, so the mutation is safe — but Swift-6 concurrency
+        // analysis flags a captured mutable var regardless; the box keeps
+        // this new file warning-clean.
+        final class EOFFlag { var reached = false }
+        let eof = EOFFlag()
         let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-            if sourceExhausted { outStatus.pointee = .endOfStream; return nil }
+            if eof.reached { outStatus.pointee = .endOfStream; return nil }
             inputBuffer.frameLength = 0
             do { try src.read(into: inputBuffer) }
-            catch { sourceExhausted = true; outStatus.pointee = .endOfStream; return nil }
+            catch { eof.reached = true; outStatus.pointee = .endOfStream; return nil }
             if inputBuffer.frameLength == 0 {
-                sourceExhausted = true; outStatus.pointee = .endOfStream; return nil
+                eof.reached = true; outStatus.pointee = .endOfStream; return nil
             }
             outStatus.pointee = .haveData
             return inputBuffer
@@ -131,13 +137,36 @@ enum WatchTransferAudioTranscoder {
 
     /// The guard predicate: is `url` a transfer-ready file — **mono,
     /// 16 kHz, AAC**? The money test asserts this on the transcoder's
-    /// output; the send path uses it defensively before `transferFile`.
-    static func isTransferReady(_ url: URL) -> Bool {
+    /// output; the send path uses it as the final gate before
+    /// `transferFile` (a file that fails this never ships).
+    nonisolated static func isTransferReady(_ url: URL) -> Bool {
         guard let file = try? AVAudioFile(forReading: url) else { return false }
         let fmt = file.fileFormat
         let isAAC = fmt.streamDescription.pointee.mFormatID == kAudioFormatMPEG4AAC
         return isAAC
             && fmt.channelCount == targetChannels
             && Int(fmt.sampleRate.rounded()) == Int(targetSampleRate)
+    }
+
+    /// Transfer-ready **and complete** for a clip of `expectedSeconds`.
+    ///
+    /// The completeness check (output duration ≈ expected, ±0.5 s) is the
+    /// send-path guard against transcoding a source that was still
+    /// finalizing: `WatchRecordingService.stop` deliberately does NOT
+    /// sync-drain the write queue (a sync drain trips the watchOS
+    /// watchdog), so an early transcode could read a truncated recording
+    /// and produce a valid-but-short `.m4a`. A short output fails this and
+    /// is re-transcoded on the next send trigger, by which point the
+    /// source has finalized. Idempotency uses THIS (not `isTransferReady`
+    /// alone) so a truncated artifact is redone, not shipped.
+    nonisolated static func isTransferReadyAndComplete(_ url: URL, expectedSeconds: Double) -> Bool {
+        guard let file = try? AVAudioFile(forReading: url) else { return false }
+        let fmt = file.fileFormat
+        let isAAC = fmt.streamDescription.pointee.mFormatID == kAudioFormatMPEG4AAC
+        let mono16k = fmt.channelCount == targetChannels
+            && Int(fmt.sampleRate.rounded()) == Int(targetSampleRate)
+        guard isAAC, mono16k, fmt.sampleRate > 0 else { return false }
+        let seconds = Double(file.length) / fmt.sampleRate
+        return abs(seconds - expectedSeconds) <= 0.5
     }
 }

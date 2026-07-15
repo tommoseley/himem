@@ -100,6 +100,14 @@ final class WatchPendingManifest: ObservableObject {
     static var manifestURL: URL { pendingRoot.appendingPathComponent("manifest.json") }
     static func audioURL(for filename: String) -> URL { audioDirectory.appendingPathComponent(filename) }
 
+    /// The compressed transfer artifact (4a): a sibling `.m4a` beside the
+    /// raw recording. The watch transfers THIS (mono/16k/AAC), never the
+    /// raw PCM. Kept next to the raw `.caf` (playback still uses the raw
+    /// file) and cleaned up alongside it on removal.
+    static func transferAudioURL(forAudioFilename filename: String) -> URL {
+        audioURL(for: filename).deletingPathExtension().appendingPathExtension("m4a")
+    }
+
     /// Hard cap from the spec — start warning the user at this many
     /// unsynced clips.
     static let storageCap = 50
@@ -197,6 +205,9 @@ final class WatchPendingManifest: ObservableObject {
             return
         }
         try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
+        // 4a: also drop the compressed transfer artifact (`.m4a`) so it
+        // doesn't outlive the acked clip.
+        try? FileManager.default.removeItem(at: Self.transferAudioURL(forAudioFilename: clip.audioFilename))
         let next = clips.filter { $0.clipId != clipId }
         replace(with: next)
         // Successful confirmed-receipt — record so the sync-stuck timer

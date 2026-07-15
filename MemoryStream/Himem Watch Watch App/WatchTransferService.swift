@@ -30,58 +30,113 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// Queues a transferFile for the given clip. WatchConnectivity persists
     /// the queue across launches; if the iPhone is currently unreachable
     /// the system holds the file and ships it when reachability returns.
+    /// clipIds with a transcode currently running — idempotency guard so
+    /// the several send triggers (record-end, retryPendingTransfers,
+    /// reachability, scenePhase, flushPending) don't re-encode the same
+    /// clip concurrently.
+    private var transcodingClipIds: Set<UUID> = []
+
+    /// Entry point for every send trigger. Ensures a **transfer-ready
+    /// mono/16k/AAC artifact** exists for the clip (4a · `Watch · spec.md`
+    /// §2), then hands *that* to `transferFile` — the raw PCM never ships.
+    ///
+    /// The transcode runs **off-main** (whole-file read + AVAudioConverter)
+    /// and is idempotent: a clip whose `.m4a` is already ready+complete is
+    /// transferred without re-encoding. It is **never** run in
+    /// `WatchRecordingService.stop` — stop doesn't sync-drain the write
+    /// queue (a sync drain trips the watchOS watchdog), so we transcode on
+    /// the send path, after the file finalizes, and the completeness gate
+    /// (`isTransferReadyAndComplete`) rejects a source that hadn't drained.
     func send(clip: WatchPendingClip) {
         guard WCSession.isSupported() else {
             NSLog("[HiMem][WC] watch — cannot send, WCSession not supported")
             return
         }
-        let session = WCSession.default
-        let url = WatchPendingManifest.audioURL(for: clip.audioFilename)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            NSLog("[HiMem][WC] watch — file missing at \(url.path), skipping send")
-            // Money 2026-06-18: if the file isn't on disk yet
-            // (recording-end async drain still flushing, or a
-            // sessionReachabilityDidChange fired immediately
-            // post-stop), the original code returned silently and
-            // the only retry path was the next app cold launch.
-            // Schedule a backoff retry so the clip ships once the
-            // write completes. Bounded to 1s + 5s + 15s; if all
-            // three fail the next legitimate retry triggers
-            // (reachability flip, scenePhase=.active, cold launch)
-            // still cover it.
+        let rawURL = WatchPendingManifest.audioURL(for: clip.audioFilename)
+        guard FileManager.default.fileExists(atPath: rawURL.path) else {
+            NSLog("[HiMem][WC] watch — file missing at \(rawURL.path), skipping send")
+            // Money 2026-06-18: recording-end async drain may still be
+            // flushing. Backoff retry so the clip ships once the write
+            // completes; reachability/scenePhase/cold-launch also cover it.
             scheduleFileMissingRetry(for: clip)
             return
         }
 
-        // Watch-side belt against the double-delivery race documented
-        // in `docs/architecture/Captured Clips · watch-to-phone sync
-        // system.md` § 8.2. If iOS is already queueing a transferFile
-        // for this clipId (e.g., recording-end + retryPendingTransfers
-        // + sessionReachabilityDidChange all firing in one window),
-        // re-queueing would double-deliver. The phone-side
-        // `AcceptanceCriticalSection` catches the race regardless, but
-        // it's cheaper to not generate the duplicate transfer in the
-        // first place.
+        let aacURL = WatchPendingManifest.transferAudioURL(forAudioFilename: clip.audioFilename)
+
+        // Idempotent fast path: a ready+complete AAC already exists →
+        // transfer it now, no re-encode. (Every retry trigger re-enters
+        // here.)
+        if WatchTransferAudioTranscoder.isTransferReadyAndComplete(aacURL, expectedSeconds: clip.duration) {
+            enqueueReadyTransfer(clip: clip, fileURL: aacURL)
+            return
+        }
+        // A transcode for this clip is already running → let it finish and
+        // enqueue.
+        guard !transcodingClipIds.contains(clip.clipId) else { return }
+        transcodingClipIds.insert(clip.clipId)
+
+        // Detached → off-main (the project's `NonisolatedNonsendingByDefault`
+        // makes a plain nonisolated async inherit the caller's actor, so
+        // `Task.detached` is what actually leaves the main thread). Reports
+        // back through a `@MainActor` method — no captured `var`, no
+        // `MainActor.run`. `self` (a `@MainActor` class) is Sendable, and
+        // the task is short-lived, so the strong capture is not a cycle.
+        Task.detached(priority: .utility) { [rawURL, aacURL, clip] in
+            let transcodeError: String?
+            do {
+                try WatchTransferAudioTranscoder.transcodeToTransferFormat(source: rawURL, destination: aacURL)
+                transcodeError = nil
+            } catch {
+                transcodeError = "\(error)"
+            }
+            await self.transcodeFinished(clip: clip, aacURL: aacURL, error: transcodeError)
+        }
+    }
+
+    /// `@MainActor` continuation of `send`'s transcode. Enqueues the AAC if
+    /// it's ready+complete, else schedules a short retry (source hadn't
+    /// finalized). Never ships raw.
+    private func transcodeFinished(clip: WatchPendingClip, aacURL: URL, error: String?) {
+        transcodingClipIds.remove(clip.clipId)
+        if WatchTransferAudioTranscoder.isTransferReadyAndComplete(aacURL, expectedSeconds: clip.duration) {
+            NSLog("[HiMem][WC] watch — transcoded clipId=\(clip.clipId) → \(aacURL.lastPathComponent); enqueuing")
+            enqueueReadyTransfer(clip: clip, fileURL: aacURL)
+        } else {
+            NSLog("[HiMem][WC] watch — clipId=\(clip.clipId) not transfer-ready after transcode (err=\(error ?? "nil")); scheduling retry")
+            scheduleTranscodeRetry(for: clip)
+        }
+    }
+
+    /// Enqueues the actual `transferFile` for an already-verified
+    /// mono/16k/AAC artifact. The `isTransferReady` guard is the **final
+    /// gate** — a file that fails the assertion never ships (`Watch ·
+    /// spec.md` §2). Pre-announce + de-dup unchanged, now carrying the
+    /// compressed size.
+    private func enqueueReadyTransfer(clip: WatchPendingClip, fileURL: URL) {
+        transcodeRetryCounts[clip.clipId] = nil
+        guard WatchTransferAudioTranscoder.isTransferReady(fileURL) else {
+            NSLog("[HiMem][WC] watch — REFUSED transfer clipId=\(clip.clipId): file not mono/16k/AAC")
+            return
+        }
+        let session = WCSession.default
+
+        // Belt against the double-delivery race (§ 8.2): if iOS is already
+        // queueing a transfer for this clipId, don't re-queue.
         let alreadyQueued = session.outstandingFileTransfers.contains { transfer in
             guard let metaClipIdStr = transfer.file.metadata?["clipId"] as? String,
                   let metaClipId = UUID(uuidString: metaClipIdStr) else { return false }
             return metaClipId == clip.clipId
         }
         if alreadyQueued {
-            NSLog("[HiMem][WC] watch — send(clip:) refused; clipId=\(clip.clipId) already in outstandingFileTransfers")
+            NSLog("[HiMem][WC] watch — enqueue refused; clipId=\(clip.clipId) already in outstandingFileTransfers")
             return
         }
 
-        // Pre-announce via `sendMessage` immediately before the
-        // `transferFile` call so the iPhone can render an
-        // IncomingCard in the sync surface BEFORE the actual file
-        // data arrives. Best-effort delivery — `sendMessage` only
-        // fires when both apps are reachable; if it fails the file
-        // still arrives later via `transferFile` and the iPhone
-        // synthesizes the in-flight entry from the manifest on
-        // arrival. Spec: `screens-captured-clips-sessions.jsx`
-        // § SYNC / INCOMING (2026-05-29).
-        let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+        // Pre-announce so the iPhone renders an IncomingCard before the
+        // bytes land. Best-effort sendMessage when reachable, durable
+        // transferUserInfo otherwise. fileSizeBytes now = compressed size.
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int) ?? 0
         let announcePayload: [String: Any] = [
             "preAnnounce": true,
             "clipId": clip.clipId.uuidString,
@@ -94,28 +149,36 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         if session.isReachable {
             session.sendMessage(announcePayload, replyHandler: nil) { [announcePayload] error in
                 NSLog("[HiMem][WC] watch — pre-announce sendMessage failed for clipId=\(clip.clipId): \(error.localizedDescription) — falling back to transferUserInfo")
-                // sendMessage requires reachable + activated on both
-                // ends. If iOS rejects (e.g., WCErrorCodeNotReachable
-                // when the link flapped mid-call), fall back to the
-                // durable user-info queue so the iPhone still gets
-                // the IncomingCard signal once reachability returns.
                 _ = session.transferUserInfo(announcePayload)
             }
         } else {
-            // Money 2026-06-18: when not reachable, queue the
-            // pre-announce as a durable transferUserInfo so the
-            // iPhone renders "Transcribing…" / IncomingCard as soon
-            // as the link comes back. Without this fallback the
-            // transferFile still delivers (durable) but the user
-            // sees no UI between recording-end and the eventual
-            // arrival — sometimes minutes for a BT wedge.
             _ = session.transferUserInfo(announcePayload)
             NSLog("[HiMem][WC] watch — pre-announce queued via transferUserInfo (not reachable); delivers on reconnect")
         }
 
         let metadata = clip.metadata.asWireDict()
-        let transfer = session.transferFile(url, metadata: metadata)
-        NSLog("[HiMem][WC] watch — transferFile queued for clipId=\(clip.clipId), reachable=\(session.isReachable), transferring=\(transfer.isTransferring)")
+        let transfer = session.transferFile(fileURL, metadata: metadata)
+        NSLog("[HiMem][WC] watch — transferFile queued for clipId=\(clip.clipId) (compressed \(fileSize) B), reachable=\(session.isReachable), transferring=\(transfer.isTransferring)")
+    }
+
+    /// Short backoff retry for the "transcoded but source hadn't finalized"
+    /// case. 0.5s / 2s / 5s covers the write-queue drain window; past that,
+    /// the next reachability/scenePhase trigger re-attempts.
+    private var transcodeRetryCounts: [UUID: Int] = [:]
+    private let transcodeRetryDelays: [UInt64] = [500_000_000, 2_000_000_000, 5_000_000_000]
+
+    private func scheduleTranscodeRetry(for clip: WatchPendingClip) {
+        let attempt = transcodeRetryCounts[clip.clipId] ?? 0
+        guard attempt < transcodeRetryDelays.count else {
+            NSLog("[HiMem][WC] watch — transcode retries exhausted for clipId=\(clip.clipId); next reachability/scenePhase event will cover it")
+            return
+        }
+        let delay = transcodeRetryDelays[attempt]
+        transcodeRetryCounts[clip.clipId] = attempt + 1
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            self?.send(clip: clip)
+        }
     }
 
     /// Per-clip in-flight retry counters for the "file not yet on

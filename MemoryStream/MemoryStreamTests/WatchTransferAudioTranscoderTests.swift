@@ -82,4 +82,21 @@ struct WatchTransferAudioTranscoderTests {
         defer { try? FileManager.default.removeItem(at: source) }
         #expect(!WatchTransferAudioTranscoder.isTransferReady(source))
     }
+
+    /// The wiring's completeness gate: a correctly-durationed transcode is
+    /// ready+complete; the same file checked against a much longer expected
+    /// duration is NOT. That's what stops the send path shipping a `.m4a`
+    /// transcoded from a source that hadn't finalized (the no-sync-drain
+    /// window) — a short/truncated artifact is re-transcoded, never shipped.
+    @Test func isTransferReadyAndComplete_gatesOnDuration() throws {
+        let source = try writeSourcePCM(channels: 2, sampleRate: 48_000, seconds: 1.0)
+        let dest = tempURL("m4a")
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: dest) }
+
+        try WatchTransferAudioTranscoder.transcodeToTransferFormat(source: source, destination: dest)
+
+        #expect(WatchTransferAudioTranscoder.isTransferReadyAndComplete(dest, expectedSeconds: 1.0))
+        #expect(!WatchTransferAudioTranscoder.isTransferReadyAndComplete(dest, expectedSeconds: 10.0),
+                "a 1s artifact must fail the completeness gate for a 10s clip (truncated-source simulation)")
+    }
 }
