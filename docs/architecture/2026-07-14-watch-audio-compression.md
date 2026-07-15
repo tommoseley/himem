@@ -50,6 +50,9 @@ The dogfood log shows **dozens** of repeated:
 ```
 for the *same* clipIds, via both `didReceiveMessage` and `didReceiveUserInfo`, plus `WCFileStorage … could not load user info data … ENOENT`. Looks like an ack loop / re-delivery churn (the buffered-ack "replay on next mutation" may be self-perpetuating). **Separate investigation — not part of the compression fix.** Logged here so it isn't lost.
 
+### 4d · Phone-side skip-if-AAC — own follow-up (logged 2026-07-14)
+Once the watch ships AAC (4a wiring), `WatchSessionDelegate.compressIfPossible` on the phone would **re-encode an already-AAC clip** (AAC→AAC). It's harmless (AVFoundation sniffs by magic bytes, so a `.caf`-named AAC still decodes) but wasteful and mildly lossy. **Fix (separate change):** sniff the arrived file's format and skip compression if it's already AAC. Not blocking 4a; logged here so it isn't lost.
+
 ## 5 · Encoder options — **Option 1 chosen (locked 2026-07-14)**
 
 All keep WatchConnectivity; all target mono/16k/AAC. `AudioCompressor` (the phone's compressor) is **not** an option — it uses `AVAssetWriter`/`AVAssetReader`, which are **unavailable on watchOS**.
