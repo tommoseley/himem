@@ -123,3 +123,45 @@ struct ClusterFingerprint: Hashable, Codable, RawRepresentable {
         return ClusterFingerprint(rawValue: hex)
     }
 }
+
+/// Model-A transient-trim resolution for the Sort cluster editor
+/// (`Captured Clips · session-first · spec.md` §87 "Adjust =
+/// expand-in-place + Remove (subtractive)", ruling 2026-07-15).
+///
+/// The expanded cluster card holds a per-fingerprint set of removed
+/// clipIds in **view-state only** — trims are provisional-and-reversible
+/// until the batch commit. These pure functions turn that trim into what
+/// the commit keeps. Nothing here touches the proposer or any store: a
+/// removed clip is simply excluded from the commit, so it stays in the
+/// inbox as a loose clip (`SortBatchCommit` removes only the clips it's
+/// handed). That is the whole mechanism by which "Not together at clip
+/// granularity" works without a new set-aside — no proposer change.
+enum ClusterTrim {
+
+    /// Kept clipIds per proposal after applying the per-fingerprint
+    /// removed sets. A cluster trimmed to empty is **dropped** — never
+    /// commit an empty memory (spec edge, 2026-07-15). Clip order within
+    /// a cluster is preserved.
+    static func keptForCommit(
+        proposals: [ClusterProposal],
+        removedByFingerprint: [String: Set<UUID>]
+    ) -> [(proposal: ClusterProposal, keptClipIds: [UUID])] {
+        proposals.compactMap { proposal in
+            let removed = removedByFingerprint[proposal.fingerprint.rawValue] ?? []
+            let kept = proposal.clipIds.filter { !removed.contains($0) }
+            guard !kept.isEmpty else { return nil }
+            return (proposal, kept)
+        }
+    }
+
+    /// Live count of Memories the commit will create — clusters with at
+    /// least one kept clip. Drives the "Keep these · N memories" label so
+    /// it always tells the truth as clips are trimmed, and reaches 0 only
+    /// when every cluster is fully trimmed (commit then disabled).
+    static func committableCount(
+        proposals: [ClusterProposal],
+        removedByFingerprint: [String: Set<UUID>]
+    ) -> Int {
+        keptForCommit(proposals: proposals, removedByFingerprint: removedByFingerprint).count
+    }
+}

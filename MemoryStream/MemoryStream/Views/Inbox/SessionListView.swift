@@ -52,6 +52,11 @@ struct SessionListView: View {
     /// this set — an excluded media ref stays on the bench as a
     /// loose clip after the voice bundle commits.
     @State private var sessionExcludedMediaIds: [UUID: Set<UUID>] = [:]
+    // Sort cluster editor (Model A transient trim, ruling 2026-07-15).
+    // Both view-state only — trims are provisional-and-reversible until
+    // the batch commit; nothing here touches the proposer or any store.
+    @State private var expandedClusterFingerprints: Set<String> = []
+    @State private var removedByFingerprint: [String: Set<UUID>] = [:]
     /// Per-clip retry-transcription state — populated while a
     /// retry is in flight so the row's link shows a "Retrying…"
     /// spinner and disables to prevent double-taps. Cleared when
@@ -244,6 +249,42 @@ struct SessionListView: View {
         InboxManifest.shared.dismissCluster(proposal)
     }
 
+    // MARK: - Cluster editor (§87 · Model A transient trim, 2026-07-15)
+
+    /// Member clips of a cluster (kept + set-aside), ordered by the
+    /// proposal's `clipIds`, for the expanded editor rows.
+    private func clips(forCluster proposal: ClusterProposal) -> [InboxClip] {
+        let byId = Dictionary(inbox.clips.map { ($0.clipId, $0) }, uniquingKeysWith: { first, _ in first })
+        return proposal.clipIds.compactMap { byId[$0] }
+    }
+
+    /// `Adjust` / card-body tap — toggle the in-place editor.
+    private func toggleClusterExpanded(_ proposal: ClusterProposal) {
+        let fp = proposal.fingerprint.rawValue
+        if expandedClusterFingerprints.contains(fp) {
+            expandedClusterFingerprints.remove(fp)
+        } else {
+            expandedClusterFingerprints.insert(fp)
+        }
+    }
+
+    /// `Remove` — set a clip aside within the cluster (transient trim,
+    /// a per-clip "Not together"). Reversible via `reAddClipToCluster`.
+    private func removeClipFromCluster(_ proposal: ClusterProposal, _ clipId: UUID) {
+        let fp = proposal.fingerprint.rawValue
+        var set = removedByFingerprint[fp] ?? []
+        set.insert(clipId)
+        removedByFingerprint[fp] = set
+    }
+
+    /// `Add back` — undo a trim; the clip rejoins the kept set.
+    private func reAddClipToCluster(_ proposal: ClusterProposal, _ clipId: UUID) {
+        let fp = proposal.fingerprint.rawValue
+        guard var set = removedByFingerprint[fp] else { return }
+        set.remove(clipId)
+        removedByFingerprint[fp] = set.isEmpty ? nil : set
+    }
+
     /// "Keep these · N memories" tap — resolve each proposal to its
     /// live clips, batch commit via `SortBatchCommit`. Clips leave
     /// the manifest on success; the ClusterCardStack disappears
@@ -266,12 +307,20 @@ struct SessionListView: View {
     /// firing on a beat that misses the render window.
     private func handleClusterBatchCommit() {
         let byClipId: [UUID: InboxClip] = Dictionary(uniqueKeysWithValues: inbox.clips.map { ($0.clipId, $0) })
-        let resolved: [(proposal: ClusterProposal, clips: [InboxClip])] = proposals.map { p in
-            let clips = p.clipIds.compactMap { byClipId[$0] }
-            return (p, clips)
+        // Apply the transient trim: commit only each cluster's KEPT clips,
+        // dropping any cluster trimmed to empty (never commit an empty
+        // memory). Removed clips are never handed to SortBatchCommit — and
+        // SortBatchCommit removes only the clips it commits — so a trimmed
+        // clip stays in the inbox as a loose clip.
+        let kept = ClusterTrim.keptForCommit(proposals: proposals, removedByFingerprint: removedByFingerprint)
+        let resolved: [(proposal: ClusterProposal, clips: [InboxClip])] = kept.map { entry in
+            (entry.proposal, entry.keptClipIds.compactMap { byClipId[$0] })
         }
+        guard !resolved.isEmpty else { return }
         DispatchQueue.main.async {
             SortBatchCommit.commit(resolved, viewModel: viewModel, storage: StorageService.shared)
+            self.removedByFingerprint = [:]
+            self.expandedClusterFingerprints = []
             self.sessions = self.computeSessions()
         }
     }
@@ -328,6 +377,12 @@ struct SessionListView: View {
                 }
                 ClusterCardStack(
                     proposals: proposals,
+                    clipsFor: clips(forCluster:),
+                    expandedFingerprints: expandedClusterFingerprints,
+                    removedByFingerprint: removedByFingerprint,
+                    onToggleExpand: toggleClusterExpanded,
+                    onRemoveClip: removeClipFromCluster,
+                    onReAddClip: reAddClipToCluster,
                     onDismiss: handleClusterDismiss,
                     onCommitAll: handleClusterBatchCommit
                 )
