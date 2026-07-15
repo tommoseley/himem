@@ -83,27 +83,41 @@ enum WatchTransferAudioTranscoder {
         do { dest = try AVAudioFile(forWriting: destination, settings: aacSettings) }
         catch { throw TranscodeError.openDestinationFailed(error.localizedDescription) }
 
-        // Converter handles both the 48k→16k resample and the N-ch→mono
-        // downmix, source PCM → the destination's mono-16k PCM format.
         let outFormat = dest.processingFormat
-        guard let converter = AVAudioConverter(from: srcFormat, to: outFormat) else {
+
+        // P0 fix (2026-07-15): do the N-ch→mono downmix OURSELVES (average
+        // every source channel per frame) and let AVAudioConverter do only
+        // the well-supported mono→mono resample. AVAudioConverter's built-in
+        // downmix produced pure SILENCE for the device's 3-channel *discrete*
+        // layout (dogfood + `transcode_3ch_preservesAudioEnergy`: in_peak=0.3
+        // → out_peak=0.0) — it has no downmix matrix for an unlabeled/discrete
+        // >2ch source, so it emitted zeros. Averaging is deterministic and
+        // captures the mic wherever it lands across the channels.
+        guard let monoSrcFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                                sampleRate: srcFormat.sampleRate,
+                                                channels: 1, interleaved: false) else {
+            throw TranscodeError.makeConverterFailed
+        }
+        guard let converter = AVAudioConverter(from: monoSrcFormat, to: outFormat) else {
             throw TranscodeError.makeConverterFailed
         }
 
-        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: srcFormat, frameCapacity: 16_384) else {
+        let srcChannels = Int(srcFormat.channelCount)
+        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: srcFormat, frameCapacity: 16_384),
+              let monoBuffer = AVAudioPCMBuffer(pcmFormat: monoSrcFormat, frameCapacity: 16_384) else {
             throw TranscodeError.bufferAllocFailed
         }
 
-        // Single stateful pass — the input block reads the whole source
-        // file in chunks and signals `.endOfStream` at EOF. This is the
-        // proven pattern (mirrors `TranscriptionService` on the phone);
-        // it does NOT restart the converter per chunk, so the resampler's
-        // continuity filter is preserved.
-        // Boxed EOF flag so the input block captures a `let` (reference),
-        // not a mutable `var`. The block runs *synchronously* inside
-        // `convert()`, so the mutation is safe — but Swift-6 concurrency
-        // analysis flags a captured mutable var regardless; the box keeps
-        // this new file warning-clean.
+        // Amplitude instrumentation — splits "silent in" from "silent out" on
+        // device. `[Amp]` line at the end: real input energy but zero output
+        // = a downmix/encode bug; zero input = a capture/read bug.
+        final class Peak { var v: Float = 0 }
+        let inPeak = Peak()
+
+        // Single stateful pass — the input block reads the source in chunks,
+        // averages N→1, and signals `.endOfStream` at EOF. It does NOT
+        // restart the converter per chunk (resampler continuity — the July 5
+        // saga). Boxed EOF flag so the block captures a `let`, not a `var`.
         final class EOFFlag { var reached = false }
         let eof = EOFFlag()
         let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
@@ -111,13 +125,31 @@ enum WatchTransferAudioTranscoder {
             inputBuffer.frameLength = 0
             do { try src.read(into: inputBuffer) }
             catch { eof.reached = true; outStatus.pointee = .endOfStream; return nil }
-            if inputBuffer.frameLength == 0 {
+            let n = Int(inputBuffer.frameLength)
+            if n == 0 {
                 eof.reached = true; outStatus.pointee = .endOfStream; return nil
             }
+            // Downmix: mono[i] = mean over channels; track input peak.
+            let inCh = inputBuffer.floatChannelData!
+            let out = monoBuffer.floatChannelData![0]
+            let scale = 1.0 / Float(srcChannels)
+            var localPeak: Float = 0
+            for i in 0..<n {
+                var acc: Float = 0
+                for ch in 0..<srcChannels {
+                    let s = inCh[ch][i]
+                    acc += s
+                    localPeak = max(localPeak, abs(s))
+                }
+                out[i] = acc * scale
+            }
+            monoBuffer.frameLength = inputBuffer.frameLength
+            if localPeak > inPeak.v { inPeak.v = localPeak }
             outStatus.pointee = .haveData
-            return inputBuffer
+            return monoBuffer
         }
 
+        var outPeak: Float = 0
         let outCapacity = AVAudioFrameCount(outFormat.sampleRate * 0.5)  // ~0.5s chunks
         while true {
             guard let outBuffer = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: outCapacity) else {
@@ -127,11 +159,16 @@ enum WatchTransferAudioTranscoder {
             let status = converter.convert(to: outBuffer, error: &convError, withInputFrom: inputBlock)
             if let convError { throw TranscodeError.convertFailed(convError.localizedDescription) }
             if outBuffer.frameLength > 0 {
+                if let od = outBuffer.floatChannelData?[0] {
+                    for i in 0..<Int(outBuffer.frameLength) { outPeak = max(outPeak, abs(od[i])) }
+                }
                 do { try dest.write(from: outBuffer) }
                 catch { throw TranscodeError.convertFailed("write: \(error.localizedDescription)") }
             }
             if status == .endOfStream || status == .error { break }
         }
+        NSLog(String(format: "[HiMem][WC][Amp] transcode srcCh=%d in_peak=%.4f conv_out_peak=%.4f",
+                     srcChannels, inPeak.v, outPeak))
         // `dest` finalizes the AAC container on dealloc (end of scope).
     }
 

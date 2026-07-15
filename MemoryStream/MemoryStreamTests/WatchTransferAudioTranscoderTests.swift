@@ -75,6 +75,62 @@ struct WatchTransferAudioTranscoderTests {
         #expect(dstSize * 10 < srcSize, "compressed \(dstSize) B should be « raw \(srcSize) B")
     }
 
+    /// Measures peak |amplitude| across all channels of a file — the
+    /// energy check that "mono/16k/AAC" alone doesn't make.
+    private func filePeak(_ url: URL) throws -> Float {
+        let f = try AVAudioFile(forReading: url)
+        guard f.length > 0,
+              let buf = AVAudioPCMBuffer(pcmFormat: f.processingFormat,
+                                         frameCapacity: AVAudioFrameCount(f.length)) else { return 0 }
+        try f.read(into: buf)
+        var peak: Float = 0
+        let chs = Int(buf.format.channelCount)
+        for ch in 0..<chs {
+            if let d = buf.floatChannelData?[ch] {
+                for i in 0..<Int(buf.frameLength) { peak = max(peak, abs(d[i])) }
+            }
+        }
+        return peak
+    }
+
+    /// P0 (2026-07-15) money test — the transcode produced format-correct
+    /// but **SILENT** output on device (watch clips arrived with no speech,
+    /// no playback). The stereo fixture + format-only assertions missed it:
+    /// "format-correct-but-silent" is exactly what they don't catch. This
+    /// runs a real **3-channel** source in the device shape (ch0 a quiet
+    /// reference, mic on ch1/ch2) and asserts the OUTPUT carries audio
+    /// energy — the assertion that would have caught the ship.
+    @Test func transcode_3ch_preservesAudioEnergy() throws {
+        // 3-ch deinterleaved Float32 @48k with an explicit discrete layout
+        // (`commonFormat` alone can't build 3ch; the device input is 3ch).
+        let layout = AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | 3)!
+        let fmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000,
+                                interleaved: false, channelLayout: layout)
+        let source = tempURL("caf")
+        let dest = tempURL("m4a")
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: dest) }
+
+        let file = try AVAudioFile(forWriting: source, settings: fmt.settings)
+        let frames = AVAudioFrameCount(48_000)  // 1s
+        let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frames)!
+        buf.frameLength = frames
+        // ch0 stays silent (the reference channel); mic on ch1 + ch2.
+        for ch in 1...2 {
+            if let d = buf.floatChannelData?[ch] {
+                for i in 0..<Int(frames) { d[i] = 0.3 * sinf(2 * .pi * 440 * Float(i) / 48_000) }
+            }
+        }
+        try file.write(from: buf)
+
+        let inPeak = try filePeak(source)
+        try WatchTransferAudioTranscoder.transcodeToTransferFormat(source: source, destination: dest)
+        let outPeak = try filePeak(dest)
+
+        #expect(inPeak > 0.1, "fixture should have real input energy (peak=\(inPeak))")
+        #expect(outPeak > 0.02,
+                "transcoded output is silent (in_peak=\(inPeak) out_peak=\(outPeak)) — the 3ch→mono downmix dropped the signal")
+    }
+
     /// The red state, captured: the raw recording the bug ships must FAIL
     /// the guard. This is the "test failing is the bug" boundary.
     @Test func isTransferReady_rejectsRawPCM() throws {
