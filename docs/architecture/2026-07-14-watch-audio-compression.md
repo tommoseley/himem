@@ -39,7 +39,7 @@ Transcode the finished PCM `.caf` → mono 16 kHz AAC `.m4a` **after stop, befor
 
 ### 4b · The 3-channel / mono premise is false on device — own item
 `WatchRecordingService` disables VPIO expecting mono ("future recordings are mono", July 5 Troika fix #1). **On device the input node still reports 3 channels after `setVoiceProcessingEnabled(false)`** (dogfood above). Consequences:
-- The transcode (4a) **must not assume mono** — it downmixes 3→1 explicitly (AVAudioConverter/ExtAudioFile average across channels).
+- The transcode (4a) **must not assume mono** — it downmixes 3→1 by a **manual per-frame channel average**, then a mono→mono resample. **`AVAudioConverter`'s built-in downmix does NOT average an unlabeled/discrete >2ch source — it emits pure silence** (P0 2026-07-15: `in_peak=0.3 → out_peak=0.0`). Never hand N-channel straight to the converter. The invariant test pairs mono/16k/AAC with **non-zero output energy from a ≥3ch fixture** so format-correct-but-silent fails.
 - Separately, this means the July 5 transcription fix's premise ("mono after VPIO disable") is also false — the phone-side transcode is averaging across 3 channels, one of which may be dead. **Not this P0**, but flag: re-verify transcription quality once clips arrive as clean mono AAC.
 
 ### 4c · Duplicate-ack storm — own item, later
@@ -59,7 +59,7 @@ All keep WatchConnectivity; all target mono/16k/AAC. `AudioCompressor` (the phon
 
 | # | Shape | How | Pro | Con |
 |---|---|---|---|---|
-| **1 (rec.)** | **AVAudioConverter, whole-file, single stateful convert** | Leave the record path (engine+tap → PCM `.caf`) untouched. After stop, one `convert()` pass over the whole file → mono 16k AAC `.m4a`; enqueue that. | Record path **untouched** (lowest risk to the fragile capture); mirrors the phone's proven `TranscriptionService` single-`convert()` pattern; watchOS-native (AVFAudio); downmixes 3→1 for free when output is mono. | Adds a ~1s post-stop transcode + temp file (CPU/battery). |
+| **1 (rec.)** | **AVAudioConverter, whole-file, single stateful convert** | Leave the record path (engine+tap → PCM `.caf`) untouched. After stop, one `convert()` pass over the whole file → mono 16k AAC `.m4a`; enqueue that. | Record path **untouched** (lowest risk to the fragile capture); mirrors the phone's proven `TranscriptionService` single-`convert()` pattern; watchOS-native (AVFAudio). **Downmix is manual** (per-frame channel average) — the converter does NOT downmix a discrete >2ch source (it silences it, P0 2026-07-15); it only resamples mono→mono. | Adds a ~1s post-stop transcode + temp file (CPU/battery). |
 | 2 | **ExtAudioFile (AudioToolbox)** | Post-stop whole-file convert via ExtAudioFile: client PCM in, AAC `.m4a` file out. | watchOS-native; robust classic file transcode. | C-style API, more boilerplate; less idiomatic than #1. |
 | 3 | **Record direct-to-AAC (AVAudioRecorder)** | Replace engine+tap with `AVAudioRecorder` configured mono/16k/AAC. No transcode step. | Smallest file from the start; no second pass. | **Changes the record path** — the exact fragile area (July 5 reverts); loses the tap-driven live waveform (metering via `averagePower` is coarser); loses all-channel PCM. Highest risk. |
 

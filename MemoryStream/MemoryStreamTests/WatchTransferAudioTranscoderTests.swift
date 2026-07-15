@@ -126,9 +126,18 @@ struct WatchTransferAudioTranscoderTests {
         try WatchTransferAudioTranscoder.transcodeToTransferFormat(source: source, destination: dest)
         let outPeak = try filePeak(dest)
 
+        // The regression lock is the PAIRING — format AND energy from a ≥3ch
+        // source, in one standing assertion. Either half alone is a false
+        // negative: format-only passed the silent ship; energy-only wouldn't
+        // catch a mis-formatted output. Both must hold.
         #expect(inPeak > 0.1, "fixture should have real input energy (peak=\(inPeak))")
         #expect(outPeak > 0.02,
                 "transcoded output is silent (in_peak=\(inPeak) out_peak=\(outPeak)) — the 3ch→mono downmix dropped the signal")
+        #expect(WatchTransferAudioTranscoder.isTransferReady(dest), "output must be mono/16k/AAC")
+        let out = try AVAudioFile(forReading: dest)
+        #expect(out.fileFormat.channelCount == 1)
+        #expect(Int(out.fileFormat.sampleRate.rounded()) == 16_000)
+        #expect(out.fileFormat.streamDescription.pointee.mFormatID == kAudioFormatMPEG4AAC)
     }
 
     /// The red state, captured: the raw recording the bug ships must FAIL
