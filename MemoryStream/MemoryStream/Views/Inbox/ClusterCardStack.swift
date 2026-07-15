@@ -241,8 +241,12 @@ struct ClusterCardStack: View {
             Button {
                 onToggleExpand(proposal)
             } label: {
+                // State-driven toggle — names the action it performs:
+                // collapsed → "Adjust ⌄" (expand into trim); expanded →
+                // "Done ⌃" (collapse back to preview). "Done" = collapse,
+                // NOT commit — the ochre "Keep these · N" is the only commit.
                 HStack(spacing: 3) {
-                    Text("Adjust")
+                    Text(expanded ? "Done" : "Adjust")
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                 }
