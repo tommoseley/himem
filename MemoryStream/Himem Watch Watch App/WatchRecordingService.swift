@@ -138,9 +138,11 @@ final class WatchRecordingService: NSObject, ObservableObject {
         let warmStart = Date()
         do {
             let session = AVAudioSession.sharedInstance()
+            // `.default` mirrors the record path (capture-gain P0, 2026-07-15)
+            // so warm and record configure the same mode — no reconfigure.
             try session.setCategory(
                 .playAndRecord,
-                mode: .measurement,
+                mode: .default,
                 options: [.allowBluetoothHFP, .mixWithOthers]
             )
             try session.setActive(true, options: [])
@@ -197,7 +199,16 @@ final class WatchRecordingService: NSObject, ObservableObject {
             // pay it once per app launch via `warmAudioSession()`
             // called from `WatchAppCoordinator.init`, then this
             // setActive hits a warm HAL.
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .allowBluetoothHFP])
+            // Capture-gain P0 (2026-07-15): `.default`, not `.measurement`.
+            // `.measurement` mode minimizes system input processing — which
+            // includes input GAIN — leaving the watch mic un-gained at
+            // ~-40 dBFS (loud-clip dogfood: in_peak pinned ~0.01 regardless of
+            // how loud the user spoke). The phone tolerates `.measurement`
+            // because its mic is hotter; the watch mic isn't. `.default` lets
+            // the system apply normal input gain. Independent of the July-5
+            // VPIO/clean-channel fix (that's `setVoiceProcessingEnabled` below,
+            // a different knob) — this does not touch it.
+            try session.setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .allowBluetoothHFP])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             NSLog("[HiMem][REC] start: AVAudioSession active in \(Int(Date().timeIntervalSince(sessionStart) * 1000))ms")
 
