@@ -6,8 +6,13 @@ import SwiftUI
 /// · spec.md` v3 § "The workbench + Sort":
 ///
 /// - Cluster cards: AI-blue reason band, cluster name + preview
-///   lines, quiet blue "Not together" secondary. `Adjust` is UI-
-///   present but no-op in v1 (post-v1 cluster editor).
+///   lines, one quiet-blue "Not together" secondary (dismiss →
+///   clips fall back to loose). The card body is non-interactive —
+///   no tap it can't honor. `Adjust` is deliberately NOT rendered
+///   in v1: no cluster editor exists behind it, and a dead
+///   interactive control violates the affordance invariant. It
+///   returns only if the post-v1 editor is pulled forward
+///   ([DECISION → Tom]).
 /// - Bottom bar: "Keep these · N memories" — the ONE ochre moment
 ///   on the workbench. One tap → each cluster becomes its own
 ///   draft Memory (spec § 74: no confirmation sheet after).
@@ -98,19 +103,17 @@ struct ClusterCardStack: View {
                     }
                     .padding(.top, 2)
                 }
-                // Quiet blue secondaries — Adjust (no-op v1) and
-                // Not together. No per-cluster ochre; commit lives
-                // in the bottom bar.
+                // One honest quiet-blue secondary: Not together (dismiss →
+                // clips fall back to loose). No per-cluster ochre; commit
+                // lives in the bottom bar. `Adjust` is deliberately NOT
+                // rendered in v1 — there is no cluster editor behind it, and a
+                // disabled interactive-looking control violates the affordance
+                // invariant (interactive look = exactly one real job). It
+                // returns only if the post-v1 cluster editor is pulled forward
+                // ([DECISION → Tom]). v1 cluster interaction = two honest
+                // paths: Keep these · N (commit) and Not together (dismiss).
                 HStack(spacing: 18) {
                     Spacer()
-                    Button {
-                        // No-op v1 — cluster editor is post-v1.
-                    } label: {
-                        Text("Adjust")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Crucible.Color.aiBlue.opacity(0.35))
-                    }
-                    .disabled(true)
                     Button {
                         onDismiss(proposal)
                     } label: {
