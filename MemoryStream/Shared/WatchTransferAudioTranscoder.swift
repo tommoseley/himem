@@ -16,11 +16,14 @@ import AVFoundation
 /// This runs a single stateful `AVAudioConverter` pass over the finished
 /// file via an input block that signals `.endOfStream` at EOF.
 ///
-/// **Explicit mono downmix.** `setVoiceProcessingEnabled(false)` does NOT
-/// collapse the watch input to mono on device (dogfood 2026-07-14: still
-/// 3 channels), so we downmix N→1 ourselves by **extracting the hottest
-/// channel** (the channels are live but uncorrelated — averaging cancels
-/// misaligned peaks and loses ~2×; capture-gain P0 2026-07-15).
+/// **Explicit mono downmix (defensive).** Under `.measurement` session mode
+/// the watch input was 3-channel (dogfood 2026-07-14); the capture-gain P0
+/// fix (`WatchAudioSessionConfig.recordMode = .default`, 2026-07-15) now
+/// yields mono on device, so N is normally 1. But we still downmix N→1
+/// ourselves by **extracting the hottest channel** — retained as tested
+/// defense for any future multichannel route. (Pick-hottest, not average:
+/// the 3ch device channels were live but uncorrelated, so averaging cancelled
+/// misaligned peaks and lost ~2×.)
 ///
 /// **Encoder shape (Tom, 2026-07-14 · Option 1):** `AVAudioConverter` for
 /// the resample + downmix, `AVAudioFile(forWriting: settings:)` for the

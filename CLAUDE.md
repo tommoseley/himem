@@ -181,6 +181,16 @@ The watch transcodes every clip to **mono · 16 kHz · AAC (`.m4a`) before `tran
 
 Source of truth: `docs/design/Watch · spec.md §2`, `docs/design/HiMem · Locked Decisions.html`, `docs/architecture/2026-07-14-watch-audio-compression.md`.
 
+### Watch Capture Session Mode (locked 2026-07-15)
+
+**The watch records in `AVAudioSession.Mode.default`, never `.measurement`.** `.measurement` minimizes system input processing — **including input gain** — which left the watch mic at ~−40 dBFS: clips arrived **silent and untranscribable** (dogfood: `[Amp]` `in_peak` pinned ~0.01 regardless of how loud the user spoke). `.measurement` was *also* selecting the raw 3-channel hardware input. `.default` applies normal input gain **and** resolves the input to processed **mono** — one change fixes the level bug and dissolves the 3-channel downmix problem at the source (dogfood 2026-07-15: `in_peak` 0.1, clips transcribe at full coverage).
+
+- The mode lives in one place — `WatchAudioSessionConfig.recordMode` (`Shared/`) — used by both the warm and record paths in `WatchRecordingService`.
+- **Guard:** `WatchAudioSessionConfigTests` asserts the mode is `.default`, not `.measurement`. Real input energy needs mic hardware to measure (the `[Amp]` transcode log is that device-side check); this config-invariant test is the deterministic guard that a refactor can't silently revert the mode and re-break capture.
+- The transcode's **pick-hottest** N→1 downmix is **retained as defensive, tested code** for any future multichannel route — not ripped out even though `.default` now yields mono on device.
+
+Source of truth: `docs/architecture/2026-07-14-watch-audio-compression.md` §4e, `docs/design/Watch · spec.md §2`.
+
 ### Wake Lock (Idle Timer)
 
 HiMem holds the system wake lock (iOS: `UIApplication.shared.isIdleTimerDisabled`; watchOS equivalent) **only during active capture** — recording in progress, photo composer open, video composer active. Everything else respects the system idle timer.

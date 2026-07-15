@@ -1,6 +1,6 @@
 # Watch audio compression — decision doc (2026-07-14)
 
-**Status:** LOCKED 2026-07-14 — **encoder = Option 1 (AVAudioConverter, whole-file, post-stop)**; **transport = WatchConnectivity, permanently.** Implementing 4a Bug-First.
+**Status:** LOCKED 2026-07-14 — **encoder = Option 1 (AVAudioConverter, whole-file, post-stop)**; **transport = WatchConnectivity, permanently.** 4a shipped. **Capture-gain P0 RESOLVED 2026-07-15** (`.measurement` → `.default`, §4e) — watch clips are now audible and transcribe.
 **Owner:** CC (implementation) · **Decision:** Tom (both *whats* locked).
 
 ## 1 · Problem + evidence
@@ -37,10 +37,29 @@ Locked into `Watch · spec.md` §2 and `HiMem · Locked Decisions.html`:
 ### 4a · The compression (this fix — awaiting encoder pick)
 Transcode the finished PCM `.caf` → mono 16 kHz AAC `.m4a` **after stop, before enqueueing the transfer**, and transfer the `.m4a`.
 
-### 4b · The 3-channel / mono premise is false on device — own item
-`WatchRecordingService` disables VPIO expecting mono ("future recordings are mono", July 5 Troika fix #1). **On device the input node still reports 3 channels after `setVoiceProcessingEnabled(false)`** (dogfood above). Consequences:
-- The transcode (4a) **must not assume mono** — it downmixes 3→1 by a **manual per-frame channel average**, then a mono→mono resample. **`AVAudioConverter`'s built-in downmix does NOT average an unlabeled/discrete >2ch source — it emits pure silence** (P0 2026-07-15: `in_peak=0.3 → out_peak=0.0`). Never hand N-channel straight to the converter. The invariant test pairs mono/16k/AAC with **non-zero output energy from a ≥3ch fixture** so format-correct-but-silent fails.
-- Separately, this means the July 5 transcription fix's premise ("mono after VPIO disable") is also false — the phone-side transcode is averaging across 3 channels, one of which may be dead. **Not this P0**, but flag: re-verify transcription quality once clips arrive as clean mono AAC.
+### 4b · The 3-channel / mono premise — CORRECTED (2026-07-15, see §4e)
+> **Correction (2026-07-15):** the "still 3 channels" observation below was **under `.measurement` session mode.** `.measurement` was *itself* selecting the raw 3-channel hardware input. Switching the record mode to **`.default`** (capture-gain P0, §4e) resolves the input to **processed mono** on device (dogfood: `input node format: 1 ch`). So the 3-channel downmix problem is **dissolved at the source**, not merely handled. The manual downmix (now **pick-hottest**, not average — see below) is **retained as defensive, tested code** for any future multichannel route; it is not ripped out.
+
+`WatchRecordingService` disables VPIO expecting mono ("future recordings are mono", July 5 Troika fix #1). **Under `.measurement` mode the input node still reported 3 channels after `setVoiceProcessingEnabled(false)`** (dogfood 2026-07-14). Consequences (now historical — see the correction above):
+- The transcode (4a) **must not assume mono** — it downmixes N→1 by **extracting the hottest channel** (revised 2026-07-15 from per-frame average: the device's channels were live but uncorrelated, so averaging cancelled misaligned peaks and lost ~2× — pick-hottest recovers it). **`AVAudioConverter`'s built-in downmix does NOT combine an unlabeled/discrete >2ch source — it emits pure silence** (P0 2026-07-15: `in_peak=0.3 → out_peak=0.0`). Never hand N-channel straight to the converter. The invariant test pairs mono/16k/AAC with **hottest-channel output energy from a ≥3ch fixture** so format-correct-but-silent fails.
+- Separately, the July 5 transcription fix's premise ("mono after VPIO disable") is now true again *because of the `.default` mode change* — clips arrive as clean mono AAC and transcribe (dogfood 2026-07-15: 122- and 192-char transcripts, full coverage).
+
+### 4e · Capture-gain P0 — RESOLVED (2026-07-15): `.measurement` → `.default`
+Watch clips transferred fast (4a) but arrived **silent — no speech, no playback, nothing transcribed.** Root cause was NOT the transcode: the loud-clip dogfood `[Amp]` line showed `in_peak` pinned at **~0.01 (−40 dBFS) regardless of how loud the user spoke** — the *capture* was under-gained.
+
+The cause: the watch recorded in **`.measurement`** session mode, which by design **minimizes system input processing, including input GAIN**. The phone's `SpeechService` uses the same `.measurement` mode and captures fine only because the phone mic is hotter; the watch mic isn't, so with no gain applied it sat at ~0.01. `.measurement` predates and is independent of the July-5 VPIO/clean-channel fix.
+
+**Fix (knob 1, the only knob needed):** record in **`.default`** mode, which applies normal input gain. Dogfood A/B, same device/voice:
+
+| mode | srcCh | in_peak | outcome |
+|---|---|---|---|
+| `.measurement` (3 clips) | 3 | ~0.0086–0.0103 | silent, no transcription |
+| `.default` (40.4s) | **1** | **0.1000** | **transcribed, 122 chars** |
+| `.default` (13.1s) | 1 | 0.0332 | **transcribed, 192 chars, full coverage** |
+
+`.default` also collapsed the input to **mono** (see §4b correction) — one change fixes both the level bug and the 3-channel problem. Knobs 2 (digital gain multiplier) and 3 (re-enable VPIO) were **not** needed and not applied. The mode is now a named constant (`WatchAudioSessionConfig.recordMode`) with a standing invariant test (`WatchAudioSessionConfigTests`) so a refactor can't silently revert to `.measurement`.
+
+**Carry-forward (both off the capture-gain critical path):** §4c ack-storm (still active in dogfood); §4d skip-if-AAC — now with teeth: the phone re-compresses the already-AAC watch clip (AAC→AAC) and it **measurably attenuates** (watch out 0.0746 → phone probe peak 0.0273), so it's mildly *lossy*, not just wasteful — worth doing.
 
 ### 4c · Duplicate-ack storm — own item, later
 The dogfood log shows **dozens** of repeated:
@@ -51,7 +70,7 @@ The dogfood log shows **dozens** of repeated:
 for the *same* clipIds, via both `didReceiveMessage` and `didReceiveUserInfo`, plus `WCFileStorage … could not load user info data … ENOENT`. Looks like an ack loop / re-delivery churn (the buffered-ack "replay on next mutation" may be self-perpetuating). **Separate investigation — not part of the compression fix.** Logged here so it isn't lost.
 
 ### 4d · Phone-side skip-if-AAC — own follow-up (logged 2026-07-14)
-Once the watch ships AAC (4a wiring), `WatchSessionDelegate.compressIfPossible` on the phone would **re-encode an already-AAC clip** (AAC→AAC). It's harmless (AVFoundation sniffs by magic bytes, so a `.caf`-named AAC still decodes) but wasteful and mildly lossy. **Fix (separate change):** sniff the arrived file's format and skip compression if it's already AAC. Not blocking 4a; logged here so it isn't lost.
+Once the watch ships AAC (4a wiring), `WatchSessionDelegate.compressIfPossible` on the phone would **re-encode an already-AAC clip** (AAC→AAC). It's harmless (AVFoundation sniffs by magic bytes, so a `.caf`-named AAC still decodes) but wasteful and **measurably lossy — now with teeth (dogfood 2026-07-15):** the watch handed over a clip at `conv_out_peak=0.0746`, and the phone's post-recompress probe read `peak=0.0273` — the AAC→AAC pass **attenuates the level ~2.7×**. So it's not just wasted CPU; it quiets an already-quiet watch clip. **Fix (separate change):** sniff the arrived file's format and skip compression if it's already AAC. Not blocking 4a; logged here so it isn't lost.
 
 ## 5 · Encoder options — **Option 1 chosen (locked 2026-07-14)**
 
