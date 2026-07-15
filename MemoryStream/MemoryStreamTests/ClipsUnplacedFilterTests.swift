@@ -45,15 +45,14 @@ import CoreData
 struct ClipsUnplacedFilterTests {
 
     private func makeInMemoryContext() throws -> NSManagedObjectContext {
-        let model = NSManagedObjectModel.mergedModel(from: [Bundle.main])!
-        let container = NSPersistentContainer(name: "test", managedObjectModel: model)
-        let description = NSPersistentStoreDescription()
-        description.type = NSInMemoryStoreType
-        container.persistentStoreDescriptions = [description]
-        var loadError: Error?
-        container.loadPersistentStores { _, err in loadError = err }
-        if let loadError { throw loadError }
-        return container.viewContext
+        // Test-isolation fix (2026-07-15): use StorageService(inMemory:),
+        // which shares the ONE production `cachedModel` instance, instead of
+        // a fresh `NSManagedObjectModel.mergedModel(from:)` here. Multiple
+        // live models for the same entity classes race in Core Data's global
+        // registry under parallel @Suite runs → "model configuration
+        // incompatible with the store." Stores stay per-test isolated (each
+        // in-memory); the MODEL shares one instance — different layers.
+        return StorageService(inMemory: true).viewContext
     }
 
     private func makeRef(in ctx: NSManagedObjectContext, kind: MediaReference.MediaType = .image) throws -> MediaReference {

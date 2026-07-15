@@ -14,6 +14,7 @@ import Foundation
 /// re-introducing the fetch into init (which would silently re-introduce
 /// the cold-launch regression).
 @MainActor
+@Suite(.serialized)
 struct JournalViewModelLoadInitialTests {
 
     /// Money test for the refactor. Before the fix, init would call

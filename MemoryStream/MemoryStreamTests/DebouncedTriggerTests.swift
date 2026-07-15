@@ -31,7 +31,18 @@ struct DebouncedTriggerTests {
         for _ in 0..<20 {
             trigger.fire { callCount += 1 }
         }
-        try await Task.sleep(nanoseconds: 250_000_000)
+        // Deterministic wait, not a fixed sleep (2026-07-15): under a full
+        // parallel test run the debounce's timer dispatch can be CPU-starved
+        // well past a fixed 250ms window, which flaked `callCount` at 0. Poll
+        // up to 3s — fires as soon as the coalesced action runs, tolerant of
+        // the delay. `.serialized` on the suite can't fix this; the
+        // contention is global CPU load, not intra-suite parallelism.
+        let deadline = Date().addingTimeInterval(3.0)
+        while callCount < 1 && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)  // 10ms
+        }
+        // Then confirm NO second action fires — the coalescing guarantee.
+        try await Task.sleep(nanoseconds: 200_000_000)
         #expect(callCount == 1)
     }
 

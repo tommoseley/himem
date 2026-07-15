@@ -154,14 +154,11 @@ struct PhoneCaptureBenchDispatcherTests {
     /// Spins up an in-memory Core Data stack against the shipping
     /// managed object model — avoids polluting the real store.
     private func makeInMemoryContext() throws -> NSManagedObjectContext {
-        let model = NSManagedObjectModel.mergedModel(from: [Bundle.main])!
-        let container = NSPersistentContainer(name: "test", managedObjectModel: model)
-        let description = NSPersistentStoreDescription()
-        description.type = NSInMemoryStoreType
-        container.persistentStoreDescriptions = [description]
-        var loadError: Error?
-        container.loadPersistentStores { _, err in loadError = err }
-        if let loadError { throw loadError }
-        return container.viewContext
+        // Test-isolation fix (2026-07-15): share the ONE production
+        // `cachedModel` via StorageService(inMemory:) instead of a fresh
+        // `mergedModel(from:)` — multiple live models for the same entity
+        // classes race in Core Data's global registry under parallel @Suite
+        // runs. Stores stay per-test isolated; the MODEL shares one instance.
+        return StorageService(inMemory: true).viewContext
     }
 }
