@@ -18,8 +18,9 @@ import AVFoundation
 ///
 /// **Explicit mono downmix.** `setVoiceProcessingEnabled(false)` does NOT
 /// collapse the watch input to mono on device (dogfood 2026-07-14: still
-/// 3 channels), so the target format is mono and the converter downmixes
-/// (averages) N→1.
+/// 3 channels), so we downmix N→1 ourselves by **extracting the hottest
+/// channel** (the channels are live but uncorrelated — averaging cancels
+/// misaligned peaks and loses ~2×; capture-gain P0 2026-07-15).
 ///
 /// **Encoder shape (Tom, 2026-07-14 · Option 1):** `AVAudioConverter` for
 /// the resample + downmix, `AVAudioFile(forWriting: settings:)` for the
@@ -85,14 +86,22 @@ enum WatchTransferAudioTranscoder {
 
         let outFormat = dest.processingFormat
 
-        // P0 fix (2026-07-15): do the N-ch→mono downmix OURSELVES (average
-        // every source channel per frame) and let AVAudioConverter do only
-        // the well-supported mono→mono resample. AVAudioConverter's built-in
-        // downmix produced pure SILENCE for the device's 3-channel *discrete*
-        // layout (dogfood + `transcode_3ch_preservesAudioEnergy`: in_peak=0.3
-        // → out_peak=0.0) — it has no downmix matrix for an unlabeled/discrete
-        // >2ch source, so it emitted zeros. Averaging is deterministic and
-        // captures the mic wherever it lands across the channels.
+        // P0 fix (2026-07-15): do the N-ch→mono downmix OURSELVES and let
+        // AVAudioConverter do only the well-supported mono→mono resample.
+        // AVAudioConverter's built-in downmix produced pure SILENCE for the
+        // device's 3-channel *discrete* layout (dogfood + the 3ch energy
+        // test: in_peak=0.3 → out_peak=0.0) — it has no downmix matrix for an
+        // unlabeled/discrete >2ch source, so it emitted zeros. We combine the
+        // channels ourselves.
+        //
+        // **Pick the hottest channel, don't average (capture-gain P0, 2026-07-15).**
+        // The device's 3 channels are all live but MUTUALLY UNCORRELATED
+        // (loud-clip dogfood: inCh=[0.0056,0.0071,0.0103], averaged out=0.0045
+        // — the mean fell BELOW even the quietest channel's peak, because
+        // per-sample averaging of misaligned peaks cancels). Averaging threw
+        // away ~2× of the mic. So a cheap first pass finds the highest-energy
+        // channel (the mic lands on a fixed channel for the whole clip) and
+        // the convert pass extracts that single channel + resamples mono→mono.
         guard let monoSrcFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                                 sampleRate: srcFormat.sampleRate,
                                                 channels: 1, interleaved: false) else {
@@ -108,24 +117,32 @@ enum WatchTransferAudioTranscoder {
             throw TranscodeError.bufferAllocFailed
         }
 
-        // Amplitude instrumentation — the capture-layer discriminator
-        // (capture-gain P0, 2026-07-15). The `[Amp]` line reports PER-CHANNEL
-        // input peaks (which channels carry the mic vs which are dead
-        // reference — quantifies the downmix's ~1/N averaging loss), the
-        // overall input peak (does the recorded level scale with input →
-        // gain-too-low vs mic-route-broken), and the converter output peak
-        // (silent-in vs silent-out). Read-only measurement over the captured
-        // file — it does not change transcode behavior.
-        final class ChannelPeaks {
-            var v: [Float]
-            init(_ n: Int) { v = Array(repeating: 0, count: max(n, 0)) }
+        // Pass 1 — per-channel peak scan (read-only, then seek back to 0).
+        // Doubles as the `[Amp]` discriminator: PER-CHANNEL input peaks (which
+        // channel carries the mic), the overall input peak (does the recorded
+        // level scale with input → gain-too-low vs mic-route-broken), and it
+        // selects the channel to extract.
+        var inPeaks = [Float](repeating: 0, count: max(srcChannels, 1))
+        while true {
+            inputBuffer.frameLength = 0
+            do { try src.read(into: inputBuffer) } catch { break }
+            let n = Int(inputBuffer.frameLength)
+            if n == 0 { break }
+            let inCh = inputBuffer.floatChannelData!
+            for ch in 0..<srcChannels {
+                var p = inPeaks[ch]
+                for i in 0..<n { let a = abs(inCh[ch][i]); if a > p { p = a } }
+                inPeaks[ch] = p
+            }
         }
-        let inPeaks = ChannelPeaks(srcChannels)
+        src.framePosition = 0
+        // The mic channel = the highest-peak channel (stable for the clip).
+        let hottestCh = inPeaks.indices.max(by: { inPeaks[$0] < inPeaks[$1] }) ?? 0
 
-        // Single stateful pass — the input block reads the source in chunks,
-        // averages N→1, and signals `.endOfStream` at EOF. It does NOT
-        // restart the converter per chunk (resampler continuity — the July 5
-        // saga). Boxed EOF flag so the block captures a `let`, not a `var`.
+        // Pass 2 — single stateful convert. The input block extracts the
+        // hottest channel (no averaging) and signals `.endOfStream` at EOF.
+        // It does NOT restart the converter per chunk (resampler continuity —
+        // the July 5 saga). Boxed EOF flag so the block captures a `let`.
         final class EOFFlag { var reached = false }
         let eof = EOFFlag()
         let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
@@ -137,20 +154,9 @@ enum WatchTransferAudioTranscoder {
             if n == 0 {
                 eof.reached = true; outStatus.pointee = .endOfStream; return nil
             }
-            // Downmix: mono[i] = mean over channels; track per-channel peak.
-            let inCh = inputBuffer.floatChannelData!
+            let hot = inputBuffer.floatChannelData![hottestCh]
             let out = monoBuffer.floatChannelData![0]
-            let scale = 1.0 / Float(srcChannels)
-            for i in 0..<n {
-                var acc: Float = 0
-                for ch in 0..<srcChannels {
-                    let s = inCh[ch][i]
-                    acc += s
-                    let a = abs(s)
-                    if a > inPeaks.v[ch] { inPeaks.v[ch] = a }
-                }
-                out[i] = acc * scale
-            }
+            for i in 0..<n { out[i] = hot[i] }
             monoBuffer.frameLength = inputBuffer.frameLength
             outStatus.pointee = .haveData
             return monoBuffer
@@ -174,9 +180,9 @@ enum WatchTransferAudioTranscoder {
             }
             if status == .endOfStream || status == .error { break }
         }
-        let perCh = inPeaks.v.map { String(format: "%.4f", $0) }.joined(separator: ",")
-        let overallIn = inPeaks.v.max() ?? 0
-        NSLog("[HiMem][WC][Amp] transcode srcCh=\(srcChannels) inCh=[\(perCh)] "
+        let perCh = inPeaks.map { String(format: "%.4f", $0) }.joined(separator: ",")
+        let overallIn = inPeaks.max() ?? 0
+        NSLog("[HiMem][WC][Amp] transcode srcCh=\(srcChannels) inCh=[\(perCh)] hottestCh=\(hottestCh) "
               + String(format: "in_peak=%.4f conv_out_peak=%.4f", overallIn, outPeak))
         // `dest` finalizes the AAC container on dealloc (end of scope).
     }

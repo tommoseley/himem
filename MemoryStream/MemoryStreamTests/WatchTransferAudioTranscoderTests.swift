@@ -97,9 +97,11 @@ struct WatchTransferAudioTranscoderTests {
     /// but **SILENT** output on device (watch clips arrived with no speech,
     /// no playback). The stereo fixture + format-only assertions missed it:
     /// "format-correct-but-silent" is exactly what they don't catch. This
-    /// runs a real **3-channel** source in the device shape (ch0 a quiet
-    /// reference, mic on ch1/ch2) and asserts the OUTPUT carries audio
-    /// energy — the assertion that would have caught the ship.
+    /// runs a real **3-channel** source in the device shape — three live
+    /// channels at DIFFERENT levels, mic hottest on ch2 (loud-clip dogfood:
+    /// inCh=[0.0056,0.0071,0.0103]) — and asserts the OUTPUT carries the
+    /// **hottest channel's** energy: the pick-hottest downmix (capture-gain
+    /// P0) must extract the mic channel, not average it away.
     @Test func transcode_3ch_preservesAudioEnergy() throws {
         // 3-ch deinterleaved Float32 @48k with an explicit discrete layout
         // (`commonFormat` alone can't build 3ch; the device input is 3ch).
@@ -114,11 +116,14 @@ struct WatchTransferAudioTranscoderTests {
         let frames = AVAudioFrameCount(48_000)  // 1s
         let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frames)!
         buf.frameLength = frames
-        // ch0 stays silent (the reference channel); mic on ch1 + ch2.
-        for ch in 1...2 {
-            if let d = buf.floatChannelData?[ch] {
-                for i in 0..<Int(frames) { d[i] = 0.3 * sinf(2 * .pi * 440 * Float(i) / 48_000) }
-            }
+        // Three live channels at distinct levels: ch0 silent, ch1 quiet (0.1),
+        // ch2 the mic (0.3, hottest). Distinct levels make hottest (0.3) vs
+        // mean (~0.13) separable — the pick-hottest downmix must land on ch2.
+        if let d = buf.floatChannelData?[1] {
+            for i in 0..<Int(frames) { d[i] = 0.1 * sinf(2 * .pi * 440 * Float(i) / 48_000) }
+        }
+        if let d = buf.floatChannelData?[2] {
+            for i in 0..<Int(frames) { d[i] = 0.3 * sinf(2 * .pi * 440 * Float(i) / 48_000) }
         }
         try file.write(from: buf)
 
@@ -126,13 +131,15 @@ struct WatchTransferAudioTranscoderTests {
         try WatchTransferAudioTranscoder.transcodeToTransferFormat(source: source, destination: dest)
         let outPeak = try filePeak(dest)
 
-        // The regression lock is the PAIRING — format AND energy from a ≥3ch
-        // source, in one standing assertion. Either half alone is a false
-        // negative: format-only passed the silent ship; energy-only wouldn't
-        // catch a mis-formatted output. Both must hold.
+        // The regression lock is the PAIRING — format AND hottest-channel
+        // energy from a ≥3ch source, in one standing assertion. Either half
+        // alone is a false negative: format-only passed the silent ship;
+        // energy-only wouldn't catch a mis-formatted output. Both must hold.
+        // > 0.25 locks pick-hottest: the output carries ch2 (~0.3), NOT the
+        // diluted mean (~0.13) that averaging uncorrelated channels produces.
         #expect(inPeak > 0.1, "fixture should have real input energy (peak=\(inPeak))")
-        #expect(outPeak > 0.02,
-                "transcoded output is silent (in_peak=\(inPeak) out_peak=\(outPeak)) — the 3ch→mono downmix dropped the signal")
+        #expect(outPeak > 0.25,
+                "output should carry the hottest channel ~0.3, not the diluted mean (in_peak=\(inPeak) out_peak=\(outPeak))")
         #expect(WatchTransferAudioTranscoder.isTransferReady(dest), "output must be mono/16k/AAC")
         let out = try AVAudioFile(forReading: dest)
         #expect(out.fileFormat.channelCount == 1)
