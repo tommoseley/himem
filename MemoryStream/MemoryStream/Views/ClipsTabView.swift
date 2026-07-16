@@ -43,6 +43,9 @@ struct ClipsTabView: View {
     /// (was folded into `.photos` in the retired single-row filter).
     @State private var type: ClipsType = .all
     @State private var unplacedRefs: [MediaReference] = []
+    /// The clip being edited in the unified `ClipEditorModal` sheet (Clip-editor
+    /// cycle 2) — supersedes the pushed `ClipDetailView` for the bench.
+    @State private var editingClip: ClipEditorModal.Source?
     /// Coalesces a burst of `NSManagedObjectContextObjectsDidChange`
     /// notifications (which flood the main thread during CloudKit
     /// import waves around freshly-arrived watch clips) into a
@@ -140,10 +143,8 @@ struct ClipsTabView: View {
                     filterBus.pending = nil
                 }
             }
-            .navigationDestination(for: UUID.self) { refId in
-                if let ref = fetchRef(id: refId) {
-                    ClipDetailView(ref: ref)
-                }
+            .sheet(item: $editingClip) { source in
+                ClipEditorModal(source: source)
             }
             .navigationDestination(isPresented: $showSearch) {
                 SearchView(
@@ -174,7 +175,7 @@ struct ClipsTabView: View {
             // gets an on-device use pattern to design against.
             newFilterContent
         case .all:
-            FlatClipsListView(type: type)
+            FlatClipsListView(type: type, onOpen: { editingClip = .managed($0) })
         }
     }
 
@@ -220,7 +221,7 @@ struct ClipsTabView: View {
                 DayHeader(date: group.day)
                 VStack(spacing: 8) {
                     ForEach(ClipsListItem.group(refs: group.refs)) { item in
-                        ClipsListItemRow(item: item)
+                        ClipsListItemRow(item: item, onOpen: { editingClip = .managed($0) })
                     }
                 }
             }
@@ -616,11 +617,14 @@ enum ClipsListItem: Identifiable {
 /// pushes ClipDetailView on tap.
 struct ClipsListItemRow: View {
     let item: ClipsListItem
+    /// Tapping a clip opens the unified `ClipEditorModal` (sheet) — supersedes
+    /// the pushed `ClipDetailView` (Clip-editor cycle 2, July 16 2026).
+    let onOpen: (MediaReference) -> Void
 
     var body: some View {
         switch item {
         case .single(let ref):
-            NavigationLink(value: ref.id) {
+            Button { onOpen(ref) } label: {
                 Group {
                     if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
                         MediaClipRow(ref: ref)
@@ -631,7 +635,7 @@ struct ClipsListItemRow: View {
             }
             .buttonStyle(.plain)
         case .burst(let refs):
-            NavigationLink(value: refs.first?.id ?? UUID()) {
+            Button { if let first = refs.first { onOpen(first) } } label: {
                 BurstRow(refs: refs)
             }
             .buttonStyle(.plain)
@@ -1048,6 +1052,8 @@ struct FlatClipsListView: View {
     /// photos (invisibly), which retired July 12 2026 when Video
     /// became a first-class filter.
     let type: ClipsType
+    /// Opens the unified `ClipEditorModal` (threaded from `ClipsTabView`).
+    let onOpen: (MediaReference) -> Void
     @Environment(\.managedObjectContext) private var context
     @State private var groups: [(day: Date, refs: [MediaReference])] = []
     /// Same debounce as `ClipsTabView.unplacedReload` — coalesces
@@ -1061,7 +1067,7 @@ struct FlatClipsListView: View {
                 DayHeader(date: group.day)
                 VStack(spacing: 8) {
                     ForEach(ClipsListItem.group(refs: group.refs)) { item in
-                        ClipsListItemRow(item: item)
+                        ClipsListItemRow(item: item, onOpen: onOpen)
                     }
                 }
             }

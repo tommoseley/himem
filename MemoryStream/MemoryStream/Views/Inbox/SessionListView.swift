@@ -31,6 +31,9 @@ struct SessionListView: View {
     /// day-grouped stack (avoids double-rendering).
     @State private var absorbedMediaBySessionId: [UUID: [MediaReference]] = [:]
     @State private var bundleSession: BundleRequest? = nil
+    // Clip-editor cycle 2: tapping a clip's content opens the unified
+    // ClipEditorModal as a sheet, superseding the pushed ClipDetailView.
+    @State private var editingClip: ClipEditorModal.Source? = nil
     @State private var playingClipId: UUID? = nil
     @State private var player: AVAudioPlayer? = nil
     /// Tracks whether THIS view activated the audio session. Only
@@ -114,6 +117,9 @@ struct SessionListView: View {
                 absorbedMediaRefs: request.absorbedMediaRefs,
                 viewModel: viewModel
             )
+        }
+        .sheet(item: $editingClip) { source in
+            ClipEditorModal(source: source)
         }
         // `Clip model · spec.md` §Model (July 12 2026 lock): the
         // Clips list is calm. Tapping a session card pushes into an
@@ -880,31 +886,19 @@ struct SessionListView: View {
         let totalClips = session.clips.count + (absorbedMediaBySessionId[session.id]?.count ?? 0)
         let effectiveRing: Binding<Bool>? = totalClips > 1 ? ringBinding : nil
         VStack(spacing: 0) {
-            NavigationLink {
-                ClipDetailView(ref: ref)
-            } label: {
-                ClipAtomView(
-                    model: model,
-                    register: .operational,
-                    ring: effectiveRing,
-                    // C3: expanded session card is an opened
-                    // context — light the ochre "Add a description"
-                    // invite when the media clip's description is
-                    // empty. Tapping routes to Clip Detail's inline
-                    // editor via the surrounding NavigationLink
-                    // (`onTapDescriptionInvite = nil` so the invite
-                    // stays visible but doesn't intercept — the
-                    // outer link handles the push).
-                    showDescriptionInvite: true,
-                    // CD 2026-07-12: session-triage row density.
-                    // Shrinks the 168pt billboard thumbnail to a
-                    // 52pt leading tile and adds the leading media
-                    // glyph so voice/note rows scan by type.
-                    isDenseContainer: true
-                )
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            ClipAtomView(
+                model: model,
+                register: .operational,
+                ring: effectiveRing,
+                // Content tap opens the unified ClipEditorModal (sheet),
+                // superseding the pushed ClipDetailView (Clip-editor cycle 2).
+                // The ring stays an independent control (no nested Button).
+                onTapContent: { editingClip = .managed(ref) },
+                showDescriptionInvite: true,
+                // CD 2026-07-12: session-triage row density.
+                isDenseContainer: true
+            )
+            .contentShape(Rectangle())
             // No row-level opacity dim on excluded rows: spec §Clip
             // triage forbids greying the content (dim = failed-clip
             // vocabulary, which pairs a Retry link — a media clip
@@ -951,36 +945,32 @@ struct SessionListView: View {
             // Ring stays a Button inside the label so it toggles
             // independently of the navigation push (SwiftUI's Button-
             // in-NavigationLink pattern the media row already uses).
-            NavigationLink {
-                ClipDetailView(inboxClip: clip)
-            } label: {
-                ClipAtomView(
-                    model: model,
-                    register: .operational,
-                    ring: effectiveRing,
-                    // The NavigationLink label handles content taps;
-                    // `onTapContent: nil` prevents a competing gesture.
-                    onTapContent: nil,
-                    onPlayEvidence: {
-                        if isPlaying {
-                            stopPlayback()
-                        } else {
-                            playClip(clip)
-                        }
-                    },
-                    onRetryTranscription: model.failed ? { retryClipTranscription(clip) } : nil,
-                    isPlayingEvidence: isPlaying,
-                    pendingTranscript: !clip.transcriptionAttempted,
-                    accidentalTranscript: accidental,
-                    // CD 2026-07-12: leading media glyph + demoted
-                    // offset stamp so the row scans as a triage
-                    // line, not a reading surface.
-                    isDenseContainer: true,
-                    retryStatus: retryStatusText(for: clip)
-                )
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            ClipAtomView(
+                model: model,
+                register: .operational,
+                ring: effectiveRing,
+                // Content tap opens the unified ClipEditorModal (sheet),
+                // superseding the pushed ClipDetailView (Clip-editor cycle 2).
+                // Play / Retry stay independent controls on the atom.
+                onTapContent: { editingClip = .inbox(clip) },
+                onPlayEvidence: {
+                    if isPlaying {
+                        stopPlayback()
+                    } else {
+                        playClip(clip)
+                    }
+                },
+                onRetryTranscription: model.failed ? { retryClipTranscription(clip) } : nil,
+                isPlayingEvidence: isPlaying,
+                pendingTranscript: !clip.transcriptionAttempted,
+                accidentalTranscript: accidental,
+                // CD 2026-07-12: leading media glyph + demoted
+                // offset stamp so the row scans as a triage
+                // line, not a reading surface.
+                isDenseContainer: true,
+                retryStatus: retryStatusText(for: clip)
+            )
+            .contentShape(Rectangle())
             // No row-level opacity dim on excluded rows: spec §Clip
             // triage forbids greying the transcript because it
             // collides with the failed-clip style. The hollow ring
