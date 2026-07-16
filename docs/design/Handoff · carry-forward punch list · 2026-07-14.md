@@ -155,3 +155,21 @@ Watch, don't chase: the spreading test-flake (`DebouncedTriggerTests`, now `Jour
 **CC action — verify, then fix only if it diverges:** confirm the shipped memory-delete path does **not** hard-delete the memory's clips. Clip↔Memory is many-to-many; letting go of a memory should tear down the *edges/derived context* and leave the clip atoms on the bench. If the current build cascade-deletes clips with the memory, that's a behavior bug against the lock — fix it so clips survive. If it already de-associates only, this is a no-op confirmation. Bug-First; four-part handoff. **This is the one item in the Memories reconcile that is more than a label** — the rest (labels, Active-Nav-Tap exemption, empty state) are spec/copy.
 
 *Related deferred (not this item):* the `Delete this Clip` live-count warning UI ("attached to N memories…") — surface when Memories deletion UI is next built.
+
+---
+
+## INVARIANT (locked 2026-07-16) · Every clip-edit surface seeds synchronously + commits via `ClipEditorCommitDecision`
+
+**Any surface that edits a clip's text (transcript · note · description) MUST: (a) seed its edit buffer SYNCHRONOUSLY — the draft equals the current stored value *before the first render*, never via an async `.task` that leaves it empty in a window; and (b) route its Done/commit through the unified `ClipEditorCommitDecision.decide(initial:draft:)`, never a bespoke inline guard.**
+
+This is now the **second** data-loss bug caused by a *separate* edit path that didn't follow the unified pattern:
+- **Synthesized-note** (`077de8c`, P3) — a parallel path minted/blanked content.
+- **Transcript-wipe** (`ce4b191`, 2026-07-16) — `AudioPlayerSheet` seeded its draft async (`.task`); a Done in the pre-seed window committed `""` over a real transcript.
+
+Same class both times: a second editor path with its own seed/commit logic. Making it an invariant so a third path can't reintroduce it. Reference implementation is the inline `ClipEditor` (caller sets the draft = current value on the tap that enters edit; `handleDoneTap` runs `ClipEditorCommitDecision`). New edit surfaces **reuse `ClipEditor`** where possible; where bespoke chrome forces a separate view, they still seed in `init` and call `ClipEditorCommitDecision`. **A new clip-edit surface that does neither is a defect, not a style choice.**
+
+---
+
+## Follow-up · `AudioPlayerSheet` fully adopts `ClipEditor` (not urgent)
+
+The transcript-wipe P0 (`ce4b191`) unified the *commit rule* + the *seed*: `AudioPlayerSheet` now seeds synchronously and routes commit through `ClipEditorCommitDecision`, so the bug is closed. But it remains a **second editor path** with its own draft/seed logic — the fragmentation that let the wipe ship in the first place. **Retire it fully:** have the sheet's transcript field reuse `ClipEditor` itself (not just its decision), leaving only the player / retry / hero chrome bespoke. Blocked on the affordability of the player-chrome refactor — **not urgent**; the invariant above holds the line meanwhile.
