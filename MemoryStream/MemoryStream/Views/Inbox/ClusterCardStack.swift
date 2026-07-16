@@ -49,14 +49,13 @@ struct ClusterCardStack: View {
     /// `Add back` on a set-aside row — undo the trim.
     let onReAddClip: (ClusterProposal, UUID) -> Void
 
-    /// Single-open accordion — the clipId whose transcript is expanded in
-    /// place (nil = all collapsed). Container-owned by `SessionListView`,
-    /// the same ownership model as Memory Detail's compact stream.
-    let openClipId: UUID?
-
-    /// Tap a compact row — toggle its transcript open (single-open:
-    /// opening one collapses the prior).
-    let onToggleClusterClip: (UUID) -> Void
+    /// Tap a compact row — open the unified Clip Editor modal for that clip
+    /// (Finding 3, 2026-07-16: the chevron promises tap-to-open, so honor it;
+    /// brought forward now that the modal exists — supersedes the in-place
+    /// transcript accordion and the post-v1 "row-tap → Clip Detail" deferral,
+    /// matching the session rows cycle 2 already wired). Play/Remove stay
+    /// independent controls on the row.
+    let onOpenClip: (ClipEditorModal.Source) -> Void
 
     /// Play/stop a clip's audio from its compact row.
     let onPlayClip: (InboxClip) -> Void
@@ -224,43 +223,35 @@ struct ClusterCardStack: View {
         Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
     }
 
-    /// One clip as a **compact single-open accordion row** (§87, reusing
-    /// the Memory-Detail `reflectiveCompact` register + container-owned
-    /// accordion). Collapsed: glyph + time + one-line preview + play +
-    /// Remove + chevron. Tapping the row expands its full transcript in
-    /// place; single-open is enforced by the container (`openClipId`).
-    /// Set-aside rows dim the **content only** — play/Add-back stay
-    /// full-strength at ≥44px.
+    /// One clip as a **compact reflective row** (§87). Layout: glyph + time +
+    /// one-line preview + play + Remove + chevron. Tapping the row opens the
+    /// unified Clip Editor modal (Finding 3, 2026-07-16 — the chevron is a
+    /// tap-to-open promise; the in-place transcript accordion is retired now
+    /// that the modal reads *and* edits the clip). Set-aside rows dim the
+    /// **content only** — play/Add-back stay full-strength at ≥44px.
     @ViewBuilder
     private func clipEditorRow(proposal: ClusterProposal, clip: InboxClip, anchor: Date, isRemoved: Bool) -> some View {
         let model = ClipDisplayModel(inboxClip: clip, sessionStart: anchor)
-        let isOpen = openClipId == clip.clipId
         let isPlaying = playingClipId == clip.clipId
         let hasAudio = !clip.audioFilename.isEmpty
-        let transcript = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                // Tappable compact header → toggle the accordion. The
-                // reflectiveCompact atom carries glyph + time + preview;
-                // the chevron rotation is container-owned. `hidePreview`
-                // when open so the preview line doesn't double-print
-                // above the expanded transcript.
+                // Tappable compact header → open the modal. The chevron is a
+                // static navigation affordance (→), not a disclosure — it no
+                // longer rotates, because the tap opens the clip rather than
+                // expanding it in place.
                 Button {
-                    onToggleClusterClip(clip.clipId)
+                    onOpenClip(.inbox(clip))
                 } label: {
                     HStack(spacing: 6) {
                         ClipAtomView(model: model,
-                                     register: .reflectiveCompact,
-                                     isEmphasized: isOpen,
-                                     hidePreview: isOpen)
+                                     register: .reflectiveCompact)
                             .opacity(isRemoved ? 0.45 : 1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
-                            .rotationEffect(.degrees(isOpen ? 90 : 0))
-                            .animation(.easeInOut(duration: 0.15), value: isOpen)
+                            .foregroundStyle(Crucible.Color.ink3)
                     }
                     .frame(minHeight: 44)      // Crucible 44px hit floor
                     .contentShape(Rectangle())
@@ -293,20 +284,6 @@ struct ClusterCardStack: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-            }
-
-            // Expanded: full transcript inline (read-only — the editor
-            // trims membership, it does not edit transcripts; row-tap →
-            // Clip Detail is the post-v1 follow-up).
-            if isOpen && !transcript.isEmpty {
-                Text("\u{201C}\(transcript)\u{201D}")
-                    .font(.system(size: 14))
-                    .lineSpacing(2)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .opacity(isRemoved ? 0.45 : 1)
-                    .padding(.bottom, 8)
-                    .padding(.horizontal, 4)
             }
         }
     }
