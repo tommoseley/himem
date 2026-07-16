@@ -813,6 +813,68 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Update an edge's **annotation** — "why this matters here", the
+    /// per-edge context in the unified Clip Editor's Zone 2. The clip *atom*
+    /// is untouched (that's Zone 1); this writes only the `(clip, memory)`
+    /// edge, so the same clip can mean different things in different memories.
+    /// An empty/whitespace value clears the annotation back to `nil`.
+    func updateEdgeAnnotation(edgeId: UUID, annotation: String) {
+        do {
+            let req = NSFetchRequest<MemoryClipEdge>(entityName: "MemoryClipEdge")
+            req.predicate = NSPredicate(format: "id == %@", edgeId as CVarArg)
+            req.fetchLimit = 1
+            guard let edge = try storage.viewContext.fetch(req).first else { return }
+            let trimmed = annotation.trimmingCharacters(in: .whitespacesAndNewlines)
+            edge.annotation = trimmed.isEmpty ? nil : trimmed
+            try storage.save(context: storage.viewContext)
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    /// **Atom-level** transcript edit for the unified Clip Editor (Zone 1).
+    /// The clip is stored once, so the edit is true in *every* memory that
+    /// references it — this sets the ref's transcript and regenerates the
+    /// content of every referencing memory (none, for a loose 0-edge clip).
+    /// The empty-over-non-empty wipe guard lives upstream in
+    /// `ClipEditorCommitDecision`; this trusts a real committed value.
+    func updateClipTranscript(refId: UUID, transcript: String) {
+        do {
+            let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+            req.predicate = NSPredicate(format: "id == %@", refId as CVarArg)
+            req.fetchLimit = 1
+            guard let ref = try storage.viewContext.fetch(req).first else { return }
+            ref.transcript = transcript
+            ref.lastEditedAt = Date()
+            try storage.save(context: storage.viewContext)
+            for edge in ref.edgesArray {
+                regenerateContent(forEntryId: edge.memoryId)
+            }
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
+    /// **Atom-level** description edit (photo/video) for the unified Clip
+    /// Editor (Zone 1). Same atom-once semantics as `updateClipTranscript`.
+    func updateClipDescription(refId: UUID, description: String) {
+        do {
+            let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+            req.predicate = NSPredicate(format: "id == %@", refId as CVarArg)
+            req.fetchLimit = 1
+            guard let ref = try storage.viewContext.fetch(req).first else { return }
+            let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+            ref.mediaDescription = trimmed.isEmpty ? nil : trimmed
+            ref.lastEditedAt = Date()
+            try storage.save(context: storage.viewContext)
+            for edge in ref.edgesArray {
+                regenerateContent(forEntryId: edge.memoryId)
+            }
+        } catch {
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+        }
+    }
+
     /// Delete a clip outright — destroys the underlying evidence. All
     /// edges to any memory this clip was attached to cascade. Audio
     /// file (for `.voice` clips) is removed from disk. This is the
