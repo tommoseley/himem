@@ -28,9 +28,9 @@ Audio landed at the **bottom** — not because it's unimportant, but because it'
 |---|---|---|
 | **Text** | Title, Summary, **Transcript** | **Tap to edit in place.** |
 | **Media** | Photo, Video, Audio | **Tap to consume** (photo opens, video/audio play). **Every clip that has an original recording shows a quiet "Original recording · m:ss" play control beneath its transcript — always, in read state, not just on tap.** This is the load-bearing reason tapping transcript text can mean *edit* (Play is its own visible control). |
-| **Deletion** | Clip, memory, project | **Open the item, scroll past all content, full-width Delete button at the bottom.** No swipe, no confirm dialog — opening + scrolling *is* the deliberation; Recently Deleted (30 days) is the safety net. |
+| **Deletion** | Clip, memory, project | **Open the item, scroll past all content, full-width Delete button at the bottom.** No swipe, no confirm dialog — opening + scrolling *is* the deliberation; Recently Deleted (30 days) is the safety net. **The label tells the truth about what is destroyed (July 13 2026 lock — clips are the atoms, everything else is association):** a memory → **"Let Go of this Memory"** (the derived layer — title · summary · topics · annotations — dissolves, but **its clips survive** and return to availability to start other memories: *"The clips stay — they'll be available to start other memories"*); a clip → **"Delete this Clip"** (destroys the atom and removes it from **every** memory that references it, with a live-count warning: *"This clip is attached to N memories. Deleting it removes it from all of them"*); a member memory inside a project → **"Remove from Project"** (de-associates only; the memory survives everywhere else). |
 | **Relocation** | Clip | **"Where does this belong?"** from the clip's edit state — move to another memory, pull into a new memory, or **"Remove from this memory"** (= move to the Captured Clips bench; the clip survives). Same placement primitive and wording as the workbench (`Kingfisher Language.md`). *survives*). Parallel to a project's Remove-from-project. Distinct from Delete clip (which destroys). |
-| **The memory itself** | — | The same bottom Delete button — no toolbar trash, no list-row swipe. |
+| **The memory itself** | — | The same bottom Delete button — labeled **"Let Go of this Memory"** (derived layer dissolves, clips survive — see the Deletion row). No toolbar trash, no list-row swipe. |
 | **Metadata** | Topics | **Tap any chip → topic management sheet.** Dashed **+ Add** to add. |
 | | Mentions | **Lightweight inline** manage. Dashed **+ Add** to add. |
 
@@ -61,7 +61,7 @@ Dogfood surfaced the need: a clip lands in the wrong memory (mis-clustered by So
 - **New memory** — pull the clip out on its own.
 - **Remove from this memory** — the plain-language name for *move to Captured Clips*. The clip returns to the bench, unfiled, and **survives**. This is the direct answer to "at the very least, remove a clip from a memory."
 
-**This is the clip-level analog of Projects' Delete vs Remove-from-project** — the same "unlinks; the thing survives" pattern, one level down. Delete clip *destroys* (→ Recently Deleted); "Where does this belong?" *relocates* (the clip lives on).ove *relocates* (the clip lives on).
+**This is the clip-level analog of Projects' Delete vs Remove-from-project** — the same "unlinks; the thing survives" pattern, one level down. **Delete this Clip** *destroys the atom* and removes it from **every** memory that references it (→ Recently Deleted; shown with the live-count warning per the July 13 lock); **"Where does this belong?"** / **Remove from this memory** *relocates* (the clip lives on, returns to the bench).ove *relocates* (the clip lives on).
 
 - **Where it lives:** the clip's **edit state**, beside Delete clip — not in the calm read view (consistent with clip-delete placement). The edit-state bottom is **two rows**: a *clip-fate management row* — **Delete clip** (destroy) and **Where does this belong?** (relocate/remove) — above the *text commit row* (Cancel / Done). Four actions never share one line (44px floor).ement row* (`🗑 Delete clip` · `↪ Move to…`) above the *text-edit commit row* (`Cancel` · `✓ Done`). Four actions never share one line — they'd fail the 44px touch floor. *(This evolves the earlier single `Delete clip … Cancel Done` bar; the management actions split onto their own row.)*
 - **Staleness reuses the existing mechanism.** Moving a clip *out* changes this memory's content; moving one *in* changes the destination's. **Both memories go stale and offer Reorganize** — identical to new clips arriving. No new concept.
@@ -124,13 +124,13 @@ The five rules are app-wide. How they land per surface:
 
 | Surface | Text (tap to edit) | Consume | Delete / remove | Notes |
 |---|---|---|---|---|
-| **Memory Detail** | title, summary, transcript | media (audio demoted) | clip → bottom **Delete clip** (in expanded clip); memory → bottom **Delete memory** | canonical |
-| **Today / Home** | — (browsing surface) | tap a memory card → open | open the memory → bottom **Delete memory** (no list-row swipe) | no edit or delete affordances on the list; both happen in detail |
-| **Projects · Detail** | tap **title / goal** → Edit Project sheet | tap a memory card → open | project → bottom **Delete project**; member memory → bottom **Remove from project** (memory survives) | nav is back · add-memory · share — **no pen, no trash** |
+| **Memory Detail** | title, summary, transcript | media (audio demoted) | clip → bottom **"Delete this Clip"** (in expanded clip; removes from all memories, live-count warning); memory → bottom **"Let Go of this Memory"** (clips survive) | canonical |
+| **Today / Home** | — (browsing surface) | tap a memory card → open | open the memory → bottom **"Let Go of this Memory"** (no list-row swipe) | no edit or delete affordances on the list; both happen in detail |
+| **Projects · Detail** | tap **title / goal** → Edit Project sheet | tap a memory card → open | project → bottom **Delete project**; member memory → bottom **"Remove from Project"** (memory survives everywhere else) | nav is back · add-memory · share — **no pen, no trash** |
 | **Projects · Edit sheet** | Name, Goal (real fields, ochre focus) | — | — | topics are **derived, read-only** (not edited here); Cancel / Save nav |
 | **Captured Clips** | clip transcript (inbox *or* bundled) | — | open the session → bottom **Delete session**; open a clip → bottom **Delete clip** | operational surface; the **session** is the primary unit — tapping a session card opens it |
 
-The invariants that must hold everywhere: **no pen button; no persistent edit mode; tap text to edit; tap media to consume; open an item and use the full-width Delete button at its bottom to destroy it (red, no swipe, no confirm); the object's own delete lives at the bottom of the object, never in a toolbar or a list-row swipe; metadata managed inline or via a sheet, never via a pen.**
+The invariants that must hold everywhere: **no pen button; no persistent edit mode; tap text to edit; tap media to consume; open an item and use the full-width Delete button at its bottom to destroy it (red, no swipe, no confirm); the object's own delete lives at the bottom of the object, never in a toolbar or a list-row swipe; the label names what is destroyed ("Let Go of this Memory" · "Delete this Clip" · "Remove from Project" — July 13 lock); metadata managed inline or via a sheet, never via a pen.**
 
 ## Implementation details (pinned June 9 2026)
 

@@ -127,3 +127,22 @@ These were violations in shipped iOS; the design corrects them and they ride the
 - **Time-scrubber rail** (Photos-style fast-seek on the right edge) — feasible on the local-index architecture, deferred until the single-card list ships and we see whether scroll-at-scale actually hurts.
 - **Comfortable / Compact Settings option** — only if a real power-user need surfaces post-launch. Not in MVP.
 - **Media-first thumbnail** — a single small visual cue is *allowed* when a memory is photo/video-dominant and has no useful text, but thumbnails are never routine card furniture. Exact treatment to be drawn if/when media-first memories are common.
+
+---
+
+## 11 · Active Navigation Tap (Memories is the reflective exemption — locked July 15 2026)
+
+The North Star's **Active Navigation Tap** primitive ships across products (Clips → sources/processing/filters; Projects → active/archived/shared), but Memories is the **reflective gallery**, not an operational surface — it has no arrivals, no processing, nothing "waiting on you." So:
+
+- **First tap on the tab → navigate to Memories.** Standard.
+- **Tap the active tab while scrolled → scroll to top.** The established iOS idiom; free, keep it.
+- **Tap the active tab while at top → nothing (no status sheet).** A "what needs me" sheet is an operational concept; a gallery has no such state, and manufacturing one (a census of "247 memories") is exactly the vanity-count guilt the North Star rejects. **Memories is deliberately exempt from the second-tap status sheet.** Its "density on demand" lives in the **topic filter** (§7) and the future **time-scrubber** (§10) — jump-to, not what-needs-me. This exemption is a decision, not an unimplemented primitive: don't add a Memories status sheet later thinking it was forgotten.
+
+## 12 · Empty / cold-start state (locked July 15 2026)
+
+Per the North Star, the honest empty state *is* the feature on day one — never a fabricated proposal to look busy. A Memories tab with zero memories shows a **calm, true empty state**, not a spinner or a prompt-wall:
+
+- One quiet reflective line in the gallery voice (Source Serif), e.g. *"Nothing kept yet."* — a small true thing, never *"You haven't created any memories"* (blame/behind framing).
+- A single plain-language pointer to the first action — capture is one tap away via the **+** (the FAB is already present); the empty state names it, it doesn't gate it.
+- **No** onboarding checklist, **no** completion meter, **no** "get started" ceremony. The empty gallery is a resting state the user grows out of, not a task to clear.
+- This is distinct from the *filtered*-empty state (a topic filter with no matches), which reads *"No memories in ‹topic› yet."* and clears when the filter is reset.
