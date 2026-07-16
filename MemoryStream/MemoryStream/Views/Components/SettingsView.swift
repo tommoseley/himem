@@ -41,6 +41,8 @@ struct SettingsView: View {
     #if DEBUG
     @State private var showResetOnboardingAlert = false
     @State private var showResetTutorialAlert = false
+    @State private var showAggregateScanAlert = false
+    @State private var aggregateScanResult = ""
     @AppStorage("himem.debug.useLeanOrganizerPrompt") private var useLeanOrganizerPrompt = false
     #endif
 
@@ -349,6 +351,32 @@ struct SettingsView: View {
                         }
                     }
                     .tint(Crucible.Color.accent)
+
+                    // Finding 1 evidence step (2026-07-16): read-only scan for
+                    // already-stored aggregate `.note` artifacts. Mutates
+                    // nothing — proves the cleanup predicate matches a real
+                    // on-device note before the destructive pass is authorized.
+                    Button {
+                        let hits = EntryLifecycleService().scanForAggregateNotes()
+                        if hits.isEmpty {
+                            aggregateScanResult = "No aggregate-note artifacts found. The predicate matched nothing already at rest."
+                        } else {
+                            let lines = hits.prefix(5).map {
+                                "• \"\($0.memoryTitle)\" — note \($0.noteId.uuidString.prefix(8)), \($0.siblingCount) sibling clips, \($0.noteLength) chars"
+                            }.joined(separator: "\n")
+                            aggregateScanResult = "\(hits.count) aggregate-note artifact(s) found:\n\n\(lines)\n\nFull detail (with memory ids) is in the device console under [HiMem][TranscriptWipe] AGGREGATE-FOUND."
+                        }
+                        showAggregateScanAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "magnifyingglass.circle.fill")
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Text("Scan for aggregate notes (read-only)")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
                 } header: {
                     Text("Debug")
                 } footer: {
@@ -363,6 +391,11 @@ struct SettingsView: View {
                     Button("OK", role: .cancel) { }
                 } message: {
                     Text("Cleared every auto-fire tutorial's seen flag plus the session/day caps. Each tutorial will auto-fire on its next natural trigger (Capture on voice-composer open, Organizing on first Draft, Find-the-thread on Plus + ≥3-memory project, Watch story on non-empty Captured Clips, Watch discovery on next Today appearance with WCSession.isPaired && !installed).")
+                }
+                .alert("Aggregate-note scan", isPresented: $showAggregateScanAlert) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text(aggregateScanResult)
                 }
 
                 // MARK: - Plus override (DEBUG)

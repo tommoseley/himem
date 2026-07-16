@@ -438,6 +438,54 @@ final class EntryLifecycleService {
         NSLog("[HiMem][TranscriptWipe] AGGREGATE-WRITE — \(context) siblingCount=\(siblings.count) len=\(candidateText.count)\n\(Thread.callStackSymbols.prefix(14).joined(separator: "\n"))")
     }
 
+    /// One already-stored aggregate `.note` artifact found by the read-only
+    /// device scan (Finding 1). Evidence for the pre-approved cleanup — never
+    /// a mutation.
+    struct AggregateNoteHit {
+        let memoryId: UUID
+        let memoryTitle: String
+        let noteId: UUID
+        let siblingCount: Int
+        let noteLength: Int
+    }
+
+    /// **Read-only** scan for `.note` clips already at rest whose text IS
+    /// their memory's aggregate (a note minted before `077de8c` shipped, or
+    /// synced from a pre-fix device). Uses the SAME `isAggregateWrite`
+    /// predicate the arbiter and the pending cleanup use (>= 2 siblings, exact
+    /// normalized equality), so this is the evidence step that proves the
+    /// predicate matches a real artifact before anything destructive runs.
+    /// Mutates nothing; logs each hit and returns the summary.
+    func scanForAggregateNotes() -> [AggregateNoteHit] {
+        var hits: [AggregateNoteHit] = []
+        do {
+            let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+            for entry in try storage.viewContext.fetch(req) {
+                for edge in entry.edgesArray {
+                    guard let ref = edge.clip, ref.mediaTypeEnum == .note else { continue }
+                    let noteText = ref.text ?? ""
+                    let siblings = Self.siblingClipTexts(in: entry, excluding: ref.id)
+                    guard Self.isAggregateWrite(candidateText: noteText, siblingTexts: siblings) else { continue }
+                    let nonEmptySiblings = siblings.filter {
+                        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    }.count
+                    let hit = AggregateNoteHit(
+                        memoryId: entry.id,
+                        memoryTitle: entry.displayTitle,
+                        noteId: ref.id,
+                        siblingCount: nonEmptySiblings,
+                        noteLength: noteText.count
+                    )
+                    hits.append(hit)
+                    NSLog("[HiMem][TranscriptWipe] AGGREGATE-FOUND mem=\(entry.id.uuidString.prefix(8)) title=\"\(entry.displayTitle)\" note=\(ref.id.uuidString.prefix(8)) siblings=\(nonEmptySiblings) len=\(noteText.count)")
+                }
+            }
+        } catch {
+            NSLog("[HiMem][TranscriptWipe] scan error: \(error.localizedDescription)")
+        }
+        return hits
+    }
+
     static func joinedContent(from entry: JournalEntry) -> String {
         var parts: [String] = []
         for edge in entry.edgesArray {
