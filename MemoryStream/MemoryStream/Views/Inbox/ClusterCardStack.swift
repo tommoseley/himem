@@ -262,6 +262,7 @@ struct ClusterCardStack: View {
                             .rotationEffect(.degrees(isOpen ? 90 : 0))
                             .animation(.easeInOut(duration: 0.15), value: isOpen)
                     }
+                    .frame(minHeight: 44)      // Crucible 44px hit floor
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
