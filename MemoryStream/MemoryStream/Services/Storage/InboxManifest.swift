@@ -957,6 +957,61 @@ final class InboxManifest: ObservableObject {
     func debugReplaceDismissedForTesting(_ next: [DismissedCluster]) {
         dismissedClusters = next
     }
+
+    /// Fixed ids for the seeded Sort-repro cluster so
+    /// `debugClearTestCluster` removes exactly these and re-seeding is
+    /// idempotent.
+    static let debugTestClusterClipIds: [UUID] = [
+        UUID(uuidString: "5EED0000-0000-0000-0000-000000000001")!,
+        UUID(uuidString: "5EED0000-0000-0000-0000-000000000002")!,
+        UUID(uuidString: "5EED0000-0000-0000-0000-000000000003")!,
+    ]
+
+    /// Seeds three transcribed clips that flow through the **real** grouping
+    /// path (`ClipSessionGrouper` → `ClipClusterProposer`) to surface a
+    /// multi-clip Sort cluster on demand — so the cluster editor, and the
+    /// aggregate-arbiter check that needs a multi-clip context, are
+    /// reproducible without waiting on organic dogfood.
+    ///
+    /// Mechanics: spaced 15 min apart (> the 10-min idle gap → three separate
+    /// sessions) and sharing a distinctive **bigram** ("Kingfisher Wharf"),
+    /// which clusters via `proposeWordMatch` with no NLTagger dependency
+    /// (bigrams use plain tokenization — robust on sim *and* device) and no
+    /// time/location gate. The shared coordinate also feeds the time+place
+    /// rule as a bonus signal. Non-destructive + idempotent: existing bench
+    /// clips are preserved and a prior seed is replaced, not duplicated.
+    func debugSeedTestCluster() {
+        let now = Date()
+        let lat = 32.2371, lon = -80.8557   // Bluffton — the spec's example place
+        let lines = [
+            "Notes from Kingfisher Wharf about the afternoon harbor plan.",
+            "More from Kingfisher Wharf, watching the boats come in.",
+            "Last one from Kingfisher Wharf before heading home.",
+        ]
+        var next = clips.filter { !Self.debugTestClusterClipIds.contains($0.clipId) }
+        for (i, id) in Self.debugTestClusterClipIds.enumerated() {
+            next.append(InboxClip(
+                clipId: id,
+                capturedAt: now.addingTimeInterval(Double(-i) * 15 * 60),
+                duration: 5,
+                transcript: lines[i],
+                latitude: lat,
+                longitude: lon,
+                source: "phone",
+                audioFilename: "",            // no real audio — play is inert for the seed
+                transcriptionAttempted: true,
+                rollGroupId: nil,             // idle-gap applies → three sessions
+                status: .transcribed
+            ))
+        }
+        next.sort { $0.capturedAt > $1.capturedAt }
+        replace(with: next)
+    }
+
+    /// Removes the seeded Sort-repro clips, leaving the real bench intact.
+    func debugClearTestCluster() {
+        replace(with: clips.filter { !Self.debugTestClusterClipIds.contains($0.clipId) })
+    }
     #endif
 }
 

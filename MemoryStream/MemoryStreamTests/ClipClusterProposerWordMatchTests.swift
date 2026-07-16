@@ -262,4 +262,35 @@ struct ClipClusterProposerWordMatchTests {
 
         #expect(proposals.isEmpty, "Stopword tokens must not cluster")
     }
+
+    // MARK: - DEBUG seed-cluster reproducibility
+
+    /// Guards the DEBUG "Seed test cluster" action
+    /// (`InboxManifest.debugSeedTestCluster`) — the on-demand Sort-cluster
+    /// repro the cluster editor and the aggregate-arbiter check depend on.
+    /// Uses the seed's exact three transcripts + >10-min spacing, with an
+    /// EMPTY extractor and nil location, proving the three clips cluster on
+    /// the NLTagger-independent **bigram** path ("Kingfisher Wharf") alone —
+    /// so the seed is reliable on the simulator, not only on device. If a
+    /// clustering threshold ever changes and the seed stops producing a
+    /// cluster, this fails loudly instead of the repro silently going dead.
+    @Test func debugSeedTranscripts_clusterViaBigram_withEmptyExtractor() {
+        let base = Date(timeIntervalSinceReferenceDate: 0)
+        let sessions = [
+            session(at: base, transcript: "Notes from Kingfisher Wharf about the afternoon harbor plan."),
+            session(at: base.addingTimeInterval(15 * 60), transcript: "More from Kingfisher Wharf, watching the boats come in."),
+            session(at: base.addingTimeInterval(30 * 60), transcript: "Last one from Kingfisher Wharf before heading home."),
+        ]
+        let stub = StubEntityExtractor()   // no proper nouns → forces the bigram path
+
+        let proposals = ClipClusterProposer.propose(
+            sessions: sessions, dismissed: [], entityExtractor: stub
+        )
+
+        let allClipIds = Set(sessions.flatMap { $0.clips.map(\.clipId) })
+        #expect(
+            proposals.contains { Set($0.clipIds) == allClipIds },
+            "the three seed clips must cluster into one proposal via the Kingfisher Wharf bigram"
+        )
+    }
 }

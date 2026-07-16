@@ -43,6 +43,8 @@ struct SettingsView: View {
     @State private var showResetTutorialAlert = false
     @State private var showAggregateScanAlert = false
     @State private var aggregateScanResult = ""
+    @State private var showSeedClusterAlert = false
+    @State private var seedClusterMessage = ""
     @AppStorage("himem.debug.useLeanOrganizerPrompt") private var useLeanOrganizerPrompt = false
     #endif
 
@@ -377,6 +379,40 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
+
+                    // Seeds a real multi-clip Sort cluster through the actual
+                    // grouping path so the cluster editor (and the aggregate
+                    // arbiter check that needs a multi-clip context) is
+                    // reproducible on demand — no waiting on organic dogfood.
+                    Button {
+                        InboxManifest.shared.debugSeedTestCluster()
+                        seedClusterMessage = "Seeded a 3-clip \u{201C}Kingfisher Wharf\u{201D} cluster onto the bench. Open Clips → the Sort proposal appears → tap Adjust to expand → tap a clip row to open the modal from a multi-clip context. Tap \u{201C}Clear test cluster\u{201D} when done."
+                        showSeedClusterAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.stack.3d.up.fill")
+                                .foregroundStyle(Crucible.Color.accent)
+                            Text("Seed test cluster (Sort repro)")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        InboxManifest.shared.debugClearTestCluster()
+                        seedClusterMessage = "Cleared the seeded test-cluster clips. Your real bench clips are untouched."
+                        showSeedClusterAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.stack.3d.up.slash.fill")
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Text("Clear test cluster")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
                 } header: {
                     Text("Debug")
                 } footer: {
@@ -396,6 +432,11 @@ struct SettingsView: View {
                     Button("OK", role: .cancel) { }
                 } message: {
                     Text(aggregateScanResult)
+                }
+                .alert("Test cluster", isPresented: $showSeedClusterAlert) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text(seedClusterMessage)
                 }
 
                 // MARK: - Plus override (DEBUG)
