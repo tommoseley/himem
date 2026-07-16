@@ -177,6 +177,10 @@ final class EntryLifecycleService {
             // Genuine orphan content — text in `entry.content` that no
             // fragment covers. Mint a `.note` and regenerate so future
             // calls see content == joined and skip.
+            Self.flagAggregateWriteIfNeeded(
+                candidateText: entry.content, entry: entry,
+                excludingRefId: nil, context: "migrateOrphanedContent"
+            )
             _ = try storage.createNoteFragment(
                 for: entry,
                 text: entry.content,
@@ -200,6 +204,12 @@ final class EntryLifecycleService {
             request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
             request.fetchLimit = 1
             guard let ref = try storage.viewContext.fetch(request).first else { return }
+            if let entry = try fetchEntry(id: entryId) {
+                Self.flagAggregateWriteIfNeeded(
+                    candidateText: text, entry: entry,
+                    excludingRefId: id, context: "updateNoteFragment"
+                )
+            }
             ref.text = text
             ref.lastEditedAt = Date()
             try storage.save(context: storage.viewContext)
@@ -242,6 +252,12 @@ final class EntryLifecycleService {
             request.predicate = NSPredicate(format: "id == %@", mediaId as CVarArg)
             request.fetchLimit = 1
             guard let ref = try storage.viewContext.fetch(request).first else { return }
+            if let entry = try fetchEntry(id: entryId) {
+                Self.flagAggregateWriteIfNeeded(
+                    candidateText: transcript, entry: entry,
+                    excludingRefId: mediaId, context: "updateMediaTranscript"
+                )
+            }
             ref.transcript = transcript
             ref.lastEditedAt = Date()
             try storage.save(context: storage.viewContext)
@@ -362,6 +378,64 @@ final class EntryLifecycleService {
             .map { JournalEntry.cleanedTranscript($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
+    }
+
+    // MARK: - Aggregate-write arbiter (Finding 1 · 2026-07-16)
+
+    /// The `[HiMem][TranscriptWipe]` arbiter, extended from the empty-over-
+    /// non-empty *wipe* signature to the *aggregate-write* signature: a clip
+    /// write whose text is the memory's own joined transcript reified into a
+    /// single atom (the 077de8c / Finding 1 corruption — worse than the wipe:
+    /// the atom now carries the whole memory). Non-blocking, exactly like the
+    /// original wipe arbiter — the write proceeds; we only NSLog the signature
+    /// + call stack so any *future* path that reifies the aggregate (a
+    /// forgotten reconcile, or a seed that pulls the composed memory
+    /// transcript and commits it down) is pinned on the next device repro.
+    /// Silence on device is the invariant.
+    ///
+    /// **The predicate mirrors the cleanup-migration predicate EXACTLY** so
+    /// detection and cleanup can never drift: `>= 2` non-empty sibling clips
+    /// (aggregate means joined-across-multiple — a single sibling that matches
+    /// is legitimately-authored content, never flagged) AND exact normalized
+    /// equality (the same per-segment ASR-noise normalization used at ingest,
+    /// so the RAW↔CLEANED join drift is caught but nothing fuzzy is).
+    static func isAggregateWrite(candidateText: String, siblingTexts: [String]) -> Bool {
+        let candidate = normalizedTranscriptBlob(candidateText)
+        guard !candidate.isEmpty else { return false }
+        let nonEmpty = siblingTexts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard nonEmpty.count >= 2 else { return false }
+        return normalizedTranscriptBlob(nonEmpty.joined(separator: "\n\n")) == candidate
+    }
+
+    /// Gathers the content of an entry's clips (per the same per-type source
+    /// `joinedContent` reads), optionally excluding one ref by id — the atom
+    /// being written, which must not count as its own sibling.
+    private static func siblingClipTexts(in entry: JournalEntry, excluding refId: UUID?) -> [String] {
+        entry.edgesArray.compactMap { edge in
+            guard let ref = edge.clip, ref.id != refId else { return nil }
+            switch ref.mediaTypeEnum {
+            case .voice: return ref.transcript
+            case .note:  return ref.text
+            case .image, .video: return ref.mediaDescription
+            }
+        }
+    }
+
+    /// Arbiter hook. Call immediately before a clip's transcript/text is set.
+    /// Fires the `[HiMem][TranscriptWipe] AGGREGATE-WRITE` device log (with the
+    /// call stack) iff the value being written is the memory's own aggregate.
+    /// Detection only — never blocks the write.
+    static func flagAggregateWriteIfNeeded(
+        candidateText: String,
+        entry: JournalEntry,
+        excludingRefId: UUID?,
+        context: String
+    ) {
+        let siblings = siblingClipTexts(in: entry, excluding: excludingRefId)
+        guard isAggregateWrite(candidateText: candidateText, siblingTexts: siblings) else { return }
+        NSLog("[HiMem][TranscriptWipe] AGGREGATE-WRITE — \(context) siblingCount=\(siblings.count) len=\(candidateText.count)\n\(Thread.callStackSymbols.prefix(14).joined(separator: "\n"))")
     }
 
     static func joinedContent(from entry: JournalEntry) -> String {
@@ -593,9 +667,32 @@ final class EntryLifecycleService {
             // Without this, the regenerate step at the end of `append`
             // would overwrite `entry.content` with just the joined
             // fragment text and silently drop the original.
+            //
+            // Finding 1 (2026-07-16): promote ONLY genuinely-orphaned typed
+            // text. The exact `priorContent != priorJoined` check alone
+            // mis-fires on the RAW join of voice transcripts — byte-unequal
+            // to the CLEANED `joinedContent` (voice fragments store
+            // `cleanedTranscript`), but the *same words* — and reifies the
+            // audio's own transcripts as a duplicate `.note`, landing the
+            // aggregate at rest in `ref.text`. That's the 077de8c defect
+            // class recurring on the write path (the render-seam guard
+            // `migrateOrphanedContentIfNeeded` was hardened; this sibling was
+            // not). Apply the same Option A normalization so the raw join is
+            // recognized as the transcripts and skipped. The raw
+            // `entry.content` drift is then cured unconditionally by the
+            // `entry.content = joinedContent(from:)` reconcile below, so it
+            // stops drifting whether we mint or skip. Money-tested by
+            // `SynthesizedNoteRenderGuardTests
+            // .append_withRawJoinedContent_doesNotReifyTranscriptsAsNote`.
             let priorContent = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
             let priorJoined = Self.joinedContent(from: entry).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !priorContent.isEmpty, priorContent != priorJoined {
+            if !priorContent.isEmpty,
+               priorContent != priorJoined,
+               Self.normalizedTranscriptBlob(priorContent) != Self.normalizedTranscriptBlob(priorJoined) {
+                Self.flagAggregateWriteIfNeeded(
+                    candidateText: entry.content, entry: entry,
+                    excludingRefId: nil, context: "append.promoteOrphan"
+                )
                 _ = try storage.createNoteFragment(
                     for: entry,
                     text: entry.content,
@@ -844,6 +941,18 @@ final class EntryLifecycleService {
             req.predicate = NSPredicate(format: "id == %@", refId as CVarArg)
             req.fetchLimit = 1
             guard let ref = try storage.viewContext.fetch(req).first else { return }
+            // Arbiter: a clip can be evidence in many memories; flag if the
+            // committed value is the aggregate of ANY referencing memory (the
+            // "seed pulled the composed memory transcript then Done committed
+            // it down" failure this modal replaces — must never recur here).
+            for edge in ref.edgesArray {
+                if let entry = try fetchEntry(id: edge.memoryId) {
+                    Self.flagAggregateWriteIfNeeded(
+                        candidateText: transcript, entry: entry,
+                        excludingRefId: refId, context: "updateClipTranscript"
+                    )
+                }
+            }
             ref.transcript = transcript
             ref.lastEditedAt = Date()
             try storage.save(context: storage.viewContext)
