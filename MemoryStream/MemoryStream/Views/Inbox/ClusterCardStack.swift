@@ -237,26 +237,27 @@ struct ClusterCardStack: View {
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                // Tappable compact header → open the modal. The chevron is a
-                // static navigation affordance (→), not a disclosure — it no
-                // longer rotates, because the tap opens the clip rather than
-                // expanding it in place.
-                Button {
-                    onOpenClip(.inbox(clip))
-                } label: {
-                    HStack(spacing: 6) {
-                        ClipAtomView(model: model,
-                                     register: .reflectiveCompact)
-                            .opacity(isRemoved ? 0.45 : 1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Crucible.Color.ink3)
-                    }
-                    .frame(minHeight: 44)      // Crucible 44px hit floor
+                // Row content → open the modal via ClipAtomView's OWN
+                // `onTapContent` — the proven bench mechanism (SessionListView
+                // rows 888/947). An OUTER Button does NOT work here:
+                // `reflectiveCompactRow` attaches its own *unconditional*
+                // `.onTapGesture { onTapContent?() }` (ClipAtomView.swift:266),
+                // which swallows every tap over the glyph/time/preview area and
+                // starves any wrapping Button — so the row *looked* wired in
+                // source but was dead at runtime (Finding 3 P1, 2026-07-16).
+                // Play/Remove stay independent controls after it in the HStack.
+                ClipAtomView(model: model,
+                             register: .reflectiveCompact,
+                             onTapContent: { onOpenClip(.inbox(clip)) })
+                    .opacity(isRemoved ? 0.45 : 1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                // The chevron is the tap-to-open promise — its own ≥44 target.
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .frame(minWidth: 30, minHeight: 44)
                     .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                    .onTapGesture { onOpenClip(.inbox(clip)) }
 
                 if hasAudio {
                     Button {
