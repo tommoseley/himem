@@ -361,7 +361,7 @@ private struct MediaReferenceClipDetail: View {
                     performDelete()
                 }
             } label: {
-                Text("Delete clip")
+                Text("Delete this Clip")
                     .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity, minHeight: 50)
                     .foregroundStyle(Crucible.Color.danger)
@@ -376,7 +376,7 @@ private struct MediaReferenceClipDetail: View {
                     .foregroundStyle(Crucible.Color.ink3)
             }
         }
-        .alert("Delete clip?", isPresented: $confirmingDelete) {
+        .alert("Delete this Clip?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive) { performDelete() }
             Button("Cancel", role: .cancel) { }
         } message: {
@@ -466,7 +466,7 @@ private struct InboxClipDetail: View {
                 .background(Crucible.Color.paper.ignoresSafeArea())
                 .navigationTitle("Clip")
                 .navigationBarTitleDisplayMode(.inline)
-                .alert("Delete clip?", isPresented: $confirmingDelete) {
+                .alert("Delete this Clip?", isPresented: $confirmingDelete) {
                     Button("Delete", role: .destructive) { performDelete() }
                     Button("Cancel", role: .cancel) { }
                 } message: {
@@ -632,7 +632,7 @@ private struct InboxClipDetail: View {
         Button(role: .destructive) {
             confirmingDelete = true
         } label: {
-            Text("Delete clip")
+            Text("Delete this Clip")
                 .font(.body.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 50)
                 .foregroundStyle(Crucible.Color.danger)

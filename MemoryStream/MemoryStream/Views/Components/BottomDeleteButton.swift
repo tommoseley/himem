@@ -25,8 +25,17 @@ struct BottomDeleteButton: View {
 
         var label: String {
             switch self {
-            case .delete(let noun): return "Delete \(noun)"
-            case .removeFromProject: return "Remove from project"
+            case .delete(let noun):
+                // July 13 2026 lock — the label names what's destroyed
+                // (clips are the atoms, everything else is association):
+                // a memory dissolves its derived layer but its clips SURVIVE;
+                // a clip destroys the atom across every memory.
+                switch noun {
+                case "memory": return "Let Go of this Memory"
+                case "clip":   return "Delete this Clip"
+                default:       return "Delete \(noun)"   // project · session
+                }
+            case .removeFromProject: return "Remove from Project"
             }
         }
 
@@ -39,7 +48,14 @@ struct BottomDeleteButton: View {
 
         var footnote: String {
             switch self {
-            case .delete:            return "Moves to Recently Deleted · kept for 30 days."
+            case .delete(let noun):
+                if noun == "memory" {
+                    // July 13 lock: "Let Go" must reassure that the clips
+                    // survive — the spec's exact wording (unified editing
+                    // model). This is what makes "Let Go" honest vs "Delete".
+                    return "The clips stay — they'll be available to start other memories. Moves to Recently Deleted · kept for 30 days."
+                }
+                return "Moves to Recently Deleted · kept for 30 days."
             case .removeFromProject: return "The memory stays in your library."
             }
         }

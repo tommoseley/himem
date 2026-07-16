@@ -34,7 +34,7 @@ struct ClipFateRow: View {
             HStack(spacing: 6) {
                 Image(systemName: "trash")
                     .font(.system(size: 12, weight: .semibold))
-                Text("Delete clip")
+                Text("Delete this Clip")
                     .font(.system(size: 14.5, weight: .semibold))
             }
             .foregroundStyle(Crucible.Color.danger)
@@ -48,7 +48,7 @@ struct ClipFateRow: View {
         }
         .buttonStyle(.plain)
         .frame(minHeight: 44)
-        .accessibilityLabel("Delete clip")
+        .accessibilityLabel("Delete this Clip")
     }
 
     private var relocateButton: some View {

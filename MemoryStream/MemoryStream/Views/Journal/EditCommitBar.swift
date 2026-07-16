@@ -26,7 +26,7 @@ struct EditCommitBar: View {
     /// of this bar. Pass `nil` for title/summary/project edits where
     /// no clip is being acted on.
     var onDelete: (() -> Void)? = nil
-    var deleteLabel: String = "Delete clip"
+    var deleteLabel: String = "Delete this Clip"
 
     var body: some View {
         HStack(spacing: 14) {

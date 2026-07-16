@@ -318,7 +318,7 @@ struct ClipEditor: View {
                 .foregroundStyle(Crucible.Color.aiBlue)
             }
             Button(role: .destructive, action: fateActions.onDelete) {
-                Label("Delete clip", systemImage: "trash")
+                Label("Delete this Clip", systemImage: "trash")
                     .font(.system(size: 13, weight: .medium))
             }
             .buttonStyle(.borderless)
