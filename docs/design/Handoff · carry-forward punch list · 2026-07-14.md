@@ -1,5 +1,3 @@
-> **Frozen snapshot (archived).** Live truth is `Watch · spec.md §2` + decision doc §4e (`docs/architecture/2026-07-14-watch-audio-compression.md`). Do not treat as current.
-
 # Handoff · carry-forward punch list — 2026-07-14
 
 **For:** Claude Code · **From:** design/spec side (read-only on the repo).
@@ -23,6 +21,18 @@ Same contract as always: read `HiMem · Locked Decisions.html` + `AGENTS.md` fir
 
 ---
 
+## INVARIANT (locked 2026-07-14) · Watch→phone transport — LIFT to Watch spec + Locked Decisions
+
+**Locked, not a task. Also lift verbatim into `Watch · spec.md` + `HiMem · Locked Decisions.html`.**
+
+> **Watch→phone clip transfer is WatchConnectivity, permanently.** The watch **never** touches CloudKit and **never** writes an iCloud container. Two stages:
+> - **Stage 1 — watch → phone:** record → transcode to mono/16k/AAC → `WCSession.transferFile`. That's the whole hop. A ~230 KB compressed clip is near-instant over WC, so WC is not a bottleneck once the payload is right.
+> - **Stage 2 — phone → iCloud:** the **phone is the sole writer to the user's iCloud** — media into the Files container, metadata into the CloudKit private DB — done **at its leisure, off the capture hot path.**
+>
+> **"iCloud as the transfer transport" is RETIRED, not deferred.** Perishability is satisfied at stage 1 (the thought reached a real device fast); iCloud durability is a background concern. This keeps the phone as the single point that writes the user's iCloud (matches the locked data-custody model) and moots the "can watchOS write the Files ubiquity container / CKAsset-in-private-DB vs media-in-Files" wrinkle entirely — the watch is simply never in that path.
+
+---
+
 ## P0 · Watch→phone audio transfer is ~144× too heavy — compress on the watch
 
 **Class:** performance / product-credibility bug (a multi-minute sync makes capture feel broken). Bug-First. **Highest priority** — capture is the product's whole job.
@@ -42,7 +52,7 @@ Same contract as always: read `HiMem · Locked Decisions.html` + `AGENTS.md` fir
 
 **Parked (flag, don't chase now):** the log shows a storm of repeated `buffered ack for unknown clipId … will replay` (dozens per clipId) — possible separate duplicate-ack bug. Capture as a backlog item, do not chase this cycle.
 
-**Custody caveat (for the someday iCloud migration, NOT now):** "watch → CloudKit" means a **CKAsset in the private DB** — a *different store* than the locked "media in iCloud Files" model. watchOS likely cannot write the Files ubiquity container at all, so the phone would still relay the asset into Files, or the media-custody *what* reopens. Whenever iCloud transport is revisited it is a **[DECISION → Tom]**, not a *how*.
+**Transport is locked (see the transport invariant above):** watch→phone stays WatchConnectivity permanently; the phone is the sole iCloud writer, at its leisure. The "iCloud as transfer transport / watch→CloudKit" idea is **retired** — do not carry "someday iCloud transport" language forward in the decision doc; the custody wrinkle it raised is gone because the watch is never in the iCloud path.
 
 **Leave alone (correct as shown, not defects):** the "Receiving from your Watch" sync card and "Receiving audio · 0:54" are legitimate live-transfer status. Once compression lands and transfers are near-instant, revisit whether the *"Keep HiMem open to finish faster"* copy still tells the truth (it becomes a lie on a 230 KB clip).
 
@@ -133,3 +143,15 @@ Same contract as always: read `HiMem · Locked Decisions.html` + `AGENTS.md` fir
 5. **P4** — hold (a) for Tom's ruling on the Topics-list swipe; fold (b) dead-component deletion + (c) stale-comment scrub into whatever cycle touches those files.
 
 Watch, don't chase: the spreading test-flake (`DebouncedTriggerTests`, now `JournalViewModelLoadInitialTests`) — shared state across parallel `@Suite` runs; aligns with the existing `@Suite(.serialized)` rule in `CLAUDE.md` for shared-singleton suites. When a third flakes, stop and apply `.serialized` rather than whack-a-mole.
+
+---
+
+## P6 · "Let Go of this Memory" must NOT cascade-delete its clips (behavior verify — July 15 2026)
+
+**Spec source:** `Memory Detail · unified editing model.md` (Deletion row) + `HiMem · Locked Decisions.html` — reconciled to the July 13 Trash-by-object lock this session.
+
+**The *what* (not negotiable):** deleting a memory is **"Let Go of this Memory"** — the *derived layer* (title · summary · topics · annotations) dissolves, **but its clips survive** and return to availability on the bench to start other memories ("The clips stay — they'll be available to start other memories"). A memory deletion is **not** a clip deletion. Only **"Delete this Clip"** destroys an atom (and it removes that clip from *every* memory referencing it, with a live-count warning).
+
+**CC action — verify, then fix only if it diverges:** confirm the shipped memory-delete path does **not** hard-delete the memory's clips. Clip↔Memory is many-to-many; letting go of a memory should tear down the *edges/derived context* and leave the clip atoms on the bench. If the current build cascade-deletes clips with the memory, that's a behavior bug against the lock — fix it so clips survive. If it already de-associates only, this is a no-op confirmation. Bug-First; four-part handoff. **This is the one item in the Memories reconcile that is more than a label** — the rest (labels, Active-Nav-Tap exemption, empty state) are spec/copy.
+
+*Related deferred (not this item):* the `Delete this Clip` live-count warning UI ("attached to N memories…") — surface when Memories deletion UI is next built.
