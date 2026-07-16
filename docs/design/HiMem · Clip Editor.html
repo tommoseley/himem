@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HiMem · Clip Editor</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="crucible.css" />
+<script src="crucible-theme.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: var(--paper); font-family: var(--sans); color: var(--ink); }
+  #root { width: 100vw; height: 100vh; overflow: hidden; }
+  a { color: var(--accent); }
+  a:hover { color: var(--accent-press); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#C64A1C"/>
+    <g fill="none" stroke="#EFECE5" stroke-width="3.4" stroke-linecap="round">
+      <rect x="26" y="22" width="48" height="56" rx="6"/>
+      <path d="M35 40 H65"/><path d="M35 52 H65"/><path d="M35 64 H54"/>
+    </g>
+  </svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="crucible-primitives.jsx"></script>
+<script type="text/babel" src="screens-clip-model.jsx"></script>
+<script type="text/babel" src="screens-clip-editor.jsx"></script>
+
+<script type="text/babel">
+const P = window.PX;
+
+// Full assembled modal (top bar + body + delete footer) inside a sheet.
+function Editor({ media = 'audio', hue = 35, duration = '0:42', timing, transcript, editing = false, edges = [], count }) {
+  const c = count != null ? count : edges.length;
+  return (
+    <window.ModalSheet h={760}>
+      <window.EditorTopBar />
+      <window.EditorBody media={media} hue={hue} duration={duration} timing={timing} transcript={transcript} editing={editing} edges={edges} />
+      <window.DeleteFooter count={c} />
+    </window.ModalSheet>
+  );
+}
+
+// annotation callout
+function Callout({ n, title, body, color }) {
+  return (
+    <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start', maxWidth: 320 }}>
+      <div style={{ width: 22, height: 22, borderRadius: 11, background: color || P.accent, color: P.accentInk, fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n}</div>
+      <div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: P.ink, letterSpacing: -0.1, marginBottom: 3 }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: P.ink2, lineHeight: 1.5 }}>{body}</div>
+      </div>
+    </div>
+  );
+}
+
+const TWO_EDGES = [
+  { title: 'Trip to Maine to see the kids', date: 'Wed Jun 3', annotation: 'The moment we settled on two weeks out — this is where the plan became real.', open: true },
+  { title: 'Things Dad wants to do this year', date: 'Wed Jun 3', annotationEmpty: true },
+];
+
+// ── PANEL A · anatomy ─────────────────────────────────────────
+function AnatomyPanel() {
+  return (
+    <div style={{ width: 900, minHeight: 1000, background: P.paper, padding: 40, boxSizing: 'border-box', fontFamily: P.sans, display: 'flex', gap: 40 }}>
+      <div>
+        <window.ModalStage w={400} h={860}>
+          <Editor media="audio" duration="0:42" timing="Wed Jun 3 · 9:47 PM · Bluffton"
+            transcript="So it looks like we're flying up to Maine in two weeks to see my son — I want to make sure Dad gets to come along."
+            edges={TWO_EDGES} count={2} />
+        </window.ModalStage>
+      </div>
+      <div style={{ flex: 1, paddingTop: 8 }}>
+        <div style={{ fontFamily: P.serif, fontSize: 28, fontWeight: 400, letterSpacing: -0.5, color: P.ink }}>One clip. Tapped from anywhere.</div>
+        <div style={{ fontSize: 13.5, color: P.ink2, marginTop: 10, marginBottom: 26, lineHeight: 1.55 }}>
+          The same modal opens whether you tapped this clip on the Clips bench, inside a session, or from a memory's transcript.
+          One editor, one commit rule — the transcript can never vanish because there is no second edit path.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+          <Callout n="1" title="The clip — evidence, shared" color={P.accent}
+            body="Media, timing, and the transcript (or a photo's description). Tap the text to edit inline. Edited once — because the clip is stored once, the change is true in every memory that uses it. This is the layer that must never wipe." />
+          <Callout n="2" title="Memory sections — one per edge" color={P.ai}
+            body="The clip is evidence in N memories; each section is one edge. It carries that memory's own annotation (‘why this matters here’) and ‘Remove from this memory’ (drops just that link — the clip lives on). Attached to three memories? Three sections. You see the many-to-many without a word of jargon." />
+          <Callout n="3" title="Delete this Clip — the atom" color={P.danger}
+            body="Destroys the clip itself and removes it from every memory that references it, with a live-count warning. Distinct from a section's Remove (which only de-associates). The July 13 Trash lock, finally reading clearly in one place." />
+        </div>
+        <div style={{ marginTop: 26, paddingTop: 18, borderTop: '1px solid ' + P.divider, fontSize: 13, color: P.ink3, fontStyle: 'italic', fontFamily: P.serif, lineHeight: 1.55 }}>
+          The clip is shown once (the atom), then N edge-panels beneath it. Editing the transcript is never “edit it only here.”
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PANEL B · the three states ────────────────────────────────
+function StatesPanel() {
+  return (
+    <div style={{ width: 1420, minHeight: 1060, background: P.paper, padding: 40, boxSizing: 'border-box', fontFamily: P.sans }}>
+      <div style={{ fontFamily: P.serif, fontSize: 27, fontWeight: 400, letterSpacing: -0.5, color: P.ink }}>Same editor, from loose clip to many memories.</div>
+      <div style={{ fontSize: 13.5, color: P.ink2, marginTop: 8, marginBottom: 28, maxWidth: 900, lineHeight: 1.55 }}>
+        A loose clip on the bench opens the same modal with <strong>no</strong> memory sections — same editor, sections simply absent.
+        As the clip becomes evidence in memories, sections appear and duplicate. Nothing about the editor changes; only how many edges it shows.
+      </div>
+      <div style={{ display: 'flex', gap: 30, alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: P.ink3, marginBottom: 12 }}>Loose clip · 0 memories</div>
+          <window.ModalStage w={392} h={760}>
+            <Editor media="audio" duration="0:05" timing="Wed Jun 3 · 9:47 PM · Bluffton"
+              transcript="Places to visit — Helen, Georgia. Worth a weekend." edges={[]} count={0} />
+          </window.ModalStage>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: P.ink3, marginBottom: 12 }}>Photo clip · 1 memory</div>
+          <window.ModalStage w={392} h={760}>
+            <Editor media="photo" hue={35} timing="Wed Jun 3 · 9:51 PM · Bluffton"
+              transcript="The new camera, still boxed on the workbench."
+              edges={[{ title: 'The new camera', date: 'Wed Jun 3', annotation: 'Bought for the Maine trip.' }]} count={1} />
+          </window.ModalStage>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.3, textTransform: 'uppercase', color: P.ai, marginBottom: 12 }}>Voice clip · 2 memories</div>
+          <window.ModalStage w={392} h={760}>
+            <Editor media="audio" duration="0:42" timing="Wed Jun 3 · 9:47 PM · Bluffton"
+              transcript="Flying up to Maine in two weeks to see my son." edges={TWO_EDGES} count={2} />
+          </window.ModalStage>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PANEL C · editing the atom (active state) ─────────────────
+function EditingPanel() {
+  return (
+    <div style={{ width: 900, minHeight: 1060, background: P.paper, padding: 40, boxSizing: 'border-box', fontFamily: P.sans, display: 'flex', gap: 40 }}>
+      <window.ModalStage w={400} h={940}>
+        <Editor media="audio" duration="0:42" timing="Wed Jun 3 · 9:47 PM · Bluffton"
+          transcript="Flying up to Maine in two weeks to see my son." editing={true} edges={TWO_EDGES} count={2} />
+      </window.ModalStage>
+      <div style={{ flex: 1, paddingTop: 8 }}>
+        <div style={{ fontFamily: P.serif, fontSize: 26, fontWeight: 400, letterSpacing: -0.5, color: P.ink }}>Editing the atom is honest.</div>
+        <div style={{ fontSize: 13.5, color: P.ink2, marginTop: 10, lineHeight: 1.55 }}>
+          Tap the transcript and it becomes an inline field — seeded synchronously with the current text, so a no-op Done can never
+          write an empty string over it. The blue AI line names the consequence: this is the clip itself, and the edit shows in every
+          memory that uses it.
+        </div>
+        <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Callout n="✓" title="Seed before render" color={P.confirmed}
+            body="The field opens holding the real transcript — never blank-then-fill. This is the invariant the wipe bug violated, now structural: one editor, one seed rule." />
+          <Callout n="✓" title="One commit path" color={P.confirmed}
+            body="Cancel restores; Done commits through the shared decision. No second bespoke editor with its own commit logic to drift." />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PANEL D · rules ───────────────────────────────────────────
+function RulesPanel() {
+  const cell = { padding: '16px 22px', borderBottom: '1px solid rgba(26,22,18,0.10)' };
+  const eb = { fontSize: 10.5, fontWeight: 700, color: 'rgba(26,22,18,0.45)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 7 };
+  const bd = { fontSize: 13.5, lineHeight: 1.55, color: '#1A1612', letterSpacing: -0.1 };
+  return (
+    <div style={{ width: 680, minHeight: 820, background: '#FFFCF6', overflow: 'hidden', fontFamily: P.sans }}>
+      <div style={{ padding: '26px 22px 6px' }}>
+        <div style={{ fontFamily: P.serif, fontSize: 26, fontWeight: 400, color: '#1A1612', letterSpacing: -0.4 }}>The editor, in rules.</div>
+        <div style={{ fontSize: 13, color: 'rgba(26,22,18,0.55)', marginTop: 6, lineHeight: 1.5 }}>One modal, three zones. See <em>Clip Editor · unified modal · spec.md</em>.</div>
+      </div>
+      <div style={cell}><div style={eb}>One editor, invoked on tap</div><div style={bd}>Tapping a clip on <strong>any</strong> surface — Clips bench, session, memory transcript, search, cluster editor — opens this same modal. There is no second edit path; that is what makes the transcript-wipe class impossible.</div></div>
+      <div style={cell}><div style={eb}>Zone 1 · the clip (atom)</div><div style={bd}>Media + timing + transcript/description. Tap text to edit inline, seeded synchronously. Edited once; true in every memory. <strong>This layer must never wipe.</strong></div></div>
+      <div style={cell}><div style={eb}>Zone 2 · memory sections (edges)</div><div style={bd}>One section per memory the clip is evidence in. Each carries that memory's <em>annotation</em> and <strong>Remove from this memory</strong> (de-associate one edge; clip survives). Duplicated per memory; absent for a loose clip.</div></div>
+      <div style={cell}><div style={eb}>Zone 3 · Delete this Clip</div><div style={bd}>Full-width red, atom-level. Destroys the clip and removes it from <strong>every</strong> memory, with a live-count warning. Distinct from a section's Remove. (July 13 Trash-by-object lock.)</div></div>
+      <div style={{ padding: '16px 22px' }}><div style={eb}>Why it matters</div><div style={bd}>The clip is shown once, then its memberships beneath it — you edit the evidence in one place and manage its context per memory. Evidence vs context, made visible.</div></div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas title="HiMem · Clip Editor"
+      subtitle="The unified clip editor modal — invoked on tap from any surface. Zone 1 edits the clip atom (shared across all memories); Zone 2 is one section per memory edge (annotation + de-associate); Zone 3 deletes the atom. One editor, one commit rule — retiring the bespoke edit paths that caused the transcript-wipe class.">
+      <DCSection id="anatomy" title="1 · Anatomy" subtitle="The three zones, annotated. Attached to two memories.">
+        <DCArtboard id="anatomy-1" label="One clip, tapped from anywhere" width={900} height={1000}><AnatomyPanel /></DCArtboard>
+      </DCSection>
+      <DCSection id="states" title="2 · From loose to many" subtitle="Same editor; only the number of edge-sections changes.">
+        <DCArtboard id="states-1" label="0 · 1 · 2 memories" width={1420} height={1060}><StatesPanel /></DCArtboard>
+      </DCSection>
+      <DCSection id="editing" title="3 · Editing the atom" subtitle="Seeded synchronously; the edit shows everywhere.">
+        <DCArtboard id="editing-1" label="Editing the transcript" width={900} height={1060}><EditingPanel /></DCArtboard>
+      </DCSection>
+      <DCSection id="rules" title="The rules" subtitle="What CC builds against.">
+        <DCArtboard id="rules-1" label="The editor, in rules" width={680} height={820}><RulesPanel /></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
