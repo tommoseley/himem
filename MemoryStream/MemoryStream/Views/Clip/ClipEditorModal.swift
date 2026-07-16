@@ -126,9 +126,7 @@ struct ClipEditorModal: View {
                 .disabled(media == .note)
                 .opacity(media == .note ? 0 : 1)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(timingText)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Crucible.Color.ink3)
+                    metadataLine
                     if media == .voice {
                         Text("Original recording\(durationSuffix)")
                             .font(.system(size: 13))
@@ -147,9 +145,7 @@ struct ClipEditorModal: View {
                             .foregroundStyle(Crucible.Color.ink3)
                     )
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(timingText)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Crucible.Color.ink3)
+                    metadataLine
                     Text("Tap to view full size")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Crucible.Color.aiBlue)
@@ -494,6 +490,44 @@ struct ClipEditorModal: View {
     private func edgeDateText(_ edge: MemoryClipEdge) -> String {
         let f = DateFormatter(); f.dateFormat = "EEE MMM d"
         return f.string(from: edge.linkedAt ?? .distantPast)
+    }
+
+    /// Capture-source glyph name for a per-clip `source` string (Finding 2,
+    /// 2026-07-16). Source is per-clip metadata — a small watch/phone glyph,
+    /// never a headline (source-agnostic rule, `CLAUDE.md` §Phone). Unknown /
+    /// absent source → no glyph. Siri capture doesn't produce clips yet; its
+    /// glyph is added when that source ships. Pure + static so the mapping is
+    /// unit-tested without Core Data (`ClipEditorModalSourceTests`).
+    static func sourceGlyphName(for sourceString: String?) -> String? {
+        switch sourceString {
+        case "watch": return "applewatch"
+        case "phone": return "iphone"
+        default:       return nil
+        }
+    }
+
+    /// The glyph for THIS clip. Available for `.inbox` clips (which carry
+    /// `source`); nil for `.managed` clips until `MediaReference.sourceDevice`
+    /// ships — a CloudKit-synced schema change deferred to the next deploy
+    /// (ruling 2026-07-16: inbox now, managed field later).
+    private var sourceGlyph: String? {
+        guard case .inbox(let clip) = source else { return nil }
+        return Self.sourceGlyphName(for: clip.source)
+    }
+
+    /// Zone 1 metadata line — source glyph (when known) + reflective timing.
+    private var metadataLine: some View {
+        HStack(spacing: 5) {
+            if let sourceGlyph {
+                Image(systemName: sourceGlyph)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .accessibilityLabel(sourceGlyph == "applewatch" ? "Captured on Apple Watch" : "Captured on iPhone")
+            }
+            Text(timingText)
+                .font(.system(size: 12))
+                .foregroundStyle(Crucible.Color.ink3)
+        }
     }
 
     // MARK: - Actions

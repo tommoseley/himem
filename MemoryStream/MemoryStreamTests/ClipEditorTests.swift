@@ -144,3 +144,31 @@ struct ClipEditorTests {
         #expect(actions.showsMove == true)
     }
 }
+
+/// Money tests for `ClipEditorModal.sourceGlyphName` — Finding 2
+/// (2026-07-16). Per-clip capture source renders as a small watch/phone
+/// glyph on Zone 1's metadata line (source-agnostic rule: metadata, never a
+/// headline). Managed clips have no source field yet, so the glyph is
+/// inbox-only until `MediaReference.sourceDevice` ships (a CloudKit schema
+/// change deferred to the next deploy). Unknown/absent source → no glyph.
+@Suite
+struct ClipEditorModalSourceTests {
+
+    @Test func watchSource_mapsToApplewatchGlyph() {
+        #expect(ClipEditorModal.sourceGlyphName(for: "watch") == "applewatch")
+    }
+
+    @Test func phoneSource_mapsToIphoneGlyph() {
+        #expect(ClipEditorModal.sourceGlyphName(for: "phone") == "iphone")
+    }
+
+    @Test func siriSource_hasNoGlyphYet() {
+        // Siri capture doesn't produce clips yet; its glyph ships with that source.
+        #expect(ClipEditorModal.sourceGlyphName(for: "siri") == nil)
+    }
+
+    @Test func unknownOrAbsentSource_noGlyph() {
+        #expect(ClipEditorModal.sourceGlyphName(for: "mac") == nil)
+        #expect(ClipEditorModal.sourceGlyphName(for: nil) == nil)
+    }
+}
