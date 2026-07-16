@@ -49,6 +49,21 @@ struct ClusterCardStack: View {
     /// `Add back` on a set-aside row — undo the trim.
     let onReAddClip: (ClusterProposal, UUID) -> Void
 
+    /// Single-open accordion — the clipId whose transcript is expanded in
+    /// place (nil = all collapsed). Container-owned by `SessionListView`,
+    /// the same ownership model as Memory Detail's compact stream.
+    let openClipId: UUID?
+
+    /// Tap a compact row — toggle its transcript open (single-open:
+    /// opening one collapses the prior).
+    let onToggleClusterClip: (UUID) -> Void
+
+    /// Play/stop a clip's audio from its compact row.
+    let onPlayClip: (InboxClip) -> Void
+
+    /// The currently-playing clipId — drives the play/stop glyph.
+    let playingClipId: UUID?
+
     /// `Not together` — dismiss the whole cluster. Caller adds it to the
     /// dismissal store; its clips fall back to loose.
     let onDismiss: (ClusterProposal) -> Void
@@ -183,7 +198,8 @@ struct ClusterCardStack: View {
         let gone = clips.filter { removed.contains($0.clipId) }
 
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(kept, id: \.clipId) { clip in
+            ForEach(Array(kept.enumerated()), id: \.element.clipId) { idx, clip in
+                if idx > 0 { rowDivider }
                 clipEditorRow(proposal: proposal, clip: clip, anchor: anchor, isRemoved: false)
             }
             if !gone.isEmpty {
@@ -195,7 +211,8 @@ struct ClusterCardStack: View {
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(Crucible.Color.ink3)
                     .padding(.bottom, 2)
-                ForEach(gone, id: \.clipId) { clip in
+                ForEach(Array(gone.enumerated()), id: \.element.clipId) { idx, clip in
+                    if idx > 0 { rowDivider }
                     clipEditorRow(proposal: proposal, clip: clip, anchor: anchor, isRemoved: true)
                 }
             }
@@ -203,34 +220,94 @@ struct ClusterCardStack: View {
         .padding(.top, 2)
     }
 
+    private var rowDivider: some View {
+        Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
+    }
+
+    /// One clip as a **compact single-open accordion row** (§87, reusing
+    /// the Memory-Detail `reflectiveCompact` register + container-owned
+    /// accordion). Collapsed: glyph + time + one-line preview + play +
+    /// Remove + chevron. Tapping the row expands its full transcript in
+    /// place; single-open is enforced by the container (`openClipId`).
+    /// Set-aside rows dim the **content only** — play/Add-back stay
+    /// full-strength at ≥44px.
     @ViewBuilder
     private func clipEditorRow(proposal: ClusterProposal, clip: InboxClip, anchor: Date, isRemoved: Bool) -> some View {
         let model = ClipDisplayModel(inboxClip: clip, sessionStart: anchor)
-        HStack(alignment: .top, spacing: 10) {
-            // Dim the CLIP CONTENT only on a set-aside row — never the
-            // affordance. Fuller transcript (raised line cap) so "does
-            // this belong" is decidable at trim time (§87).
-            ClipAtomView(model: model, register: .operational,
-                         isDenseContainer: true, transcriptLineLimit: 8)
-                .opacity(isRemoved ? 0.45 : 1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            // Subtractive vocabulary (§187): Remove on a kept row, the
-            // reversible Add back on a set-aside row. FULL-STRENGTH and
-            // ≥44px even when the row content is dimmed — a status or
-            // affordance is never opacity-alone (Crucible).
-            Button {
-                if isRemoved { onReAddClip(proposal, clip.clipId) }
-                else { onRemoveClip(proposal, clip.clipId) }
-            } label: {
-                Text(isRemoved ? "Add back" : "Remove")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(Crucible.Color.aiBlue)
-                    .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+        let isOpen = openClipId == clip.clipId
+        let isPlaying = playingClipId == clip.clipId
+        let hasAudio = !clip.audioFilename.isEmpty
+        let transcript = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                // Tappable compact header → toggle the accordion. The
+                // reflectiveCompact atom carries glyph + time + preview;
+                // the chevron rotation is container-owned. `hidePreview`
+                // when open so the preview line doesn't double-print
+                // above the expanded transcript.
+                Button {
+                    onToggleClusterClip(clip.clipId)
+                } label: {
+                    HStack(spacing: 6) {
+                        ClipAtomView(model: model,
+                                     register: .reflectiveCompact,
+                                     isEmphasized: isOpen,
+                                     hidePreview: isOpen)
+                            .opacity(isRemoved ? 0.45 : 1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
+                            .rotationEffect(.degrees(isOpen ? 90 : 0))
+                            .animation(.easeInOut(duration: 0.15), value: isOpen)
+                    }
                     .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if hasAudio {
+                    Button {
+                        onPlayClip(clip)
+                    } label: {
+                        Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.accent)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // Subtractive vocabulary (§187): Remove / reversible Add
+                // back. Full-strength, ≥44px even when content is dimmed.
+                Button {
+                    if isRemoved { onReAddClip(proposal, clip.clipId) }
+                    else { onRemoveClip(proposal, clip.clipId) }
+                } label: {
+                    Text(isRemoved ? "Add back" : "Remove")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(Crucible.Color.aiBlue)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+
+            // Expanded: full transcript inline (read-only — the editor
+            // trims membership, it does not edit transcripts; row-tap →
+            // Clip Detail is the post-v1 follow-up).
+            if isOpen && !transcript.isEmpty {
+                Text("\u{201C}\(transcript)\u{201D}")
+                    .font(.system(size: 14))
+                    .lineSpacing(2)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(isRemoved ? 0.45 : 1)
+                    .padding(.bottom, 8)
+                    .padding(.horizontal, 4)
+            }
         }
-        .padding(.vertical, 2)
     }
 
     // MARK: - Secondary row (Adjust toggle + Not together)

@@ -57,6 +57,10 @@ struct SessionListView: View {
     // the batch commit; nothing here touches the proposer or any store.
     @State private var expandedClusterFingerprints: Set<String> = []
     @State private var removedByFingerprint: [String: Set<UUID>] = [:]
+    // Single-open accordion for the cluster editor's compact rows — the
+    // clipId whose transcript is expanded (nil = all collapsed). Same
+    // container-owned model as Memory Detail's compact stream.
+    @State private var openClusterClipId: UUID? = nil
     /// Per-clip retry-transcription state — populated while a
     /// retry is in flight so the row's link shows a "Retrying…"
     /// spinner and disables to prevent double-taps. Cleared when
@@ -285,6 +289,19 @@ struct SessionListView: View {
         removedByFingerprint[fp] = set.isEmpty ? nil : set
     }
 
+    /// Single-open accordion toggle for a cluster editor compact row —
+    /// opening one clip collapses the prior.
+    private func toggleClusterClip(_ clipId: UUID) {
+        openClusterClipId = (openClusterClipId == clipId) ? nil : clipId
+    }
+
+    /// Play/stop a cluster clip's audio from its compact row — reuses the
+    /// bench's single-player (`playClip` / `stopPlayback` / `playingClipId`).
+    private func playOrStopClusterClip(_ clip: InboxClip) {
+        if playingClipId == clip.clipId { stopPlayback() }
+        else { playClip(clip) }
+    }
+
     /// "Keep these · N memories" tap — resolve each proposal to its
     /// live clips, batch commit via `SortBatchCommit`. Clips leave
     /// the manifest on success; the ClusterCardStack disappears
@@ -321,6 +338,7 @@ struct SessionListView: View {
             SortBatchCommit.commit(resolved, viewModel: viewModel, storage: StorageService.shared)
             self.removedByFingerprint = [:]
             self.expandedClusterFingerprints = []
+            self.openClusterClipId = nil
             self.sessions = self.computeSessions()
         }
     }
@@ -383,6 +401,10 @@ struct SessionListView: View {
                     onToggleExpand: toggleClusterExpanded,
                     onRemoveClip: removeClipFromCluster,
                     onReAddClip: reAddClipToCluster,
+                    openClipId: openClusterClipId,
+                    onToggleClusterClip: toggleClusterClip,
+                    onPlayClip: playOrStopClusterClip,
+                    playingClipId: playingClipId,
                     onDismiss: handleClusterDismiss,
                     onCommitAll: handleClusterBatchCommit
                 )

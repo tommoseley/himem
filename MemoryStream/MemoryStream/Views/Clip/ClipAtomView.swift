@@ -145,13 +145,6 @@ struct ClipAtomView: View {
     /// registers already carry their own density).
     var isDenseContainer: Bool = false
 
-    /// Optional override for the dense-container transcript line cap
-    /// (default 3). The Sort cluster editor (§87) passes a higher value
-    /// so an expanded row shows a fuller transcript than the collapsed
-    /// preview — enough to decide "does this clip belong" at trim time —
-    /// while keeping the compact dense thumbnail. Nil = the default cap.
-    var transcriptLineLimit: Int? = nil
-
     /// Inline status text appended after the retry link
     /// (e.g. `"· Retrying…"` while a retry is in flight,
     /// `"· Retry failed"` after an error). Owned by the container
@@ -196,8 +189,7 @@ struct ClipAtomView: View {
                     emptyTranscriptCaption: emptyTranscriptCaption,
                     showDescriptionInvite: showDescriptionInvite,
                     onTapDescriptionInvite: onTapDescriptionInvite,
-                    isDenseContainer: isDenseContainer,
-                    transcriptLineLimit: transcriptLineLimit
+                    isDenseContainer: isDenseContainer
                 )
                 if model.failed, let onRetry = onRetryTranscription {
                     ClipRetry(onTap: onRetry, status: retryStatus)
@@ -486,10 +478,6 @@ struct ClipContentSlot: View {
     /// 52pt horizontal thumbnail — the session-triage skin.
     var isDenseContainer: Bool = false
 
-    /// Overrides the dense transcript line cap (default 3) — the Sort
-    /// cluster editor passes a higher value for a fuller trim-time preview.
-    var transcriptLineLimit: Int? = nil
-
     var body: some View {
         switch content {
         case .transcriptFull(let text):
@@ -531,10 +519,8 @@ struct ClipContentSlot: View {
                 if isDenseContainer {
                     // Dense triage: cap transcripts so a long clip
                     // doesn't push the row height past a scannable
-                    // line count. `transcriptLineLimit` lets a
-                    // read-to-decide surface (the Sort cluster editor)
-                    // raise the cap for a fuller preview.
-                    let capped = body.lineLimit(transcriptLineLimit ?? 3)
+                    // line count.
+                    let capped = body.lineLimit(3)
                     if let onTap {
                         capped.onTapGesture { onTap() }
                     } else {
