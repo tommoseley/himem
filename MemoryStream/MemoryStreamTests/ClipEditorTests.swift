@@ -77,13 +77,14 @@ struct ClipEditorTests {
         #expect(d == .commit(trimmed: "new"))
     }
 
-    /// Text-to-empty is a real change — the user erased the field.
-    /// The commit fires with an empty string; downstream persists
-    /// the erasure. `.skip` here would silently reject a legitimate
-    /// intent.
-    @Test func decide_text_to_empty_returns_commit_with_empty_string() {
+    /// Text-to-empty is a **skip** (wipe guard, P0 2026-07-16, supersedes
+    /// the prior "erase commits empty" rule). An inline edit never blanks a
+    /// non-empty field to empty — a stale/empty draft reaching commit was the
+    /// transcript-wipe bug, not a real erase. Removing a clip's content is
+    /// "Delete this Clip", not an edit-to-blank.
+    @Test func decide_text_to_empty_skips_wipeGuard() {
         let d = ClipEditorCommitDecision.decide(initial: "was here", draft: "")
-        #expect(d == .commit(trimmed: ""))
+        #expect(d == .skip)
     }
 
     /// Both-empty (initial = "", draft = "") is a skip — nothing

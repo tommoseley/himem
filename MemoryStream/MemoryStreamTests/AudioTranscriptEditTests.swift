@@ -27,14 +27,15 @@ struct AudioTranscriptEditTests {
                 "a no-op Done must skip — the transcript must not be overwritten")
     }
 
-    /// Documents WHY the synchronous seed matters: an empty draft against a
-    /// real transcript commits "" — the wipe. The `init` seed is what keeps
-    /// the draft from ever being empty on a no-op.
-    @Test func emptyDraft_wouldCommitAWipe() {
+    /// An empty draft against a real transcript now **skips** (wipe guard,
+    /// P0 2026-07-16). Even if a stale/empty draft reaches commit, the gate
+    /// refuses to blank a non-empty transcript — belt-and-suspenders with the
+    /// synchronous seed.
+    @Test func emptyDraft_isGuarded_skips() {
         var edit = AudioTranscriptEdit(initial: "real transcript")
-        edit.draft = ""   // simulates the pre-fix async-seed gap
-        #expect(edit.pendingCommit == "",
-                "an empty draft against a real initial commits a wipe — which the synchronous seed prevents on a no-op")
+        edit.draft = ""   // simulates a stale/empty draft reaching commit
+        #expect(edit.pendingCommit == nil,
+                "the gate never blanks a non-empty transcript with an empty draft")
     }
 
     /// A real edit persists the trimmed new value.
@@ -51,12 +52,14 @@ struct AudioTranscriptEditTests {
         #expect(edit.pendingCommit == nil)
     }
 
-    /// An intentional full erase IS a change (the user cleared the field) —
-    /// commits "". The buffer can't read intent; the synchronous seed is what
-    /// separates this from an accidental no-op empty.
-    @Test func intentionalErase_commitsEmpty() {
+    /// Erasing to empty is now a **skip** (wipe guard, P0 2026-07-16). An
+    /// inline edit never blanks a non-empty field — removing content is
+    /// "Delete this Clip", not an edit-to-blank. The buffer can't read intent,
+    /// and a stale/empty draft is the wipe bug far more often than a real
+    /// erase, so the gate skips it.
+    @Test func erasingToEmpty_skips_wipeGuard() {
         var edit = AudioTranscriptEdit(initial: "was here")
         edit.draft = ""
-        #expect(edit.pendingCommit == "")
+        #expect(edit.pendingCommit == nil)
     }
 }

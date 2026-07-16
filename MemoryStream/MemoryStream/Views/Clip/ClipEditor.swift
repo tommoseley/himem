@@ -66,6 +66,15 @@ enum ClipEditorCommitDecision: Equatable {
         let trimmedInitial = initial.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDraft = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInitial == trimmedDraft { return .skip }
+        // Wipe guard (P0 2026-07-16): an inline edit never blanks a
+        // non-empty field to empty. Reaching here means the draft differs
+        // from a non-empty initial; if the draft is empty, that's the
+        // transcript-wipe bug — a stale/empty draft reaching commit
+        // ([HiMem][TranscriptWipe] pinned it to CompactClipRow's ClipEditor
+        // onDone), NOT a real erase. Removing a clip's content is
+        // "Delete this Clip", not an edit-to-blank. One gate, so every
+        // clip-edit surface (transcript · description · sheet) is covered.
+        if trimmedDraft.isEmpty { return .skip }
         return .commit(trimmed: trimmedDraft)
     }
 }

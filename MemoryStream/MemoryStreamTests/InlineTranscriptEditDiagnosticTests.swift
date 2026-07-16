@@ -45,9 +45,12 @@ struct InlineTranscriptEditDiagnosticTests {
         #expect(ClipEditorCommitDecision.decide(initial: T, draft: T) == .skip)
     }
 
-    // The wipe mechanism: an empty draft against a real initial commits "".
-    @Test func inlineDecision_emptyDraftAgainstReal_wipes() {
+    // The wipe guard (P0 2026-07-16): an empty draft against a real initial
+    // now SKIPS — it never commits "" over a non-empty transcript. This is
+    // the fix for the CompactClipRow onDone wipe the [TranscriptWipe]
+    // instrumentation pinned.
+    @Test func inlineDecision_emptyDraftAgainstReal_skips() {
         let T = "Ben said the Basque cheesecake"
-        #expect(ClipEditorCommitDecision.decide(initial: T, draft: "") == .commit(trimmed: ""))
+        #expect(ClipEditorCommitDecision.decide(initial: T, draft: "") == .skip)
     }
 }
