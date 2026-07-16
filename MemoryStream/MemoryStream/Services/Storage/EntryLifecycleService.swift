@@ -242,6 +242,15 @@ final class EntryLifecycleService {
             request.predicate = NSPredicate(format: "id == %@", mediaId as CVarArg)
             request.fetchLimit = 1
             guard let ref = try storage.viewContext.fetch(request).first else { return }
+            // P0 diagnostic (2026-07-16 · transcript-wipe): log — with the
+            // call stack — any time an EMPTY transcript is about to overwrite
+            // a NON-empty one. The unit-level paths all guard against this, so
+            // the failing surface commits an empty draft through a stateful/
+            // timing path; this pins the exact caller on the next device repro.
+            let existing = (ref.transcript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !existing.isEmpty {
+                NSLog("[HiMem][TranscriptWipe] EMPTY over NON-empty — mediaId=\(mediaId.uuidString.prefix(8)) existingLen=\(existing.count)\n\(Thread.callStackSymbols.prefix(14).joined(separator: "\n"))")
+            }
             ref.transcript = transcript
             ref.lastEditedAt = Date()
             try storage.save(context: storage.viewContext)
