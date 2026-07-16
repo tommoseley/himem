@@ -1,6 +1,32 @@
 import SwiftUI
 import AVFoundation
 
+/// The `AudioPlayerSheet`'s transcript edit buffer. Seeds **synchronously**
+/// from the current transcript (via `init`), so the draft equals the stored
+/// transcript from the first render — a no-op Done is then deterministically
+/// a skip. This fixes the P0 (2026-07-16) where the sheet's async `.task`
+/// seed left the draft empty in a window and a Done in that window committed
+/// "" over a real transcript. `pendingCommit` reuses the unified
+/// `ClipEditorCommitDecision` so this separate sheet and the inline
+/// `ClipEditor` share one commit rule (the coherence fix underneath the bug).
+struct AudioTranscriptEdit: Equatable {
+    let initial: String
+    var draft: String
+
+    init(initial: String) {
+        self.initial = initial
+        self.draft = initial   // synchronous seed — never empty-when-initial-isn't
+    }
+
+    /// The value to persist on Done, or `nil` to skip (no meaningful change).
+    var pendingCommit: String? {
+        switch ClipEditorCommitDecision.decide(initial: initial, draft: draft) {
+        case .commit(let trimmed): return trimmed
+        case .skip:                return nil
+        }
+    }
+}
+
 /// Sheet-presented audio player + transcript editor for a voice clip.
 /// Built on top of the shared `EditTextSheet` template so the chrome
 /// (grabber, Cancel · title · Done bar, metadata line, ochre-ring
@@ -46,7 +72,14 @@ struct AudioPlayerSheet: View {
     /// `.missing` — catches the case where iCloud Drive has metadata
     /// for a path but the bytes were never uploaded.
     @State private var downloadPollCount = 0
-    @State private var draftTranscript: String = ""
+    /// Transcript edit buffer — seeded SYNCHRONOUSLY in `init` (P0
+    /// 2026-07-16). The prior `@State draftTranscript = ""` + async `.task`
+    /// seed left the draft empty in the window before the task ran; a Done
+    /// in that window committed "" over a real transcript (the "tap-to-view
+    /// → Done wipes the transcript" bug). Seeding in `init` makes the draft
+    /// equal the current transcript from the very first render, so a no-op
+    /// Done is deterministically a skip.
+    @State private var edit: AudioTranscriptEdit
     @State private var isRetryingTranscription = false
     /// Surfaces the outcome of a retry that didn't overwrite the draft —
     /// either a failure (model not installed, transcriber threw) or a
@@ -55,6 +88,16 @@ struct AudioPlayerSheet: View {
     @State private var retryStatusMessage: String? = nil
 
     private let downloadPollCeiling = 10  // 10 polls at 1s = ~10 seconds
+
+    init(filename: String, recordedAt: Date?, initialTranscript: String, onSaveTranscript: @escaping (String) -> Void) {
+        self.filename = filename
+        self.recordedAt = recordedAt
+        self.initialTranscript = initialTranscript
+        self.onSaveTranscript = onSaveTranscript
+        // Synchronous seed — draft == current transcript from the first
+        // render (see the `edit` property doc for the P0 this fixes).
+        _edit = State(initialValue: AudioTranscriptEdit(initial: initialTranscript))
+    }
 
     enum MediaState: Equatable {
         case checking
@@ -68,7 +111,7 @@ struct AudioPlayerSheet: View {
             title: "Voice clip",
             metadata: metadataLine,
             fieldLabel: "Transcript",
-            text: $draftTranscript,
+            text: $edit.draft,
             onCancel: { dismiss() },
             onDone: {
                 commitIfChanged()
@@ -78,7 +121,8 @@ struct AudioPlayerSheet: View {
             footer: { footer }
         )
         .task {
-            draftTranscript = initialTranscript
+            // Draft is seeded synchronously in `init` — do NOT re-seed here
+            // (async re-seed was the P0). This task only resolves media state.
             await resolveMediaState()
             startTicking()
         }
@@ -273,7 +317,7 @@ struct AudioPlayerSheet: View {
     private func applyRetryOutcome(_ outcome: TranscriptionService.Outcome) {
         switch Self.decideRetryAction(outcome: outcome) {
         case .overwriteDraft(let newText):
-            draftTranscript = newText
+            edit.draft = newText
             retryStatusMessage = nil
         case .keepDraft(let reason):
             retryStatusMessage = reason
@@ -291,10 +335,13 @@ struct AudioPlayerSheet: View {
     // MARK: - Save
 
     private func commitIfChanged() {
-        let trimmed = draftTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        let original = initialTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed != original else { return }
-        onSaveTranscript(trimmed)
+        // Route through the same decision the inline `ClipEditor` uses
+        // (coherence — one commit rule for both the sheet and the inline
+        // editor). `pendingCommit` is nil for a no-op / whitespace-only
+        // change, so a Done without a real edit never persists.
+        if let value = edit.pendingCommit {
+            onSaveTranscript(value)
+        }
     }
 
     // MARK: - Playback state
