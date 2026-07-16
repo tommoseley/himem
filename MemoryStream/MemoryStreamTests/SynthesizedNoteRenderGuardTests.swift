@@ -187,6 +187,33 @@ struct SynthesizedNoteRenderGuardTests {
             candidateText: "   ", siblingTexts: ["first capture", "second capture"]))
     }
 
+    /// Near-miss watch-line (b): the aggregate PLUS extra text, which exact
+    /// equality misses. Diagnostic only — must flag for the arbiter but must
+    /// NOT satisfy the exact `isAggregateWrite` predicate the cleanup uses.
+    @Test func isNearAggregateWrite_aggregatePlusAWord_flags_butNotExact() {
+        let siblings = ["first capture", "second capture"]
+        let plusAWord = "first capture\n\nsecond capture\n\nand one more thought"
+        #expect(EntryLifecycleService.isNearAggregateWrite(
+            candidateText: plusAWord, siblingTexts: siblings),
+            "aggregate-plus-extra must trip the near-miss watch-line")
+        #expect(!EntryLifecycleService.isAggregateWrite(
+            candidateText: plusAWord, siblingTexts: siblings),
+            "but must NOT satisfy the exact cleanup predicate (never auto-deleted)")
+    }
+
+    @Test func isNearAggregateWrite_exactAggregate_doesNotDoubleFlag() {
+        // An exact aggregate is caught by `isAggregateWrite`; the near-miss
+        // predicate excludes exact equality so the arbiter logs one signature.
+        let siblings = ["first capture", "second capture"]
+        #expect(!EntryLifecycleService.isNearAggregateWrite(
+            candidateText: "first capture\n\nsecond capture", siblingTexts: siblings))
+    }
+
+    @Test func isNearAggregateWrite_singleSibling_neverFlags() {
+        #expect(!EntryLifecycleService.isNearAggregateWrite(
+            candidateText: "the only clip and more", siblingTexts: ["the only clip"]))
+    }
+
     // MARK: - The guard rail (Option A must not over-suppress)
 
     /// The reason we rejected the blanket "any voice → skip" rule: a

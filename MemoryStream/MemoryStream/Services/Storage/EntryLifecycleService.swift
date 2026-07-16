@@ -409,6 +409,26 @@ final class EntryLifecycleService {
         return normalizedTranscriptBlob(nonEmpty.joined(separator: "\n\n")) == candidate
     }
 
+    /// Near-miss companion to `isAggregateWrite` — the memory's joined
+    /// transcript with extra text around it (the "aggregate-plus-a-word" case
+    /// exact normalized equality misses). **Diagnostic only**: this drives the
+    /// arbiter's `AGGREGATE-NEARMISS` watch-line, NEVER the cleanup delete
+    /// predicate — deletion stays exact-equality per the deletion-safety rule
+    /// (Tom, 2026-07-16). A clip that fully *contains* its memory's ≥2-sibling
+    /// join is almost certainly a reified aggregate that was then edited; we
+    /// want it surfaced, not silently deleted.
+    static func isNearAggregateWrite(candidateText: String, siblingTexts: [String]) -> Bool {
+        let candidate = normalizedTranscriptBlob(candidateText)
+        guard !candidate.isEmpty else { return false }
+        let nonEmpty = siblingTexts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard nonEmpty.count >= 2 else { return false }
+        let joined = normalizedTranscriptBlob(nonEmpty.joined(separator: "\n\n"))
+        guard !joined.isEmpty, candidate != joined else { return false }
+        return candidate.contains(joined)
+    }
+
     /// Gathers the content of an entry's clips (per the same per-type source
     /// `joinedContent` reads), optionally excluding one ref by id — the atom
     /// being written, which must not count as its own sibling.
@@ -434,8 +454,13 @@ final class EntryLifecycleService {
         context: String
     ) {
         let siblings = siblingClipTexts(in: entry, excluding: excludingRefId)
-        guard isAggregateWrite(candidateText: candidateText, siblingTexts: siblings) else { return }
-        NSLog("[HiMem][TranscriptWipe] AGGREGATE-WRITE — \(context) siblingCount=\(siblings.count) len=\(candidateText.count)\n\(Thread.callStackSymbols.prefix(14).joined(separator: "\n"))")
+        if isAggregateWrite(candidateText: candidateText, siblingTexts: siblings) {
+            NSLog("[HiMem][TranscriptWipe] AGGREGATE-WRITE — \(context) siblingCount=\(siblings.count) len=\(candidateText.count)\n\(Thread.callStackSymbols.prefix(14).joined(separator: "\n"))")
+        } else if isNearAggregateWrite(candidateText: candidateText, siblingTexts: siblings) {
+            // Near-miss: the value contains the memory's full ≥2-sibling join
+            // plus extra text. Surfaced, never auto-cleaned.
+            NSLog("[HiMem][TranscriptWipe] AGGREGATE-NEARMISS — \(context) siblingCount=\(siblings.count) len=\(candidateText.count)\n\(Thread.callStackSymbols.prefix(14).joined(separator: "\n"))")
+        }
     }
 
     /// One already-stored aggregate `.note` artifact found by the read-only

@@ -109,3 +109,44 @@ struct AudioPlayerSheetRetryDecisionTests {
         }
     }
 }
+
+/// Money tests for `AudioPlayerTarget.editorSeedTranscript` — Finding 1
+/// (2026-07-16), a DISPLAY bug (reclassified from "corruption" once the
+/// device scan came back clean: nothing was ever wrong at rest).
+///
+/// The retired inline seed was `target.transcript ?? entry.content`. When a
+/// voice clip's per-clip transcript was nil, the editor borrowed the whole
+/// memory's JOINED transcript (the aggregate) and displayed it as that one
+/// clip's own text — an Honest-Label violation (the clip claimed words that
+/// aren't its evidence). Nothing was corrupt at rest (the atom's transcript
+/// stayed nil), so it only ever appeared at display. The fix: a clip seeds
+/// from its OWN transcript only; nil → empty, never the aggregate.
+@Suite
+struct AudioPlayerSheetSeedTests {
+
+    @Test func nilTranscript_seedsOwnEmptyState_neverMemoryAggregate() {
+        let aggregate = "first clip\n\nsecond clip\n\nthird clip"
+        let clipTranscript: String? = nil
+
+        // The retired mechanism (reproduction): the old `?? entry.content`
+        // fallback yielded the whole memory aggregate for a nil-transcript
+        // clip. This is the exact behavior that must never recur.
+        #expect((clipTranscript ?? aggregate) == aggregate,
+                "documents the Finding 1 mechanism the fix removes")
+
+        // The fixed seam: the clip shows its OWN (empty) state — never the
+        // memory's joined content.
+        let target = AudioPlayerTarget(
+            mediaId: UUID(), filename: "a.caf", recordedAt: nil, transcript: clipTranscript
+        )
+        #expect(target.editorSeedTranscript == "")
+        #expect(target.editorSeedTranscript != aggregate)
+    }
+
+    @Test func presentTranscript_seedsOwnWords() {
+        let target = AudioPlayerTarget(
+            mediaId: UUID(), filename: "a.caf", recordedAt: nil, transcript: "my own words"
+        )
+        #expect(target.editorSeedTranscript == "my own words")
+    }
+}

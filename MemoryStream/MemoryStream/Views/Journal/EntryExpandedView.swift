@@ -14,6 +14,18 @@ struct AudioPlayerTarget: Identifiable {
     let recordedAt: Date?
     let transcript: String?
     var id: String { filename }
+
+    /// Seeds the transcript editor from the clip's OWN transcript only. A
+    /// nil/absent transcript seeds empty — the sheet shows the clip's own
+    /// empty state, NEVER the memory's aggregate (`entry.content`). Borrowing
+    /// the aggregate is an Honest-Label violation (the clip would claim words
+    /// that aren't its evidence) and was the Finding 1 display bug
+    /// (2026-07-16, reclassified from "corruption" once the device scan came
+    /// back clean — nothing was ever wrong at rest). See `Clip Editor ·
+    /// unified modal · spec.md` and `AudioPlayerSheetSeedTests`.
+    var editorSeedTranscript: String {
+        transcript ?? ""
+    }
 }
 
 struct EntryExpandedView: View {
@@ -336,7 +348,6 @@ struct EntryExpandedView: View {
             audioPlayerForFile: $audioPlayerForFile,
             photoViewerItem: $photoViewerItem,
             videoPlayerForItem: $videoPlayerForItem,
-            legacyTranscriptFallback: entry.content,
             onSaveAudioTranscript: { mediaId, newText in
                 if let mediaId {
                     updateMediaTranscript(id: mediaId, text: newText)
@@ -1419,11 +1430,6 @@ private struct MediaFragmentEditorStack: ViewModifier {
     /// keeps its own full-screen cover.
     @Binding var photoViewerItem: QuickLookItem?
     @Binding var videoPlayerForItem: MediaDisplayItem?
-    /// Used when a voice clip predates the per-clip transcript
-    /// schema — the joined entry content is the only transcript
-    /// available. Passed through to AudioPlayerSheet's
-    /// `initialTranscript`.
-    let legacyTranscriptFallback: String
     /// (mediaId?, newText) — `nil` mediaId means a legacy voice
     /// entry whose transcript IS the entry content.
     let onSaveAudioTranscript: (UUID?, String) -> Void
@@ -1434,7 +1440,13 @@ private struct MediaFragmentEditorStack: ViewModifier {
                 AudioPlayerSheet(
                     filename: target.filename,
                     recordedAt: target.recordedAt,
-                    initialTranscript: target.transcript ?? legacyTranscriptFallback,
+                    // Finding 1 fix (2026-07-16): the clip's OWN transcript,
+                    // never `entry.content`. A nil transcript seeds empty —
+                    // a clip must never borrow the memory's joined aggregate
+                    // as its own text (Honest-Label). Was
+                    // `target.transcript ?? legacyTranscriptFallback` where
+                    // the fallback was the whole memory's content.
+                    initialTranscript: target.editorSeedTranscript,
                     onSaveTranscript: { newText in
                         onSaveAudioTranscript(target.mediaId, newText)
                     }
