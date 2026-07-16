@@ -325,10 +325,15 @@ struct CompactClipRow: View {
             editingDraft = nil
             return
         }
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let current = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed != current {
-            onCommitTranscript(trimmed)
+        // Route the accordion-close commit through the SAME decision the
+        // inline ClipEditor's Done uses (July-16 invariant: one commit rule
+        // per clip-edit surface — no bespoke inline guard). Behavior is
+        // unchanged (the prior `trimmed != current` guard is exactly what
+        // `decide` computes), so this is coherence hardening, not a
+        // proven-culprit fix — it keeps a fourth path from diverging.
+        switch ClipEditorCommitDecision.decide(initial: currentText, draft: draft) {
+        case .commit(let trimmed): onCommitTranscript(trimmed)
+        case .skip:                break
         }
         editingDraft = nil
     }
