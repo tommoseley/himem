@@ -204,17 +204,7 @@ struct CompactClipRow: View {
                     }
                     Spacer(minLength: 0)
                     if let onEdit {
-                        Button(action: onEdit) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "pencil")
-                                Text("Edit")
-                            }
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Crucible.Color.aiBlue)
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        ClipEditButton(action: onEdit)
                     }
                 }
                 .padding(.top, 2)

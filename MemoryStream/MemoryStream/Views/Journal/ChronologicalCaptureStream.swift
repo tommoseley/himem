@@ -396,7 +396,7 @@ struct MediaCard: View {
                 HStack(alignment: .top, spacing: 8) {
                     MediaDescriptionFilled(text: desc)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    descriptionEditButton(onEdit: onEdit)
+                    ClipEditButton(action: onEdit)
                 }
             } else {
                 MediaDescriptionFilled(text: desc)
@@ -417,22 +417,6 @@ struct MediaCard: View {
         }
     }
 
-    /// Quiet blue **✎ Edit** control (≥44px) that opens the modal to the
-    /// clip's description field — the photo/video counterpart to the
-    /// transcript row's Edit affordance.
-    private func descriptionEditButton(onEdit: @escaping () -> Void) -> some View {
-        Button(action: onEdit) {
-            HStack(spacing: 4) {
-                Image(systemName: "pencil")
-                Text("Edit")
-            }
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Crucible.Color.aiBlue)
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
 }
 
 /// Thumbnail tile that drives the visual presence inside `MediaCard`.

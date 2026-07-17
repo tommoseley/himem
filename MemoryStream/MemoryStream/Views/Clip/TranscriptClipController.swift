@@ -97,42 +97,24 @@ struct TranscriptClipController: View {
             duration: audioDuration,
             sessionStart: nil
         )
-        return VStack(alignment: .leading, spacing: 8) {
+        // Edit is a small bordered button right-aligned on the atom's
+        // play/duration row (`.bottom` alignment), so a short clip pays no
+        // extra row height (2026-07-16 layout ruling). The transcript text
+        // stays selectable/non-tappable; inline edit-on-tap only falls back
+        // when no modal host is wired.
+        return HStack(alignment: .bottom, spacing: 8) {
             ClipAtomView(
                 model: model,
                 register: .reflective,
-                // Inline edit-on-tap retired (2026-07-16): the transcript
-                // text stays selectable and non-tappable; the ✎ Edit control
-                // below opens the modal. When `onEdit` is nil (no modal host),
-                // fall back to the legacy inline entry so nothing regresses.
                 onTapContent: onEdit == nil && onCommit != nil ? { editingDraft = currentText } : nil,
                 onPlayEvidence: onPlay,
                 isPlayingEvidence: isPlaying,
                 emptyTranscriptCaption: emptyCaption
             )
+            .frame(maxWidth: .infinity, alignment: .leading)
             if let onEdit {
-                editControlLane(onEdit: onEdit)
+                ClipEditButton(action: onEdit)
             }
-        }
-    }
-
-    /// The row's control lane — a quiet blue **✎ Edit** affordance
-    /// (≥44px) that opens the modal. Trailing-aligned; sits with the
-    /// atom's play evidence as the row's actions.
-    private func editControlLane(onEdit: @escaping () -> Void) -> some View {
-        HStack {
-            Spacer(minLength: 0)
-            Button(action: onEdit) {
-                HStack(spacing: 4) {
-                    Image(systemName: "pencil")
-                    Text("Edit")
-                }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Crucible.Color.aiBlue)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
         }
     }
 
@@ -292,5 +274,34 @@ struct TranscriptClipController: View {
         case .downloaded, .none:
             return "(no transcript)"
         }
+    }
+}
+
+/// The shared **✎ Edit** affordance for Memory Detail rows (2026-07-16
+/// layout ruling): a small blue *bordered box* button that reads as a
+/// button (not a text link, not tap-the-text). Visually compact so it sits
+/// right-aligned on the existing play/duration row without adding height;
+/// the tap target still clears 44px. Blue = routes to the editor.
+struct ClipEditButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "pencil")
+                Text("Edit")
+            }
+            .font(.system(size: 12.5, weight: .medium))
+            .foregroundStyle(Crucible.Color.aiBlue)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(Crucible.Color.aiBlue.opacity(0.45), lineWidth: 1)
+            )
+            .frame(minHeight: 44)          // Crucible 44px tap floor
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit")
     }
 }
