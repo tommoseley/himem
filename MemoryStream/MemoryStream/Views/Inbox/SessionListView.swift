@@ -333,14 +333,6 @@ struct SessionListView: View {
         removedByFingerprint[fp] = set.isEmpty ? nil : set
     }
 
-
-    /// Play/stop a cluster clip's audio from its compact row — reuses the
-    /// bench's single-player (`playClip` / `stopPlayback` / `playingClipId`).
-    private func playOrStopClusterClip(_ clip: InboxClip) {
-        if playingClipId == clip.clipId { stopPlayback() }
-        else { playClip(clip) }
-    }
-
     // MARK: - Empty state
 
     private var emptyState: some View {
@@ -402,8 +394,6 @@ struct SessionListView: View {
                     onOpenClip: { editingClip = $0 },
                     openClipId: openClusterClipId,
                     onToggleClusterClip: toggleClusterClip,
-                    onPlayClip: playOrStopClusterClip,
-                    playingClipId: playingClipId,
                     onDismiss: handleClusterDismiss,
                     onAddToMemory: addClusterToMemory
                 )

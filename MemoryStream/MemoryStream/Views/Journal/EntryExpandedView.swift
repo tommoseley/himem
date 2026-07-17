@@ -1,33 +1,6 @@
 import SwiftUI
 import CoreData
 
-/// Identifies the voice tile a user tapped, so the AudioPlayerSheet can be
-/// presented via SwiftUI's `sheet(item:)` API. `mediaId` is the
-/// MediaReference id (so the sheet's transcript edit can save back to the
-/// right ref); `filename` is the audio file path; `recordedAt` is shown as
-/// a header timestamp; `transcript` is the per-clip transcript (nil for
-/// legacy voice refs from before the schema gained the field, in which
-/// case the sheet falls back to entry.content).
-struct AudioPlayerTarget: Identifiable {
-    let mediaId: UUID?
-    let filename: String
-    let recordedAt: Date?
-    let transcript: String?
-    var id: String { filename }
-
-    /// Seeds the transcript editor from the clip's OWN transcript only. A
-    /// nil/absent transcript seeds empty — the sheet shows the clip's own
-    /// empty state, NEVER the memory's aggregate (`entry.content`). Borrowing
-    /// the aggregate is an Honest-Label violation (the clip would claim words
-    /// that aren't its evidence) and was the Finding 1 display bug
-    /// (2026-07-16, reclassified from "corruption" once the device scan came
-    /// back clean — nothing was ever wrong at rest). See `Clip Editor ·
-    /// unified modal · spec.md` and `AudioPlayerSheetSeedTests`.
-    var editorSeedTranscript: String {
-        transcript ?? ""
-    }
-}
-
 struct EntryExpandedView: View {
     let entry: EntryDisplayModel
     var backLabel: String = "Today"
@@ -95,7 +68,6 @@ struct EntryExpandedView: View {
     /// overlay glyph but tapping only opened the description
     /// sheet — no playback path existed.
     @State private var videoPlayerForItem: MediaDisplayItem? = nil
-    @State private var audioPlayerForFile: AudioPlayerTarget? = nil
     @State private var showShareSheet = false
     @ObservedObject private var entitlement = Entitlement.shared
 
@@ -352,19 +324,8 @@ struct EntryExpandedView: View {
             }
         }
         .modifier(MediaFragmentEditorStack(
-            audioPlayerForFile: $audioPlayerForFile,
             photoViewerItem: $photoViewerItem,
-            videoPlayerForItem: $videoPlayerForItem,
-            onSaveAudioTranscript: { mediaId, newText in
-                if let mediaId {
-                    updateMediaTranscript(id: mediaId, text: newText)
-                } else {
-                    // Legacy voice entry — transcript IS entry.content.
-                    // Persist through lifecycle.edit so search +
-                    // inference re-derive from the new text.
-                    lifecycle.edit(entryId: entry.id, newContent: newText)
-                }
-            }
+            videoPlayerForItem: $videoPlayerForItem
         ))
         .sheet(item: $editingClip) { source in
             ClipEditorModal(source: source)
@@ -1447,37 +1408,18 @@ private struct CommitFooter: View {
 /// `EntryExpandedView.body` so the body stops owning their wiring
 /// directly — CRAP audit 2026-06-07.
 private struct MediaFragmentEditorStack: ViewModifier {
-    @Binding var audioPlayerForFile: AudioPlayerTarget?
     /// Slice 9 (Memory Detail Full stream convergence):
     /// `PhotoDescriptionEditSheet` retired. The QuickLook viewer
     /// it hosted moves up to this stack so a photo tap in
     /// `MediaCard` can still consume the file directly. Video
-    /// keeps its own full-screen cover.
+    /// keeps its own full-screen cover. (Voice playback + transcript edit
+    /// moved to the unified modal / inline row play — AudioPlayerSheet
+    /// retired 2026-07-17.)
     @Binding var photoViewerItem: QuickLookItem?
     @Binding var videoPlayerForItem: MediaDisplayItem?
-    /// (mediaId?, newText) — `nil` mediaId means a legacy voice
-    /// entry whose transcript IS the entry content.
-    let onSaveAudioTranscript: (UUID?, String) -> Void
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $audioPlayerForFile) { target in
-                AudioPlayerSheet(
-                    filename: target.filename,
-                    recordedAt: target.recordedAt,
-                    // Finding 1 fix (2026-07-16): the clip's OWN transcript,
-                    // never `entry.content`. A nil transcript seeds empty —
-                    // a clip must never borrow the memory's joined aggregate
-                    // as its own text (Honest-Label). Was
-                    // `target.transcript ?? legacyTranscriptFallback` where
-                    // the fallback was the whole memory's content.
-                    initialTranscript: target.editorSeedTranscript,
-                    onSaveTranscript: { newText in
-                        onSaveAudioTranscript(target.mediaId, newText)
-                    }
-                )
-                .presentationDetents([.large])
-            }
             .sheet(item: $photoViewerItem) { item in
                 QuickLookViewer(url: item.url)
                     .ignoresSafeArea()

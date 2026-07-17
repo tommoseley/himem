@@ -66,7 +66,6 @@
 		A100000095 /* PlacemarkFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000095 /* PlacemarkFormatter.swift */; };
 		A100000096 /* ClipLocationResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000096 /* ClipLocationResolver.swift */; };
 		A100000201 /* MediaTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000201 /* MediaTile.swift */; };
-		A100000203 /* AudioPlayerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000203 /* AudioPlayerSheet.swift */; };
 		A100000204 /* TextSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000204 /* TextSegment.swift */; };
 		A100000205 /* ChronologicalCaptureStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000205 /* ChronologicalCaptureStream.swift */; };
 		A100000206 /* AddMemoryToProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000206 /* AddMemoryToProjectSheet.swift */; };
@@ -336,7 +335,6 @@
 		B100000095 /* PlacemarkFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacemarkFormatter.swift; sourceTree = "<group>"; };
 		B100000096 /* ClipLocationResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipLocationResolver.swift; sourceTree = "<group>"; };
 		B100000201 /* MediaTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTile.swift; sourceTree = "<group>"; };
-		B100000203 /* AudioPlayerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerSheet.swift; sourceTree = "<group>"; };
 		B100000204 /* TextSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSegment.swift; sourceTree = "<group>"; };
 		B100000205 /* ChronologicalCaptureStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronologicalCaptureStream.swift; sourceTree = "<group>"; };
 		B100000206 /* AddMemoryToProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddMemoryToProjectSheet.swift; sourceTree = "<group>"; };
@@ -737,7 +735,6 @@
 				B100000733 /* TopicEditorSheet.swift */,
 				B100000046 /* RecycleBinView.swift */,
 				B100000201 /* MediaTile.swift */,
-				B100000203 /* AudioPlayerSheet.swift */,
 				B100000910 /* EditTextSheet.swift */,
 				B100000323 /* Linkify.swift */,
 				B100000302 /* AppendFAB.swift */,
@@ -1444,7 +1441,6 @@
 				A100000201 /* MediaTile.swift in Sources */,
 				A100000302 /* AppendFAB.swift in Sources */,
 				A100000305 /* CaptureFlowHost.swift in Sources */,
-				A100000203 /* AudioPlayerSheet.swift in Sources */,
 				A100000910 /* EditTextSheet.swift in Sources */,
 				A100000323 /* Linkify.swift in Sources */,
 				A100000046 /* RecycleBinView.swift in Sources */,

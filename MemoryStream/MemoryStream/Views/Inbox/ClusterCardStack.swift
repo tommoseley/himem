@@ -63,12 +63,6 @@ struct ClusterCardStack: View {
     /// opening one collapses the prior). Reading only — editing is ✎ Edit.
     let onToggleClusterClip: (UUID) -> Void
 
-    /// Play/stop a clip's audio from its compact row.
-    let onPlayClip: (InboxClip) -> Void
-
-    /// The currently-playing clipId — drives the play/stop glyph.
-    let playingClipId: UUID?
-
     /// `Not together` — dismiss the whole cluster. Caller adds it to the
     /// dismissal store; its clips fall back to loose.
     let onDismiss: (ClusterProposal) -> Void
