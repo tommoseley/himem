@@ -77,6 +77,13 @@ struct ClusterCardStack: View {
     /// clips. Fires only when at least one cluster has a kept clip.
     let onCommitAll: () -> Void
 
+    /// `Add to a memory…` — the quiet secondary placement path for a single
+    /// cluster's kept clips (set-aside excluded). Opens the shared placement
+    /// sheet (Start a new memory / add to existing). The ochre `Keep these · N`
+    /// stays the single primary (accept-all-as-new); this is the exception
+    /// path. (2026-07-17, §Sort-is-the-moment.)
+    let onAddToMemory: (ClusterProposal) -> Void
+
     /// Per-cluster Compact/Full display mode (§90). Keyed by fingerprint;
     /// absent → the multi-clip default of **Compact** (a big cluster must
     /// never open as a wall of text). Display-only, not persisted.
@@ -326,6 +333,19 @@ struct ClusterCardStack: View {
     private func secondaryRow(_ proposal: ClusterProposal, expanded: Bool) -> some View {
         HStack(spacing: 18) {
             Spacer()
+            if expanded {
+                // Quiet secondary placement path — opens the shared sheet
+                // (Start a new memory / add to existing) on the cluster's kept
+                // clips. Ochre "Keep these · N" stays the primary.
+                Button {
+                    onAddToMemory(proposal)
+                } label: {
+                    Text("Add to a memory…")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Crucible.Color.aiBlue)
+                }
+                .buttonStyle(.plain)
+            }
             Button {
                 onToggleExpand(proposal)
             } label: {

@@ -269,6 +269,24 @@ struct SessionListView: View {
         return proposal.clipIds.compactMap { byId[$0] }
     }
 
+    /// `Add to a memory…` on a cluster — routes the cluster's KEPT clips
+    /// (set-aside excluded) into the shared placement sheet
+    /// (`CreateMemoryFromClipsSheet` via `bundleSession`): Start a new memory
+    /// or add to an existing one. On confirm the clips are placed + disposed
+    /// from the inbox, so the cluster leaves Sort and `Keep these · N`
+    /// recomputes. The ochre `Keep these · N` stays the primary; this is the
+    /// quiet secondary exception path (2026-07-17, §Sort-is-the-moment).
+    private func addClusterToMemory(_ proposal: ClusterProposal) {
+        let removed = removedByFingerprint[proposal.fingerprint.rawValue] ?? []
+        let kept = clips(forCluster: proposal).filter { !removed.contains($0.clipId) }
+        guard !kept.isEmpty else { return }
+        bundleSession = BundleRequest(
+            session: ClipGroup(clips: kept),
+            clipsToBundle: kept,
+            absorbedMediaRefs: []
+        )
+    }
+
     /// `Adjust` / card-body tap — toggle the in-place editor.
     private func toggleClusterExpanded(_ proposal: ClusterProposal) {
         let fp = proposal.fingerprint.rawValue
@@ -415,7 +433,8 @@ struct SessionListView: View {
                     onPlayClip: playOrStopClusterClip,
                     playingClipId: playingClipId,
                     onDismiss: handleClusterDismiss,
-                    onCommitAll: handleClusterBatchCommit
+                    onCommitAll: handleClusterBatchCommit,
+                    onAddToMemory: addClusterToMemory
                 )
                 LazyVStack(spacing: 12) {
                     ForEach(looseSessions) { session in
