@@ -40,18 +40,20 @@ struct TranscriptHeaderControl: View {
         "Transcript · \(clipCount) clips · \(wordCount.formatted()) words"
     }
 
-    private var toggle: some View {
+    private var toggle: some View { TranscriptModeToggle(mode: $mode) }
+}
+
+/// The two-icon **Compact/Full** segmented control. Extracted from
+/// `TranscriptHeaderControl` (2026-07-17) so Memory Detail *and* the expanded
+/// cluster card (§90) share the one affordance — reused, not minted per
+/// surface.
+struct TranscriptModeToggle: View {
+    @Binding var mode: TranscriptMode
+
+    var body: some View {
         HStack(spacing: 2) {
-            segmentButton(
-                target: .full,
-                systemImage: "text.alignleft",
-                a11yLabel: "Full transcript view"
-            )
-            segmentButton(
-                target: .compact,
-                systemImage: "list.bullet",
-                a11yLabel: "Compact index view"
-            )
+            segmentButton(target: .full, systemImage: "text.alignleft", a11yLabel: "Full transcript view")
+            segmentButton(target: .compact, systemImage: "list.bullet", a11yLabel: "Compact index view")
         }
         .padding(3)
         .background(Crucible.Color.sunk, in: RoundedRectangle(cornerRadius: 11))

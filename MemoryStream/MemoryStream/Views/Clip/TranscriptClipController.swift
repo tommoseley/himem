@@ -277,29 +277,25 @@ struct TranscriptClipController: View {
     }
 }
 
-/// The shared **✎ Edit** affordance for Memory Detail rows (2026-07-16
-/// layout ruling): a small blue *bordered box* button that reads as a
-/// button (not a text link, not tap-the-text). Visually compact so it sits
-/// right-aligned on the existing play/duration row without adding height;
-/// the tap target still clears 44px. Blue = routes to the editor.
+/// The shared **✎ Edit** affordance — the single edit standard on every clip
+/// row/card everywhere (cluster, Memory Detail Compact/Full, bench/session).
+/// **Icon-only pencil** (2026-07-17): no "Edit" label, just the ✎ glyph in a
+/// blue `#1E5C8E` hairline box so it reads as a button, not a text link. The
+/// visible box is compact (dense-scan tier); the tap target clears 44px.
 struct ClipEditButton: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: "pencil")
-                Text("Edit")
-            }
-            .font(.system(size: 12.5, weight: .medium))
-            .foregroundStyle(Crucible.Color.aiBlue)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .overlay(
-                RoundedRectangle(cornerRadius: 7)
-                    .stroke(Crucible.Color.aiBlue.opacity(0.45), lineWidth: 1)
-            )
-            .frame(minHeight: 44)          // Crucible 44px tap floor
-            .contentShape(Rectangle())
+            Image(systemName: "pencil")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Crucible.Color.aiBlue)
+                .frame(width: 34, height: 34)          // visible box
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(Crucible.Color.aiBlue.opacity(0.45), lineWidth: 1)
+                )
+                .frame(minWidth: 44, minHeight: 44)     // Crucible 44px tap floor
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit")

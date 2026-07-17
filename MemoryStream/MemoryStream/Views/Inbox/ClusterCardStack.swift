@@ -77,6 +77,21 @@ struct ClusterCardStack: View {
     /// clips. Fires only when at least one cluster has a kept clip.
     let onCommitAll: () -> Void
 
+    /// Per-cluster Compact/Full display mode (§90). Keyed by fingerprint;
+    /// absent → the multi-clip default of **Compact** (a big cluster must
+    /// never open as a wall of text). Display-only, not persisted.
+    @State private var clusterModes: [String: TranscriptMode] = [:]
+
+    private func mode(for proposal: ClusterProposal) -> TranscriptMode {
+        clusterModes[proposal.fingerprint.rawValue] ?? .compact
+    }
+    private func modeBinding(for proposal: ClusterProposal) -> Binding<TranscriptMode> {
+        Binding(
+            get: { clusterModes[proposal.fingerprint.rawValue] ?? .compact },
+            set: { clusterModes[proposal.fingerprint.rawValue] = $0 }
+        )
+    }
+
     var body: some View {
         if proposals.isEmpty {
             EmptyView()
@@ -136,7 +151,14 @@ struct ClusterCardStack: View {
                 .buttonStyle(.plain)
 
                 if expanded {
-                    editorRows(proposal)
+                    // §90: the same two-icon Compact/Full control as Memory
+                    // Detail, top-right above the rows. Multi-clip defaults
+                    // Compact. Reused, not minted.
+                    HStack {
+                        Spacer(minLength: 0)
+                        TranscriptModeToggle(mode: modeBinding(for: proposal))
+                    }
+                    editorRows(proposal, mode: mode(for: proposal))
                 } else if !proposal.previewLines.isEmpty {
                     previewLinesView(proposal)
                 }
@@ -195,7 +217,7 @@ struct ClusterCardStack: View {
     // MARK: - Expanded editor (§87 · subtractive, expand-in-place)
 
     @ViewBuilder
-    private func editorRows(_ proposal: ClusterProposal) -> some View {
+    private func editorRows(_ proposal: ClusterProposal, mode: TranscriptMode) -> some View {
         let clips = clipsFor(proposal)
         let removed = removedSet(proposal)
         let anchor = clips.map(\.capturedAt).min() ?? Date()
@@ -205,7 +227,7 @@ struct ClusterCardStack: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(kept.enumerated()), id: \.element.clipId) { idx, clip in
                 if idx > 0 { rowDivider }
-                clipEditorRow(proposal: proposal, clip: clip, anchor: anchor, isRemoved: false)
+                clipEditorRow(proposal: proposal, clip: clip, anchor: anchor, isRemoved: false, mode: mode)
             }
             if !gone.isEmpty {
                 Rectangle()
@@ -218,7 +240,7 @@ struct ClusterCardStack: View {
                     .padding(.bottom, 2)
                 ForEach(Array(gone.enumerated()), id: \.element.clipId) { idx, clip in
                     if idx > 0 { rowDivider }
-                    clipEditorRow(proposal: proposal, clip: clip, anchor: anchor, isRemoved: true)
+                    clipEditorRow(proposal: proposal, clip: clip, anchor: anchor, isRemoved: true, mode: mode)
                 }
             }
         }
@@ -230,46 +252,37 @@ struct ClusterCardStack: View {
     }
 
     /// One clip as a **compact single-open accordion row** (§89). Layout:
-    /// glyph · time · one-line preview · **boxed ✎ Edit** · play · chevron.
-    /// Row/chevron tap expands the transcript in place (reading, single-open);
-    /// the boxed ✎ Edit is the one edit affordance → the unified modal
-    /// (2026-07-17, supersedes Finding 3's row-tap-opens-modal). Set-aside
-    /// rows dim the **content only** — Edit/play/Add-back stay full-strength.
+    /// glyph · time · one-line preview · **boxed ✎ pencil** · Remove. Row tap
+    /// expands the transcript in place (reading, single-open); the boxed ✎
+    /// pencil is the one edit affordance → the unified modal, where playback +
+    /// scrub live (no inline Play on cluster rows, 2026-07-17). Set-aside rows
+    /// dim the **content only** — Edit/Add-back stay full-strength.
     @ViewBuilder
-    private func clipEditorRow(proposal: ClusterProposal, clip: InboxClip, anchor: Date, isRemoved: Bool) -> some View {
+    private func clipEditorRow(proposal: ClusterProposal, clip: InboxClip, anchor: Date, isRemoved: Bool, mode: TranscriptMode) -> some View {
         let model = ClipDisplayModel(inboxClip: clip, sessionStart: anchor)
         let isOpen = openClipId == clip.clipId
-        let isPlaying = playingClipId == clip.clipId
-        let hasAudio = !clip.audioFilename.isEmpty
         let transcript = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Full → every transcript wrapped, always. Compact → single-line
+        // preview + per-row accordion (§90).
+        let isFull = mode == .full
+        let showTranscript = isFull || isOpen
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                // Row content → expand-to-read (accordion) via the atom's own
-                // onTapGesture. Reading, not editing.
+                // Compact: row tap → expand-to-read (accordion). Full: the
+                // transcript is always shown below, so the row isn't a toggle.
                 ClipAtomView(model: model,
                              register: .reflectiveCompact,
-                             onTapContent: { onToggleClusterClip(clip.clipId) },
+                             onTapContent: isFull ? nil : { onToggleClusterClip(clip.clipId) },
                              isEmphasized: isOpen,
-                             hidePreview: isOpen)
+                             hidePreview: showTranscript)
                     .opacity(isRemoved ? 0.45 : 1)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // The one edit affordance — boxed ✎ Edit → modal.
+                // The one edit affordance — boxed ✎ pencil → modal (playback +
+                // scrub live in the modal, matching Memory Detail Compact;
+                // inline Play removed from cluster rows 2026-07-17).
                 ClipEditButton(action: { onOpenClip(.inbox(clip)) })
-
-                if hasAudio {
-                    Button {
-                        onPlayClip(clip)
-                    } label: {
-                        Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Crucible.Color.accent)
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
 
                 // Subtractive vocabulary (§187): Remove / reversible Add
                 // back. Full-strength, ≥44px even when content is dimmed.
@@ -286,8 +299,9 @@ struct ClusterCardStack: View {
                 .buttonStyle(.plain)
             }
 
-            // Expanded: full transcript in place (read-only — editing is ✎ Edit).
-            if isOpen && !transcript.isEmpty {
+            // Full transcript in place (read-only — editing is ✎). Shown on
+            // accordion-open (Compact) or always (Full).
+            if showTranscript && !transcript.isEmpty {
                 Text("\u{201C}\(transcript)\u{201D}")
                     .font(.system(size: 14))
                     .lineSpacing(2)
