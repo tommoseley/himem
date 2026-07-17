@@ -47,3 +47,32 @@ final class MemoryNavigationBus: ObservableObject {
 
     private init() {}
 }
+
+/// Session-scoped signal: "navigate to the Memories list filtered by
+/// this topic." Emitted when the user taps a topic **read chip** on an
+/// opened memory (the unified associations read model — read chips
+/// navigate to where each association lives; a topic lives in the
+/// Memories-list filter). Consumed by `HiMemTabView` (switch to the
+/// Memories tab) and the memories-instance `JournalView` (pop any pushed
+/// detail + set `selectedTopic`, driving the already-working filter).
+///
+/// Mirrors `pendingOpenMemoryId`'s two-observer shape. A topic chip can
+/// be tapped on a memory opened from *any* tab (Memories, or a member
+/// memory inside a Project), so the bus + tab switch is what makes the
+/// navigation uniform regardless of entry point.
+///
+/// Not persisted. Cleared by the consumer after routing.
+@MainActor
+final class TopicFilterBus: ObservableObject {
+    static let shared = TopicFilterBus()
+
+    /// Non-nil = route to Memories filtered by this topic name. The
+    /// memories `JournalView` clears it after applying the filter.
+    @Published var pendingTopicFilter: String? = nil
+
+    private init() {}
+
+    func request(_ topic: String) {
+        pendingTopicFilter = topic
+    }
+}

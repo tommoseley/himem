@@ -44,6 +44,8 @@ struct JournalView: View {
     /// Sessions Create-one-memory flow. Only the memories-mode
     /// instance responds (guarded in the `.onChange` handler).
     @ObservedObject private var memoryNavigation = MemoryNavigationBus.shared
+    /// Consumes topic read-chip navigation (memories instance only).
+    @ObservedObject private var topicFilter = TopicFilterBus.shared
     @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var activeCaptureModality: CaptureModality? = nil
@@ -217,6 +219,17 @@ struct JournalView: View {
             viewModel.refresh()
             selectedEntryId = pending
             memoryNavigation.pendingOpenMemoryId = nil
+        }
+        // Topic read-chip navigation (unified associations read model):
+        // a topic tapped on any opened memory routes here. Only the
+        // memories instance consumes it — pop any pushed detail back to
+        // the list, then set the filter (the same `selectedTopic` the
+        // top strip drives). HiMemTabView has already switched the tab.
+        .onChange(of: topicFilter.pendingTopicFilter) { _, pending in
+            guard let pending, viewMode == .memories else { return }
+            selectedEntryId = nil
+            viewModel.selectedTopic = pending
+            topicFilter.pendingTopicFilter = nil
         }
         } // NavigationStack
     }

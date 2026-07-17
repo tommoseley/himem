@@ -441,19 +441,20 @@ struct EntryExpandedView: View {
             // a fixed column width and the chip text wrapped inside.
             FlowLayout(spacing: 10) {
                 ForEach(currentTopics, id: \.self) { topic in
-                    // Per the unified-editing model (Tom 2026-06-09),
-                    // tap any topic chip → ManageTopicsSheet. The
-                    // dedicated "+ Edit" pill is retired; the entry
-                    // gesture is now tap-on-chip itself, exactly the
-                    // same gesture that's now used everywhere else in
-                    // the app for metadata management.
+                    // Unified associations read model (locked 2026-07-17):
+                    // a read chip NAVIGATES to where the association lives
+                    // — a topic → the Memories-list filter for that topic.
+                    // Management moved to the one dashed **Edit** below (no
+                    // longer tap-the-chip). Routing goes through the tab
+                    // shell so it works from a member memory opened inside
+                    // a Project too.
                     Button {
-                        showManageTopics = true
+                        TopicFilterBus.shared.request(topic)
                     } label: {
                         TopicChip(label: topic, state: .set)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Manage topic: \(topic)")
+                    .accessibilityLabel("Filter memories by topic: \(topic)")
                 }
                 // "+ Add" affordance — dashed border = add/provisional
                 // per the affordance vocabulary lock. Same sheet as
@@ -484,13 +485,12 @@ struct EntryExpandedView: View {
         }
     }
 
-    /// Dashed-ochre **+ Add** affordance — opens the topic management
-    /// sheet for adding a new topic. Per the unified-editing model
-    /// (Tom 2026-06-09), the dashed border still means
-    /// "add / provisional" per the affordance vocabulary lock; what
-    /// changed is the label from "+ Edit" to "+ Add" — tapping any
-    /// existing chip handles editing now, so the dedicated pill no
-    /// longer needs to overload that role.
+    /// Dashed-ochre **Edit** affordance — the ONE way into topic
+    /// management (unified associations read model, 2026-07-17). Read
+    /// chips now navigate (tap a topic → its filter), so add/remove is
+    /// no longer tap-the-chip; this dashed Edit is the single entry to
+    /// the manage sheet. The dashed border keeps its "add / manage"
+    /// meaning per the affordance vocabulary lock.
     private var addTopicAffordance: some View {
         Button {
             showManageTopics = true
@@ -498,7 +498,7 @@ struct EntryExpandedView: View {
             HStack(spacing: 5) {
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .semibold))
-                Text("Add")
+                Text("Edit")
                     .font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(Crucible.Color.accent)

@@ -60,6 +60,9 @@ struct HiMemTabView: View {
     /// successful save so the user lands on the freshly-created
     /// memory instead of the calm Clips list.
     @ObservedObject private var memoryNavigation = MemoryNavigationBus.shared
+    /// Routes a topic read-chip tap (from any tab's Memory Detail) to the
+    /// Memories tab's topic filter (unified associations read model).
+    @ObservedObject private var topicFilter = TopicFilterBus.shared
     /// Set true when `pendingReturnToClips` fires; consumed by the
     /// next Clips coachmark evaluation so guardrail #3 ("suppress the
     /// Clips coachmark when arriving from a capture") holds. Cleared
@@ -209,6 +212,15 @@ struct HiMemTabView: View {
         // `JournalView` clears it after routing so the tab switch
         // and the push don't race on nil.
         .onChange(of: memoryNavigation.pendingOpenMemoryId) { _, pending in
+            if pending != nil {
+                selection = .memories
+            }
+        }
+        // Topic read-chip tapped on an opened memory → route to the
+        // Memories tab so its JournalView can apply the topic filter
+        // (unified associations read model). The id is NOT cleared here;
+        // the memories JournalView clears it after applying the filter.
+        .onChange(of: topicFilter.pendingTopicFilter) { _, pending in
             if pending != nil {
                 selection = .memories
             }
