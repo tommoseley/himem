@@ -236,11 +236,11 @@ struct CompactClipRow: View {
     /// time + semibold preview weight the row inherits from the
     /// prior JSX spec.
     private var header: some View {
-        // Layout: glyph · time · preview · [✎ Edit] · chevron. The atom's own
-        // tap expands-to-read (no wrapping Button — that would let the atom's
-        // reflectiveCompact onTapGesture swallow it, the P1 bug). ✎ Edit is an
-        // independent, ALWAYS-visible sibling → the modal (2026-07-17). The
-        // chevron is a redundant expand target.
+        // Layout: glyph · time · preview · [✎ Edit]. No chevron (2026-07-17) —
+        // the atom's own tap expands-to-read (no wrapping Button — that would
+        // let the atom's reflectiveCompact onTapGesture swallow it, the P1
+        // bug); the open state reads from the emphasized/hidden preview. ✎ Edit
+        // is an independent, ALWAYS-visible sibling → the modal.
         HStack(spacing: 6) {
             // C1: when the row is expanded, hide the header's preview line so
             // it doesn't double-print above the full transcript body below.
@@ -255,14 +255,6 @@ struct CompactClipRow: View {
             if let onEdit {
                 ClipEditButton(action: onEdit)
             }
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
-                .rotationEffect(.degrees(isOpen ? 90 : 0))
-                .animation(.easeInOut(duration: 0.15), value: isOpen)
-                .frame(minWidth: 30, minHeight: 44)
-                .contentShape(Rectangle())
-                .onTapGesture { headerTap() }
         }
         .frame(minHeight: 52)
     }

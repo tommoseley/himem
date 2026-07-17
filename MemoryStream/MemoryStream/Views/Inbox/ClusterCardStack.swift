@@ -284,16 +284,6 @@ struct ClusterCardStack: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-
-                // Chevron: a redundant expand-to-read target; rotates on open.
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
-                    .rotationEffect(.degrees(isOpen ? 90 : 0))
-                    .animation(.easeInOut(duration: 0.15), value: isOpen)
-                    .frame(minWidth: 30, minHeight: 44)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onToggleClusterClip(clip.clipId) }
             }
 
             // Expanded: full transcript in place (read-only — editing is ✎ Edit).

@@ -617,14 +617,15 @@ enum ClipsListItem: Identifiable {
 /// pushes ClipDetailView on tap.
 struct ClipsListItemRow: View {
     let item: ClipsListItem
-    /// Tapping a clip opens the unified `ClipEditorModal` (sheet) — supersedes
-    /// the pushed `ClipDetailView` (Clip-editor cycle 2, July 16 2026).
+    /// The boxed ✎ Edit opens the unified `ClipEditorModal` (2026-07-17: ✎ Edit
+    /// is the one edit affordance; the row body is non-interactive — no
+    /// whole-row-to-edit).
     let onOpen: (MediaReference) -> Void
 
     var body: some View {
         switch item {
         case .single(let ref):
-            Button { onOpen(ref) } label: {
+            HStack(spacing: 8) {
                 Group {
                     if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
                         MediaClipRow(ref: ref)
@@ -632,13 +633,17 @@ struct ClipsListItemRow: View {
                         LooseClipRow(ref: ref)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                ClipEditButton(action: { onOpen(ref) })
             }
-            .buttonStyle(.plain)
         case .burst(let refs):
-            Button { if let first = refs.first { onOpen(first) } } label: {
+            HStack(spacing: 8) {
                 BurstRow(refs: refs)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let first = refs.first {
+                    ClipEditButton(action: { onOpen(first) })
+                }
             }
-            .buttonStyle(.plain)
         }
     }
 }
