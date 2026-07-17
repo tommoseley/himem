@@ -138,26 +138,26 @@ struct ClusterCardStack: View {
             reasonBand(proposal)
 
             VStack(alignment: .leading, spacing: 8) {
-                // Name row — a card-body tap toggles the editor (§87).
-                Button {
-                    onToggleExpand(proposal)
-                } label: {
-                    Text(proposal.proposedName)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.ink)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                if expanded {
-                    // §90: the same two-icon Compact/Full control as Memory
-                    // Detail, top-right above the rows. Multi-clip defaults
-                    // Compact. Reused, not minted.
-                    HStack {
-                        Spacer(minLength: 0)
+                // Name row — a card-body tap toggles the editor (§87). When
+                // expanded, the Compact/Full toggle (§90) sits right-aligned
+                // on the title row (reused from Memory Detail, not minted).
+                HStack(spacing: 8) {
+                    Button {
+                        onToggleExpand(proposal)
+                    } label: {
+                        Text(proposal.proposedName)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.ink)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if expanded {
                         TranscriptModeToggle(mode: modeBinding(for: proposal))
                     }
+                }
+
+                if expanded {
                     editorRows(proposal, mode: mode(for: proposal))
                 } else if !proposal.previewLines.isEmpty {
                     previewLinesView(proposal)
@@ -284,19 +284,18 @@ struct ClusterCardStack: View {
                 // inline Play removed from cluster rows 2026-07-17).
                 ClipEditButton(action: { onOpenClip(.inbox(clip)) })
 
-                // Subtractive vocabulary (§187): Remove / reversible Add
-                // back. Full-strength, ≥44px even when content is dimmed.
-                Button {
+                // Subtractive set-aside (§187) — a boxed ⊖ / ⊕ icon beside the
+                // pencil (✎ ⊖). minus.circle = set-aside, plus.circle = Add
+                // back. NOT a trash can: this trims cluster membership, it
+                // never deletes the clip (Delete lives in the modal).
+                RowIconButton(
+                    systemName: isRemoved ? "plus.circle" : "minus.circle",
+                    tint: Crucible.Color.ink3,
+                    accessibilityLabel: isRemoved ? "Add back to this memory" : "Set aside from this memory"
+                ) {
                     if isRemoved { onReAddClip(proposal, clip.clipId) }
                     else { onRemoveClip(proposal, clip.clipId) }
-                } label: {
-                    Text(isRemoved ? "Add back" : "Remove")
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(Crucible.Color.aiBlue)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
             }
 
             // Full transcript in place (read-only — editing is ✎). Shown on

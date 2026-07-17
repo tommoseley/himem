@@ -277,27 +277,39 @@ struct TranscriptClipController: View {
     }
 }
 
-/// The shared **✎ Edit** affordance — the single edit standard on every clip
-/// row/card everywhere (cluster, Memory Detail Compact/Full, bench/session).
-/// **Icon-only pencil** (2026-07-17): no "Edit" label, just the ✎ glyph in a
-/// blue `#1E5C8E` hairline box so it reads as a button, not a text link. The
-/// visible box is compact (dense-scan tier); the tap target clears 44px.
-struct ClipEditButton: View {
+/// A boxed, icon-only row control (2026-07-17): an SF Symbol in a hairline
+/// rounded box so it reads as a button, not a text link. The visible box is
+/// compact (dense-scan tier); the tap target clears 44px. The single standard
+/// for per-clip-row actions everywhere (cluster, Memory Detail, bench).
+struct RowIconButton: View {
+    let systemName: String
+    var tint: Color = Crucible.Color.aiBlue
+    let accessibilityLabel: String
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Image(systemName: "pencil")
+            Image(systemName: systemName)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Crucible.Color.aiBlue)
+                .foregroundStyle(tint)
                 .frame(width: 34, height: 34)          // visible box
                 .overlay(
                     RoundedRectangle(cornerRadius: 7)
-                        .stroke(Crucible.Color.aiBlue.opacity(0.45), lineWidth: 1)
+                        .stroke(tint.opacity(0.45), lineWidth: 1)
                 )
                 .frame(minWidth: 44, minHeight: 44)     // Crucible 44px tap floor
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Edit")
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+/// The shared **✎ Edit** affordance — the single edit standard on every clip
+/// row/card everywhere. Icon-only pencil in a blue `#1E5C8E` hairline box.
+struct ClipEditButton: View {
+    let action: () -> Void
+    var body: some View {
+        RowIconButton(systemName: "pencil", tint: Crucible.Color.aiBlue,
+                      accessibilityLabel: "Edit", action: action)
     }
 }

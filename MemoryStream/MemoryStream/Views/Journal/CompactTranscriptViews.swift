@@ -51,9 +51,11 @@ struct TranscriptModeToggle: View {
     @Binding var mode: TranscriptMode
 
     var body: some View {
+        // Compact (line-item) LEFT = default; Full (detail) RIGHT — identical
+        // order in Memory Detail and the cluster card (2026-07-17).
         HStack(spacing: 2) {
-            segmentButton(target: .full, systemImage: "text.alignleft", a11yLabel: "Full transcript view")
             segmentButton(target: .compact, systemImage: "list.bullet", a11yLabel: "Compact index view")
+            segmentButton(target: .full, systemImage: "text.alignleft", a11yLabel: "Full transcript view")
         }
         .padding(3)
         .background(Crucible.Color.sunk, in: RoundedRectangle(cornerRadius: 11))
