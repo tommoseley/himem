@@ -31,6 +31,11 @@ struct CreateMemoryFromClipsSheet: View {
     /// idle-gap lock). Empty when the session had no absorbed
     /// media or the user deselected them all.
     var absorbedMediaRefs: [MediaReference] = []
+    /// Seeds the Title field when placing from a Sort cluster (the cluster's
+    /// proposed title, e.g. "Kingfisher Wharf"). Editable; clearing it falls
+    /// back to the AI-suggest default. `nil` for single loose clips — they
+    /// keep the optional / AI-suggest default. (2026-07-17, §Sort.)
+    var prefillTitle: String? = nil
     @ObservedObject var viewModel: JournalViewModel
 
     @State private var destination: Destination = .newMemory
@@ -112,12 +117,17 @@ struct CreateMemoryFromClipsSheet: View {
                 }
             }
             .onAppear {
-                // Forward-looking placeholder: when the AI title fetch
-                // lands, populate `aiSuggestedTitle` here and seed
-                // `title` from it. Until then, the field stays empty
-                // with the suggestion helper.
-                if title.isEmpty, let suggestion = aiSuggestedTitle {
-                    title = suggestion
+                // Cluster placement seeds the Title with the cluster's proposed
+                // title (editable; clearing it falls back to AI-suggest). Single
+                // loose clips have no prefill and keep the AI-suggest default.
+                // Forward-looking: when the AI title fetch lands, populate
+                // `aiSuggestedTitle` and it seeds here when nothing else has.
+                if title.isEmpty {
+                    if let prefillTitle, !prefillTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        title = prefillTitle
+                    } else if let suggestion = aiSuggestedTitle {
+                        title = suggestion
+                    }
                 }
             }
         }

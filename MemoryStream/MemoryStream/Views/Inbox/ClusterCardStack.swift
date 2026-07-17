@@ -75,13 +75,11 @@ struct ClusterCardStack: View {
 
     /// `Keep these · N memories` — batch-commit every cluster's *kept*
     /// clips. Fires only when at least one cluster has a kept clip.
-    let onCommitAll: () -> Void
-
-    /// `Add to a memory…` — the quiet secondary placement path for a single
-    /// cluster's kept clips (set-aside excluded). Opens the shared placement
-    /// sheet (Start a new memory / add to existing). The ochre `Keep these · N`
-    /// stays the single primary (accept-all-as-new); this is the exception
-    /// path. (2026-07-17, §Sort-is-the-moment.)
+    /// `Add to a memory…` — the placement action for a single cluster's kept
+    /// clips (set-aside excluded). Opens the shared placement sheet (New
+    /// memory / add to existing) with the cluster's title prefilled. This is
+    /// the ONLY commit — the batch "Keep these · N" bar is retired (2026-07-17,
+    /// §Sort). Present on the collapsed teaser and the expanded card.
     let onAddToMemory: (ClusterProposal) -> Void
 
     /// Per-cluster Compact/Full display mode (§90). Keyed by fingerprint;
@@ -108,7 +106,6 @@ struct ClusterCardStack: View {
                 ForEach(proposals, id: \.fingerprint.rawValue) { proposal in
                     clusterCard(proposal)
                 }
-                commitBar
             }
             .padding(.bottom, 12)
         }
@@ -331,21 +328,11 @@ struct ClusterCardStack: View {
     // MARK: - Secondary row (Adjust toggle + Not together)
 
     private func secondaryRow(_ proposal: ClusterProposal, expanded: Bool) -> some View {
+        // Bottom row: Show all N ⌄ · Add to a memory… · Not together — on both
+        // the collapsed teaser and the expanded card. "Add to a memory…" is
+        // the placement action (the batch commit bar is retired).
         HStack(spacing: 18) {
             Spacer()
-            if expanded {
-                // Quiet secondary placement path — opens the shared sheet
-                // (Start a new memory / add to existing) on the cluster's kept
-                // clips. Ochre "Keep these · N" stays the primary.
-                Button {
-                    onAddToMemory(proposal)
-                } label: {
-                    Text("Add to a memory…")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Crucible.Color.aiBlue)
-                }
-                .buttonStyle(.plain)
-            }
             Button {
                 onToggleExpand(proposal)
             } label: {
@@ -365,6 +352,16 @@ struct ClusterCardStack: View {
                 .foregroundStyle(Crucible.Color.aiBlue)
             }
             .buttonStyle(.plain)
+            // The placement action — opens the shared sheet (New memory / add
+            // to existing) on the cluster's kept clips, title prefilled.
+            Button {
+                onAddToMemory(proposal)
+            } label: {
+                Text("Add to a memory…")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Crucible.Color.aiBlue)
+            }
+            .buttonStyle(.plain)
             Button {
                 onDismiss(proposal)
             } label: {
@@ -375,42 +372,5 @@ struct ClusterCardStack: View {
             .buttonStyle(.plain)
         }
         .padding(.top, 4)
-    }
-
-    // MARK: - Commit bar (live N, disabled when nothing kept)
-
-    private var committableCount: Int {
-        ClusterTrim.committableCount(proposals: proposals, removedByFingerprint: removedByFingerprint)
-    }
-
-    private var commitBar: some View {
-        let n = committableCount
-        let disabled = n == 0
-        return Button {
-            if !disabled { onCommitAll() }
-        } label: {
-            HStack(spacing: 8) {
-                Text(commitLabel(n))
-                    .font(.system(size: 15.5, weight: .semibold))
-                if !disabled {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .bold))
-                }
-            }
-            .foregroundStyle(Crucible.Color.accentInk)
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(Crucible.Color.accent.opacity(disabled ? 0.4 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .padding(.top, 4)
-    }
-
-    private func commitLabel(_ n: Int) -> String {
-        guard n > 0 else { return "Nothing found to keep" }
-        let noun = n == 1 ? "memory" : "memories"
-        return "Keep these · \(n) \(noun)"
     }
 }

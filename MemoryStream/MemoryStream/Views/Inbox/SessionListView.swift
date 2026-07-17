@@ -94,6 +94,11 @@ struct SessionListView: View {
         /// memory that actually contains all three clips. Empty
         /// when the session has no absorbed media.
         let absorbedMediaRefs: [MediaReference]
+        /// Seeds the sheet's Title field when placing a cluster (the cluster's
+        /// proposed title, e.g. "Kingfisher Wharf"). Editable; clearing it
+        /// falls back to the AI-suggest default. `nil` for single loose bench
+        /// clips (keep the optional/AI-suggest default). (2026-07-17, §Sort.)
+        var prefillTitle: String? = nil
     }
 
     var body: some View {
@@ -116,6 +121,7 @@ struct SessionListView: View {
                 clips: request.clipsToBundle,
                 session: request.session,
                 absorbedMediaRefs: request.absorbedMediaRefs,
+                prefillTitle: request.prefillTitle,
                 viewModel: viewModel
             )
         }
@@ -283,7 +289,8 @@ struct SessionListView: View {
         bundleSession = BundleRequest(
             session: ClipGroup(clips: kept),
             clipsToBundle: kept,
-            absorbedMediaRefs: []
+            absorbedMediaRefs: [],
+            prefillTitle: proposal.proposedName
         )
     }
 
@@ -326,47 +333,6 @@ struct SessionListView: View {
     private func playOrStopClusterClip(_ clip: InboxClip) {
         if playingClipId == clip.clipId { stopPlayback() }
         else { playClip(clip) }
-    }
-
-    /// "Keep these · N memories" tap — resolve each proposal to its
-    /// live clips, batch commit via `SortBatchCommit`. Clips leave
-    /// the manifest on success; the ClusterCardStack disappears
-    /// naturally because the proposer no longer sees the placed
-    /// clipIds.
-    ///
-    /// **Deferred to the next runloop tick.** The commit shrinks
-    /// `proposals` to empty (all clips placed), which causes
-    /// `ClusterCardStack` to render `EmptyView`. If we mutate
-    /// `InboxManifest.shared` synchronously inside the button's
-    /// tap closure, SwiftUI can tear down the button's parent view
-    /// mid-callback and render the whole ScrollView blank until
-    /// the next tick — the "went dark with just the back button"
-    /// symptom Tom reported after committing 8 clips into one
-    /// memory (July 4 2026). Deferring lets the button action
-    /// return before the view hierarchy churns.
-    ///
-    /// Also forces `sessions` to recompute at the end as belt-and-
-    /// braces against the `.onChange(of: inbox.clips)` observer
-    /// firing on a beat that misses the render window.
-    private func handleClusterBatchCommit() {
-        let byClipId: [UUID: InboxClip] = Dictionary(uniqueKeysWithValues: inbox.clips.map { ($0.clipId, $0) })
-        // Apply the transient trim: commit only each cluster's KEPT clips,
-        // dropping any cluster trimmed to empty (never commit an empty
-        // memory). Removed clips are never handed to SortBatchCommit — and
-        // SortBatchCommit removes only the clips it commits — so a trimmed
-        // clip stays in the inbox as a loose clip.
-        let kept = ClusterTrim.keptForCommit(proposals: proposals, removedByFingerprint: removedByFingerprint)
-        let resolved: [(proposal: ClusterProposal, clips: [InboxClip])] = kept.map { entry in
-            (entry.proposal, entry.keptClipIds.compactMap { byClipId[$0] })
-        }
-        guard !resolved.isEmpty else { return }
-        DispatchQueue.main.async {
-            SortBatchCommit.commit(resolved, viewModel: viewModel, storage: StorageService.shared)
-            self.removedByFingerprint = [:]
-            self.expandedClusterFingerprints = []
-            self.openClusterClipId = nil
-            self.sessions = self.computeSessions()
-        }
     }
 
     // MARK: - Empty state
@@ -433,7 +399,6 @@ struct SessionListView: View {
                     onPlayClip: playOrStopClusterClip,
                     playingClipId: playingClipId,
                     onDismiss: handleClusterDismiss,
-                    onCommitAll: handleClusterBatchCommit,
                     onAddToMemory: addClusterToMemory
                 )
                 // The ochre "Keep these · N" is the FOOTER of the proposals
