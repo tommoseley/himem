@@ -33,33 +33,30 @@ struct ProjectDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Title — serif 30pt per `ProjectTitleBlock`. Tap to
-                // open EditProjectSheet (unified editing model: no pen,
-                // tap text to edit). `.contentShape` extends the tap
-                // hit to the full leading width.
-                Text(project?.name ?? "")
-                    .font(.system(size: 30, design: .serif))
-                    .tracking(-0.5)
-                    .lineSpacing(2)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture { editSheetFocus = .name }
-                    .accessibilityHint("Double tap to edit the project name and goal")
+                // Title — serif 30pt. F4 (2026-07-17): the boxed ✎ Edit is
+                // the ONE edit affordance (matching ✎ on every clip surface);
+                // the title text is NOT tap-to-edit. Editing routes to the
+                // EditProjectSheet.
+                HStack(alignment: .top, spacing: 10) {
+                    Text(project?.name ?? "")
+                        .font(.system(size: 30, design: .serif))
+                        .tracking(-0.5)
+                        .lineSpacing(2)
+                        .foregroundStyle(Crucible.Color.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ClipEditButton(action: { editSheetFocus = .name })
+                }
 
-                // Goal — italic serif when present (tap to edit),
-                // dashed "+ Add a goal" affordance when empty. Either
-                // path opens the Edit Project sheet with the goal
-                // field pre-focused.
+                // Goal — italic serif when present (read-only; edited via the
+                // ✎ Edit button, not tap-the-text, F4). Dashed "+ Add a goal"
+                // add-affordance when empty (dashed = add/provisional, an
+                // allowed invite — distinct from tap-the-content).
                 if let purpose = project?.purpose, !purpose.isEmpty {
                     Text(purpose)
                         .font(.system(size: 13, design: .serif).italic())
                         .foregroundStyle(Crucible.Color.ink2)
                         .lineSpacing(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture { editSheetFocus = .goal }
-                        .accessibilityHint("Double tap to edit the project goal")
                 } else {
                     Button {
                         editSheetFocus = .goal
@@ -248,6 +245,12 @@ struct ProjectDetailView: View {
                         purpose: newGoal.isEmpty ? nil : newGoal
                     )
                     loadProject()
+                },
+                onFindTheThread: {
+                    // Run the assist so the summary lands on the detail
+                    // (its home) after the sheet dismisses. Plus-gated;
+                    // Free routes to Pricing — same as the detail button.
+                    handleFindTheThreadTap()
                 }
             )
         }

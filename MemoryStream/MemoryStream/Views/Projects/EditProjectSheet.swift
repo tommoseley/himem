@@ -8,9 +8,11 @@ import SwiftUI
 /// > **Projects · Edit sheet** — Name, Goal (real fields, ochre focus);
 /// > topics are derived, read-only (not edited here); Cancel / Save nav.
 ///
-/// Reached from Project Detail by tapping the title text or the goal
-/// text (or the dashed "+ Add a goal" affordance when the goal is
-/// empty). The pen button on Project Detail is gone.
+/// Reached from Project Detail via the boxed **✎ Edit** button beside the
+/// header (F4, 2026-07-17 — the one edit affordance; title/goal text are NOT
+/// tap-to-edit), or the dashed "+ Add a goal" affordance when the goal is
+/// empty. Also carries the Find-the-thread trigger (AI action reachable from
+/// edit; the summary renders on the detail).
 ///
 /// **Topics on this sheet are intentionally read-only.** A project's
 /// topic chips are *derived* from its member memories — managing them
@@ -27,6 +29,11 @@ struct EditProjectSheet: View {
     /// topics live, but they can't be edited from here.
     let derivedTopics: [String]
     let onSave: (_ name: String, _ goal: String) -> Void
+    /// F4 (2026-07-17): the AI action reachable from edit. A trigger only —
+    /// the thread's summary/suggestions render in their existing home on the
+    /// project detail, not here (one surface per concept). Saves + dismisses,
+    /// then runs on the detail. nil hides the button.
+    let onFindTheThread: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -42,13 +49,15 @@ struct EditProjectSheet: View {
         initialGoal: String,
         derivedTopics: [String],
         focus: FocusTarget = .name,
-        onSave: @escaping (_ name: String, _ goal: String) -> Void
+        onSave: @escaping (_ name: String, _ goal: String) -> Void,
+        onFindTheThread: (() -> Void)? = nil
     ) {
         self.projectId = projectId
         self.initialName = initialName
         self.initialGoal = initialGoal
         self.derivedTopics = derivedTopics
         self.onSave = onSave
+        self.onFindTheThread = onFindTheThread
         _name = State(initialValue: initialName)
         _goal = State(initialValue: initialGoal)
         _initialFocus = State(initialValue: focus)
@@ -69,6 +78,9 @@ struct EditProjectSheet: View {
                 goalField
                 if !derivedTopics.isEmpty {
                     derivedTopicsRow
+                }
+                if onFindTheThread != nil {
+                    findTheThreadButton
                 }
                 Spacer(minLength: 0)
             }
@@ -162,6 +174,38 @@ struct EditProjectSheet: View {
                 .foregroundStyle(Crucible.Color.ink4)
                 .padding(.leading, 4)
         }
+    }
+
+    /// Find the thread — a blue AI *trigger* (named verb + trailing sparkle).
+    /// Saves any pending name/goal edit, dismisses, then runs the assist so
+    /// its summary lands on the project detail (the thread's home).
+    @ViewBuilder
+    private var findTheThreadButton: some View {
+        Button {
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedName.isEmpty {
+                onSave(trimmedName, goal.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            dismiss()
+            onFindTheThread?()
+        } label: {
+            HStack(spacing: 8) {
+                Text("Find the thread")
+                    .font(.system(size: 14.5, weight: .semibold))
+                    .tracking(-0.1)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.aiBlue)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 46)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Crucible.Color.aiBlue, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Find the thread with AI")
     }
 
     @ViewBuilder
