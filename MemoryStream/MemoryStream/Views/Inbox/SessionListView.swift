@@ -31,9 +31,11 @@ struct SessionListView: View {
     /// day-grouped stack (avoids double-rendering).
     @State private var absorbedMediaBySessionId: [UUID: [MediaReference]] = [:]
     @State private var bundleSession: BundleRequest? = nil
-    // Clip-editor cycle 2: tapping a clip's content opens the unified
-    // ClipEditorModal as a sheet, superseding the pushed ClipDetailView.
+    // Clip-editor cycle 2: the boxed ✎ Edit opens the unified ClipEditorModal
+    // as a sheet, superseding the pushed ClipDetailView.
     @State private var editingClip: ClipEditorModal.Source? = nil
+    // Cluster-editor single-open accordion (row/chevron tap expands-to-read).
+    @State private var openClusterClipId: UUID? = nil
     @State private var playingClipId: UUID? = nil
     @State private var player: AVAudioPlayer? = nil
     /// Tracks whether THIS view activated the audio session. Only
@@ -277,6 +279,12 @@ struct SessionListView: View {
         }
     }
 
+    /// Single-open accordion toggle for a cluster editor row — opening one
+    /// clip's transcript collapses the prior (reading; editing is ✎ Edit).
+    private func toggleClusterClip(_ clipId: UUID) {
+        openClusterClipId = (openClusterClipId == clipId) ? nil : clipId
+    }
+
     /// `Remove` — set a clip aside within the cluster (transient trim,
     /// a per-clip "Not together"). Reversible via `reAddClipToCluster`.
     private func removeClipFromCluster(_ proposal: ClusterProposal, _ clipId: UUID) {
@@ -338,6 +346,7 @@ struct SessionListView: View {
             SortBatchCommit.commit(resolved, viewModel: viewModel, storage: StorageService.shared)
             self.removedByFingerprint = [:]
             self.expandedClusterFingerprints = []
+            self.openClusterClipId = nil
             self.sessions = self.computeSessions()
         }
     }
@@ -401,6 +410,8 @@ struct SessionListView: View {
                     onRemoveClip: removeClipFromCluster,
                     onReAddClip: reAddClipToCluster,
                     onOpenClip: { editingClip = $0 },
+                    openClipId: openClusterClipId,
+                    onToggleClusterClip: toggleClusterClip,
                     onPlayClip: playOrStopClusterClip,
                     playingClipId: playingClipId,
                     onDismiss: handleClusterDismiss,

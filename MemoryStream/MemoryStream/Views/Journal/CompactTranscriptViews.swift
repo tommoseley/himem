@@ -177,39 +177,33 @@ struct CompactClipRow: View {
             header
             if isOpen, let fullBody = Self.expandedBody(for: item) {
                 expandedTranscriptArea(fallback: fullBody)
-                // Expanded-state control lane: Play (voice) on the left, the
-                // quiet blue ✎ Edit affordance on the right. Only rendered
-                // when the row is open — collapsed rows stay clean.
-                HStack(spacing: 8) {
-                    if let onPlay, item.mediaType == .voice {
-                        // Play footer present in read AND edit (spec rule #8).
-                        // E3 alignment: same glyph shape as the atom's
-                        // reflective namedPlay (`play`, not `play.circle`),
-                        // same tint discipline (accent triangle, ink3 label).
-                        Button(action: onPlay) {
-                            HStack(spacing: 8) {
-                                Image(systemName: isPlaying ? "stop.fill" : "play")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(Crucible.Color.accent)
-                                Text(TranscriptClipController.playFooterLabel(duration: audioDuration))
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Crucible.Color.ink3)
-                            }
-                            .contentShape(Rectangle())
+                // Expanded-state play footer (voice). ✎ Edit is NOT here — it
+                // lives always-visible in the header (2026-07-17).
+                if let onPlay, item.mediaType == .voice {
+                    // Play footer present in read AND edit (spec rule #8).
+                    // E3 alignment: same glyph shape as the atom's reflective
+                    // namedPlay (`play`, not `play.circle`), same tint
+                    // discipline (accent triangle, ink3 label).
+                    Button(action: onPlay) {
+                        HStack(spacing: 8) {
+                            Image(systemName: isPlaying ? "stop.fill" : "play")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Crucible.Color.accent)
+                            Text(TranscriptClipController.playFooterLabel(duration: audioDuration))
+                                .font(.system(size: 13))
+                                .foregroundStyle(Crucible.Color.ink3)
+                            Spacer(minLength: 0)
                         }
-                        .buttonStyle(.plain)
-                        .frame(minHeight: 44)
-                        .accessibilityLabel(TranscriptClipController.playFooterAccessibilityLabel(duration: audioDuration))
-                        .task(id: item.id) { await loadAudioDurationIfNeeded() }
+                        .contentShape(Rectangle())
                     }
-                    Spacer(minLength: 0)
-                    if let onEdit {
-                        ClipEditButton(action: onEdit)
-                    }
+                    .buttonStyle(.plain)
+                    .frame(minHeight: 44)
+                    .accessibilityLabel(TranscriptClipController.playFooterAccessibilityLabel(duration: audioDuration))
+                    .task(id: item.id) { await loadAudioDurationIfNeeded() }
+                    .padding(.top, 2)
+                    .padding(.bottom, 12)
+                    .padding(.horizontal, 4)
                 }
-                .padding(.top, 2)
-                .padding(.bottom, 12)
-                .padding(.horizontal, 4)
             }
         }
         .padding(.horizontal, 12)
@@ -242,34 +236,42 @@ struct CompactClipRow: View {
     /// time + semibold preview weight the row inherits from the
     /// prior JSX spec.
     private var header: some View {
-        Button(action: {
-            if editingDraft != nil { commitDraft() }
-            onTap()
-        }) {
-            HStack(spacing: 6) {
-                // C1: when the row is expanded, hide the header's
-                // preview line so it doesn't double-print above
-                // the full transcript in the body below. T5: time
-                // stays one color — the chevron rotation is the
-                // open-state cue, no ochre time swap.
-                ClipAtomView(
-                    model: ClipDisplayModel(mediaDisplayItem: item, duration: audioDuration, sessionStart: nil),
-                    register: .reflectiveCompact,
-                    isEmphasized: isOpen,
-                    hidePreview: isOpen
-                )
-                .frame(maxWidth: .infinity)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
-                    .rotationEffect(.degrees(isOpen ? 90 : 0))
-                    .animation(.easeInOut(duration: 0.15), value: isOpen)
-                    .padding(.trailing, 4)
+        // Layout: glyph · time · preview · [✎ Edit] · chevron. The atom's own
+        // tap expands-to-read (no wrapping Button — that would let the atom's
+        // reflectiveCompact onTapGesture swallow it, the P1 bug). ✎ Edit is an
+        // independent, ALWAYS-visible sibling → the modal (2026-07-17). The
+        // chevron is a redundant expand target.
+        HStack(spacing: 6) {
+            // C1: when the row is expanded, hide the header's preview line so
+            // it doesn't double-print above the full transcript body below.
+            ClipAtomView(
+                model: ClipDisplayModel(mediaDisplayItem: item, duration: audioDuration, sessionStart: nil),
+                register: .reflectiveCompact,
+                onTapContent: { headerTap() },
+                isEmphasized: isOpen,
+                hidePreview: isOpen
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let onEdit {
+                ClipEditButton(action: onEdit)
             }
-            .contentShape(Rectangle())
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
+                .rotationEffect(.degrees(isOpen ? 90 : 0))
+                .animation(.easeInOut(duration: 0.15), value: isOpen)
+                .frame(minWidth: 30, minHeight: 44)
+                .contentShape(Rectangle())
+                .onTapGesture { headerTap() }
         }
-        .buttonStyle(.plain)
         .frame(minHeight: 52)
+    }
+
+    /// Row/chevron tap → expand-to-read (commits any in-flight legacy draft
+    /// first). Reading only — editing is the ✎ Edit button.
+    private func headerTap() {
+        if editingDraft != nil { commitDraft() }
+        onTap()
     }
 
     /// Either the read-mode transcript body (tap-to-edit when a

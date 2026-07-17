@@ -49,13 +49,19 @@ struct ClusterCardStack: View {
     /// `Add back` on a set-aside row — undo the trim.
     let onReAddClip: (ClusterProposal, UUID) -> Void
 
-    /// Tap a compact row — open the unified Clip Editor modal for that clip
-    /// (Finding 3, 2026-07-16: the chevron promises tap-to-open, so honor it;
-    /// brought forward now that the modal exists — supersedes the in-place
-    /// transcript accordion and the post-v1 "row-tap → Clip Detail" deferral,
-    /// matching the session rows cycle 2 already wired). Play/Remove stay
-    /// independent controls on the row.
+    /// Opens the unified Clip Editor modal — fired ONLY by the boxed ✎ Edit
+    /// button (2026-07-17: ✎ Edit is the one edit affordance everywhere;
+    /// supersedes Finding 3's row-tap-opens-modal). Play/Remove stay
+    /// independent; the row tap/chevron expands-to-read in place (accordion).
     let onOpenClip: (ClipEditorModal.Source) -> Void
+
+    /// Single-open accordion — the clipId whose transcript is expanded in
+    /// place (nil = all collapsed). Container-owned by `SessionListView`.
+    let openClipId: UUID?
+
+    /// Tap a compact row / chevron — toggle its transcript open (single-open:
+    /// opening one collapses the prior). Reading only — editing is ✎ Edit.
+    let onToggleClusterClip: (UUID) -> Void
 
     /// Play/stop a clip's audio from its compact row.
     let onPlayClip: (InboxClip) -> Void
@@ -223,41 +229,34 @@ struct ClusterCardStack: View {
         Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
     }
 
-    /// One clip as a **compact reflective row** (§87). Layout: glyph + time +
-    /// one-line preview + play + Remove + chevron. Tapping the row opens the
-    /// unified Clip Editor modal (Finding 3, 2026-07-16 — the chevron is a
-    /// tap-to-open promise; the in-place transcript accordion is retired now
-    /// that the modal reads *and* edits the clip). Set-aside rows dim the
-    /// **content only** — play/Add-back stay full-strength at ≥44px.
+    /// One clip as a **compact single-open accordion row** (§89). Layout:
+    /// glyph · time · one-line preview · **boxed ✎ Edit** · play · chevron.
+    /// Row/chevron tap expands the transcript in place (reading, single-open);
+    /// the boxed ✎ Edit is the one edit affordance → the unified modal
+    /// (2026-07-17, supersedes Finding 3's row-tap-opens-modal). Set-aside
+    /// rows dim the **content only** — Edit/play/Add-back stay full-strength.
     @ViewBuilder
     private func clipEditorRow(proposal: ClusterProposal, clip: InboxClip, anchor: Date, isRemoved: Bool) -> some View {
         let model = ClipDisplayModel(inboxClip: clip, sessionStart: anchor)
+        let isOpen = openClipId == clip.clipId
         let isPlaying = playingClipId == clip.clipId
         let hasAudio = !clip.audioFilename.isEmpty
+        let transcript = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                // Row content → open the modal via ClipAtomView's OWN
-                // `onTapContent` — the proven bench mechanism (SessionListView
-                // rows 888/947). An OUTER Button does NOT work here:
-                // `reflectiveCompactRow` attaches its own *unconditional*
-                // `.onTapGesture { onTapContent?() }` (ClipAtomView.swift:266),
-                // which swallows every tap over the glyph/time/preview area and
-                // starves any wrapping Button — so the row *looked* wired in
-                // source but was dead at runtime (Finding 3 P1, 2026-07-16).
-                // Play/Remove stay independent controls after it in the HStack.
+                // Row content → expand-to-read (accordion) via the atom's own
+                // onTapGesture. Reading, not editing.
                 ClipAtomView(model: model,
                              register: .reflectiveCompact,
-                             onTapContent: { onOpenClip(.inbox(clip)) })
+                             onTapContent: { onToggleClusterClip(clip.clipId) },
+                             isEmphasized: isOpen,
+                             hidePreview: isOpen)
                     .opacity(isRemoved ? 0.45 : 1)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                // The chevron is the tap-to-open promise — its own ≥44 target.
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Crucible.Color.ink3)
-                    .frame(minWidth: 30, minHeight: 44)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onOpenClip(.inbox(clip)) }
+
+                // The one edit affordance — boxed ✎ Edit → modal.
+                ClipEditButton(action: { onOpenClip(.inbox(clip)) })
 
                 if hasAudio {
                     Button {
@@ -285,6 +284,28 @@ struct ClusterCardStack: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+
+                // Chevron: a redundant expand-to-read target; rotates on open.
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isOpen ? Crucible.Color.accent : Crucible.Color.ink3)
+                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                    .animation(.easeInOut(duration: 0.15), value: isOpen)
+                    .frame(minWidth: 30, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onToggleClusterClip(clip.clipId) }
+            }
+
+            // Expanded: full transcript in place (read-only — editing is ✎ Edit).
+            if isOpen && !transcript.isEmpty {
+                Text("\u{201C}\(transcript)\u{201D}")
+                    .font(.system(size: 14))
+                    .lineSpacing(2)
+                    .foregroundStyle(Crucible.Color.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(isRemoved ? 0.45 : 1)
+                    .padding(.bottom, 8)
+                    .padding(.horizontal, 4)
             }
         }
     }
