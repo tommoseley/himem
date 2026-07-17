@@ -65,6 +65,7 @@ final class OnDeviceOrganizer: Organizer {
     - Do not add reasons, purposes, or causes the clips don't state. No "to ___," no "because ___."
     - Photo and video clips are not visible. Do not describe their visual content. Reference them by count only.
     - Topic selection: when the input lists the user's existing topics, prefer one of those exact labels if any fits this memory. Coin a new topic only when none of the existing topics reasonably fit.
+    - Mention selection: when the input lists people, places, and projects the user has mentioned before, prefer one of those exact names if the memory refers to the same one. Coin a new mention only when none of the existing ones match.
 
     Generate: title, summary, topics, mentions.
     """
@@ -128,7 +129,11 @@ final class OnDeviceOrganizer: Organizer {
         }
 
         let session = LanguageModelSession(instructions: Self.promptInstructions)
-        let promptInput = Self.formatPrompt(content: content, existingTopics: existingTopics)
+        let promptInput = Self.formatPrompt(
+            content: content,
+            existingTopics: existingTopics,
+            existingMentions: existingMentions
+        )
         do {
             let response = try await session.respond(
                 to: promptInput,
@@ -186,30 +191,51 @@ final class OnDeviceOrganizer: Organizer {
     /// Internal (not `private`) so the prompt-shape money tests in
     /// `OnDeviceOrganizerPromptTests` can exercise every cell of the
     /// palette / no-palette / whitespace-padding matrix.
-    static func formatPrompt(content: String, existingTopics: [String]) -> String {
-        let trimmedTopics = existingTopics
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let paletteSection: String
-        if trimmedTopics.isEmpty {
-            paletteSection = ""
-        } else {
-            let bulleted = trimmedTopics.map { "- \($0)" }.joined(separator: "\n")
-            paletteSection = """
-
-
-            Existing topics in this user's library (prefer one of these if any fits):
-            \(bulleted)
-            """
-        }
+    static func formatPrompt(
+        content: String,
+        existingTopics: [String],
+        existingMentions: [String] = []
+    ) -> String {
+        let topicsSection = paletteSection(
+            entries: existingTopics,
+            header: "Existing topics in this user's library (prefer one of these if any fits):"
+        )
+        // Mentions get their own palette section, mirroring topics
+        // (AI Organize spec §2c "Mentions follow the same palette
+        // discipline"). Without it the on-device model coins a fresh
+        // name every pass — Darlene / Darlene G. / Darlene Graham —
+        // fragmenting recurring people. The static directive tells the
+        // model what to do with the list; this renders the list.
+        let mentionsSection = paletteSection(
+            entries: existingMentions,
+            header: "People, places, and projects this user has mentioned before (prefer one of these if any fits):"
+        )
         return """
         MEMORY
 
         Text clip 1:
         "\(content)"
-        \(paletteSection)
+        \(topicsSection)\(mentionsSection)
 
         Organize this memory.
+        """
+    }
+
+    /// Renders a bulleted "prefer one of these" palette block, or an
+    /// empty string when the palette is empty (first-pass memory or a
+    /// wiped library) so the prompt stays clean. Shared by the topics
+    /// and mentions sections — one shape, two vocabularies.
+    private static func paletteSection(entries: [String], header: String) -> String {
+        let trimmed = entries
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !trimmed.isEmpty else { return "" }
+        let bulleted = trimmed.map { "- \($0)" }.joined(separator: "\n")
+        return """
+
+
+        \(header)
+        \(bulleted)
         """
     }
 

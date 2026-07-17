@@ -52,8 +52,19 @@ When Reorganize was scoped to Title + Summary, topics lost their user-facing sur
   - **Plumbing fix:** both organizers already receive `existingTopics`. The Anthropic backend forwards it; the **on-device `OnDeviceOrganizer` currently ignores it** and always invents de-novo names. The on-device prompt must be updated to bias toward the supplied palette — this is the one-sided plumbing to close. Until it lands, the on-device path is the source of topic sprawl.
 - **First organize reviews topics.** Topics are accepted in the draft→review→organized sheet, alongside title and summary. Existing-palette chips are **pre-selected**; a genuinely-new topic is **marked NEW** (AI-blue dashed chip) and can be dropped in one tap before it sticks.
 - **Reorganize never touches topics.** Reorganize stays **Title + Summary only** (§8.0). A wording refresh must never churn the topic set — topics are orthogonal to the title/summary the model is rethinking.
+- **Mentions follow the same palette discipline (locked July 17 2026).** Mentions are **library-backed** too — the organizer is handed the user's existing mentions (recurring people/places/projects) alongside `existingTopics`, and **must prefer an existing mention when one fits**, coining a new one only when nothing matches (flagged **New**, same as topics). This keeps people searchable across memories instead of fragmenting (Darlene / Darlene G. / Darlene Graham). **Plumbing:** pass an `existingMentions` palette to both organizers on every organize/reorganize pass, mirroring the `existingTopics` contract; the on-device path must honor it (same fix class as the topic plumbing above).
 - **A persistent home.** Every memory shows a **topic chip row directly under the summary** — solid ochre-dot chips for assigned topics, with an **Edit** affordance opening a manage sheet (pick from the existing library, or add one). **Topic changes are deliberate user actions**, never an AI side effect of some other pass.
 - **Color.** Topics are user-owned organization → **ochre** dots on wash chips. The only AI-blue moment is the *suggested / NEW* flag during review. *(Reference: `HiMem · Topics.html`.)*
+
+### The unified managed-chip model (locked July 17 2026)
+
+Topics, mentions, and projects are a memory's many-to-many associations, and they now share **one** interaction model — retiring four divergent mechanisms (topic sheet, mention ✕-pill, project no-inline-remove, and the toolbar folder-plus). Reference: `HiMem · Associations.html`.
+
+- **Read state navigates, never removes.** Filled pills tap through to where each lives (topic → filter, project → open, mention → its people). No inline ✕. One dashed **Edit** per section is the only way in to add/remove.
+- **One manage sheet, three types.** *On this memory* (tap a chip to remove — deselect, stays in library) · *Add a new…* · *From your library* (tap to add). One removal idiom, so **mentions are library-backed**.
+- **Deselect vs. delete-from-library.** Deselect removes from *this* memory. The library's **Edit** toggle reveals a red minus per chip to **delete the vocabulary entry entirely**; deleting warns how many memories use it (mirrors clip-delete's live count) — the memories themselves are never touched. *(Projects delete via the project's own full-width Delete Project, not the library minus.)*
+- **Glyph rule.** The leading **dot** means a palette-coloured topic — topics only. Mentions use a person glyph, projects a folder glyph.
+- **One exception, named.** A memory opened *through* a project keeps a contextual **Remove from this project** shortcut at the bottom; general management still routes through the sheet.
 
 ## 2b. Honest Label on Free is an editable draft, not a guarantee
 

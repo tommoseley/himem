@@ -70,4 +70,66 @@ struct OnDeviceOrganizerPromptTests {
             instructions.contains("supplied palette")
         #expect(mentionsPaletteRule, "Prompt instructions must direct the model to prefer existing palette topics per AI Organize spec §2c")
     }
+
+    // MARK: - Mentions palette (AI Organize spec §2c, locked 2026-07-17)
+    //
+    // "Mentions follow the same palette discipline." The on-device path
+    // received `existingMentions` but silently dropped it before
+    // `formatPrompt` — so it coined a fresh name every pass (Darlene /
+    // Darlene G. / Darlene Graham), fragmenting recurring people. These
+    // tests enforce the mirror of the topics plumbing.
+
+    @available(iOS 26.0, *)
+    @Test func formatPrompt_emptyExistingMentions_omitsMentionSection() {
+        let prompt = OnDeviceOrganizer.formatPrompt(content: "Hello", existingTopics: [], existingMentions: [])
+        #expect(prompt.lowercased().contains("mentioned before") == false)
+    }
+
+    @available(iOS 26.0, *)
+    @Test func formatPrompt_withExistingMentions_includesEachMentionInPrompt() {
+        let prompt = OnDeviceOrganizer.formatPrompt(
+            content: "Hello",
+            existingTopics: [],
+            existingMentions: ["Darlene", "Kingfisher Wharf"]
+        )
+        #expect(prompt.contains("Darlene"))
+        #expect(prompt.contains("Kingfisher Wharf"))
+    }
+
+    @available(iOS 26.0, *)
+    @Test func formatPrompt_emptyMentionsAreFilteredFromSection() {
+        let prompt = OnDeviceOrganizer.formatPrompt(
+            content: "Hello",
+            existingTopics: [],
+            existingMentions: ["", "Darlene"]
+        )
+        #expect(prompt.contains("Darlene"))
+        // One bullet, not a phantom empty one.
+        let bullets = prompt.components(separatedBy: "\n- ").count - 1
+        #expect(bullets == 1)
+    }
+
+    @available(iOS 26.0, *)
+    @Test func formatPrompt_topicsAndMentionsRenderAsSeparateSections() {
+        // Both palettes present → both headers present, each list under
+        // its own header (the mentions plumbing must not clobber topics).
+        let prompt = OnDeviceOrganizer.formatPrompt(
+            content: "Hello",
+            existingTopics: ["Garden"],
+            existingMentions: ["Darlene"]
+        )
+        #expect(prompt.contains("Garden"))
+        #expect(prompt.contains("Darlene"))
+        #expect(prompt.lowercased().contains("existing topics"))
+        #expect(prompt.lowercased().contains("mentioned before"))
+    }
+
+    @available(iOS 26.0, *)
+    @Test func promptInstructions_includesPreferExistingMentionDirective() {
+        let instructions = OnDeviceOrganizer.promptInstructions.lowercased()
+        #expect(
+            instructions.contains("mention selection") || instructions.contains("mentioned before"),
+            "Prompt instructions must direct the model to prefer existing mentions per AI Organize spec §2c"
+        )
+    }
 }
