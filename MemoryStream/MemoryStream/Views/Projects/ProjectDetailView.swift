@@ -22,6 +22,12 @@ struct ProjectDetailView: View {
     /// "Removed from [project] · Undo" toast (F2/F3) — the safety net that
     /// lets the remove skip a confirm dialog. 5-second timeout; Undo re-adds.
     @State private var removalToast: RemovalToast? = nil
+    /// Projects-only delete confirm (ruled 2026-07-17 — a scoped carve-out
+    /// to the deletion lock). A project dissolves a container spanning many
+    /// memories, and unlike a memory/clip the loss is abstract (no clips
+    /// visibly survive in front of you), so it earns one light confirm on
+    /// top of the soft-delete net. Memory/clip deletion stays no-confirm.
+    @State private var showDeleteConfirm = false
 
     private struct RemovalToast: Identifiable {
         let id = UUID()
@@ -32,6 +38,10 @@ struct ProjectDetailView: View {
     @State private var topicFilter: String? = nil
     @State private var showShareSheet = false
     @State private var showAddMemorySheet = false
+    /// Consumes the in-project FAB's "Add existing memory" signal (F7).
+    /// The FAB lives at `HiMemTabView`; the search-to-add sheet lives
+    /// here — this bus is the seam, mirroring `NewProjectRequestBus`.
+    @ObservedObject private var addExistingBus = AddExistingMemoryRequestBus.shared
     @State private var shareItems: [Any] = []
     @State private var isPreparingShare = false
     @State private var showSuggestionsSheet = false
@@ -194,8 +204,7 @@ struct ProjectDetailView: View {
                 // the toolbar Trash; opening a member memory carries
                 // its own bottom button.
                 BottomDeleteButton(kind: .delete(noun: "project")) {
-                    projectVM.deleteProject(id: projectId)
-                    dismiss()
+                    showDeleteConfirm = true
                 }
                 .padding(.top, 24)
             }
@@ -211,6 +220,15 @@ struct ProjectDetailView: View {
             }
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.9), value: removalToast?.id)
+        .alert("Delete Project?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                projectVM.deleteProject(id: projectId)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The memories stay in your library.")
+        }
         .navigationDestination(item: $selectedEntryId) { entryId in
             memberDetailDestination(for: entryId)
         }
@@ -229,18 +247,15 @@ struct ProjectDetailView: View {
                     .foregroundStyle(Crucible.Color.accent)
                 }
             }
-            // Trailing toolbar per unified editing model spec —
-            // add-memory · share. No pen, no Trash (title and goal are
-            // tap-to-edit via EditProjectSheet; project destruction is
-            // the bottom Delete project button at the end of the body).
+            // Trailing toolbar: share only. The add-memory `+` is retired
+            // (F7, 2026-07-17) — adding memories now lives on the context-
+            // aware FAB's two paths (new-in-project + "Add existing
+            // memory"), per Projects · MVP spec §Surfaces ("no toolbar
+            // trash, no +"). No pen, no Trash (title/goal edit via
+            // EditProjectSheet; destruction is the bottom Delete Project
+            // button).
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
-                    Button { showAddMemorySheet = true } label: {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 16))
-                            .foregroundStyle(Crucible.Color.accent)
-                    }
-                    .accessibilityLabel("Add memory to project")
                     Button {
                         Task { await prepareAndShowShareSheet() }
                     } label: {
@@ -323,6 +338,15 @@ struct ProjectDetailView: View {
         }
         .onDisappear {
             ProjectsNavigationContext.shared.exit(projectId: projectId)
+        }
+        .onChange(of: addExistingBus.pendingToken) { _, token in
+            // The in-project FAB's "Add existing memory" path fired —
+            // present the same search-to-add sheet the retired toolbar +
+            // used to open, then clear the one-shot token.
+            if token != nil {
+                showAddMemorySheet = true
+                addExistingBus.consume()
+            }
         }
     }
 

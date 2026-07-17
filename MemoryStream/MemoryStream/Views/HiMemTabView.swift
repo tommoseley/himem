@@ -124,7 +124,23 @@ struct HiMemTabView: View {
                     NewProjectFAB(onTap: {
                         NewProjectRequestBus.shared.request()
                     })
-                case .dropOnBench, .createMemory, .createMemoryInProject:
+                case .createMemoryInProject:
+                    // In-project FAB offers TWO paths (Projects · MVP spec
+                    // §Surfaces): capture a new memory in this project (the
+                    // modality stack) + "Add existing memory" (the leading
+                    // pill → the search-to-add sheet, via the request bus).
+                    AppendFAB(
+                        onSelect: { modality in
+                            activeCaptureModality = modality
+                        },
+                        accessibilityLabel: currentFabAccessibilityLabel,
+                        leadingAction: AppendFABLeadingAction(
+                            label: "Add existing memory",
+                            systemImage: "folder.badge.plus",
+                            onTap: { AddExistingMemoryRequestBus.shared.request() }
+                        )
+                    )
+                case .dropOnBench, .createMemory:
                     AppendFAB(
                         onSelect: { modality in
                             activeCaptureModality = modality

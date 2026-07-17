@@ -31,9 +31,10 @@ struct BottomDeleteButton: View {
                 // a memory dissolves its derived layer but its clips SURVIVE;
                 // a clip destroys the atom across every memory.
                 switch noun {
-                case "memory": return "Let Go of this Memory"
-                case "clip":   return "Delete this Clip"
-                default:       return "Delete \(noun)"   // project · session
+                case "memory":  return "Let Go of this Memory"
+                case "clip":    return "Delete this Clip"
+                case "project": return "Delete Project"   // title-case, spec §Deleting
+                default:        return "Delete \(noun)"   // session
                 }
             case .removeFromProject(let name):
                 // F2/F3 (2026-07-17): name the project so it's unambiguous
@@ -58,6 +59,11 @@ struct BottomDeleteButton: View {
                     // survive — the spec's exact wording (unified editing
                     // model). This is what makes "Let Go" honest vs "Delete".
                     return "The clips stay — they'll be available to start other memories. Moves to Recently Deleted · kept for 30 days."
+                }
+                if noun == "project" {
+                    // Projects · MVP spec §Deleting: deleting the container
+                    // never deletes the memories it connected — say so.
+                    return "The memories stay in your library. Moves to Recently Deleted · kept for 30 days."
                 }
                 return "Moves to Recently Deleted · kept for 30 days."
             case .removeFromProject: return "The memory stays in your library."

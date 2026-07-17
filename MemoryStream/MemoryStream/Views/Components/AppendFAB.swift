@@ -11,12 +11,26 @@ import UIKit
 /// for the resulting save.
 ///
 /// Geometry, motion, and color values are pinned to the spec.
+/// A non-capture action rendered as an extra pill at the top of the
+/// `AppendFAB` stack. Used by the in-project FAB (F7) to surface the
+/// "Add existing memory" path above the capture modalities — the stack's
+/// two jobs read as one list: make a new memory here, or add one you
+/// already have. `nil` (the default) means a pure capture stack.
+struct AppendFABLeadingAction {
+    let label: String
+    let systemImage: String
+    let onTap: () -> Void
+}
+
 struct AppendFAB: View {
     /// Fired when the user picks a pill. The host presents the appropriate
     /// capture surface for `modality`.
     let onSelect: (CaptureModality) -> Void
     /// Optional accessibility label override for the closed FAB. Default: "Add."
     var accessibilityLabel: String = "Add"
+    /// Optional non-capture pill above the modality stack (F7 in-project
+    /// "Add existing memory"). `nil` → capture-only stack, unchanged.
+    var leadingAction: AppendFABLeadingAction? = nil
 
     @State private var isOpen = false
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
@@ -92,11 +106,69 @@ struct AppendFAB: View {
 
     private var actionStack: some View {
         VStack(spacing: 8) {
+            if let leadingAction {
+                leadingActionPill(leadingAction)
+            }
             ForEach(Array(CaptureModality.stackOrder.enumerated()), id: \.element.id) { index, modality in
                 pill(for: modality, index: index)
             }
         }
         .frame(width: 188, alignment: .leading)
+    }
+
+    /// The non-capture "Add existing memory" pill (F7). Styled as a
+    /// secondary pill (same height/weight as a non-primary modality) but
+    /// with an ink glyph rather than a modality colour — it isn't a
+    /// capture type. Sits at the top of the stack, furthest from the FAB.
+    private func leadingActionPill(_ action: AppendFABLeadingAction) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            close()
+            DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0.08 : 0.14)) {
+                action.onTap()
+            }
+        } label: {
+            HStack(spacing: 0) {
+                Text(action.label)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink)
+                    .padding(.leading, 18)
+                Spacer(minLength: 8)
+                ZStack {
+                    Circle()
+                        .fill(Crucible.Color.ink2.opacity(0.10))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: action.systemImage)
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
+                .padding(.trailing, 6)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(Crucible.Color.card)
+            .clipShape(Capsule())
+            .shadow(
+                color: Color(red: 40/255, green: 25/255, blue: 15/255).opacity(0.10),
+                radius: 12, x: 0, y: 8
+            )
+            .shadow(color: .black.opacity(0.06), radius: 1, x: 0, y: 1)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(action.label)
+        .accessibilityAddTraits(.isButton)
+        .transition(
+            reduceMotion
+                ? .opacity
+                : .asymmetric(
+                    insertion: .modifier(
+                        active: PillEnter(progress: 0),
+                        identity: PillEnter(progress: 1)
+                    ).animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.18)),
+                    removal: .opacity.combined(with: .move(edge: .bottom))
+                        .animation(.easeOut(duration: 0.12))
+                )
+        )
     }
 
     /// Pill enter timing (open): each pill animates 180ms with the spec's
