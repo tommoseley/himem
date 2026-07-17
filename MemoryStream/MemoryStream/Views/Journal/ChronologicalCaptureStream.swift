@@ -62,6 +62,12 @@ struct ChronologicalCaptureStream: View {
     /// sheet round-trip; the trimmed value lands here directly.
     let onCommitMediaDescription: (UUID, String) -> Void
 
+    /// Opens the unified Clip Editor modal for a clip id — fired by the ✎ Edit
+    /// affordance in an expanded row (2026-07-16 Memory Detail cycle). Editing
+    /// routes here; the inline editors (`onCommit*`) are the retiring path,
+    /// kept reachable-in-code but no longer entered on tap.
+    let onEditClip: (UUID) -> Void
+
     /// View mode for long memories. `.full` is the historical behavior
     /// (one rich row per clip); `.compact` renders a scannable index of
     /// voice + note clips and skips photos/videos entirely. Short
@@ -103,7 +109,8 @@ struct ChronologicalCaptureStream: View {
                         onCommitVoiceTranscript(item.id, newText)
                     },
                     onDelete: { onDeleteVoice(item.id) },
-                    onRelocate: { onRelocateClip(item.id) }
+                    onRelocate: { onRelocateClip(item.id) },
+                    onEdit: { onEditClip(item.id) }
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -116,7 +123,8 @@ struct ChronologicalCaptureStream: View {
                         onCommitNoteText(item.id, newText)
                     },
                     onDelete: { onDeleteNote(item.id) },
-                    onRelocate: { onRelocateClip(item.id) }
+                    onRelocate: { onRelocateClip(item.id) },
+                    onEdit: { onEditClip(item.id) }
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -135,7 +143,8 @@ struct ChronologicalCaptureStream: View {
                         onCommitMediaDescription(item.id, newText)
                     },
                     onDelete: { onDeleteMedia(item.id) },
-                    onRelocate: { onRelocateClip(item.id) }
+                    onRelocate: { onRelocateClip(item.id) },
+                    onEdit: { onEditClip(item.id) }
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -196,6 +205,9 @@ struct ChronologicalCaptureStream: View {
                 onDelete: { compactDeleteAction(item) },
                 onRelocate: item.mediaType == .voice || item.mediaType == .note
                     ? { onRelocateClip(item.id) }
+                    : nil,
+                onEdit: item.mediaType == .voice || item.mediaType == .note
+                    ? { onEditClip(item.id) }
                     : nil
             )
             .listRowSeparator(.hidden)
@@ -309,6 +321,12 @@ struct MediaCard: View {
     /// is hidden.
     var onRelocate: (() -> Void)? = nil
 
+    /// Opens the unified Clip Editor modal for the description (2026-07-16
+    /// cycle). When non-nil, the ✎ Edit control (filled) / invite tap (empty)
+    /// open the modal instead of the inline editor, which is retired but kept
+    /// reachable-in-code.
+    var onEdit: (() -> Void)? = nil
+
     /// Slice 9 (Memory Detail Full stream convergence): inline
     /// description edit state, replacing the retired
     /// `PhotoDescriptionEditSheet`. Nil = read state (invite or
@@ -363,22 +381,49 @@ struct MediaCard: View {
                 }
             )
         } else if let desc = item.mediaDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
-            MediaDescriptionFilled(text: desc)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if onSaveDescription != nil {
-                        editingDescription = desc
-                    }
+            // Filled description: the text stays selectable/non-tappable; a
+            // quiet blue ✎ Edit control opens the modal (2026-07-16). Legacy
+            // inline tap-to-edit only when no modal host is wired.
+            if let onEdit {
+                HStack(alignment: .top, spacing: 8) {
+                    MediaDescriptionFilled(text: desc)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    descriptionEditButton(onEdit: onEdit)
                 }
+            } else {
+                MediaDescriptionFilled(text: desc)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if onSaveDescription != nil { editingDescription = desc }
+                    }
+            }
         } else {
+            // Empty invite — a distinct "add a description" affordance (dashed,
+            // not content text), so tapping it to open the modal is honest.
             MediaDescriptionEmpty()
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    if onSaveDescription != nil {
-                        editingDescription = ""
-                    }
+                    if let onEdit { onEdit() }
+                    else if onSaveDescription != nil { editingDescription = "" }
                 }
         }
+    }
+
+    /// Quiet blue **✎ Edit** control (≥44px) that opens the modal to the
+    /// clip's description field — the photo/video counterpart to the
+    /// transcript row's Edit affordance.
+    private func descriptionEditButton(onEdit: @escaping () -> Void) -> some View {
+        Button(action: onEdit) {
+            HStack(spacing: 4) {
+                Image(systemName: "pencil")
+                Text("Edit")
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(Crucible.Color.aiBlue)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -128,6 +128,12 @@ struct CompactClipRow: View {
     /// own delete affordance).
     let onRelocate: (() -> Void)?
 
+    /// Opens the unified Clip Editor modal (2026-07-16 cycle). When non-nil,
+    /// the ✎ Edit control shows in the expanded control lane and inline
+    /// edit-on-tap is retired — the expanded transcript stays read-only in
+    /// place; editing happens in the modal. Inline `ClipEditor` kept in-code.
+    let onEdit: (() -> Void)?
+
     /// Slice 10b (Clip Model convergence): inline edit state.
     /// Nil = read; non-nil = editing (renders `ClipEditor(field:
     /// .transcript)` in the expanded body). Replaces the retired
@@ -147,7 +153,8 @@ struct CompactClipRow: View {
         onCommitTranscript: ((String) -> Void)? = nil,
         onPlay: (() -> Void)? = nil,
         onDelete: @escaping () -> Void,
-        onRelocate: (() -> Void)? = nil
+        onRelocate: (() -> Void)? = nil,
+        onEdit: (() -> Void)? = nil
     ) {
         self.item = item
         self.isOpen = isOpen
@@ -156,6 +163,7 @@ struct CompactClipRow: View {
         self.onPlay = onPlay
         self.onDelete = onDelete
         self.onRelocate = onRelocate
+        self.onEdit = onEdit
     }
 
     var body: some View {
@@ -163,35 +171,49 @@ struct CompactClipRow: View {
             header
             if isOpen, let fullBody = Self.expandedBody(for: item) {
                 expandedTranscriptArea(fallback: fullBody)
-                if let onPlay, item.mediaType == .voice {
-                    // Play footer present in read AND edit (spec
-                    // rule #8). Tap fires the parent's audio-player
-                    // sheet — same callback as
-                    // `TranscriptClipController`.
-                    // E3 alignment: same glyph shape as the atom's
-                    // reflective namedPlay (`play`, not
-                    // `play.circle`), same tint discipline (accent
-                    // for the triangle, ink3 for the label) so the
-                    // compact expanded body's play affordance
-                    // reads as the same primitive.
-                    Button(action: onPlay) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "play")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Crucible.Color.accent)
-                            Text(TranscriptClipController.playFooterLabel(duration: audioDuration))
-                                .font(.system(size: 13))
-                                .foregroundStyle(Crucible.Color.ink3)
+                // Expanded-state control lane: Play (voice) on the left, the
+                // quiet blue ✎ Edit affordance on the right. Only rendered
+                // when the row is open — collapsed rows stay clean.
+                HStack(spacing: 8) {
+                    if let onPlay, item.mediaType == .voice {
+                        // Play footer present in read AND edit (spec rule #8).
+                        // E3 alignment: same glyph shape as the atom's
+                        // reflective namedPlay (`play`, not `play.circle`),
+                        // same tint discipline (accent triangle, ink3 label).
+                        Button(action: onPlay) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "play")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Crucible.Color.accent)
+                                Text(TranscriptClipController.playFooterLabel(duration: audioDuration))
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Crucible.Color.ink3)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        .padding(.top, 2)
-                        .padding(.bottom, 12)
-                        .padding(.horizontal, 4)
+                        .buttonStyle(.plain)
+                        .frame(minHeight: 44)
+                        .accessibilityLabel(TranscriptClipController.playFooterAccessibilityLabel(duration: audioDuration))
+                        .task(id: item.id) { await loadAudioDurationIfNeeded() }
                     }
-                    .buttonStyle(.plain)
-                    .frame(minHeight: 32)
-                    .accessibilityLabel(TranscriptClipController.playFooterAccessibilityLabel(duration: audioDuration))
-                    .task(id: item.id) { await loadAudioDurationIfNeeded() }
+                    Spacer(minLength: 0)
+                    if let onEdit {
+                        Button(action: onEdit) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "pencil")
+                                Text("Edit")
+                            }
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Crucible.Color.aiBlue)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+                .padding(.top, 2)
+                .padding(.bottom, 12)
+                .padding(.horizontal, 4)
             }
         }
         .padding(.horizontal, 12)
@@ -301,9 +323,15 @@ struct CompactClipRow: View {
                 .padding(.bottom, 12)
                 .padding(.horizontal, 4)
                 .contentShape(Rectangle())
+                // Inline edit-on-tap retired (2026-07-16): when a modal host
+                // is wired (`onEdit`), the expanded transcript stays read-only
+                // and selectable — the ✎ Edit control opens the modal. Only
+                // fall back to inline entry when there's no modal host.
                 .simultaneousGesture(
                     TapGesture().onEnded {
-                        if onCommitTranscript != nil { editingDraft = currentText }
+                        if onEdit == nil, onCommitTranscript != nil {
+                            editingDraft = currentText
+                        }
                     }
                 )
         }

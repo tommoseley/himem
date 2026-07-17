@@ -44,6 +44,12 @@ struct TranscriptClipController: View {
     /// hides the relocate half of the fate row.
     let onRelocate: (() -> Void)?
 
+    /// Opens the unified Clip Editor modal (2026-07-16 cycle). When
+    /// non-nil, the ✎ Edit control shows and inline edit-on-tap is
+    /// retired — editing happens in the modal, not in place. The inline
+    /// `editor(...)` below is kept reachable-in-code but no longer entered.
+    var onEdit: (() -> Void)? = nil
+
     /// `nil` = read state; non-nil = the in-flight
     /// `ClipEditor(field: .transcript)` draft. Matches Slice 7's
     /// `descriptionDraft` idiom in `ClipDetailView`.
@@ -87,13 +93,42 @@ struct TranscriptClipController: View {
             duration: audioDuration,
             sessionStart: nil
         )
-        return ClipAtomView(
-            model: model,
-            register: .reflective,
-            onTapContent: onCommit != nil ? { editingDraft = currentText } : nil,
-            onPlayEvidence: onPlay,
-            emptyTranscriptCaption: emptyCaption
-        )
+        return VStack(alignment: .leading, spacing: 8) {
+            ClipAtomView(
+                model: model,
+                register: .reflective,
+                // Inline edit-on-tap retired (2026-07-16): the transcript
+                // text stays selectable and non-tappable; the ✎ Edit control
+                // below opens the modal. When `onEdit` is nil (no modal host),
+                // fall back to the legacy inline entry so nothing regresses.
+                onTapContent: onEdit == nil && onCommit != nil ? { editingDraft = currentText } : nil,
+                onPlayEvidence: onPlay,
+                emptyTranscriptCaption: emptyCaption
+            )
+            if let onEdit {
+                editControlLane(onEdit: onEdit)
+            }
+        }
+    }
+
+    /// The row's control lane — a quiet blue **✎ Edit** affordance
+    /// (≥44px) that opens the modal. Trailing-aligned; sits with the
+    /// atom's play evidence as the row's actions.
+    private func editControlLane(onEdit: @escaping () -> Void) -> some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button(action: onEdit) {
+                HStack(spacing: 4) {
+                    Image(systemName: "pencil")
+                    Text("Edit")
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Crucible.Color.aiBlue)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     // MARK: - Edit state (ClipEditor)

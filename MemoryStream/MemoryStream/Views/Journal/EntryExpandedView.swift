@@ -182,6 +182,11 @@ struct EntryExpandedView: View {
     /// `.manageTopics` cases; the `.newTopic` case rode the dead
     /// `addTopicMenu` and went out with the cleanup.
     @State private var showManageTopics: Bool = false
+    // Memory Detail → unified Clip Editor modal (2026-07-16 cycle). The ✎ Edit
+    // control in an expanded clip row opens the modal for that clip; the
+    // long-memory read accordion (transcriptOpenRowId) is untouched. Editing
+    // routes here, superseding the bespoke inline editors + AudioPlayerSheet.
+    @State private var editingClip: ClipEditorModal.Source? = nil
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
     /// Topic names assigned to this memory. Was previously composed
@@ -359,6 +364,9 @@ struct EntryExpandedView: View {
                 }
             }
         ))
+        .sheet(item: $editingClip) { source in
+            ClipEditorModal(source: source)
+        }
         .sheet(isPresented: $showShareSheet) {
             let composed = "\(entry.displayTitle)\n\n\(entry.content)"
             ShareSheet(items: [composed])
@@ -889,6 +897,7 @@ struct EntryExpandedView: View {
                 onCommitMediaDescription: { mediaId, newText in
                     updateMediaDescription(id: mediaId, text: newText)
                 },
+                onEditClip: { id in openClipEditor(id: id) },
                 mode: transcriptMode,
                 openCompactRowId: transcriptOpenRowId,
                 onToggleCompactRow: { rowId in
@@ -1162,6 +1171,15 @@ struct EntryExpandedView: View {
         req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         req.fetchLimit = 1
         return try? ctx.fetch(req).first
+    }
+
+    /// Opens the unified Clip Editor modal for the clip `id`, from the ✎ Edit
+    /// affordance in an expanded row. Memory Detail clips are all placed
+    /// (`.managed`); fetch the live `MediaReference` so the modal's Zone 2
+    /// edges + delete branch on the real object.
+    private func openClipEditor(id: UUID) {
+        guard let ref = fetchRefForRelocate(id: id) else { return }
+        editingClip = .managed(ref)
     }
 
     private func updateMediaDescription(id: UUID, text: String) {
