@@ -24,6 +24,10 @@ struct EntryDisplayModel: Identifiable {
     /// summary row has been accepted. Used by the feed card to replace
     /// the raw-content snippet when present. Nil otherwise.
     let renderedSummary: String?
+    /// Active projects this memory belongs to (F2/F3). Renders as
+    /// "In [project]" chips in Memory Detail. Many-to-many, so 0-N;
+    /// empty when the memory is unfiled.
+    let projectMemberships: [ProjectChip]
 
     var timeString: String {
         let interval = Date().timeIntervalSince(createdAt)
@@ -112,6 +116,7 @@ extension EntryDisplayModel: Equatable {
             && lhs.longitude == rhs.longitude
             && lhs.locationName == rhs.locationName
             && lhs.renderedSummary == rhs.renderedSummary
+            && lhs.projectMemberships == rhs.projectMemberships
     }
 }
 
@@ -138,7 +143,8 @@ extension EntryDisplayModel {
             latitude: latitude,
             longitude: longitude,
             locationName: locationName,
-            renderedSummary: renderedSummary
+            renderedSummary: renderedSummary,
+            projectMemberships: projectMemberships
         )
     }
 }
@@ -192,4 +198,12 @@ struct TagDisplayModel: Identifiable, Equatable {
     let value: String
     let entityType: ExtractedEntity.EntityType
     let confidence: Double
+}
+
+/// A project a memory belongs to, reduced to what an "In [project]" chip
+/// needs (F2/F3). Tapping a chip could later navigate to the project; for
+/// now it just labels membership.
+struct ProjectChip: Identifiable, Hashable {
+    let id: UUID
+    let name: String
 }

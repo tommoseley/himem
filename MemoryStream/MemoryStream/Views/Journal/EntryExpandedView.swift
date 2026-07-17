@@ -31,6 +31,8 @@ struct EntryExpandedView: View {
     /// **Remove from project** (memory survives)". The callback
     /// receives the entry id; the host wires the project context.
     var onRemoveFromProject: ((UUID) -> Void)? = nil
+    /// Names the project for the "Remove from [project]" button (F2/F3).
+    var projectContextName: String? = nil
     var availableProjects: [ProjectDisplayModel] = []
 
     @Environment(\.dismiss) private var dismiss
@@ -199,6 +201,13 @@ struct EntryExpandedView: View {
             }
             headerRow { summarySection }
             headerRow(top: -3) { topicChipsRow }
+            // Project-context row (F2/F3): "In [project]" membership chips
+            // + a dashed "Add to project" affordance. Shown whenever the
+            // memory belongs to a project or there's a project to add it
+            // to; an unfiled memory with no projects gets nothing here.
+            if !entry.projectMemberships.isEmpty || !addableProjects.isEmpty {
+                headerRow(top: -3) { projectContextRow }
+            }
             // Transcript Full ⇄ Compact toggle sits between the topic
             // chips row and the chronological body. Hidden for short
             // memories — the section header itself disappears, the
@@ -268,7 +277,7 @@ struct EntryExpandedView: View {
                 // Delete.
                 VStack(spacing: 10) {
                     if let onRemoveFromProject {
-                        BottomDeleteButton(kind: .removeFromProject) {
+                        BottomDeleteButton(kind: .removeFromProject(name: projectContextName)) {
                             onRemoveFromProject(entry.id)
                             dismiss()
                         }
@@ -503,6 +512,79 @@ struct EntryExpandedView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit topics")
+    }
+
+    /// Projects the memory could be added to — the available set minus the
+    /// ones it's already a member of. Drives both the row's visibility and
+    /// the dashed affordance's menu; empty means "no project to add to."
+    private var addableProjects: [ProjectDisplayModel] {
+        let memberIds = Set(entry.projectMemberships.map(\.id))
+        return availableProjects.filter { !memberIds.contains($0.id) }
+    }
+
+    /// Project-context row (F2/F3). "In [project]" chips label the
+    /// containers this memory belongs to; the dashed "Add to project"
+    /// affordance links it into another. Mirrors the topic row's shape
+    /// (wash chips + dashed-ochre add) so the two read as siblings.
+    private var projectContextRow: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            FlowLayout(spacing: 10) {
+                ForEach(entry.projectMemberships) { membership in
+                    HStack(spacing: 5) {
+                        Image(systemName: "folder")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("In \(membership.name)")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 38)
+                    .background(Crucible.Color.wash1, in: Capsule())
+                }
+                if !addableProjects.isEmpty {
+                    addToProjectAffordance
+                }
+            }
+        }
+        .padding(.top, 12)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Crucible.Color.hairline)
+                .frame(height: 0.5)
+                .padding(.top, 4)
+        }
+    }
+
+    /// Dashed "Add to project" — the same dashed-ochre add vocabulary as
+    /// `addTopicAffordance`. Opens a menu of projects the memory isn't
+    /// already in; selecting one links it via `onAddToProject`.
+    private var addToProjectAffordance: some View {
+        Menu {
+            ForEach(addableProjects) { project in
+                Button {
+                    onAddToProject?(entry.id, project.id)
+                } label: {
+                    Label(project.name, systemImage: "folder")
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Add to project")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.accent)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 38)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            )
+        }
+        .accessibilityLabel("Add to project")
     }
 
     /// Title field swaps between an editable `TextField` and a read-mode

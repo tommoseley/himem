@@ -183,6 +183,15 @@ extension JournalEntry {
         return set.sorted { $0.name < $1.name }
     }
 
+    /// Active projects this memory belongs to (F2/F3). Excludes soft-deleted
+    /// (recycled) projects so a memory doesn't advertise membership in a
+    /// container that's in Recently Deleted. Sorted by name for stable chip
+    /// order. Many-to-many, so 0-N.
+    var projectsArray: [Project] {
+        let set = projects as? Set<Project> ?? []
+        return set.filter { $0.recycledAt == nil }.sorted { $0.name < $1.name }
+    }
+
     /// Clips referenced by this memory, sorted by their per-memory
     /// `orderInMemory` on the connecting `MemoryClipEdge` (falls back
     /// to `linkedAt`, then `ref.createdAt`). Walks edges — the legacy

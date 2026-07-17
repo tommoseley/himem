@@ -26,7 +26,8 @@ struct ProjectDetailViewTextTests {
             latitude: nil,
             longitude: nil,
             locationName: locality,
-            renderedSummary: nil
+            renderedSummary: nil,
+            projectMemberships: []
         )
     }
 

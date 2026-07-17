@@ -79,7 +79,10 @@ struct JournalView: View {
             if viewMode == .projects {
                 ProjectListView(
                     projectVM: projectVM,
-                    selectedTopic: viewModel.selectedTopic
+                    selectedTopic: viewModel.selectedTopic,
+                    viewModel: viewModel,
+                    cameraService: cameraService,
+                    speechService: speechService
                 )
             } else {
                 memoriesList

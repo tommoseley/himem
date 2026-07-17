@@ -4,6 +4,11 @@ import SwiftUI
 struct ProjectListView: View {
     @ObservedObject var projectVM: ProjectViewModel
     var selectedTopic: String?
+    /// Threaded to ProjectDetailView so a member card can open the canonical
+    /// Memory Detail (F2/F3, 2026-07-17).
+    @ObservedObject var viewModel: JournalViewModel
+    let cameraService: CameraService
+    @ObservedObject var speechService: SpeechService
     @State private var showNewProject = false
     @State private var showPricing = false
     @State private var newProjectName = ""
@@ -117,7 +122,13 @@ struct ProjectListView: View {
         }
         .navigationDestination(item: $selectedProjectId) { projectId in
             if let project = projectVM.projects.first(where: { $0.id == projectId }) {
-                ProjectDetailView(projectId: project.id, projectVM: projectVM)
+                ProjectDetailView(
+                    projectId: project.id,
+                    projectVM: projectVM,
+                    viewModel: viewModel,
+                    cameraService: cameraService,
+                    speechService: speechService
+                )
             }
         }
     }

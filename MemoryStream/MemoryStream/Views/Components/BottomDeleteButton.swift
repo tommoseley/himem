@@ -21,7 +21,7 @@ struct BottomDeleteButton: View {
 
     enum Kind {
         case delete(noun: String) // "memory" / "clip" / "project" / "session"
-        case removeFromProject
+        case removeFromProject(name: String?) // names the project (F2/F3)
 
         var label: String {
             switch self {
@@ -35,7 +35,11 @@ struct BottomDeleteButton: View {
                 case "clip":   return "Delete this Clip"
                 default:       return "Delete \(noun)"   // project · session
                 }
-            case .removeFromProject: return "Remove from Project"
+            case .removeFromProject(let name):
+                // F2/F3 (2026-07-17): name the project so it's unambiguous
+                // which container the memory leaves.
+                if let name, !name.isEmpty { return "Remove from \(name)" }
+                return "Remove from Project"
             }
         }
 
@@ -98,7 +102,7 @@ struct BottomDeleteButton: View {
         BottomDeleteButton(kind: .delete(noun: "memory"), action: {})
         BottomDeleteButton(kind: .delete(noun: "clip"), action: {})
         BottomDeleteButton(kind: .delete(noun: "project"), action: {})
-        BottomDeleteButton(kind: .removeFromProject, action: {})
+        BottomDeleteButton(kind: .removeFromProject(name: "Kingfisher"), action: {})
     }
     .padding()
     .background(Crucible.Color.paper)
