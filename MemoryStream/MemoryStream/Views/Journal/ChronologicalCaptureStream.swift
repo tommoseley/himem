@@ -68,6 +68,12 @@ struct ChronologicalCaptureStream: View {
     /// kept reachable-in-code but no longer entered on tap.
     let onEditClip: (UUID) -> Void
 
+    /// The `localIdentifier` of the voice clip currently playing in place
+    /// (nil = nothing playing). Drives each voice row's play/stop glyph — the
+    /// row's ▶ toggles playback through the audio session, no sheet (2026-07-16
+    /// cycle 2/3).
+    var playingFilename: String? = nil
+
     /// View mode for long memories. `.full` is the historical behavior
     /// (one rich row per clip); `.compact` renders a scannable index of
     /// voice + note clips and skips photos/videos entirely. Short
@@ -110,7 +116,8 @@ struct ChronologicalCaptureStream: View {
                     },
                     onDelete: { onDeleteVoice(item.id) },
                     onRelocate: { onRelocateClip(item.id) },
-                    onEdit: { onEditClip(item.id) }
+                    onEdit: { onEditClip(item.id) },
+                    isPlaying: playingFilename == item.localIdentifier
                 )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -208,7 +215,8 @@ struct ChronologicalCaptureStream: View {
                     : nil,
                 onEdit: item.mediaType == .voice || item.mediaType == .note
                     ? { onEditClip(item.id) }
-                    : nil
+                    : nil,
+                isPlaying: playingFilename == item.localIdentifier
             )
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)

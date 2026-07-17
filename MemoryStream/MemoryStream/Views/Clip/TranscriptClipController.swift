@@ -50,6 +50,10 @@ struct TranscriptClipController: View {
     /// `editor(...)` below is kept reachable-in-code but no longer entered.
     var onEdit: (() -> Void)? = nil
 
+    /// True when this clip's audio is playing in place — drives the atom's
+    /// play/stop evidence glyph (2026-07-16 cycle 2/3).
+    var isPlaying: Bool = false
+
     /// `nil` = read state; non-nil = the in-flight
     /// `ClipEditor(field: .transcript)` draft. Matches Slice 7's
     /// `descriptionDraft` idiom in `ClipDetailView`.
@@ -103,6 +107,7 @@ struct TranscriptClipController: View {
                 // fall back to the legacy inline entry so nothing regresses.
                 onTapContent: onEdit == nil && onCommit != nil ? { editingDraft = currentText } : nil,
                 onPlayEvidence: onPlay,
+                isPlayingEvidence: isPlaying,
                 emptyTranscriptCaption: emptyCaption
             )
             if let onEdit {

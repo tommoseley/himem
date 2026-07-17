@@ -47,6 +47,10 @@ struct ClipEditorModal: View {
     // from the current content the instant edit begins — never blank-then-fill).
     @State private var contentDraft: String? = nil
     @State private var audioDuration: TimeInterval? = nil
+    // Live playback position for the Zone 1 progress bar (Memory Detail cycle
+    // 2/3 — the modal is the full listen surface; AudioPlayerService has no
+    // seek, so this is a progress indicator + timeline, not a scrub control).
+    @State private var playbackTime: TimeInterval = 0
     @State private var isRetranscribing = false
     @State private var retryStatus: String? = nil
 
@@ -71,6 +75,15 @@ struct ClipEditorModal: View {
         }
         .background(Crucible.Color.paper.ignoresSafeArea())
         .task(id: source.id) { await loadDurationIfNeeded() }
+        // Drive the Zone 1 progress bar while this clip plays. 4 Hz is smooth
+        // enough for a progress indicator and cheap; it idles to 0 otherwise.
+        .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
+            if isPlayingThis {
+                playbackTime = player.currentAVPlayer?.currentTime ?? 0
+            } else if playbackTime != 0 {
+                playbackTime = 0
+            }
+        }
         .onDisappear { if player.isPlaying { player.stop() } }
         .sheet(isPresented: $placing) { placementSheet }
     }
@@ -131,6 +144,9 @@ struct ClipEditorModal: View {
                         Text("Original recording\(durationSuffix)")
                             .font(.system(size: 13))
                             .foregroundStyle(Crucible.Color.ink2)
+                        if isPlayingThis {
+                            playbackProgressRow
+                        }
                     }
                 }
                 Spacer(minLength: 0)
@@ -471,6 +487,36 @@ struct ClipEditorModal: View {
     private var durationSuffix: String {
         guard let d = audioDuration else { return "" }
         return " · \(Int(d) / 60):\(String(format: "%02d", Int(d) % 60))"
+    }
+
+    /// Zone 1 playback progress — a non-interactive progress bar + elapsed /
+    /// total timeline (AudioPlayerService has no seek, so this reports
+    /// position; it doesn't scrub). Shown only while this clip is playing.
+    private var playbackProgressRow: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ProgressView(value: playbackProgress)
+                .tint(Crucible.Color.accent)
+            HStack(spacing: 0) {
+                Text(Self.formatPlaybackTime(playbackTime))
+                Spacer(minLength: 8)
+                Text(Self.formatPlaybackTime(audioDuration ?? 0))
+            }
+            .font(.system(size: 10))
+            .monospacedDigit()
+            .foregroundStyle(Crucible.Color.ink3)
+        }
+        .frame(maxWidth: 220, alignment: .leading)
+        .padding(.top, 3)
+    }
+
+    private var playbackProgress: Double {
+        guard let d = audioDuration, d > 0 else { return 0 }
+        return min(1, max(0, playbackTime / d))
+    }
+
+    static func formatPlaybackTime(_ t: TimeInterval) -> String {
+        let total = Int(t.rounded(.down))
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 
     private var timingText: String {

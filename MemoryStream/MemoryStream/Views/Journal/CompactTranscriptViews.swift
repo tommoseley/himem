@@ -134,6 +134,10 @@ struct CompactClipRow: View {
     /// place; editing happens in the modal. Inline `ClipEditor` kept in-code.
     let onEdit: (() -> Void)?
 
+    /// True when this clip's audio is playing in place — the play footer
+    /// shows a stop glyph (2026-07-16 cycle 2/3).
+    let isPlaying: Bool
+
     /// Slice 10b (Clip Model convergence): inline edit state.
     /// Nil = read; non-nil = editing (renders `ClipEditor(field:
     /// .transcript)` in the expanded body). Replaces the retired
@@ -154,7 +158,8 @@ struct CompactClipRow: View {
         onPlay: (() -> Void)? = nil,
         onDelete: @escaping () -> Void,
         onRelocate: (() -> Void)? = nil,
-        onEdit: (() -> Void)? = nil
+        onEdit: (() -> Void)? = nil,
+        isPlaying: Bool = false
     ) {
         self.item = item
         self.isOpen = isOpen
@@ -164,6 +169,7 @@ struct CompactClipRow: View {
         self.onDelete = onDelete
         self.onRelocate = onRelocate
         self.onEdit = onEdit
+        self.isPlaying = isPlaying
     }
 
     var body: some View {
@@ -182,7 +188,7 @@ struct CompactClipRow: View {
                         // same tint discipline (accent triangle, ink3 label).
                         Button(action: onPlay) {
                             HStack(spacing: 8) {
-                                Image(systemName: "play")
+                                Image(systemName: isPlaying ? "stop.fill" : "play")
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundStyle(Crucible.Color.accent)
                                 Text(TranscriptClipController.playFooterLabel(duration: audioDuration))

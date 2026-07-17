@@ -187,6 +187,8 @@ struct EntryExpandedView: View {
     // long-memory read accordion (transcriptOpenRowId) is untouched. Editing
     // routes here, superseding the bespoke inline editors + AudioPlayerSheet.
     @State private var editingClip: ClipEditorModal.Source? = nil
+    /// Drives in-place voice playback + the row's play/stop glyph (cycle 2/3).
+    @ObservedObject private var audioPlayer = AudioPlayerService.shared
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
 
     /// Topic names assigned to this memory. Was previously composed
@@ -850,12 +852,16 @@ struct EntryExpandedView: View {
                     relocatingClipId = id
                 },
                 onOpenVoice: { item in
-                    audioPlayerForFile = AudioPlayerTarget(
-                        mediaId: item.id,
-                        filename: item.localIdentifier,
-                        recordedAt: item.createdAt,
-                        transcript: item.transcript
-                    )
+                    // Play IN PLACE (2026-07-16 cycle 2/3): the row's ▶ toggles
+                    // playback through the audio session — no sheet. The modal
+                    // (opened via ✎ Edit) is the full listen surface with the
+                    // progress timeline; the row is quick sample-in-place.
+                    let file = item.localIdentifier
+                    if audioPlayer.isPlaying && audioPlayer.currentFile == file {
+                        audioPlayer.stop()
+                    } else {
+                        audioPlayer.play(filename: file)
+                    }
                 },
                 onCommitVoiceTranscript: { mediaId, newText in
                     lifecycle.updateMediaTranscript(
@@ -898,6 +904,7 @@ struct EntryExpandedView: View {
                     updateMediaDescription(id: mediaId, text: newText)
                 },
                 onEditClip: { id in openClipEditor(id: id) },
+                playingFilename: audioPlayer.isPlaying ? audioPlayer.currentFile : nil,
                 mode: transcriptMode,
                 openCompactRowId: transcriptOpenRowId,
                 onToggleCompactRow: { rowId in
