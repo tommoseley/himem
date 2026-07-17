@@ -202,7 +202,14 @@ final class StorageService {
         //       entirely — Tom exported his data and starts fresh.
         //       Bumped so his device republishes v3 to Dev after Dev
         //       is reset via CloudKit Dashboard.
-        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV5"
+        //   V6 — `Project.recycledAt` added for the F1 project deletion lock
+        //         (soft-delete → Recently Deleted). Without this bump the
+        //         field never publishes to Development, so the recycledAt
+        //         write doesn't round-trip and deleted projects never reach
+        //         the bin (device repro 2026-07-17). Folds into the same
+        //         batched pre-TestFlight Production deploy as the staged
+        //         purpose→goal / MediaReference.sourceDevice fields.
+        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV6"
         if !UserDefaults.standard.bool(forKey: schemaInitKey) {
             // Only mark the version flag set on actual success. If we
             // failed silently (e.g. account daemon temporarily refused
