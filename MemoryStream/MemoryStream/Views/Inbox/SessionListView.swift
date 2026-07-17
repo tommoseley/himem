@@ -436,6 +436,15 @@ struct SessionListView: View {
                     onCommitAll: handleClusterBatchCommit,
                     onAddToMemory: addClusterToMemory
                 )
+                // The ochre "Keep these · N" is the FOOTER of the proposals
+                // section (header + cards + bar = one group). A divider +
+                // quiet section header opens the ungrouped region below it, so
+                // the ochre bar can't be misread as acting on the loose clips
+                // (2026-07-17, §Sort-is-the-moment). Only when both regions
+                // exist.
+                if !proposals.isEmpty && !looseSessions.isEmpty {
+                    ungroupedSectionHeader
+                }
                 LazyVStack(spacing: 12) {
                     ForEach(looseSessions) { session in
                         sessionCard(session)
@@ -453,6 +462,25 @@ struct SessionListView: View {
             // banner on the watch has an obvious user remedy.
             WatchSessionDelegate.shared.requestWatchPendingFlush()
             WatchSessionDelegate.shared.reconcileWatchAcks()
+        }
+    }
+
+    /// Divider + quiet header opening the ungrouped ("not yet connected")
+    /// clips as a region distinct from the proposals section above (whose
+    /// footer is the ochre commit bar). Section label per `CLAUDE.md` §Phone
+    /// ("Not yet connected", never internal jargon).
+    private var ungroupedSectionHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle()
+                .fill(Crucible.Color.hairline)
+                .frame(height: 0.5)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
+            Text("Not yet connected")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 4)
         }
     }
 
