@@ -176,6 +176,14 @@ struct ClusterCardStack: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(Crucible.Color.aiEdge, lineWidth: 1)
         )
+        // The WHOLE collapsed card (head + title + teaser rows) expands — no
+        // hidden title-tap dependency (2026-07-17). The "Show all N" cue names
+        // it. Inner Buttons ("Show all", "Not together") still win their own
+        // taps; a tap anywhere else on the collapsed card expands. When
+        // expanded, the background tap is inert — the ✎/⊖/toggle/rows and
+        // "Done" own interaction.
+        .contentShape(Rectangle())
+        .onTapGesture { if !expanded { onToggleExpand(proposal) } }
     }
 
     private func reasonBand(_ proposal: ClusterProposal) -> some View {
@@ -321,12 +329,15 @@ struct ClusterCardStack: View {
             Button {
                 onToggleExpand(proposal)
             } label: {
-                // State-driven toggle — names the action it performs:
-                // collapsed → "Adjust ⌄" (expand into trim); expanded →
-                // "Done ⌃" (collapse back to preview). "Done" = collapse,
-                // NOT commit — the ochre "Keep these · N" is the only commit.
+                // The disclosure names what it reveals: collapsed →
+                // "Show all N ⌄" (expand to the full clip list + trim);
+                // expanded → "Done ⌃" (collapse back to the teaser). "Adjust"
+                // is retired — editing (✎), trim (⊖), and the Compact/Full
+                // toggle all live inside the expanded state, not the teaser.
+                // "Done" = collapse, NOT commit — the ochre "Keep these · N"
+                // is the only commit.
                 HStack(spacing: 3) {
-                    Text(expanded ? "Done" : "Adjust")
+                    Text(expanded ? "Done" : "Show all \(proposal.clipIds.count)")
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                 }
