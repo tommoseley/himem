@@ -283,8 +283,14 @@ struct SessionListView: View {
     /// recomputes. The ochre `Keep these · N` stays the primary; this is the
     /// quiet secondary exception path (2026-07-17, §Sort-is-the-moment).
     private func addClusterToMemory(_ proposal: ClusterProposal) {
-        let removed = removedByFingerprint[proposal.fingerprint.rawValue] ?? []
-        let kept = clips(forCluster: proposal).filter { !removed.contains($0.clipId) }
+        // Route through the SHARED, tested trim logic (ClusterTrim) — set-aside
+        // exclusion + drop-empty + order — so the placement path can't diverge
+        // from it. (The batch commit is retired; the trim it fed is not.)
+        guard let trimmed = ClusterTrim.keptForCommit(
+            proposals: [proposal], removedByFingerprint: removedByFingerprint
+        ).first else { return }
+        let byId = Dictionary(inbox.clips.map { ($0.clipId, $0) }, uniquingKeysWith: { first, _ in first })
+        let kept = trimmed.keptClipIds.compactMap { byId[$0] }
         guard !kept.isEmpty else { return }
         bundleSession = BundleRequest(
             session: ClipGroup(clips: kept),
