@@ -2,14 +2,24 @@ import SwiftUI
 
 struct RecycleBinView: View {
     @ObservedObject var viewModel: JournalViewModel
+    /// F1 (2026-07-17): Recently Deleted now also holds soft-deleted projects.
+    /// Self-owned VM (reads StorageService.shared) — no threading through the
+    /// presenter. NOTE: a fully object-agnostic bin (one list + restore path
+    /// for memory/clip/project) is a real refactor — GhostCard is memory-
+    /// shaped and each type has its own VM — flagged as a follow-up; for now
+    /// projects are a second section reusing the same list/restore/purge shape.
+    @StateObject private var projectVM = ProjectViewModel()
     @State private var recycledEntries: [EntryDisplayModel] = []
+    @State private var recycledProjects: [ProjectDisplayModel] = []
     @State private var showEmptyConfirm = false
     @Environment(\.dismiss) private var dismiss
+
+    private var isEmpty: Bool { recycledEntries.isEmpty && recycledProjects.isEmpty }
 
     var body: some View {
         NavigationStack {
             Group {
-                if recycledEntries.isEmpty {
+                if isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "trash")
                             .font(.system(size: 40)) // design-token size
@@ -25,10 +35,22 @@ struct RecycleBinView: View {
                         ForEach(recycledEntries) { entry in
                             GhostCard(entry: entry, onRestore: {
                                 viewModel.restoreEntry(entryId: entry.id)
-                                recycledEntries = viewModel.loadRecycledEntries()
+                                reload()
                             }, onDelete: {
                                 viewModel.deleteEntry(entryId: entry.id)
-                                recycledEntries = viewModel.loadRecycledEntries()
+                                reload()
+                            })
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        }
+                        ForEach(recycledProjects) { project in
+                            ProjectGhostCard(project: project, recycledAt: nil, onRestore: {
+                                projectVM.restoreProject(id: project.id)
+                                reload()
+                            }, onDelete: {
+                                projectVM.purgeProject(id: project.id)
+                                reload()
                             })
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
@@ -46,7 +68,7 @@ struct RecycleBinView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
-                if !recycledEntries.isEmpty {
+                if !isEmpty {
                     ToolbarItem(placement: .destructiveAction) {
                         Button("Empty") {
                             showEmptyConfirm = true
@@ -58,16 +80,92 @@ struct RecycleBinView: View {
             .confirmationDialog("Empty Recently Deleted?", isPresented: $showEmptyConfirm, titleVisibility: .visible) {
                 Button("Delete All Forever", role: .destructive) {
                     viewModel.emptyRecycleBin()
-                    recycledEntries = []
+                    recycledProjects.forEach { projectVM.purgeProject(id: $0.id) }
+                    reload()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("\(recycledEntries.count) memories will be permanently deleted.")
+                let n = recycledEntries.count + recycledProjects.count
+                Text("\(n) item\(n == 1 ? "" : "s") will be permanently deleted.")
             }
         }
-        .onAppear {
-            recycledEntries = viewModel.loadRecycledEntries()
+        .onAppear { reload() }
+    }
+
+    private func reload() {
+        projectVM.purgeExpiredRecycledProjects()
+        recycledEntries = viewModel.loadRecycledEntries()
+        recycledProjects = projectVM.loadRecycledProjects()
+    }
+}
+
+// MARK: - Project Ghost Card
+
+/// Grayscale ghost card for a soft-deleted project (name · goal · memory
+/// count), matching `GhostCard`'s ghost styling + Restore/Delete actions.
+private struct ProjectGhostCard: View {
+    let project: ProjectDisplayModel
+    let recycledAt: Date?
+    let onRestore: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(project.name)
+                    .font(.system(size: 17, design: .serif))
+                    .italic()
+                    .foregroundStyle(Crucible.Color.ink3)
+                Spacer()
+                Text("Project")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Crucible.Color.sunk)
+                    .clipShape(Capsule())
+            }
+            if let purpose = project.purpose, !purpose.isEmpty {
+                Text(purpose)
+                    .font(.system(size: 12, design: .serif).italic())
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .lineLimit(2)
+            }
+            Text("\(project.memoryCount) memor\(project.memoryCount == 1 ? "y" : "ies") — they stay in your library")
+                .font(.caption)
+                .foregroundStyle(Crucible.Color.ink4)
+
+            HStack(spacing: 12) {
+                Spacer()
+                Button(action: onRestore) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 12))
+                            .accessibilityHidden(true)
+                        Text("Restore").font(.caption).fontWeight(.semibold)
+                    }
+                    .foregroundStyle(Crucible.Color.accent)
+                }
+                .buttonStyle(.plain)
+                Button(action: onDelete) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12))
+                            .accessibilityHidden(true)
+                        Text("Delete").font(.caption).fontWeight(.semibold)
+                    }
+                    .foregroundStyle(Crucible.Color.danger)
+                }
+                .buttonStyle(.plain)
+            }
         }
+        .padding(14)
+        .background(Crucible.Color.card)
+        .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.xl))
+        .modifier(WarmShadow(level: 1))
+        .saturation(0)
+        .opacity(0.75)
     }
 }
 

@@ -21,11 +21,26 @@ May 2026. Locked for v1.
 
 | Surface | What's there |
 |---|---|
-| Today header | `Memories ⟷ Projects` segmented control. Right side is Projects. |
-| Projects tab | Topic-filter strip (filters by *contains-topic*, not *is-topic*). List of project cards (title, derived topic pips, memory count, last-activity date). Single inline `+ New project` row at the bottom of the list. **No FAB.** |
+| Navigation | `Clips · Memories · Projects` bottom tab bar (three peers). Projects is the third tab. *(The old `Memories ⟷ Projects` top segmented control is retired — it omitted Clips and duplicated the bottom nav. See CLAUDE.md · Phone and `HiMem · Home.html`.)* |
+| Projects tab | Topic-filter strip (filters by *contains-topic*, not *is-topic*). List of project cards (title, derived topic pips, memory count, last-activity date). Single inline `+ New project` row at the bottom of the list, **and** the context-aware **FAB** (creates a new project — same name+goal sheet the inline row opens; two paths, one sheet, per CLAUDE.md § Phone context-aware-FAB lock July 10 2026, which supersedes the earlier "No FAB" bug-fix). |
 | New project sheet | Two fields: `name` + `goal`. No topic picker. |
-| Project detail | Back-to-Projects + (+ / share / edit) cluster. Serif title. Italic serif goal line. Derived topic chips. Memory count. *Find the thread* affordance (or summary card, if a run exists). Memory list below. |
+| Project detail | Nav: Back-to-Projects + (share) cluster — **no toolbar trash, no `+`** (delete moved to a bottom full-width button; add moved to the FAB). Serif title with an explicit **✎ Edit** button beside the header (opens the Edit Project sheet — the one edit affordance, matching ✎ everywhere). Italic serif goal line. Derived topic chips. Memory count. *Find the thread* affordance (or summary card, if a run exists). Memory list below. **Full-width red "Delete Project" button at the very bottom**, below all content (deletion lock). The **in-project FAB** offers two paths: **create a new memory in this project**, and **search existing memories to add** (in-context capture + add-existing). |
 | Settings → Projects | Top-level row, `N active`. Never buried. (Already shipping.) |
+
+## Deleting a project (locked July 17 2026 — deletion lock)
+
+- **A project is deleted from a full-width red "Delete Project" button at the bottom of the opened project**, below all content — danger red, hairline-bordered, ≥50px. **Never a toolbar trash glyph** (the earlier nav-cluster trash is retired). No confirmation modal — scrolling past all the content to reach it *is* the deliberation; recoverability (Recently Deleted, 30 days) is the safety net. One affordance, one place, matching memory/clip deletion.
+- **Delete Project dissolves the project (name + goal + the derived summary/suggestions) and its membership edges — the member memories survive** everywhere else, exactly as *Remove from project* would leave them. Deleting the *container* never deletes the *memories* it connected. (Copy should say so, Crucible voice.)
+
+## Editing a project
+
+- **An explicit ✎ Edit button beside the project header** opens the Edit Project sheet (name + goal; topics are derived/read-only). This is the one edit affordance — matching the boxed ✎ used on every clip surface; **not** tap-the-title-text. (`Clip Editor · unified modal · spec.md` established ✎ as the single edit convention; project fields follow it.)
+- **The Edit Project screen keeps the Find the thread box** — the AI action is reachable from edit, not only from the detail read view.
+
+## Opening a member memory (locked July 17 2026 — one memory surface)
+
+- **Tapping a memory card inside a project opens the canonical Memory Detail** — the full clip stream, boxed ✎ → the unified Clip Editor modal, and the Compact/Full toggle — **not** a bespoke summary-only card. It adds only the project-context pieces: the **"In [project]"** membership chips + dashed **"Add to project"**, and the bottom fate buttons.
+- **Bottom fate buttons, in order:** full-width **"Remove from [project]"** (recycle/unlink glyph, de-associate only — memory survives; toast + Undo, no confirm), then the memory's own full-width red **"Let Go of this Memory"** (July 13 Trash lock — dissolves the derived layer; **its clips survive** and return to the bench, subtext: "The clips stay — they'll be available to start other memories"). The stale label **"Delete memory" is retired.**
 
 ## Project Assist · “Find the thread”
 
@@ -116,7 +131,7 @@ No starter counters, no per-run accounting, no `packBalance`. If Free is offered
 
 - **AI Summary** label and **App is inferring** block were ochre/amber on the shipping project detail. Crucible reserves AI blue `#1E5C8E` for AI moments — both move to AI blue.
 - Header chrome glyphs (search, collapse, settings) were iOS system blue — they move to warm ink. Reserve blue strictly for AI.
-- Duplicate "new project" affordance on the Projects tab (inline row + FAB) collapses to the inline row only.
+- Duplicate "new project" affordance on the Projects tab (inline row + FAB) collapses to the inline row only. *(Reversed July 17 2026 — the context-aware FAB lock (CLAUDE.md § Phone, July 10 2026) restores the FAB as a second path to the same name+goal sheet; inline row and FAB coexist, both open one sheet. Not a duplicate capability — two doors, one room.)*
 - "Selection = check" on the Add-memory sheet is a Crucible violation (selection should be a ring; completion is a check). Flagged for a follow-up sweep.
 
 ## Out of scope for MVP
@@ -148,7 +163,7 @@ For the iOS team. These aren't design decisions but they're worth pinning before
 ## Files
 
 - `Himem · Projects.html` — design canvas: 5 screens + rules panel.
-- `screens-projects.jsx` — chrome, topics, segmented control.
+- `screens-projects.jsx` — chrome, topics. *(The old top segmented control is retired; the top bar is the shared HIMEM wordmark + search/settings, navigation is the bottom tab bar.)*
 - `screens-projects-cards.jsx` — project card, memory card, detail header.
 - `screens-projects-views.jsx` — the five screens.
 - `screens-projects-spec.jsx` — annotated suggestion-row spec + row states (dev handoff).

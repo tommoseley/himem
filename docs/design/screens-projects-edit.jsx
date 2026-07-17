@@ -133,6 +133,36 @@ function ScrEditProject({ goalFocused = true, goalEmpty = true }) {
           multiline
         />
         <DerivedTopics topics={['tech', 'content']} />
+
+        {/* Find the thread — kept on the Edit screen too (AI action reachable
+           from edit, not only the detail read view). Blue AI button, trailing ✦. */}
+        <div style={{
+          background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 14,
+          padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10, background: PX.aiTint, color: PX.ai,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <Spark size={18} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: PX.ink, letterSpacing: -0.1 }}>Find the thread</div>
+              <div style={{ fontSize: 11.5, color: PX.ink3, marginTop: 2, lineHeight: 1.35 }}>
+                A short summary across these memories, and others that may belong.
+              </div>
+            </div>
+          </div>
+          <button style={{
+            height: 46, width: '100%', borderRadius: 12, background: PX.ai, color: PX.accentInk,
+            border: 'none', fontSize: 14.5, fontWeight: 600, letterSpacing: -0.1, cursor: 'default',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}>
+            Find the thread
+            <Spark size={15} color={PX.accentInk} />
+          </button>
+        </div>
       </div>
     </PhoneScreen>
   );

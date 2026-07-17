@@ -42,12 +42,9 @@ function ProjectCard({ title, topics, count, date }) {
 // from screens-memories.jsx is the single memory-card definition everywhere,
 // including inside projects. One card, one source of truth.)
 
-// Project detail nav: back + (add-memory / share / delete-project) on the right.
-
-// Project detail nav: back + (add-memory / share / delete-project) on the right.
-// No pen — per the unified editing model, the title & goal are tap-to-edit
-// (they open the Edit Project sheet), and the only memory/project-level
-// destructive action is this Trash. (CLAUDE.md · unified editing model.)
+// Project detail nav: back + share only. Delete moved to a bottom full-width
+// red "Delete Project" button (deletion lock); add moved to the in-project FAB;
+// editing is the ✎ Edit button beside the header (ProjectTitleBlock).
 function ProjectDetailNav({ pill = true }) {
   return (
     <div style={{ paddingTop: 6, padding: '10px 14px 8px', display: 'flex', alignItems: 'center' }}>
@@ -69,25 +66,34 @@ function ProjectDetailNav({ pill = true }) {
         height: 32, padding: '0 12px', borderRadius: 16,
         background: PX.card, border: '1px solid ' + PX.hairline,
       }}>
-        <Plus size={15} color={PX.accent} />
+        {/* Share only. No trash (→ bottom Delete Project), no + (→ FAB). */}
         <svg width="14" height="16" viewBox="0 0 16 18" fill="none" stroke={PX.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M8 1v11"/><path d="M4 5l4-4 4 4"/><path d="M2 12v3a2 2 0 002 2h8a2 2 0 002-2v-3"/>
-        </svg>
-        {/* Trash = delete the whole project. The only project-delete path. */}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={PX.ink} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/>
         </svg>
       </div>
     </div>
   );
 }
 
-// Project detail title block
+// Project detail title block. Serif title with an explicit ✎ Edit button
+// beside it (the one edit affordance — opens the Edit Project sheet; matches
+// the boxed ✎ used on every clip surface, never tap-the-title-text).
 function ProjectTitleBlock({ title, topics, count, goal }) {
   return (
     <div style={{ padding: '10px 18px 0' }}>
-      <div style={{ fontFamily: PX.serif, fontSize: 30, fontWeight: 400, lineHeight: 1.1, letterSpacing: -0.5, color: PX.ink }}>
-        {title}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0, fontFamily: PX.serif, fontSize: 30, fontWeight: 400, lineHeight: 1.1, letterSpacing: -0.5, color: PX.ink }}>
+          {title}
+        </div>
+        {/* ✎ Edit — boxed blue button, standard edit affordance */}
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, marginTop: 4,
+          minHeight: 34, padding: '0 12px', borderRadius: 9,
+          border: '1px solid ' + PX.ai, color: PX.ai, fontSize: 13.5, fontWeight: 600, letterSpacing: -0.05,
+        }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={PX.ai} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg>
+          Edit
+        </span>
       </div>
       {goal && (
         <div style={{ fontSize: 13, color: PX.ink2, marginTop: 8, lineHeight: 1.45, fontStyle: 'italic', fontFamily: PX.serif }}>

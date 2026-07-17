@@ -37,6 +37,9 @@ class ProjectViewModel: ObservableObject {
 
     func loadProjects() {
         let request = Project.fetchAll()
+        // Recycled projects (F1 soft-delete) are hidden from the active list —
+        // they live in Recently Deleted until restored or purged.
+        request.predicate = NSPredicate(format: "recycledAt == nil")
         do {
             let fetched = try storage.viewContext.fetch(request)
             projects = fetched.map { mapToDisplayModel($0) }
@@ -54,13 +57,74 @@ class ProjectViewModel: ObservableObject {
         }
     }
 
+    /// F1 deletion lock (2026-07-17): SOFT-delete — routes the project to
+    /// Recently Deleted (recoverable 30 days), the safety net that makes the
+    /// no-confirm bottom Delete button safe. The membership edges are kept so
+    /// Restore is faithful; a purge (or the 30-day sweep) hard-deletes, and
+    /// the Nullify rule dissolves the edges then. Member memories survive
+    /// throughout — they're never touched.
     func deleteProject(id: UUID) {
+        withProject(id) { project in
+            project.recycledAt = Date()
+            project.updatedAt = Date()
+        }
+    }
+
+    /// Recently-Deleted list — projects with a non-nil `recycledAt`,
+    /// newest-deleted first.
+    func loadRecycledProjects() -> [ProjectDisplayModel] {
+        let request = Project.fetchAll()
+        request.predicate = NSPredicate(format: "recycledAt != nil")
+        request.sortDescriptors = [NSSortDescriptor(key: "recycledAt", ascending: false)]
+        do {
+            return try storage.viewContext.fetch(request).map { mapToDisplayModel($0) }
+        } catch {
+            ErrorState.shared.report(.projectError(error.localizedDescription))
+            return []
+        }
+    }
+
+    /// Restore from Recently Deleted — clears `recycledAt`; the kept edges
+    /// bring back the memberships.
+    func restoreProject(id: UUID) {
+        withProject(id) { project in
+            project.recycledAt = nil
+            project.updatedAt = Date()
+        }
+    }
+
+    /// Permanent delete (from the bin / 30-day purge). The Nullify edge rule
+    /// dissolves membership here; member memories survive.
+    func purgeProject(id: UUID) {
+        withProject(id) { project in
+            storage.viewContext.delete(project)
+        }
+    }
+
+    /// 30-day sweep — hard-deletes recycled projects past their window.
+    /// Matches the memory bin's retention.
+    func purgeExpiredRecycledProjects() {
+        let cutoff = Date().addingTimeInterval(-30 * 24 * 60 * 60)
+        let request = Project.fetchAll()
+        request.predicate = NSPredicate(format: "recycledAt != nil AND recycledAt < %@", cutoff as CVarArg)
+        do {
+            let expired = try storage.viewContext.fetch(request)
+            guard !expired.isEmpty else { return }
+            expired.forEach { storage.viewContext.delete($0) }
+            try storage.save(context: storage.viewContext)
+            loadProjects()
+        } catch {
+            ErrorState.shared.report(.projectError(error.localizedDescription))
+        }
+    }
+
+    private func withProject(_ id: UUID, _ mutate: (Project) -> Void) {
         let request = NSFetchRequest<Project>(entityName: "Project")
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         request.fetchLimit = 1
         do {
             if let project = try storage.viewContext.fetch(request).first {
-                storage.viewContext.delete(project)
+                mutate(project)
                 try storage.save(context: storage.viewContext)
                 loadProjects()
             }

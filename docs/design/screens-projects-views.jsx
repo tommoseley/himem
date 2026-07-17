@@ -115,6 +115,20 @@ function ScrProjectDetail() {
           topics={['tech']}
           gist={{ kind: 'excerpt', text: 'The watch should just capture — no transcription on-device, no screen to manage. Audio syncs to the phone and becomes a memory there.' }}
         />
+        {/* Delete Project — full-width red, at the very bottom below all content
+           (deletion lock). No toolbar trash. Dissolves the project; member
+           memories survive. No confirm — the scroll here is the deliberation. */}
+        <div style={{
+          minHeight: 50, borderRadius: 13, border: '1px solid ' + PX.danger, color: PX.danger,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          fontSize: 15.5, fontWeight: 600, letterSpacing: -0.1, marginTop: 6,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
+          Delete Project
+        </div>
+        <div style={{ fontSize: 11.5, color: PX.ink3, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>
+          Dissolves this project. The memories stay in your library.
+        </div>
       </div>
     </PhoneScreen>
   );
@@ -363,12 +377,14 @@ function SerifTitle({ children, size = 22, style }) {
 
 // ─────────────────────────────────────────────────────────────
 // 5. Project MEMBER, opened. Tapping a memory card in a project
-//    opens the memory (a real, interactive object — not a dead row).
-//    Its bottom carries TWO full-width actions, per the buttons lock:
-//      • Remove from project (Recycle) — memory LEAVES this project,
-//        survives in the library. The disassociation the user asked for.
-//      • Delete memory (Trash) — destroys → Recently Deleted.
-//    A memory in 0 projects simply won't show the first button.
+//    opens the canonical Memory Detail (full clip stream, boxed ✎ → modal,
+//    Compact/Full toggle) — NOT this stripped summary card. This mock shows
+//    only the project-context additions + bottom fate buttons; the real build
+//    reuses Memory Detail wholesale (Projects · MVP spec § Opening a member memory).
+//    Bottom fate, per the buttons + July 13 Trash locks:
+//      • Remove from [project] (Recycle) — memory LEAVES this project, survives.
+//      • Let Go of this Memory (Trash) — dissolves the memory; its CLIPS survive
+//        and return to the bench. → Recently Deleted.
 // ─────────────────────────────────────────────────────────────
 function ScrProjectMemberOpen() {
   return (
@@ -432,7 +448,10 @@ function ScrProjectMemberOpen() {
             fontSize: 15.5, fontWeight: 600, letterSpacing: -0.1,
           }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>
-            Delete memory
+            Let Go of this Memory
+          </div>
+          <div style={{ fontSize: 11.5, color: PX.ink3, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>
+            The clips stay — they’ll be available to start other memories.
           </div>
         </div>
       </div>

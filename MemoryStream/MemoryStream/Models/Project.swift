@@ -19,6 +19,12 @@ public class Project: NSManagedObject, Identifiable {
     /// assist is NOT refunded (the call already happened).
     @NSManaged public var lastThreadSummary: String?
     @NSManaged public var lastThreadGeneratedAt: Date?
+    /// Soft-delete timestamp (F1 deletion lock, 2026-07-17). Non-nil = in
+    /// Recently Deleted; restored by clearing it, purged after 30 days. The
+    /// project's membership edges nullify on soft-delete too, so member
+    /// memories survive regardless. CloudKit-synced — schema staged on Dev,
+    /// Production deploy held for the batched pre-TestFlight ceremony.
+    @NSManaged public var recycledAt: Date?
     @NSManaged public var entries: NSSet?
 }
 
