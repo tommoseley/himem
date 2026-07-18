@@ -267,70 +267,10 @@ final class EntryLifecycleService {
         }
     }
 
-    /// Removes a single ExtractedEntity by id. Used by the inline
-    /// mention chip's edit state — tap ✕ removes one chip from the
-    /// entry's mention row without going through the legacy global
-    /// edit-mode flush.
-    func removeMention(entityId: UUID, entryId: UUID) {
-        do {
-            let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
-            request.predicate = NSPredicate(format: "id == %@", entityId as CVarArg)
-            request.fetchLimit = 1
-            if let entity = try storage.viewContext.fetch(request).first {
-                storage.viewContext.delete(entity)
-                try storage.save(context: storage.viewContext)
-            }
-        } catch {
-            ErrorState.shared.report(.saveFailed(error.localizedDescription))
-        }
-    }
-
-    /// Renames an ExtractedEntity in place. Used by the inline
-    /// mention chip's edit state — typing a new label and tapping away
-    /// (or hitting Return) commits via this path. Empty `newValue` is
-    /// treated as a removal (matches the ✕ semantic per the spec's
-    /// empty-commit rule).
-    func renameMention(entityId: UUID, newValue: String, entryId: UUID) {
-        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            removeMention(entityId: entityId, entryId: entryId)
-            return
-        }
-        do {
-            let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
-            request.predicate = NSPredicate(format: "id == %@", entityId as CVarArg)
-            request.fetchLimit = 1
-            guard let entity = try storage.viewContext.fetch(request).first else { return }
-            entity.value = trimmed
-            try storage.save(context: storage.viewContext)
-        } catch {
-            ErrorState.shared.report(.saveFailed(error.localizedDescription))
-        }
-    }
-
-    /// Creates a new ExtractedEntity under the entry. Used by the
-    /// dashed "+ Add" affordance next to the mention chips — the user
-    /// types a label, taps away, and the entity is persisted with the
-    /// default `.idea` type (the catch-all dot color for user-typed
-    /// mentions; the AI-extracted entities own person/project/issue).
-    func addMention(value: String, entryId: UUID) {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        do {
-            guard let entry = try fetchEntry(id: entryId) else { return }
-            _ = try storage.createEntity(
-                entryId: entryId,
-                type: .idea,
-                value: trimmed,
-                confidence: 1.0,
-                method: "user",
-                entry: entry
-            )
-            try storage.save(context: storage.viewContext)
-        } catch {
-            ErrorState.shared.report(.saveFailed(error.localizedDescription))
-        }
-    }
+    // The inline-mention lifecycle methods (removeMention / renameMention /
+    // addMention over ExtractedEntity) were retired with the B4 mentions
+    // library — mention management now lives in ManageMentionsSheet over
+    // the library-backed `Mention` entity. Removed 2026-07-18.
 
     /// Updates a photo/video MediaReference's `mediaDescription` and
     /// regenerates the parent entry's joined content so the new text
