@@ -212,8 +212,14 @@ struct ProjectDisplayModel: Identifiable, Hashable {
     let updatedAt: Date
     let previewText: String?
 
-    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    // Equatable/Hashable are SYNTHESIZED (all stored properties), not
+    // id-only. An id-only `==` made SwiftUI treat a card whose goal (or
+    // name / count / topics) changed as unchanged — same id → equal →
+    // skip re-render — so an edited goal only appeared after a cold
+    // relaunch (Tom, 2026-07-18). ForEach identity still comes from
+    // `Identifiable.id`; this equality only governs whether the row's
+    // body re-runs, which must react to every visible field.
+    // Guarded by ProjectDisplayModelEqualityTests.
 
     var updatedLabel: String {
         let interval = Date().timeIntervalSince(updatedAt)
