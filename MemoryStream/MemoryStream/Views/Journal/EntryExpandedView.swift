@@ -747,9 +747,22 @@ struct EntryExpandedView: View {
         editCoordinator.end(id: "summary")
     }
 
+    /// Toggles the title-edit layout WITHOUT the `List`'s implicit
+    /// cell-resize animation. The title row changes height (read `Text`
+    /// ⇄ `TextField` + commit bar); `List` animates that resize by
+    /// default, and the adjacent topic-chip row reflows *through* the
+    /// animation — its ochre dot renders at intermediate positions, the
+    /// "floating dot" bug (Tom, 2026-07-18). Making the swap instant
+    /// means no subview is ever caught in motion.
+    private func setTitleEditing(_ editing: Bool) {
+        var tx = Transaction()
+        tx.disablesAnimations = true
+        withTransaction(tx) { titleIsEditing = editing }
+    }
+
     private func beginEditingTitle() {
         editedTitle = entry.displayTitle
-        titleIsEditing = true
+        setTitleEditing(true)
         editCoordinator.begin(id: "title")
         DispatchQueue.main.async {
             titleFieldFocused = true
@@ -763,14 +776,14 @@ struct EntryExpandedView: View {
             onSave(entry.id, entry.content, titleToSave)
         }
         titleFieldFocused = false
-        titleIsEditing = false
+        setTitleEditing(false)
         editCoordinator.end(id: "title")
     }
 
     private func cancelTitleEdit() {
         editedTitle = entry.displayTitle
         titleFieldFocused = false
-        titleIsEditing = false
+        setTitleEditing(false)
         editCoordinator.end(id: "title")
     }
 
