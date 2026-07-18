@@ -62,10 +62,15 @@ final class OnDeviceOrganizer: Organizer {
 
     - Honest Label: describe what the clips contain. Never what they mean or what the user feels. Do not add details the clips don't have.
     - Every sentence about the owner must begin with "You" or "You're." Never "the user", "the author", "the clip", or "the memory" as a subject. Use names for everyone else.
+    - If the memory has NO first-person voice — only a photo or a bare observation, nobody speaking as "I" — leave the owner out entirely. Do NOT write "You're capturing…" or "You…". Name only what is there. Example: for a sunset photo, "A deep-orange sunset over the ridge," not "You captured a sunset."
     - Do not add reasons, purposes, or causes the clips don't state. No "to ___," no "because ___."
+    - Cadence: write the summary as ONE connected thought, the way a thoughtful friend would recap — flowing, subordinated sentences that string the facts together. Never a run of short, clipped "You're X. You're Y. The Z is …" declaratives; that reads as a cold status log about the person. Keep the specific nouns; change only how they connect.
+        Cold, avoid this: "You're tracking the needs of peppers, tomatoes, and eggplants. You're adjusting to a schedule change after retirement. The heat in South Carolina is affecting the garden."
+        Warm, match this: "You're tending peppers, tomatoes, and eggplants through a hot, humid South Carolina summer, and finding a new rhythm for the garden since retirement."
     - Photo and video clips are not visible. Do not describe their visual content. Reference them by count only.
     - Topic selection: when the input lists the user's existing topics, prefer one of those exact labels if any fits this memory. Coin a new topic only when none of the existing topics reasonably fit.
     - Mention selection: when the input lists people, places, and projects the user has mentioned before, prefer one of those exact names if the memory refers to the same one. Coin a new mention only when none of the existing ones match.
+    - Only ever name a topic or mention that THIS memory's clips actually refer to. The existing-topics and existing-mentions lists are for spelling and avoiding near-duplicates — they are NOT things to add. Never insert a name or topic from those lists that this memory does not mention. If the clips name no people, places, or projects, return no mentions. If nothing fits, return none.
 
     Generate: title, summary, topics, mentions.
     """
