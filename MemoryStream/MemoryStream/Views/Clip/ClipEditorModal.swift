@@ -552,13 +552,16 @@ struct ClipEditorModal: View {
         }
     }
 
-    /// The glyph for THIS clip. Available for `.inbox` clips (which carry
-    /// `source`); nil for `.managed` clips until `MediaReference.sourceDevice`
-    /// ships — a CloudKit-synced schema change deferred to the next deploy
-    /// (ruling 2026-07-16: inbox now, managed field later).
+    /// The glyph for THIS clip. `.inbox` clips carry `source`; `.managed`
+    /// clips now read `MediaReference.sourceDevice` (shipped in the B4
+    /// schema batch, July 18 2026). Nil (no glyph) when the source is
+    /// unknown — legacy clips captured before the field, which we never
+    /// backfill with a guess.
     private var sourceGlyph: String? {
-        guard case .inbox(let clip) = source else { return nil }
-        return Self.sourceGlyphName(for: clip.source)
+        switch source {
+        case .inbox(let clip):  return Self.sourceGlyphName(for: clip.source)
+        case .managed(let ref): return Self.sourceGlyphName(for: ref.sourceDevice)
+        }
     }
 
     /// Zone 1 metadata line — source glyph (when known) + reflective timing.

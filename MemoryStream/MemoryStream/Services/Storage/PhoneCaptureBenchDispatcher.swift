@@ -130,6 +130,8 @@ enum PhoneCaptureBenchDispatcher {
         ref.osIdentifier = osIdentifier
         ref.mediaType = mediaType.rawValue
         ref.createdAt = now
+        // Phone Clips-tab ad-hoc capture — always phone-sourced (B4).
+        ref.sourceDevice = JournalEntry.SourceDevice.phone.rawValue
         if let text {
             ref.text = text
         }

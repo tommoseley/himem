@@ -398,6 +398,7 @@ final class StorageService {
         localIdentifier: String,
         mediaType: MediaReference.MediaType,
         capturedAt: Date? = nil,
+        sourceDevice: JournalEntry.SourceDevice? = nil,
         context: NSManagedObjectContext? = nil
     ) throws -> MediaReference {
         let ctx = context ?? viewContext
@@ -406,6 +407,7 @@ final class StorageService {
         ref.osIdentifier = localIdentifier
         ref.mediaType = mediaType.rawValue
         ref.isAccessible = true
+        ref.sourceDevice = sourceDevice?.rawValue
         let refCreatedAt = capturedAt ?? Date()
         ref.createdAt = refCreatedAt
         try Self.createEdge(from: entry, to: ref, linkedAt: refCreatedAt, in: ctx)
@@ -420,6 +422,7 @@ final class StorageService {
         for entry: JournalEntry,
         text: String,
         createdAt: Date = Date(),
+        sourceDevice: JournalEntry.SourceDevice? = nil,
         context: NSManagedObjectContext? = nil
     ) throws -> MediaReference {
         let ctx = context ?? viewContext
@@ -428,6 +431,7 @@ final class StorageService {
         ref.osIdentifier = ""
         ref.mediaType = MediaReference.MediaType.note.rawValue
         ref.isAccessible = true
+        ref.sourceDevice = sourceDevice?.rawValue
         ref.createdAt = createdAt
         ref.text = text
         try Self.createEdge(from: entry, to: ref, linkedAt: createdAt, in: ctx)
@@ -444,6 +448,7 @@ final class StorageService {
         audioFilename: String,
         transcript: String,
         createdAt: Date = Date(),
+        sourceDevice: JournalEntry.SourceDevice? = nil,
         context: NSManagedObjectContext? = nil
     ) throws -> MediaReference {
         let ctx = context ?? viewContext
@@ -452,6 +457,7 @@ final class StorageService {
         ref.osIdentifier = audioFilename
         ref.mediaType = MediaReference.MediaType.voice.rawValue
         ref.isAccessible = true
+        ref.sourceDevice = sourceDevice?.rawValue
         ref.createdAt = createdAt
         // Strip ASR leading-noise punctuation (",.", ",…", "...") so
         // the stored transcript — and everything downstream (joined
