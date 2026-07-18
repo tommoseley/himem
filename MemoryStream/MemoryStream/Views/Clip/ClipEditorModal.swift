@@ -75,6 +75,15 @@ struct ClipEditorModal: View {
         }
         .background(Crucible.Color.paper.ignoresSafeArea())
         .task(id: source.id) { await loadDurationIfNeeded() }
+        // "Opened by you" — the single point where a clip becomes Reviewed
+        // (P7-2). Covers every open path (bench, session, cluster, Memory
+        // Detail) since they all present this modal. Per-device, idempotent.
+        .onAppear {
+            switch source {
+            case .inbox(let clip):  InboxManifest.shared.markReviewed(clipId: clip.clipId)
+            case .managed(let ref): BenchClipReviewStore.markReviewed(ref.id)
+            }
+        }
         // Drive the Zone 1 progress bar while this clip plays. 4 Hz is smooth
         // enough for a progress indicator and cheap; it idles to 0 otherwise.
         .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in

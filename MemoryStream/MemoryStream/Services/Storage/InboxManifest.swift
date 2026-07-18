@@ -81,6 +81,12 @@ struct InboxClip: Codable, Identifiable, Equatable {
     /// older pre-announce wire payloads (and every non-announced
     /// row) don't carry it.
     let fileSizeBytes: Int64?
+    /// "Opened by you" — flips true the first time the user opens this
+    /// clip (P7-2, July 18 2026). Drives the New filter (`New = reviewed
+    /// == false`). **Per-device, not synced** — it rides the local
+    /// manifest, never CloudKit; review state is a noise-reduction signal,
+    /// so per-device is honest for v1. Legacy rows decode `false`.
+    let reviewed: Bool
 
     var id: UUID { clipId }
 
@@ -98,7 +104,8 @@ struct InboxClip: Codable, Identifiable, Equatable {
         status: Status = .received,
         disposedAt: Date? = nil,
         announcedAt: Date? = nil,
-        fileSizeBytes: Int64? = nil
+        fileSizeBytes: Int64? = nil,
+        reviewed: Bool = false
     ) {
         self.clipId = clipId
         self.capturedAt = capturedAt
@@ -114,6 +121,7 @@ struct InboxClip: Codable, Identifiable, Equatable {
         self.disposedAt = disposedAt
         self.announcedAt = announcedAt
         self.fileSizeBytes = fileSizeBytes
+        self.reviewed = reviewed
     }
 
     // Custom decoding so legacy manifests (no `status`/`disposedAt`/
@@ -129,6 +137,7 @@ struct InboxClip: Codable, Identifiable, Equatable {
         case source, audioFilename, transcriptionAttempted, rollGroupId
         case status, disposedAt
         case announcedAt, fileSizeBytes
+        case reviewed
     }
 
     init(from decoder: Decoder) throws {
@@ -153,6 +162,7 @@ struct InboxClip: Codable, Identifiable, Equatable {
         disposedAt = try c.decodeIfPresent(Date.self, forKey: .disposedAt)
         announcedAt = try c.decodeIfPresent(Date.self, forKey: .announcedAt)
         fileSizeBytes = try c.decodeIfPresent(Int64.self, forKey: .fileSizeBytes)
+        reviewed = try c.decodeIfPresent(Bool.self, forKey: .reviewed) ?? false
     }
 }
 
@@ -392,7 +402,40 @@ final class InboxManifest: ObservableObject {
             transcriptionAttempted: true,
             rollGroupId: existing.rollGroupId,
             status: .transcribed,
-            disposedAt: existing.disposedAt
+            disposedAt: existing.disposedAt,
+            announcedAt: existing.announcedAt,
+            fileSizeBytes: existing.fileSizeBytes,
+            reviewed: existing.reviewed
+        )
+        var next = clips
+        next[idx] = updated
+        replace(with: next)
+    }
+
+    /// Flips a clip's `reviewed` to true on first open (P7-2). Per-device,
+    /// rides the manifest. No-op if already reviewed or the clip's gone —
+    /// so it's cheap to call on every open. Carries every other field
+    /// forward verbatim (same discipline as `recordTranscriptionAttempt`).
+    func markReviewed(clipId: UUID) {
+        guard let idx = clips.firstIndex(where: { $0.clipId == clipId }) else { return }
+        let existing = clips[idx]
+        guard !existing.reviewed else { return }
+        let updated = InboxClip(
+            clipId: existing.clipId,
+            capturedAt: existing.capturedAt,
+            duration: existing.duration,
+            transcript: existing.transcript,
+            latitude: existing.latitude,
+            longitude: existing.longitude,
+            source: existing.source,
+            audioFilename: existing.audioFilename,
+            transcriptionAttempted: existing.transcriptionAttempted,
+            rollGroupId: existing.rollGroupId,
+            status: existing.status,
+            disposedAt: existing.disposedAt,
+            announcedAt: existing.announcedAt,
+            fileSizeBytes: existing.fileSizeBytes,
+            reviewed: true
         )
         var next = clips
         next[idx] = updated
@@ -521,7 +564,10 @@ final class InboxManifest: ObservableObject {
             transcriptionAttempted: clip.transcriptionAttempted,
             rollGroupId: clip.rollGroupId,
             status: .disposed,
-            disposedAt: Date()
+            disposedAt: Date(),
+            announcedAt: clip.announcedAt,
+            fileSizeBytes: clip.fileSizeBytes,
+            reviewed: clip.reviewed
         )
     }
 
@@ -1030,4 +1076,31 @@ private extension JSONDecoder {
         d.dateDecodingStrategy = .iso8601
         return d
     }()
+}
+
+/// Per-device review state for bench `MediaReference`s (P7-2, July 18 2026).
+/// A `MediaReference` is CloudKit-synced, so a stored `reviewed` attribute
+/// would sync and force a schema deploy; review state is per-device +
+/// no-deploy by decision, so it lives here in UserDefaults instead, keyed
+/// by ref id. The bench-ref sibling of `InboxClip.reviewed` (which rides
+/// its own local manifest) — both fold into one `New = not reviewed`
+/// predicate. Cross-device review-sync is out of scope for v1 (rides the
+/// post-v1 bench→MediaReference unification).
+enum BenchClipReviewStore {
+    private static let key = "com.himem.bench.reviewedRefIds"
+
+    static func isReviewed(_ id: UUID) -> Bool {
+        reviewedIds().contains(id.uuidString)
+    }
+
+    /// Idempotent — a no-op (no write) when the id is already recorded.
+    static func markReviewed(_ id: UUID) {
+        var ids = reviewedIds()
+        guard ids.insert(id.uuidString).inserted else { return }
+        UserDefaults.standard.set(Array(ids), forKey: key)
+    }
+
+    private static func reviewedIds() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
+    }
 }

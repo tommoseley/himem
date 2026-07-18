@@ -66,6 +66,7 @@
 		A100000095 /* PlacemarkFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000095 /* PlacemarkFormatter.swift */; };
 		A100000096 /* ClipLocationResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000096 /* ClipLocationResolver.swift */; };
 		A100000097 /* Mention.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000097 /* Mention.swift */; };
+		A100000098 /* ManageMentionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000098 /* ManageMentionsSheet.swift */; };
 		A100000201 /* MediaTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000201 /* MediaTile.swift */; };
 		A100000204 /* TextSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000204 /* TextSegment.swift */; };
 		A100000205 /* ChronologicalCaptureStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000205 /* ChronologicalCaptureStream.swift */; };
@@ -151,7 +152,6 @@
 		A100000910 /* EditTextSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000910 /* EditTextSheet.swift */; };
 		A100000950 /* TopicChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000950 /* TopicChip.swift */; };
 		A100000951 /* ManageTopicsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000951 /* ManageTopicsSheet.swift */; };
-		A100000098 /* ManageMentionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000098 /* ManageMentionsSheet.swift */; };
 		A100000970 /* TranscriptMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000970 /* TranscriptMode.swift */; };
 		A100000971 /* CompactTranscriptViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000971 /* CompactTranscriptViews.swift */; };
 		A100000980 /* VideoPlayerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000980 /* VideoPlayerSheet.swift */; };
@@ -336,6 +336,7 @@
 		B100000095 /* PlacemarkFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacemarkFormatter.swift; sourceTree = "<group>"; };
 		B100000096 /* ClipLocationResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipLocationResolver.swift; sourceTree = "<group>"; };
 		B100000097 /* Mention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mention.swift; sourceTree = "<group>"; };
+		B100000098 /* ManageMentionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageMentionsSheet.swift; sourceTree = "<group>"; };
 		B100000201 /* MediaTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTile.swift; sourceTree = "<group>"; };
 		B100000204 /* TextSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSegment.swift; sourceTree = "<group>"; };
 		B100000205 /* ChronologicalCaptureStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronologicalCaptureStream.swift; sourceTree = "<group>"; };
@@ -414,7 +415,6 @@
 		B100000910 /* EditTextSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTextSheet.swift; sourceTree = "<group>"; };
 		B100000950 /* TopicChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicChip.swift; sourceTree = "<group>"; };
 		B100000951 /* ManageTopicsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageTopicsSheet.swift; sourceTree = "<group>"; };
-		B100000098 /* ManageMentionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageMentionsSheet.swift; sourceTree = "<group>"; };
 		B100000970 /* TranscriptMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptMode.swift; sourceTree = "<group>"; };
 		B100000971 /* CompactTranscriptViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactTranscriptViews.swift; sourceTree = "<group>"; };
 		B100000980 /* VideoPlayerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerSheet.swift; sourceTree = "<group>"; };
