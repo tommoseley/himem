@@ -151,6 +151,7 @@
 		A100000910 /* EditTextSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000910 /* EditTextSheet.swift */; };
 		A100000950 /* TopicChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000950 /* TopicChip.swift */; };
 		A100000951 /* ManageTopicsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000951 /* ManageTopicsSheet.swift */; };
+		A100000098 /* ManageMentionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000098 /* ManageMentionsSheet.swift */; };
 		A100000952 /* ManagedChipEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000952 /* ManagedChipEdit.swift */; };
 		A100000970 /* TranscriptMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000970 /* TranscriptMode.swift */; };
 		A100000971 /* CompactTranscriptViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000971 /* CompactTranscriptViews.swift */; };
@@ -414,6 +415,7 @@
 		B100000910 /* EditTextSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTextSheet.swift; sourceTree = "<group>"; };
 		B100000950 /* TopicChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicChip.swift; sourceTree = "<group>"; };
 		B100000951 /* ManageTopicsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageTopicsSheet.swift; sourceTree = "<group>"; };
+		B100000098 /* ManageMentionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageMentionsSheet.swift; sourceTree = "<group>"; };
 		B100000952 /* ManagedChipEdit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedChipEdit.swift; sourceTree = "<group>"; };
 		B100000970 /* TranscriptMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptMode.swift; sourceTree = "<group>"; };
 		B100000971 /* CompactTranscriptViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactTranscriptViews.swift; sourceTree = "<group>"; };
@@ -733,6 +735,7 @@
 				B100000994 /* BottomDeleteButton.swift */,
 				B200000034 /* NewProjectFAB.swift */,
 				B100000951 /* ManageTopicsSheet.swift */,
+				B100000098 /* ManageMentionsSheet.swift */,
 				B100000980 /* VideoPlayerSheet.swift */,
 				B100000732 /* TopicColorPicker.swift */,
 				B100000733 /* TopicEditorSheet.swift */,
@@ -1440,6 +1443,7 @@
 				A100000993 /* QuickLookViewer.swift in Sources */,
 				A100000994 /* BottomDeleteButton.swift in Sources */,
 				A100000951 /* ManageTopicsSheet.swift in Sources */,
+				A100000098 /* ManageMentionsSheet.swift in Sources */,
 				A100000980 /* VideoPlayerSheet.swift in Sources */,
 				A100000201 /* MediaTile.swift in Sources */,
 				A100000302 /* AppendFAB.swift in Sources */,

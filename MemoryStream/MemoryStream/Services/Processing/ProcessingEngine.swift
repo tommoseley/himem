@@ -438,20 +438,16 @@ final class ProcessingEngine {
             let topics = (try? context.fetch(request)) ?? []
             return topics.map(\.name)
         }
+        // Library-wide mentions palette (B4 Phase 2) — all Mention names,
+        // mirroring the existingTopics gather. Now that mentions are
+        // library-backed, the organizer prefers reusing a recurring
+        // person/place over coining a near-duplicate (spec §2c). Replaces
+        // the old entry-scoped gather (which only saw this memory's own
+        // entities, so it couldn't prevent cross-memory fragmentation).
         let existingMentions: [String] = await context.perform {
-            guard let entry = try? context.existingObject(with: objectID) as? JournalEntry,
-                  let entities = entry.extractedEntities as? Set<ExtractedEntity> else { return [] }
-            var seen: Set<String> = []
-            var out: [String] = []
-            for e in entities {
-                let trimmed = e.value.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { continue }
-                let key = trimmed.lowercased()
-                if seen.insert(key).inserted {
-                    out.append(trimmed)
-                }
-            }
-            return out
+            let request = NSFetchRequest<Mention>(entityName: "Mention")
+            let mentions = (try? context.fetch(request)) ?? []
+            return mentions.map(\.name)
         }
         return (existingTopics, existingMentions)
     }
@@ -535,6 +531,15 @@ final class ProcessingEngine {
 
         for entityResult in result.entities {
             guard let type = ExtractedEntity.EntityType(rawValue: entityResult.type) else { continue }
+            // Link a library-backed Mention (B4 Phase 2) so the mentions UI
+            // populates on every organize. Idempotent (findOrCreate dedups
+            // on name+type; addToMentions is a Set add), and runs even when
+            // the ExtractedEntity below is a dupe, so migrated / re-imported
+            // entries stay linked. `next_action` maps to nil → skipped.
+            if let mentionType = MentionMigration.mappedType(for: type),
+               let mention = try? StorageService.shared.findOrCreateMention(name: entityResult.value, type: mentionType, context: context) {
+                entry.addToMentions(mention)
+            }
             let key = Self.entityKey(type: type.rawValue, value: entityResult.value)
             if existingKeys.contains(key) { continue }
             let entity = ExtractedEntity(context: context)

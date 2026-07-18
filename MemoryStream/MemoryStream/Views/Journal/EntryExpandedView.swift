@@ -158,6 +158,9 @@ struct EntryExpandedView: View {
     /// manage sheet (unified associations, 2026-07-17), opened from the
     /// dashed Edit in the Projects read section.
     @State private var showManageProjects: Bool = false
+    /// Drives the ManageMentionsSheet — the mentions sibling (B4 Phase 2),
+    /// opened from the dashed Edit in the Mentions read section.
+    @State private var showManageMentions: Bool = false
     // Memory Detail → unified Clip Editor modal (2026-07-16 cycle). The ✎ Edit
     // control in an expanded clip row opens the modal for that clip; the
     // long-memory read accordion (transcriptOpenRowId) is untouched. Editing
@@ -352,6 +355,12 @@ struct EntryExpandedView: View {
         .sheet(isPresented: $showManageProjects) {
             ManageProjectsSheet(entryID: entry.id, onDismiss: {
                 showManageProjects = false
+            })
+            .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showManageMentions) {
+            ManageMentionsSheet(entryID: entry.id, onDismiss: {
+                showManageMentions = false
             })
             .presentationDetents([.large])
         }
@@ -1053,15 +1062,12 @@ struct EntryExpandedView: View {
         }
     }
 
-    /// Mentions section — always-visible row of extracted entity
-    /// tags per Memory Detail v3. Now uses the **managed chip · edit
-    /// state** Crucible pattern: each chip is tap-to-edit in place
-    /// (rename or remove via ✕). A trailing dashed **+ Add** chip
-    /// matches the unified-editing model's "lightweight inline" rule
-    /// for mentions. The section sits between the chronological
-    /// capture stream and the Organized · review card; the section
-    /// stays mounted even when empty so the + Add affordance is always
-    /// reachable.
+    /// Mentions section — the unified associations read model (B4 Phase 2,
+    /// July 18 2026), the mentions sibling of the topic + project rows.
+    /// Per-type-glyph navigable chips (tap → filter Memories by that
+    /// mention) + one dashed **Edit** → `ManageMentionsSheet`. Replaces the
+    /// retired inline `ManagedChipEdit` (✕-pill + free-text add). Always
+    /// mounted so a memory can always gain mentions.
     @ViewBuilder
     private var mentionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1071,36 +1077,64 @@ struct EntryExpandedView: View {
                 .tracking(1.6)
                 .foregroundStyle(Crucible.Color.ink3)
 
-            FlowLayout(spacing: 6) {
-                ForEach(visibleTags) { tag in
-                    ManagedChipEdit(
-                        id: "mention-\(tag.id.uuidString)",
-                        value: tag.value,
-                        dotTint: tag.entityType.mentionTint,
-                        onCommitRename: { newValue in
-                            lifecycle.renameMention(
-                                entityId: tag.id,
-                                newValue: newValue,
-                                entryId: entry.id
-                            )
-                        },
-                        onRemove: {
-                            lifecycle.removeMention(entityId: tag.id, entryId: entry.id)
-                        }
-                    )
-                }
-                ManagedChipAddAffordance(
-                    id: "mention-add",
-                    onCommit: { newValue in
-                        lifecycle.addMention(value: newValue, entryId: entry.id)
+            FlowLayout(spacing: 10) {
+                ForEach(entry.mentions) { mention in
+                    Button {
+                        MentionFilterBus.shared.request(mention)
+                    } label: {
+                        mentionReadChip(mention)
                     }
-                )
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Filter memories by \(mention.type.label.lowercased()): \(mention.name)")
+                }
+                editMentionsAffordance
             }
         }
         .padding(.top, 8)
         .overlay(alignment: .top) {
             Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
         }
+    }
+
+    /// A navigable mention chip — per-type line glyph + name (glyph rule:
+    /// dot = topic, folder = project, per-type glyph = mention).
+    private func mentionReadChip(_ mention: MentionChip) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: mention.type.sfSymbol)
+                .font(.system(size: 11, weight: .semibold))
+            Text(mention.name)
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(Crucible.Color.ink2)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 38)
+        .background(Crucible.Color.wash1, in: Capsule())
+    }
+
+    /// Dashed **Edit** — the one way into mention management, matching the
+    /// topic + project rows. Opens `ManageMentionsSheet`.
+    private var editMentionsAffordance: some View {
+        Button {
+            showManageMentions = true
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Edit")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.accent)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 38)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit mentions")
     }
 
     // MARK: - Toolbar items (decomposed from var body)

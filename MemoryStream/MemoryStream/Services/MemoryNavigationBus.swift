@@ -99,3 +99,26 @@ final class ProjectOpenBus: ObservableObject {
         pendingProjectId = projectId
     }
 }
+
+/// Session-scoped signal: "filter Memories by this mention" (B4 Phase 2).
+/// Emitted when a mention read-chip is tapped on an opened memory (unified
+/// associations read model — a mention navigates to where it lives; ruled
+/// 2026-07-18 to be the Memories-list filter, mirroring the topic filter).
+/// Consumed by `HiMemTabView` (switch to Memories) and the memories
+/// `JournalView` (set `selectedMention`, drives the filter + banner).
+///
+/// Not persisted. Cleared by the consumer after routing.
+@MainActor
+final class MentionFilterBus: ObservableObject {
+    static let shared = MentionFilterBus()
+
+    /// Non-nil = filter the Memories list to this mention. The memories
+    /// `JournalView` clears it after applying the filter.
+    @Published var pendingMention: MentionChip? = nil
+
+    private init() {}
+
+    func request(_ mention: MentionChip) {
+        pendingMention = mention
+    }
+}

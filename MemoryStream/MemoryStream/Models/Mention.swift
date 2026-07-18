@@ -50,6 +50,31 @@ extension Mention {
     }
 }
 
+extension Mention.MentionType {
+    /// Per-type line glyph (unified associations glyph rule: dot = topic
+    /// only; mentions carry a per-type glyph). Matches the associations
+    /// mock's KindGlyph; an untyped mention resolves to `.idea` upstream,
+    /// so the neutral lightbulb is the fallback, never a person.
+    var sfSymbol: String {
+        switch self {
+        case .person: return "person"
+        case .place:  return "mappin"
+        case .idea:   return "lightbulb"
+        case .org:    return "building.2"
+        }
+    }
+
+    /// Human label for the type (accessibility + the add-type picker).
+    var label: String {
+        switch self {
+        case .person: return "Person"
+        case .place:  return "Place"
+        case .idea:   return "Idea"
+        case .org:    return "Organization"
+        }
+    }
+}
+
 // MARK: - Relationships
 
 extension Mention {

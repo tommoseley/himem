@@ -8,6 +8,11 @@ class JournalViewModel: ObservableObject {
     @Published var entries: [EntryDisplayModel] = []
     @Published var topics: [String] = []
     @Published var selectedTopic: String? = nil
+    /// Active mention filter (B4 Phase 2). Set by a mention read-chip tap
+    /// (via `MentionFilterBus`); the Memories list filters to memories
+    /// carrying it and shows a dismissable banner. No filter strip — it's
+    /// reachable only from a mention chip, cleared from the banner.
+    @Published var selectedMention: MentionChip? = nil
     @Published private(set) var filteredEntries: [EntryDisplayModel] = []
     @Published private(set) var groupedEntries: [DayGroup] = []
     /// Month-year label for the oldest stored memory (e.g., "March 2024").
@@ -230,18 +235,21 @@ class JournalViewModel: ObservableObject {
         // Recompute filtered/grouped whenever entries or selectedTopic change.
         // (Entity-tap filtering was retired with the Memories list redesign —
         // see docs/design/Memories list · spec.md §3.)
-        Publishers.CombineLatest($entries, $selectedTopic)
+        Publishers.CombineLatest3($entries, $selectedTopic, $selectedMention)
             .debounce(for: .milliseconds(16), scheduler: RunLoop.main)
-            .sink { [weak self] entries, topic in
-                self?.recomputeFiltered(entries: entries, topic: topic)
+            .sink { [weak self] entries, topic, mention in
+                self?.recomputeFiltered(entries: entries, topic: topic, mention: mention)
             }
             .store(in: &recomputeCancellables)
     }
 
-    private func recomputeFiltered(entries: [EntryDisplayModel], topic: String?) {
+    private func recomputeFiltered(entries: [EntryDisplayModel], topic: String?, mention: MentionChip?) {
         var result = entries
         if let topic {
             result = result.filter { $0.topicNames.contains(topic) }
+        }
+        if let mention {
+            result = result.filter { entry in entry.mentions.contains { $0.id == mention.id } }
         }
         filteredEntries = result
         recomputeGrouped(from: result)

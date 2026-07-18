@@ -66,6 +66,8 @@ struct HiMemTabView: View {
     /// Routes a project read-chip tap to the Projects tab (opens the
     /// project detail there).
     @ObservedObject private var projectOpen = ProjectOpenBus.shared
+    /// Routes a mention read-chip tap to the Memories tab's mention filter.
+    @ObservedObject private var mentionFilter = MentionFilterBus.shared
     /// Set true when `pendingReturnToClips` fires; consumed by the
     /// next Clips coachmark evaluation so guardrail #3 ("suppress the
     /// Clips coachmark when arriving from a capture") holds. Cleared
@@ -234,6 +236,14 @@ struct HiMemTabView: View {
         .onChange(of: projectOpen.pendingProjectId) { _, pending in
             if pending != nil {
                 selection = .projects
+            }
+        }
+        // Mention read-chip tapped → route to Memories so its JournalView
+        // applies the mention filter. Not cleared here; the memories
+        // JournalView clears it after applying.
+        .onChange(of: mentionFilter.pendingMention) { _, pending in
+            if pending != nil {
+                selection = .memories
             }
         }
         .onChange(of: selection) { _, newTab in

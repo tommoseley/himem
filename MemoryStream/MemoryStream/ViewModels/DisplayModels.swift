@@ -28,6 +28,10 @@ struct EntryDisplayModel: Identifiable {
     /// "In [project]" chips in Memory Detail. Many-to-many, so 0-N;
     /// empty when the memory is unfiled.
     let projectMemberships: [ProjectChip]
+    /// Library-backed mentions on this memory (B4 Phase 2). Per-type-glyph
+    /// navigable chips in Memory Detail. Replaces the `tags`-as-mentions
+    /// (`ExtractedEntity`) rendering.
+    let mentions: [MentionChip]
 
     var timeString: String {
         let interval = Date().timeIntervalSince(createdAt)
@@ -117,6 +121,7 @@ extension EntryDisplayModel: Equatable {
             && lhs.locationName == rhs.locationName
             && lhs.renderedSummary == rhs.renderedSummary
             && lhs.projectMemberships == rhs.projectMemberships
+            && lhs.mentions == rhs.mentions
     }
 }
 
@@ -144,7 +149,8 @@ extension EntryDisplayModel {
             longitude: longitude,
             locationName: locationName,
             renderedSummary: renderedSummary,
-            projectMemberships: projectMemberships
+            projectMemberships: projectMemberships,
+            mentions: mentions
         )
     }
 }
@@ -206,4 +212,13 @@ struct TagDisplayModel: Identifiable, Equatable {
 struct ProjectChip: Identifiable, Hashable {
     let id: UUID
     let name: String
+}
+
+/// A library-backed mention on a memory, reduced to what a read/manage
+/// chip needs (B4 Phase 2): name + type (the type drives the per-type
+/// glyph — person · place · idea · org; dot stays topics-only).
+struct MentionChip: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+    let type: Mention.MentionType
 }
