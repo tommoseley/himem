@@ -44,7 +44,7 @@ final class EntryLifecycleService {
         guard let entry = try fetchEntry(id: entryId) else {
             throw NSError(domain: "EntryLifecycleService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry \(entryId) not found"])
         }
-        let ref = try storage.createMediaReference(for: entry, localIdentifier: localIdentifier, mediaType: mediaType)
+        let ref = try storage.createMediaReference(for: entry, localIdentifier: localIdentifier, mediaType: mediaType, sourceDevice: .phone)
         if let transcript, !transcript.isEmpty {
             ref.transcript = transcript
             try storage.save(context: storage.viewContext)
@@ -91,7 +91,7 @@ final class EntryLifecycleService {
         guard let entry = try fetchEntry(id: entryId) else {
             throw NSError(domain: "EntryLifecycleService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry \(entryId) not found"])
         }
-        return try storage.createNoteFragment(for: entry, text: text, createdAt: createdAt)
+        return try storage.createNoteFragment(for: entry, text: text, createdAt: createdAt, sourceDevice: .phone)
     }
 
     /// Regenerates `entry.content` from the entry's TextSegments + voice
@@ -534,7 +534,8 @@ final class EntryLifecycleService {
                     for: entry,
                     audioFilename: voiceFilename,
                     transcript: content,
-                    createdAt: voiceCapturedAt ?? Date()
+                    createdAt: voiceCapturedAt ?? Date(),
+                    sourceDevice: .phone
                 )
                 // Re-derive `entry.content` from the just-created
                 // voice fragment so it matches the cleaned text. The
@@ -709,7 +710,8 @@ final class EntryLifecycleService {
                 _ = try storage.createNoteFragment(
                     for: entry,
                     text: entry.content,
-                    createdAt: entry.createdAt
+                    createdAt: entry.createdAt,
+                    sourceDevice: .phone
                 )
             }
 
@@ -718,10 +720,11 @@ final class EntryLifecycleService {
                     for: entry,
                     audioFilename: voiceFilename,
                     transcript: trimmed,
-                    createdAt: voiceCapturedAt ?? Date()
+                    createdAt: voiceCapturedAt ?? Date(),
+                    sourceDevice: .phone
                 )
             } else if !trimmed.isEmpty {
-                _ = try storage.createNoteFragment(for: entry, text: trimmed)
+                _ = try storage.createNoteFragment(for: entry, text: trimmed, sourceDevice: .phone)
             }
 
             let savedRefs = try createMediaReferences(for: entry, mediaCaptures: mediaCaptures)
@@ -1091,7 +1094,8 @@ final class EntryLifecycleService {
             let ref = try storage.createMediaReference(
                 for: entry,
                 localIdentifier: capture.localIdentifier,
-                mediaType: capture.mediaType
+                mediaType: capture.mediaType,
+                sourceDevice: .phone
             )
             refs.append(ref)
         }
