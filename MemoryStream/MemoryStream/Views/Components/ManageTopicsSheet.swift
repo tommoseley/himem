@@ -107,7 +107,7 @@ struct ManageTopicsSheet: View {
         .alert(item: $pendingDelete) { pending in
             Alert(
                 title: Text("Delete “\(pending.name)”?"),
-                message: Text(impactMessage(count: pending.count)),
+                message: Text(Self.impactMessage(count: pending.count)),
                 primaryButton: .destructive(Text("Delete from library")) {
                     performLibraryDelete(pending.name)
                 },
@@ -118,8 +118,9 @@ struct ManageTopicsSheet: View {
 
     /// Impact copy, plural-aware. Mirrors clip-delete's live-count
     /// warning: the memories keep everything else — only the topic
-    /// assignment is removed.
-    private func impactMessage(count: Int) -> String {
+    /// assignment is removed. `static` + internal so the money test can
+    /// exercise the plural boundary without standing up the sheet.
+    static func impactMessage(count: Int) -> String {
         let memories = count == 1 ? "1 memory" : "\(count) memories"
         return "Used in \(memories). Deleting removes this topic from all of them. The memories themselves are untouched."
     }
