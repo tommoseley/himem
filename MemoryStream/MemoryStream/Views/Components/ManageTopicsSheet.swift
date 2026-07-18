@@ -217,14 +217,25 @@ struct ManageTopicsSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: 11))
     }
 
+    /// Library topics NOT already on this memory — the "From your
+    /// library" list, and the only topics the red-minus can delete.
+    /// (On-memory topics are managed by tap-to-deselect above; deleting
+    /// an in-use topic means deselect-first, then delete — one idiom per
+    /// scope, ruled 2026-07-18.)
+    private var availableLibraryNames: [String] {
+        paletteNames.filter { !selectedNames.contains($0) }
+    }
+
     /// "From your library" eyebrow + the Edit/Done toggle that reveals
     /// the red-minus delete-from-library affordance. The toggle hides
-    /// when the library is empty (nothing to edit).
+    /// when there's nothing deletable — every library topic is already
+    /// on this memory — because a control that does nothing is noise
+    /// (ruled 2026-07-18).
     private var libraryHeader: some View {
         HStack(alignment: .firstTextBaseline) {
             sectionEyebrow("From your library")
             Spacer()
-            if !paletteNames.isEmpty {
+            if !availableLibraryNames.isEmpty {
                 Button {
                     libraryEditing.toggle()
                 } label: {
@@ -247,7 +258,7 @@ struct ManageTopicsSheet: View {
         // Hide names already selected — they live in "On this memory"
         // above. Empty palette gets a quiet placeholder so the section
         // header doesn't dangle.
-        let available = paletteNames.filter { !selectedNames.contains($0) }
+        let available = availableLibraryNames
         return Group {
             if available.isEmpty {
                 Text(paletteNames.isEmpty
@@ -356,7 +367,9 @@ struct ManageTopicsSheet: View {
         }
         paletteNames.removeAll { $0 == name }
         selectedNames.remove(name)
-        if paletteNames.isEmpty { libraryEditing = false }
+        // Exit edit mode once there's nothing left to delete — the
+        // toggle itself is about to disappear (see libraryHeader).
+        if availableLibraryNames.isEmpty { libraryEditing = false }
     }
 
     /// Promotes the draft field's text into the selection (creating a
