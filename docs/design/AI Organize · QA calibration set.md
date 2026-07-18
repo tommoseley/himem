@@ -117,11 +117,14 @@ Rubric (per output):
 > "You captured a breathtaking sunset, taking a peaceful moment to appreciate the beauty of the evening sky over your home."
 *Why it fails:* injects "you," mental state ("peaceful moment to appreciate"), and an aesthetic verdict ("breathtaking") absent from the clip. A pure-observation memory names what's there and stops.
 
+**On-device status (July 18 2026 calibration): `on-device: known ceiling / frontier: expected pass`.** The 3B on-device model still renders *"You're capturing one photo of…"* here even with an explicit subject-out rule in the prompt — one of the two documented hand-editable ceilings (see `spec.md §2b`). Kept as a permanent graded fixture: the Draft-organized review catches it today, and any model bump or the frontier/Plus path is measured against it.
+
 ---
 
 ## Expansion targets (toward 20–30 before launch)
 
 Still to author, one hand-written ideal each — categories from §11 not yet covered:
+- **A second subject-out fixture** (photo/observation, no first-person voice) — generalizes Fixture 5's `on-device: known ceiling / frontier: expected pass` marker beyond the sunset case, so the subject-out rule the 3B can't hold is measured on more than one input on every model bump.
 - On-a-roll session (5+ voice clips, one sitting) → one memory
 - Pure-audio long memory (the 25-min lecture case) — proportional summary of a *long* substance
 - Mixed languages in one memory (deferred behavior, but seed a fixture)
