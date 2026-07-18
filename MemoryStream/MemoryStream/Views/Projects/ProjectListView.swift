@@ -19,6 +19,9 @@ struct ProjectListView: View {
     /// The FAB lives at `HiMemTabView`; the sheet lives here. Wired
     /// via `NewProjectRequestBus` per the July 10 FAB lock.
     @ObservedObject private var newProjectBus = NewProjectRequestBus.shared
+    /// Consumes a project read-chip tap routed from a memory's Projects
+    /// read section (unified associations, 2026-07-17).
+    @ObservedObject private var projectOpenBus = ProjectOpenBus.shared
 
     private var filteredProjects: [ProjectDisplayModel] {
         guard let topic = selectedTopic else { return projectVM.projects }
@@ -115,6 +118,14 @@ struct ProjectListView: View {
             if token != nil {
                 attemptCreateProject()
                 newProjectBus.consume()
+            }
+        }
+        // A project read-chip was tapped on an opened memory (from any
+        // tab). HiMemTabView switched to Projects; push the detail here.
+        .onChange(of: projectOpenBus.pendingProjectId) { _, pid in
+            if let pid {
+                selectedProjectId = pid
+                projectOpenBus.pendingProjectId = nil
             }
         }
         .sheet(isPresented: $showPricing) {

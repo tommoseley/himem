@@ -88,3 +88,16 @@ For any label, ask three things:
 3. **Would a thoughtful person say it this way?** Not *"What operation would you like to perform?"* but *"Where does this belong?"*, *"These seem related — want to look?"*, *"Still thinking about this?"*
 
 The whole voice, in one line: **HiMem should sound like a conversation with a thoughtful person, not a form with a submit button.**
+
+---
+
+## Nouns are locked; the outcome vocabulary can evolve (logged July 18 2026 — dogfood finding, not a v1 change)
+
+Dogfooding surfaced a mental-model observation worth recording: users don't experience the architecture's nouns (*evidence → context → intent*), they experience **`captures → stories → collections`**. When you open a Memory today — title, summary, topics, mentions, connected clips, notes, coming reflection — it reads less like "a saved recording" and more like **an authored story assembled from evidence**. That is the *trajectory* of a Memory, and it's Studio's reason to exist.
+
+Two verdicts, so this doesn't become drift:
+
+- **Do not rename the objects or nav in v1.** *Clips / Memories / Projects* stay. "Memory" is load-bearing brand — the app is *HiMem*; "Stories" inside "HiMem" is a cognitive bump a week from launch. **"Projects → Collections" is rejected outright** — *Project = intent* was arrived at deliberately (we killed "container"/collection language); "feels like a collection" in dogfood is a **surfaces problem** (the intent-bearing feature, Find the thread, is Plus-gated and manual, so free use only ever shows the collection half), not a relabel to ratify. Renaming would sand the warning light off the dashboard.
+- **The outcome vocabulary *may* evolve — object stays "memory," the shaping act can become "story."** Precedent: iPhoto's internal `Asset/Album` vs user-facing `Photos/Albums`. If explored post-v1, it is a **deliberate register split, never a scatter**: the *object* keeps its noun everywhere (labels, chips, counts — "this clip appears in 3 **memories**"), and only the *shaping verbs* lean narrative ("build a **story** from these clips"). Mixing "build a story" with "3 stories" in the same surface is **worse** than either alone — that's the two-nouns-for-one-thing fragmentation this whole document fights. One experiment, measured, post-launch: if users spontaneously say *"I built a story from those clips,"* the register has landed.
+
+*The disciplined response to the finding is (1) note the Memory→Story trajectory here and in the North Star, and (2) fix the intent-expression on Projects so "feels like a collection" stops being true — not rename the furniture into the vocabulary we spent months rejecting.*

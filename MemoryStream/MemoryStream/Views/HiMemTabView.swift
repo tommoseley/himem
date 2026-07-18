@@ -63,6 +63,9 @@ struct HiMemTabView: View {
     /// Routes a topic read-chip tap (from any tab's Memory Detail) to the
     /// Memories tab's topic filter (unified associations read model).
     @ObservedObject private var topicFilter = TopicFilterBus.shared
+    /// Routes a project read-chip tap to the Projects tab (opens the
+    /// project detail there).
+    @ObservedObject private var projectOpen = ProjectOpenBus.shared
     /// Set true when `pendingReturnToClips` fires; consumed by the
     /// next Clips coachmark evaluation so guardrail #3 ("suppress the
     /// Clips coachmark when arriving from a capture") holds. Cleared
@@ -223,6 +226,14 @@ struct HiMemTabView: View {
         .onChange(of: topicFilter.pendingTopicFilter) { _, pending in
             if pending != nil {
                 selection = .memories
+            }
+        }
+        // Project read-chip tapped on an opened memory → route to the
+        // Projects tab so ProjectListView can push the project detail.
+        // Id NOT cleared here; ProjectListView clears it after pushing.
+        .onChange(of: projectOpen.pendingProjectId) { _, pending in
+            if pending != nil {
+                selection = .projects
             }
         }
         .onChange(of: selection) { _, newTab in

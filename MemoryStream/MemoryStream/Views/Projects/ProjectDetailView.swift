@@ -693,16 +693,12 @@ struct ProjectDetailView: View {
                 onRecycle: { entryId in
                     viewModel.recycleEntry(entryId: entryId)
                 },
-                onAddToProject: { entryId, projId in
-                    projectVM.addMemory(entryId: entryId, toProjectId: projId)
-                },
                 onRemoveFromProject: { entryId in
                     projectVM.removeMemory(entryId: entryId, fromProjectId: projectId)
                     loadProjectEntries()
                     showRemovalToast(entryId: entryId)
                 },
-                projectContextName: project?.name,
-                availableProjects: projectVM.projects
+                projectContextName: project?.name
             )
             .onAppear { viewModel.markEntryViewed(entryId) }
         } else {

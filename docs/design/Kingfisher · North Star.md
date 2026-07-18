@@ -277,3 +277,11 @@ Not:
 ## The long-term vision
 
 We want Kingfisher products to feel less like software and more like thoughtful tools. Quiet. Patient. Trustworthy — and fast when speed is the kindness. They help people keep thinking rather than interrupt it. They disappear until they're useful, and they show up instantly when they are. They preserve possibility without creating obligation.
+
+---
+
+## The trajectory: a memory is becoming a story (logged July 18 2026)
+
+A dogfood observation worth keeping above the build, because it points at where the product is going. Users don't experience the architecture's nouns (*evidence → context → intent*); they experience **`captures → stories → collections`**. A HiMem Memory started as "a saved recording" and is maturing into **an authored story assembled from evidence** — title, summary, topics, mentions, connected clips, notes, and eventually reflection. That maturation *is* the arc from capture toward creation, and it's what Studio exists to finish (a story becomes an article, a talk, a recipe, a book).
+
+We hold this as *direction, not instruction*: **rename nothing in v1** (the object stays "memory" — it's load-bearing brand; *Project = intent* stays, not "collection"). The disciplined response is to let the **outcome vocabulary** evolve while the object noun holds, and to keep making a Memory *richer* so the trajectory is real rather than relabeled. See `Kingfisher Language.md` § "Nouns are locked; the outcome vocabulary can evolve." The signal we're watching for: people spontaneously saying *"I built a story from those clips."*

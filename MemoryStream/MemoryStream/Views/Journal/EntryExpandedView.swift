@@ -23,7 +23,6 @@ struct EntryExpandedView: View {
     /// mediaCaptures: staged photo/video/voice assets.
     var onCommit: ((UUID, String, [(localIdentifier: String, mediaType: MediaReference.MediaType)]) -> Void)? = nil
     var onRecycle: ((UUID) -> Void)? = nil
-    var onAddToProject: ((UUID, UUID) -> Void)? = nil  // entryId, projectId
     /// Set when this Memory Detail was opened from inside a project.
     /// When non-nil, the bottom destruction button swaps from
     /// `Delete memory` to `Remove from project` per `Memory Detail ·
@@ -33,7 +32,6 @@ struct EntryExpandedView: View {
     var onRemoveFromProject: ((UUID) -> Void)? = nil
     /// Names the project for the "Remove from [project]" button (F2/F3).
     var projectContextName: String? = nil
-    var availableProjects: [ProjectDisplayModel] = []
 
     @Environment(\.dismiss) private var dismiss
 
@@ -156,6 +154,10 @@ struct EntryExpandedView: View {
     /// `.manageTopics` cases; the `.newTopic` case rode the dead
     /// `addTopicMenu` and went out with the cleanup.
     @State private var showManageTopics: Bool = false
+    /// Drives the ManageProjectsSheet — the projects sibling of the topic
+    /// manage sheet (unified associations, 2026-07-17), opened from the
+    /// dashed Edit in the Projects read section.
+    @State private var showManageProjects: Bool = false
     // Memory Detail → unified Clip Editor modal (2026-07-16 cycle). The ✎ Edit
     // control in an expanded clip row opens the modal for that clip; the
     // long-memory read accordion (transcriptOpenRowId) is untouched. Editing
@@ -202,12 +204,10 @@ struct EntryExpandedView: View {
             headerRow { summarySection }
             headerRow(top: -3) { topicChipsRow }
             // Project-context row (F2/F3): "In [project]" membership chips
-            // + a dashed "Add to project" affordance. Shown whenever the
-            // memory belongs to a project or there's a project to add it
-            // to; an unfiled memory with no projects gets nothing here.
-            if !entry.projectMemberships.isEmpty || !addableProjects.isEmpty {
-                headerRow(top: -3) { projectContextRow }
-            }
+            // + a dashed "Edit" affordance. Always shown (like the topic
+            // row) so a memory can always be filed; unified associations
+            // read model (2026-07-17).
+            headerRow(top: -3) { projectSection }
             // Transcript Full ⇄ Compact toggle sits between the topic
             // chips row and the chronological body. Hidden for short
             // memories — the section header itself disappears, the
@@ -346,6 +346,12 @@ struct EntryExpandedView: View {
         .sheet(isPresented: $showManageTopics) {
             ManageTopicsSheet(entryID: entry.id, onDismiss: {
                 showManageTopics = false
+            })
+            .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showManageProjects) {
+            ManageProjectsSheet(entryID: entry.id, onDismiss: {
+                showManageProjects = false
             })
             .presentationDetents([.large])
         }
@@ -514,37 +520,31 @@ struct EntryExpandedView: View {
         .accessibilityLabel("Edit topics")
     }
 
-    /// Projects the memory could be added to — the available set minus the
-    /// ones it's already a member of. Drives both the row's visibility and
-    /// the dashed affordance's menu; empty means "no project to add to."
-    private var addableProjects: [ProjectDisplayModel] {
-        let memberIds = Set(entry.projectMemberships.map(\.id))
-        return availableProjects.filter { !memberIds.contains($0.id) }
-    }
-
-    /// Project-context row (F2/F3). "In [project]" chips label the
-    /// containers this memory belongs to; the dashed "Add to project"
-    /// affordance links it into another. Mirrors the topic row's shape
-    /// (wash chips + dashed-ochre add) so the two read as siblings.
-    private var projectContextRow: some View {
+    /// Projects read section (unified associations, 2026-07-17) — the
+    /// sibling of the topic row. Navigable folder chips (tap → open the
+    /// project) plus one dashed **Edit** that opens `ManageProjectsSheet`.
+    /// Replaces the F2/F3 "In [project]" static chips + add-menu. Always
+    /// shown so a memory can always be filed. The bottom "Remove from
+    /// [project]" fate button (member-through-project) is unchanged — the
+    /// one contextual exception to routing through the sheet.
+    private var projectSection: some View {
         VStack(alignment: .leading, spacing: 7) {
+            Text("PROJECTS")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(1.6)
+                .foregroundStyle(Crucible.Color.ink3)
+
             FlowLayout(spacing: 10) {
                 ForEach(entry.projectMemberships) { membership in
-                    HStack(spacing: 5) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("In \(membership.name)")
-                            .font(.system(size: 13, weight: .semibold))
+                    Button {
+                        ProjectOpenBus.shared.request(membership.id)
+                    } label: {
+                        projectReadChip(membership.name)
                     }
-                    .foregroundStyle(Crucible.Color.ink2)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(minHeight: 38)
-                    .background(Crucible.Color.wash1, in: Capsule())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open project: \(membership.name)")
                 }
-                if !addableProjects.isEmpty {
-                    addToProjectAffordance
-                }
+                editProjectsAffordance
             }
         }
         .padding(.top, 12)
@@ -556,23 +556,33 @@ struct EntryExpandedView: View {
         }
     }
 
-    /// Dashed "Add to project" — the same dashed-ochre add vocabulary as
-    /// `addTopicAffordance`. Opens a menu of projects the memory isn't
-    /// already in; selecting one links it via `onAddToProject`.
-    private var addToProjectAffordance: some View {
-        Menu {
-            ForEach(addableProjects) { project in
-                Button {
-                    onAddToProject?(entry.id, project.id)
-                } label: {
-                    Label(project.name, systemImage: "folder")
-                }
-            }
+    /// A navigable project chip — folder glyph + name (glyph rule: dot =
+    /// topic, folder = project). Tapping opens the project.
+    private func projectReadChip(_ name: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "folder")
+                .font(.system(size: 11, weight: .semibold))
+            Text(name)
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(Crucible.Color.ink2)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 38)
+        .background(Crucible.Color.wash1, in: Capsule())
+    }
+
+    /// Dashed **Edit** — the one way into project management, matching the
+    /// topic row's dashed Edit. Opens `ManageProjectsSheet` (on this
+    /// memory / new project / from your library).
+    private var editProjectsAffordance: some View {
+        Button {
+            showManageProjects = true
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .semibold))
-                Text("Add to project")
+                Text("Edit")
                     .font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(Crucible.Color.accent)
@@ -584,7 +594,8 @@ struct EntryExpandedView: View {
                     .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             )
         }
-        .accessibilityLabel("Add to project")
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit projects")
     }
 
     /// Title field swaps between an editable `TextField` and a read-mode
@@ -1116,22 +1127,10 @@ struct EntryExpandedView: View {
     @ViewBuilder
     private var trailingToolbar: some View {
         HStack(spacing: 16) {
-            if !availableProjects.isEmpty {
-                Menu {
-                    ForEach(availableProjects) { project in
-                        Button {
-                            onAddToProject?(entry.id, project.id)
-                        } label: {
-                            Label(project.name, systemImage: "folder")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.subheadline)
-                        .foregroundStyle(Crucible.Color.ink2)
-                }
-                .accessibilityLabel("Add to project")
-            }
+            // The toolbar folder-plus is retired (unified associations,
+            // 2026-07-17) — project add/remove now lives on the Projects
+            // read section's dashed Edit → ManageProjectsSheet, the one
+            // management path. Share only.
             Button { showShareSheet = true } label: {
                 Image(systemName: "square.and.arrow.up")
                     .font(.subheadline)

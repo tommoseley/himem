@@ -76,3 +76,26 @@ final class TopicFilterBus: ObservableObject {
         pendingTopicFilter = topic
     }
 }
+
+/// Session-scoped signal: "open this project." Emitted when the user taps
+/// a project **read chip** on an opened memory (unified associations read
+/// model — a project chip navigates to the project it names). Consumed by
+/// `HiMemTabView` (switch to the Projects tab) and `ProjectListView`
+/// (push `ProjectDetailView` for the id). Mirrors `TopicFilterBus`; works
+/// from a memory opened in any tab, since the bus + tab switch is uniform.
+///
+/// Not persisted. Cleared by the consumer after routing.
+@MainActor
+final class ProjectOpenBus: ObservableObject {
+    static let shared = ProjectOpenBus()
+
+    /// Non-nil = open the project with this id on the Projects tab. The
+    /// projects `ProjectListView` clears it after pushing the detail.
+    @Published var pendingProjectId: UUID? = nil
+
+    private init() {}
+
+    func request(_ projectId: UUID) {
+        pendingProjectId = projectId
+    }
+}

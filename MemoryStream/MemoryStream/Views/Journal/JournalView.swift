@@ -299,11 +299,7 @@ struct JournalView: View {
                 },
                 onRecycle: { entryId in
                     viewModel.recycleEntry(entryId: entryId)
-                },
-                onAddToProject: { entryId, projectId in
-                    projectVM.addMemory(entryId: entryId, toProjectId: projectId)
-                },
-                availableProjects: projectVM.projects
+                }
             )
             .onAppear { viewModel.markEntryViewed(entryId) }
         } else {
