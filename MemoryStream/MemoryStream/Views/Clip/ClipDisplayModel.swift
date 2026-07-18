@@ -77,6 +77,13 @@ struct ClipDisplayModel: Equatable, Identifiable {
     /// workbench, not the reflective surface.
     let failed: Bool
 
+    /// Capture source — "watch" / "phone" (nil = unknown). Drives the
+    /// per-clip source glyph on the operational/bench row (B4, July 18
+    /// 2026 — "a small Watch/phone glyph on the card"). From
+    /// `InboxClip.source` (bench) or `MediaReference.sourceDevice`
+    /// (managed). Reflective registers ignore it.
+    var sourceDevice: String? = nil
+
     /// The four media kinds. Explicit + exhaustive — the spec
     /// (`Clip model · spec.md` §1 · Content, Evidence control) is
     /// written against these four; adding a fifth would ripple
@@ -147,7 +154,8 @@ extension ClipDisplayModel {
             content: .transcript(clip.transcript),
             evidence: .audio(duration: clip.duration),
             thumbnailKey: nil,
-            failed: clip.transcriptionAttempted && clip.transcript.isEmpty
+            failed: clip.transcriptionAttempted && clip.transcript.isEmpty,
+            sourceDevice: clip.source
         )
     }
 
@@ -185,7 +193,8 @@ extension ClipDisplayModel {
             content: content,
             evidence: evidence,
             thumbnailKey: thumbnailKey,
-            failed: false
+            failed: false,
+            sourceDevice: ref.sourceDevice
         )
     }
 
