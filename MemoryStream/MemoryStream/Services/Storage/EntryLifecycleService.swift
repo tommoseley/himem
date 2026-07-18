@@ -815,7 +815,8 @@ final class EntryLifecycleService {
     @discardableResult
     func appendClips(
         entryId: UUID,
-        clips: [(audioFilename: String, transcript: String, capturedAt: Date)]
+        clips: [(audioFilename: String, transcript: String, capturedAt: Date)],
+        sourceDevice: JournalEntry.SourceDevice? = nil
     ) -> Int {
         guard !clips.isEmpty else { return 0 }
         do {
@@ -826,7 +827,8 @@ final class EntryLifecycleService {
                     for: entry,
                     audioFilename: clip.audioFilename,
                     transcript: clip.transcript,
-                    createdAt: clip.capturedAt
+                    createdAt: clip.capturedAt,
+                    sourceDevice: sourceDevice
                 )
             }
             entry.content = Self.joinedContent(from: entry)
@@ -862,7 +864,8 @@ final class EntryLifecycleService {
     @discardableResult
     func createMemoryFromVoiceClips(
         _ clips: [(audioFilename: String, transcript: String, capturedAt: Date)],
-        topicName: String?
+        topicName: String?,
+        sourceDevice: JournalEntry.SourceDevice? = nil
     ) -> UUID? {
         guard !clips.isEmpty else { return nil }
         do {
@@ -880,7 +883,8 @@ final class EntryLifecycleService {
                     for: entry,
                     audioFilename: clip.audioFilename,
                     transcript: clip.transcript,
-                    createdAt: clip.capturedAt
+                    createdAt: clip.capturedAt,
+                    sourceDevice: sourceDevice
                 )
             }
 
