@@ -200,11 +200,17 @@ struct ClipsTabView: View {
             refs: unplacedRefs,
             absorbed: absorbedBus.absorbedRefIds
         )
+        // P7-1 (July 18 2026): the new/unshaped session block goes on TOP;
+        // the returned-from-memory day-grouped stack (older, previously-
+        // connected-now-loose refs, running back months) goes BELOW. The
+        // shipped build had these reversed, so a fresh session landed
+        // under months of reverse-chron and "new arrivals appeared after
+        // May 19." Whatever is surfaced as "to look at" leads the screen.
         VStack(alignment: .leading, spacing: 12) {
+            SessionListView(viewModel: viewModel)
             if !visibleUnplaced.isEmpty {
                 unplacedDayGroupedStack(refs: visibleUnplaced)
             }
-            SessionListView(viewModel: viewModel)
         }
     }
 

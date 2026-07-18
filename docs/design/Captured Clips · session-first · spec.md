@@ -30,6 +30,33 @@ Captured Clips shows ad-hoc clips grouped into sessions. Each session is one car
 - **Accidental clips** (no speech detected, sub-2-second clips, palm-muted) are flagged at sync time and **auto-excluded from the bundle.** The card surfaces the exclusion count as a quiet line ("1 clip auto-excluded · no speech"). The user can include an excluded clip back from the expanded card view. They can also exclude a "good" clip the same way.
 - **Deterministic grouping has no AI; *Sort* is the AI layer above it.** The idle-gap rule (below) is a clock, not a classifier. **Sort** (below) is the AI proposal layer that groups across sessions by time+place and word-match (Free/on-device) or semantics (Plus). The two compose: idle-gap forms sessions; Sort proposes which sessions/clips belong to one Memory. Title-on-bundle AI is unchanged.
 
+### Clip lifecycle + the status lens (locked July 18 2026 — supersedes "New = unconnected")
+
+The bench is a **library, not an inbox** — and a library's states are *recently-acquired / available / referenced*, not "old vs. new." A clip has **two orthogonal properties** — a review *state* and a connection *relationship* — and keeping them separate is what makes the model boring (in the good way):
+
+**Axis 1 · Review state (a stored property):**
+- **New** — `reviewed == false`. Never opened. Genuine fresh intake. **New means *unseen*, not *unconnected*** — this aligns the New filter with the tab dot (both = unseen arrivals).
+- **Reviewed** — `reviewed == true`. **"Opened by you."** The definition is the *act of opening*, nothing about the outcome — you may review a clip and immediately attach it, or review and leave it loose; both are Reviewed.
+
+**Axis 2 · Connection count (derived from the edges):** `0` · `1` · `n`. **Loose = `connectionCount == 0`** — covering *never-used ∨ previously-attached-then-deleted ∨ manually-detached*, since all three are simply "0 edges right now."
+
+They combine naturally: *New + 0 memories*, *Reviewed + 0 memories*, *Reviewed + 3 memories*. **"Attached" is not a lifecycle state — it's a relationship** (edge count ≥ 1), so it isn't in the state enum.
+
+**The status lens is `New · All · Loose`**, and each is one predicate — **New** = `reviewed==false` · **Loose** = `connectionCount==0` · **All** = everything. Type axis (Voice/Photos/Video/Notes) is unchanged and independent.
+
+**`reviewed` is a persisted field, not derivable — and per-device, not synced (decided July 18 2026).** *reviewed=true, connections=0* is reachable two different ways — open-then-close, **or** attach-then-delete — and they're indistinguishable from connection history alone, so "has this been opened" **must be stored**. It lives as a **local field on `InboxClip` (manifest) and bench `MediaReference` — no CloudKit deploy** (the V7 batch already shipped). Review state is a noise-reduction signal, not load-bearing, so per-device is honest for v1 (the tab dot already clears locally on open); **cross-device review-sync is out of scope for v1** and is a property of the post-v1 bench→MediaReference unification, solved there once and consistently. Connection count *is* derived (count the edges).
+
+*Why this changed:* deleting a memory returns its clips to the bench (the Let Go lock preserves them), and under the old "New = unconnected" definition those re-appeared as **New** — though they're not new, they're *previously-shaped, now loose*. Dogfood hit ~30 such clips masquerading as New. Splitting the review-state axis from the connection axis makes each honest.
+
+**"Orphaned" is architecture-only.** The store can tell never-used from previously-attached if needed (via edge history / an `everConnected` bit), but the **UI only ever says "Loose"** — nobody thinks *"I have 37 orphaned clips,"* they think *"I've got loose stuff I don't need."* Future-proof: because *loose* and *reviewed* are clean primitives, Studio graph queries like "loose clips about gardening" or "reviewed but unattached" are meaningful.
+
+### Loose-clip cleanup (locked July 18 2026)
+
+- **No cascade, ever.** Deleting a memory/project never destroys its clips (the Let Go lock). They return to the bench as **Loose**.
+- **Cleanup lives in the Loose filter.** Tap **Loose** → the zero-connection pile → **multi-select → Delete / Add to a memory** (Photos-style; reuses the Sort multi-select and its single ochre commit). Delete here is clip-deletion (**"Delete this Clip"**, destroys the atom, → Recently Deleted).
+- **No branching at deletion time.** Let Go / Delete-project add **no** clip checkbox or modal — the honest sentence ("The clips stay…") is enough. Cleanup is a separate, deliberate act on the bench, not a fork inside a calm deletion flow.
+- **The Loose count is never a nag.** No badge, no "N to clear." Loose is a filter you *choose* to open when you want to tidy — the workbench-not-queue rule still holds.
+
 ## Idle-gap sessioning (locked June 30 2026)
 
 **Origin (dogfood, June 30):** a dinner at the CIA produced five separate clips between 6:09 and 6:18 PM — obviously *one sitting* — but each wrist-raise became its own session, so the day shattered into 13 one-clip cards and the consolidation burden landed entirely on the user. That is a perishability failure at the *organizing* end: the thing that is actually one memory (a dinner) arrived as five decisions. This rule makes a session mean *a sitting*, not *a wrist-raise*.
