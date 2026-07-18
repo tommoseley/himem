@@ -176,12 +176,6 @@ struct EntryExpandedView: View {
     /// Topic changes now write straight through `ManageTopicsSheet`.
     private var currentTopics: [String] { entry.topicNames }
 
-    /// Mentions to render in the always-visible mentions row. Used to
-    /// filter out staged `removedTagIds`; deletion now writes directly
-    /// to Core Data through `ManagedChipEdit`'s ✕ → `lifecycle.removeMention`,
-    /// so the list is just the entry's tags.
-    private var visibleTags: [TagDisplayModel] { entry.tags }
-
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
         // Detail screen renders as a `List` (not a `ScrollView + VStack`)
