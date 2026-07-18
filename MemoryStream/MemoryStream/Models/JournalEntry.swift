@@ -30,6 +30,9 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var textSegments: NSSet?
     @NSManaged public var topics: NSSet?
     @NSManaged public var projects: NSSet?
+    /// Library-backed mentions (B4, July 18 2026) — many-to-many, replaces
+    /// the per-memory `extractedEntities` mentions for display/management.
+    @NSManaged public var mentions: NSSet?
     /// Timestamp of the most recent successful AI Organize pass.
     /// `nil` means this memory has never been organized. Used by the
     /// memory detail view to decide whether to show the "N new clips
@@ -192,6 +195,13 @@ extension JournalEntry {
         return set.filter { $0.recycledAt == nil }.sorted { $0.name < $1.name }
     }
 
+    /// Library-backed mentions on this memory (B4), sorted by name for
+    /// stable chip order. Many-to-many, so 0-N.
+    var mentionsArray: [Mention] {
+        let set = mentions as? Set<Mention> ?? []
+        return set.sorted { $0.name < $1.name }
+    }
+
     /// Clips referenced by this memory, sorted by their per-memory
     /// `orderInMemory` on the connecting `MemoryClipEdge` (falls back
     /// to `linkedAt`, then `ref.createdAt`). Walks edges — the legacy
@@ -314,6 +324,14 @@ extension JournalEntry {
 
     @objc(addOrganizePassesObject:)
     @NSManaged func addToOrganizePasses(_ value: OrganizePass)
+
+    // Library-backed mentions accessors (B4). Manual @NSManaged decls —
+    // this model uses no Core Data codegen, so the to-many add/remove
+    // helpers are declared explicitly (mirrors addToTopics/addToProjects).
+    @objc(addMentionsObject:)
+    @NSManaged func addToMentions(_ value: Mention)
+    @objc(removeMentionsObject:)
+    @NSManaged func removeFromMentions(_ value: Mention)
 }
 
 // MARK: - Fetch Requests

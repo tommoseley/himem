@@ -65,6 +65,7 @@
 		A100000094 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000094 /* LocationService.swift */; };
 		A100000095 /* PlacemarkFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000095 /* PlacemarkFormatter.swift */; };
 		A100000096 /* ClipLocationResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000096 /* ClipLocationResolver.swift */; };
+		A100000097 /* Mention.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000097 /* Mention.swift */; };
 		A100000201 /* MediaTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000201 /* MediaTile.swift */; };
 		A100000204 /* TextSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000204 /* TextSegment.swift */; };
 		A100000205 /* ChronologicalCaptureStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000205 /* ChronologicalCaptureStream.swift */; };
@@ -334,6 +335,7 @@
 		B100000094 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		B100000095 /* PlacemarkFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacemarkFormatter.swift; sourceTree = "<group>"; };
 		B100000096 /* ClipLocationResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipLocationResolver.swift; sourceTree = "<group>"; };
+		B100000097 /* Mention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mention.swift; sourceTree = "<group>"; };
 		B100000201 /* MediaTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTile.swift; sourceTree = "<group>"; };
 		B100000204 /* TextSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSegment.swift; sourceTree = "<group>"; };
 		B100000205 /* ChronologicalCaptureStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronologicalCaptureStream.swift; sourceTree = "<group>"; };
@@ -607,6 +609,7 @@
 				B100000204 /* TextSegment.swift */,
 				B100000301 /* CaptureModality.swift */,
 				B100000048 /* Project.swift */,
+				B100000097 /* Mention.swift */,
 				B100000626 /* OrganizePass.swift */,
 				B200000010 /* MemoryClipEdge.swift */,
 				B100000024 /* MemoryStream.xcdatamodeld */,
@@ -1452,6 +1455,7 @@
 				A100000057 /* EntryLifecycleService.swift in Sources */,
 				A100000056 /* EntryMapper.swift in Sources */,
 				A100000048 /* Project.swift in Sources */,
+				A100000097 /* Mention.swift in Sources */,
 				A100000049 /* ProjectViewModel.swift in Sources */,
 				A100000050 /* ProjectCardView.swift in Sources */,
 				A100000051 /* ProjectListView.swift in Sources */,

@@ -209,7 +209,16 @@ final class StorageService {
         //         the bin (device repro 2026-07-17). Folds into the same
         //         batched pre-TestFlight Production deploy as the staged
         //         purpose→goal / MediaReference.sourceDevice fields.
-        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV6"
+        //   V7 — B4 mentions-library schema batch (July 18 2026): new
+        //         `Mention` entity (many-to-many → JournalEntry), the
+        //         `JournalEntry.mentions` relationship, and
+        //         `MediaReference.sourceDevice`. Bumped so all three
+        //         publish to Development; they ride ONE batched Production
+        //         deploy with the still-pending V6 `recycledAt`. The
+        //         ExtractedEntity→Mention DATA migration is separate
+        //         (`MentionMigration`, run via LaunchScreenView), not a
+        //         schema concern.
+        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV7"
         if !UserDefaults.standard.bool(forKey: schemaInitKey) {
             // Only mark the version flag set on actual success. If we
             // failed silently (e.g. account daemon temporarily refused
@@ -535,6 +544,42 @@ final class StorageService {
         return topic
     }
 
+    // MARK: - Mention Operations
+
+    /// Idempotent find-or-create for a library-backed `Mention` (B4).
+    /// Dedup is on **(normalizedName, type)** — a same-name person and
+    /// org stay distinct (ruled 2026-07-17); only a same-name same-type
+    /// pair merges. Mirrors `findOrCreateTopic`'s slug idempotency.
+    @discardableResult
+    func findOrCreateMention(
+        name: String,
+        type: Mention.MentionType,
+        context: NSManagedObjectContext? = nil
+    ) throws -> Mention {
+        let ctx = context ?? viewContext
+        let normalized = Mention.normalize(name)
+
+        let request = NSFetchRequest<Mention>(entityName: "Mention")
+        request.predicate = NSPredicate(
+            format: "normalizedName == %@ AND type == %@",
+            normalized, type.rawValue
+        )
+        request.fetchLimit = 1
+
+        if let existing = try ctx.fetch(request).first {
+            return existing
+        }
+
+        let mention = Mention(context: ctx)
+        mention.id = UUID()
+        mention.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        mention.type = type.rawValue
+        mention.normalizedName = normalized
+        mention.createdAt = Date()
+        try save(context: ctx)
+        return mention
+    }
+
     /// Merges Topic entities that share a slug into a single canonical
     /// topic. CloudKit can't enforce uniqueness, so two devices that
     /// independently create the same topic before they sync end up with
@@ -609,5 +654,72 @@ final class StorageService {
         if didMerge {
             try save(context: ctx)
         }
+    }
+}
+
+// MARK: - Mention Migration (B4, July 18 2026)
+
+/// Seeds the library-backed `Mention` store from the legacy per-memory
+/// `ExtractedEntity` mentions, so the unified associations mentions UI has
+/// data on day one. Co-located with `StorageService` (avoids a new
+/// project-file entry) and modelled on `FragmentMigration.runIfNeeded`.
+///
+/// **Mapping** (ruled 2026-07-18): `idea→idea`, `person→person`,
+/// `project→org` (the NL extractor lumped places+orgs into `project`; org
+/// is the least-wrong bucket, user re-types in one tap), `issue→idea`,
+/// `next_action→skipped` (never a mention).
+///
+/// **ExtractedEntity rows are LEFT in place** — that table is still the
+/// NL-extraction substrate; only the mentions *display/management* moves
+/// to `Mention`. The migration is idempotent twice over: a run-once
+/// UserDefaults flag *and* `findOrCreateMention` + `addToMentions` Set
+/// semantics, so a re-run self-heals rather than duplicating.
+enum MentionMigration {
+    private static let flagKey = "com.himem.migration.extractedEntityToMentionV1"
+
+    static func runIfNeeded(in context: NSManagedObjectContext, storage: StorageService = .shared) {
+        if UserDefaults.standard.bool(forKey: flagKey) { return }
+        _ = migrate(in: context, storage: storage)
+        UserDefaults.standard.set(true, forKey: flagKey)
+    }
+
+    /// Maps a legacy entity type to a mention type, or `nil` when the
+    /// entity is not a mention (`next_action`). Internal for the money
+    /// tests.
+    static func mappedType(for type: ExtractedEntity.EntityType) -> Mention.MentionType? {
+        switch type {
+        case .idea:       return .idea
+        case .person:     return .person
+        case .project:    return .org
+        case .issue:      return .idea
+        case .nextAction: return nil
+        }
+    }
+
+    /// The migration body, flag-free so tests can drive it directly on an
+    /// in-memory context. Returns the number of memory→mention links
+    /// created (existing links are not double-counted). Idempotent.
+    @discardableResult
+    static func migrate(in context: NSManagedObjectContext, storage: StorageService = .shared) -> Int {
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        guard let entries = try? context.fetch(request) else { return 0 }
+
+        var linked = 0
+        for entry in entries {
+            let entities = (entry.extractedEntities as? Set<ExtractedEntity>) ?? []
+            let alreadyLinked = (entry.mentions as? Set<Mention>) ?? []
+            for entity in entities {
+                guard let type = mappedType(for: entity.entityTypeEnum) else { continue }
+                let name = entity.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { continue }
+                guard let mention = try? storage.findOrCreateMention(name: name, type: type, context: context) else { continue }
+                if !alreadyLinked.contains(mention) && !(entry.mentions as? Set<Mention> ?? []).contains(mention) {
+                    entry.addToMentions(mention)
+                    linked += 1
+                }
+            }
+        }
+        try? context.save()
+        return linked
     }
 }

@@ -26,26 +26,35 @@
 
 // ── kinds ───────────────────────────────────────────────────
 // glyph: 'topic' (ochre dot) · 'mention' (person) · 'project' (folder)
-function KindGlyph({ kind, color }) {
+// glyph: 'topic' (ochre dot) · 'mention' (per-type glyph) · 'project' (folder)
+// For mentions, `mtype` selects the glyph: person · place · idea · org.
+// The leading DOT is topics ONLY (a palette-coloured topic); mentions are
+// typed, so they carry a per-type line glyph, never a dot.
+function KindGlyph({ kind, color, mtype = 'person' }) {
   if (kind === 'topic') return <span style={{ width: 7, height: 7, borderRadius: 4, background: color, flexShrink: 0 }} />;
-  if (kind === 'mention') return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1" />
-    </svg>
-  );
-  return (
+  if (kind === 'project') return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
     </svg>
   );
+  // mention — per-type glyph
+  const sw = 1.9, common = { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round', style: { flexShrink: 0 } };
+  if (mtype === 'place') return (<svg {...common}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0116 0z" /><circle cx="12" cy="10" r="3" /></svg>);
+  if (mtype === 'idea') return (<svg {...common}><path d="M9 18h6" /><path d="M10 22h4" /><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0012 2z" /></svg>);
+  if (mtype === 'org') return (<svg {...common}><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h.01M12 9h.01M15 9h.01M9 13h.01M12 13h.01M15 13h.01" /></svg>);
+  // person (default)
+  return (<svg {...common}><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1" /></svg>);
 }
 
 // a chip in any of the section states
+// label may be a string, or {label, mtype} for typed mentions.
 // state: 'set' (assigned, read — navigable) · 'pick' (selected in manage,
 //        tap to remove) · 'off' (in library, tap to add) · 'new' (AI-coined) ·
 //        'del' (library edit mode — tap the red minus to delete the vocabulary
 //               entry entirely, everywhere)
 function AssocChip({ label, kind = 'topic', state = 'set' }) {
+  const text = typeof label === 'object' ? label.label : label;
+  const mtype = typeof label === 'object' ? label.mtype : 'person';
   const off = state === 'off';
   const del = state === 'del';
   const isNew = state === 'new';
@@ -66,8 +75,8 @@ function AssocChip({ label, kind = 'topic', state = 'set' }) {
           <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><path d="M3 6h6" /></svg>
         </span>
       )}
-      <KindGlyph kind={kind} color={glyphColor} />
-      {label}
+      <KindGlyph kind={kind} color={glyphColor} mtype={mtype} />
+      {text}
       {isNew && <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: PX.ai, marginLeft: 1 }}>New</span>}
       {state === 'pick' && <Check size={13} color={PX.accent} />}
     </span>
@@ -125,7 +134,7 @@ function ScrMemoryAssociations() {
         <div style={{ borderTop: '1px solid ' + PX.divider, paddingTop: 16 }}>
           <AssocSection label="Topics" kind="topic" chips={['Travel', 'Food']} />
         </div>
-        <AssocSection label="Mentions" kind="mention" chips={['Darlene', 'Henry McMaster']} />
+        <AssocSection label="Mentions" kind="mention" chips={[{ label: 'Darlene', mtype: 'person' }, { label: 'Charleston', mtype: 'place' }]} />
         <AssocSection label="Projects" kind="project" chips={['Foodies!', 'Together here']} />
 
         <div style={{ fontSize: 11.5, color: PX.ink3, lineHeight: 1.5, background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 12, padding: '11px 13px', marginTop: 2 }}>
@@ -205,10 +214,10 @@ function ScrManageTopicsU() {
     note="Pick from your library, or add a new topic. Picking the right existing one keeps your topics useful as filters." />;
 }
 function ScrManageMentionsU() {
-  return <ManageSheet title="Mentions" kind="mention" addLabel="Add a new person…"
-    onMemory={['Darlene', 'Henry McMaster']}
-    library={['Lindsay Graham', 'Judi', 'Ben', 'Mom', 'Dad', 'Alton Brown']}
-    note="Pick someone you've mentioned before, or add a new name. Reusing a name keeps people searchable across memories." />;
+  return <ManageSheet title="Mentions" kind="mention" addLabel="Add a new person or place…"
+    onMemory={[{ label: 'Darlene', mtype: 'person' }, { label: 'Charleston', mtype: 'place' }]}
+    library={[{ label: 'Ben', mtype: 'person' }, { label: 'Mom', mtype: 'person' }, { label: 'Basque cheesecake', mtype: 'idea' }, { label: 'Kingfisher Studio', mtype: 'org' }, { label: 'Naples', mtype: 'place' }, { label: 'Alton Brown', mtype: 'person' }]}
+    note="Pick someone or somewhere you've mentioned before, or add a new one. Reusing an entry keeps people and places searchable across memories." />;
 }
 function ScrManageProjectsU() {
   return <ManageSheet title="Projects" kind="project" addLabel="New project…"
@@ -292,7 +301,7 @@ function AssocSpecCard() {
       <div style={row}><div style={eyebrow}>Read = navigate, never remove</div><div style={body}>Filled pills tap through to where they live — a topic filters, a project opens, a mention shows its people. No inline ✕; read chips are never individually removable (kills the accidental-tap, frees the tap for navigation).</div></div>
       <div style={row}><div style={eyebrow}>One dashed Edit per section</div><div style={body}>The single way in to add or remove. Opens the manage sheet for that type.</div></div>
       <div style={row}><div style={eyebrow}>One manage sheet, three types</div><div style={body}><strong style={{ color: PX.ink2, fontWeight: 600 }}>On this memory</strong> (tap a chip to remove) · <strong style={{ color: PX.ink2, fontWeight: 600 }}>Add a new…</strong> · <strong style={{ color: PX.ink2, fontWeight: 600 }}>From your library</strong> (tap to add). One removal idiom everywhere — so mentions are library-backed (recurring people are a library).</div></div>
-      <div style={row}><div style={eyebrow}>Glyph rule</div><div style={body}>The leading <strong style={{ color: PX.accent, fontWeight: 600 }}>dot</strong> means a palette-coloured topic — topics only. Mentions use a person glyph, projects a folder glyph. (Retires the off-standard mention dot.)</div></div>
+      <div style={row}><div style={eyebrow}>Glyph rule</div><div style={body}>The leading <strong style={{ color: PX.accent, fontWeight: 600 }}>dot</strong> means a palette-coloured topic — topics only. Mentions carry a <strong style={{ color: PX.ink2, fontWeight: 600 }}>per-type glyph</strong> (person · place · idea · org), projects a folder glyph. (Retires the off-standard mention dot; the type signal is honest, not a colour.)</div></div>
       <div style={row}><div style={eyebrow}>The library feeds the AI</div><div style={body}>Every organize/reorganize pass is handed the existing library (topics <em>and</em> mentions) so it <strong style={{ color: PX.ink2, fontWeight: 600 }}>prefers reusing an entry</strong> over coining a near-duplicate — it coins a new one only when nothing fits, and flags it <strong style={{ color: PX.ai, fontWeight: 600 }}>New</strong>. This is what keeps the library a clean filter (no Garden / Gardening / Yard). <em>(Topics already pass the palette; mentions join it.)</em></div></div>
       <div style={row}><div style={eyebrow}>Deselect vs. delete</div><div style={body}>Tapping a chip in <strong style={{ color: PX.ink2, fontWeight: 600 }}>On this memory</strong> removes it from <em>this</em> memory (stays in the library). To purge the vocabulary entry entirely, the library's <strong style={{ color: PX.ink2, fontWeight: 600 }}>Edit</strong> toggle reveals a red minus per chip — deleting warns how many memories use it (mirrors clip-delete's live count). The memories themselves are never touched.</div></div>
       <div style={{ ...row, borderBottom: 'none' }}><div style={eyebrow}>One exception, named</div><div style={body}>Viewing a memory <em>through</em> a project keeps a contextual <strong style={{ color: PX.accent, fontWeight: 600 }}>Remove from this project</strong> shortcut at the bottom. General management still routes through the sheet. Retires the toolbar folder-plus and the two-add-paths redundancy. <em>(Projects delete via the project's own full-width Delete Project, not the library minus.)</em></div></div>

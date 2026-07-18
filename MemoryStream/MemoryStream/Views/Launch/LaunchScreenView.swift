@@ -322,6 +322,12 @@ struct LaunchScreenView: View {
         let context = StorageService.shared.backgroundContext()
         context.perform {
             FragmentMigration.runIfNeeded(in: context)
+            // B4 (July 18 2026): seed the library-backed Mention store from
+            // legacy ExtractedEntity mentions. Own UserDefaults flag,
+            // idempotent, cheap no-op once complete. Runs in the same
+            // CloudKit-import-settled window as the other Core Data
+            // migrations (see feedback_inboxmanifest_launch_gating).
+            MentionMigration.runIfNeeded(in: context)
             // Backfill `JournalEntry.summary` from the latest accepted
             // `OrganizePass.summaryText` so the unified-editing model
             // has a canonical working value to display + edit (Tom
