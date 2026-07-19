@@ -328,7 +328,15 @@ struct ClipsTabView: View {
             // unplaced stack) filtered to unreviewed clips (P7-2 predicate).
             // Type filter is not applied to the workbench in this cut — a
             // follow-up when "new videos only" gets a use pattern.
-            newFilterContent
+            //
+            // Select entry sits here (not in SessionListView's header) so it
+            // shows on every New layout — sessions, returned-refs-only, or
+            // all-clustered. Bare (no caption): the "N new clips" serif
+            // header renders just below inside SessionListView.
+            VStack(alignment: .leading, spacing: 6) {
+                selectCaption(nil)
+                newFilterContent
+            }
         case .all:
             // All = everything (no connection or review filter).
             VStack(alignment: .leading, spacing: 10) {
@@ -351,12 +359,14 @@ struct ClipsTabView: View {
     /// (the top bar takes over). The generalized read of the mock's
     /// Unconnected "Select" — one entry per filter's top caption row.
     @ViewBuilder
-    private func selectCaption(_ text: String) -> some View {
+    private func selectCaption(_ text: String?) -> some View {
         if !selection.selecting {
             HStack {
-                Text(text)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Crucible.Color.ink3)
+                if let text {
+                    Text(text)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
                 Spacer()
                 Button("Select") { selection.enter() }
                     .font(.system(size: 13.5, weight: .semibold))

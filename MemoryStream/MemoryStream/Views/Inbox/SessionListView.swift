@@ -477,23 +477,17 @@ struct SessionListView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(headerTitle)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(Crucible.Color.ink)
-                Text(headerSubtitle)
-                    .font(.footnote)
-                    .foregroundStyle(Crucible.Color.ink3)
-            }
-            Spacer()
-            // Quiet "Select" enters multi-select on New (P7-4); shown only
-            // when there are loose sessions to select and not already in mode.
-            if !selection.selecting && !looseSessions.isEmpty {
-                Button("Select") { selection.enter() }
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .foregroundStyle(Crucible.Color.accent)
-            }
+        // The Select entry for New lives at the ClipsTabView level (a
+        // consistent position across all three filters) — SessionListView's
+        // header renders only when the inbox is non-empty, so hosting Select
+        // here would hide it whenever New is all returned-refs / all-clustered.
+        VStack(alignment: .leading, spacing: 4) {
+            Text(headerTitle)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink)
+            Text(headerSubtitle)
+                .font(.footnote)
+                .foregroundStyle(Crucible.Color.ink3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 12)
