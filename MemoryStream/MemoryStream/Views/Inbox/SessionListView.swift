@@ -606,12 +606,13 @@ struct SessionListView: View {
             let ids = sessionSelectableIds(session)
             Button { selection.toggleAll(ids) } label: {
                 HStack(alignment: .top, spacing: 11) {
-                    SelectCircle(checked: selection.isChecked(all: ids))
+                    DragSelectCircle(checked: selection.isChecked(all: ids), selection: selection)
                         .padding(.top, 16)
                     sessionCardFace(session, selecting: true)
                 }
             }
             .buttonStyle(.plain)
+            .reportsClipRowFrame(ids, enabled: true)
         } else {
             sessionCardNavLink(session)
         }

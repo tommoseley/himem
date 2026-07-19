@@ -90,6 +90,7 @@ struct ClipsTabView: View {
                             // replaces the status header: Cancel · N selected ·
                             // Select all.
                             selectingTopBar
+                            dragHint
                         } else {
                             ClipsHeader(
                                 status: $status,
@@ -105,6 +106,8 @@ struct ClipsTabView: View {
                             .padding(.bottom, selection.selecting ? 84 : 12)
                     }
                 }
+                .coordinateSpace(name: ClipsSelectionSpace.name)
+                .onPreferenceChange(ClipRowFramesKey.self) { selection.rowFrames = $0 }
                 if let toastMemoryId = memoryNav.justCreatedMemoryId {
                     MemoryCreatedToast(
                         onView: {
@@ -228,6 +231,19 @@ struct ClipsTabView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 10)
+    }
+
+    /// The drag-to-select affordance hint (mock, July 2026).
+    private var dragHint: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 11, weight: .semibold))
+            Text("Drag down the circles to select a run")
+        }
+        .font(.system(size: 11.5))
+        .foregroundStyle(Crucible.Color.ink4)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 6)
     }
 
     /// Pinned bottom action bar shown throughout selecting mode: Add to a
@@ -826,12 +842,13 @@ struct ClipsListItemRow: View {
             // edit affordance stands down (Photos-style).
             Button { selection.toggleAll(item.refIds) } label: {
                 HStack(spacing: 10) {
-                    SelectCircle(checked: selection.isChecked(all: item.refIds))
+                    DragSelectCircle(checked: selection.isChecked(all: item.refIds), selection: selection)
                     rowCore.frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .reportsClipRowFrame(item.refIds, enabled: true)
         } else {
             HStack(spacing: 8) {
                 rowCore.frame(maxWidth: .infinity, alignment: .leading)
@@ -1429,13 +1446,14 @@ struct UnconnectedListView: View {
                             // Selecting mode: whole row toggles; ✎ stands down.
                             Button { selection.toggle(item.id) } label: {
                                 HStack(spacing: 10) {
-                                    SelectCircle(checked: selection.selectedIds.contains(item.id))
+                                    DragSelectCircle(checked: selection.selectedIds.contains(item.id), selection: selection)
                                     ClipAtomView(model: item.model, register: .operational, isDenseContainer: true)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .reportsClipRowFrame([item.id], enabled: true)
                         } else {
                             HStack(spacing: 10) {
                                 ClipAtomView(model: item.model, register: .operational, isDenseContainer: true)
@@ -1608,4 +1626,96 @@ final class ClipsSelection: ObservableObject {
     }
     func clear() { selectedIds.removeAll() }
     var count: Int { selectedIds.count }
+
+    // MARK: Drag-to-select (P7-4)
+    //
+    // The gesture lives on each select circle, so a drag that BEGINS on a
+    // circle paints a run without fighting the scroll view (scrolls start
+    // elsewhere). Row spans are registered by the container's
+    // onPreferenceChange; the gesture hit-tests them by y.
+
+    /// Row y-spans in the shared drag coordinate space (id-set + minY/maxY).
+    /// Plain (non-published): only the drag reads it, and it's refreshed
+    /// from layout, so publishing would just churn renders.
+    var rowFrames: [ClipRowFrame] = []
+    /// The state being painted across the run (nil = no drag in progress).
+    /// The first row hit sets it to the opposite of its current state.
+    private var dragPaint: Bool? = nil
+    private var lastDragY: CGFloat = 0
+
+    func dragChanged(to y: CGFloat) {
+        guard selecting else { return }
+        if dragPaint == nil {
+            guard let row = rowFrames.first(where: { y >= $0.minY && y <= $0.maxY }) else { return }
+            let paint = !isChecked(all: row.ids)
+            dragPaint = paint
+            row.ids.forEach { set($0, selected: paint) }
+            lastDragY = y
+        } else {
+            guard let paint = dragPaint else { return }
+            let lo = min(lastDragY, y), hi = max(lastDragY, y)
+            for row in rowFrames where row.maxY >= lo && row.minY <= hi {
+                row.ids.forEach { set($0, selected: paint) }
+            }
+            lastDragY = y
+        }
+    }
+    func dragEnded() { dragPaint = nil }
+}
+
+/// The coordinate space the drag-to-select frame registry resolves in.
+enum ClipsSelectionSpace { static let name = "clipsSelect" }
+
+/// One selectable row's vertical span in the drag coordinate space.
+struct ClipRowFrame: Equatable {
+    let ids: [UUID]
+    let minY: CGFloat
+    let maxY: CGFloat
+}
+
+struct ClipRowFramesKey: PreferenceKey {
+    static var defaultValue: [ClipRowFrame] = []
+    static func reduce(value: inout [ClipRowFrame], nextValue: () -> [ClipRowFrame]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+extension View {
+    /// Reports a selectable row's y-span so drag-to-select can hit-test it.
+    /// No-op when not selecting (avoids preference churn at rest).
+    @ViewBuilder
+    func reportsClipRowFrame(_ ids: [UUID], enabled: Bool) -> some View {
+        if enabled {
+            background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: ClipRowFramesKey.self,
+                        value: [ClipRowFrame(
+                            ids: ids,
+                            minY: geo.frame(in: .named(ClipsSelectionSpace.name)).minY,
+                            maxY: geo.frame(in: .named(ClipsSelectionSpace.name)).maxY
+                        )]
+                    )
+                }
+            )
+        } else {
+            self
+        }
+    }
+}
+
+/// A `SelectCircle` that also carries the drag-to-select gesture. Because
+/// the gesture originates on the small circle, a drag here reliably means
+/// "paint a selection run" rather than "scroll" (P7-4).
+struct DragSelectCircle: View {
+    let checked: Bool
+    @ObservedObject var selection: ClipsSelection
+    var body: some View {
+        SelectCircle(checked: checked)
+            .gesture(
+                DragGesture(minimumDistance: 4, coordinateSpace: .named(ClipsSelectionSpace.name))
+                    .onChanged { selection.dragChanged(to: $0.location.y) }
+                    .onEnded { _ in selection.dragEnded() }
+            )
+    }
 }
