@@ -72,6 +72,13 @@ struct ClipsTabView: View {
     /// clears it after ~3.5s; the View button also clears via the
     /// nav-bus route.
     @State private var toastAutoDismissTask: Task<Void, Never>? = nil
+    /// Unconnected multi-select (P7-3). Drives the pinned action bar.
+    @StateObject private var unconnectedSelection = UnconnectedSelection()
+    /// "Delete N clips?" confirm — clips have no Recently Deleted yet, so
+    /// batch delete is permanent; the confirm is the interim net.
+    @State private var showUnconnectedDeleteConfirm = false
+    /// Carries the selected clips into the "Add to a memory" create flow.
+    @State private var unconnectedBundle: SessionListView.BundleRequest? = nil
 
     var body: some View {
         NavigationStack {
@@ -109,7 +116,14 @@ struct ClipsTabView: View {
                     .padding(.bottom, 12)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                if status == .unconnected && !unconnectedSelection.selectedIds.isEmpty {
+                    unconnectedActionBar
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.easeOut(duration: 0.22), value: unconnectedSelection.selectedIds.isEmpty)
             .animation(.easeOut(duration: 0.22), value: memoryNav.justCreatedMemoryId)
             .background(Crucible.Color.paper.ignoresSafeArea())
             .navigationTitle("Clips")
@@ -146,6 +160,28 @@ struct ClipsTabView: View {
             .sheet(item: $editingClip) { source in
                 ClipEditorModal(source: source)
             }
+            .sheet(item: $unconnectedBundle) { request in
+                CreateMemoryFromClipsSheet(
+                    clips: request.clipsToBundle,
+                    session: request.session,
+                    absorbedMediaRefs: request.absorbedMediaRefs,
+                    prefillTitle: request.prefillTitle,
+                    viewModel: viewModel
+                )
+            }
+            .onChange(of: status) { _, newStatus in
+                // Leaving Unconnected drops the multi-select.
+                if newStatus != .unconnected { unconnectedSelection.clear() }
+            }
+            .alert("Delete \(unconnectedSelection.selectedIds.count) clips?", isPresented: $showUnconnectedDeleteConfirm) {
+                Button("Delete", role: .destructive) { performUnconnectedDelete() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                // Clips have no Recently Deleted yet — batch delete is
+                // permanent, so the copy is honest (distinct from the
+                // memory/project soft-delete language).
+                Text("This can't be undone. The clips and their transcripts are deleted.")
+            }
             .navigationDestination(isPresented: $showSearch) {
                 SearchView(
                     onSelectEntry: { _ in showSearch = false },
@@ -159,6 +195,74 @@ struct ClipsTabView: View {
                 SettingsView(viewModel: viewModel)
             }
         }
+    }
+
+    // MARK: - Unconnected multi-select cleanup (P7-3)
+
+    /// Pinned action bar for the Unconnected selection: Add to a memory…
+    /// (ochre) + Delete N (danger). Appears when ≥1 clip is selected.
+    private var unconnectedActionBar: some View {
+        HStack(spacing: 10) {
+            Button { startAddSelectedToMemory() } label: {
+                Text("Add to a memory…")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 48)
+                    .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            Button { showUnconnectedDeleteConfirm = true } label: {
+                Text("Delete \(unconnectedSelection.selectedIds.count)")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.danger)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 48)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Crucible.Color.danger, lineWidth: 1.5))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .background(Crucible.Color.card, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.14), radius: 14, y: 4)
+    }
+
+    /// Deletes the selected clips, partitioned by backing: InboxClips →
+    /// manifest dispose (tombstone + watch ack), MediaReferences → hard
+    /// delete. Both are the established delete paths (arbiter-consistent).
+    /// Permanent — gated behind the confirm alert (no clip Recently
+    /// Deleted yet).
+    private func performUnconnectedDelete() {
+        let ids = unconnectedSelection.selectedIds
+        let clipIds = InboxManifest.shared.clips.filter { ids.contains($0.clipId) }.map(\.clipId)
+        let refIds = ids.subtracting(Set(clipIds))
+        if !clipIds.isEmpty { InboxManifest.shared.removeBatch(clipIds: clipIds) }
+        if !refIds.isEmpty {
+            EntryLifecycleService(storage: .shared, processingEngine: .shared)
+                .deleteMediaReferences(ids: refIds)
+        }
+        unconnectedSelection.clear()
+    }
+
+    /// Routes the selection into one new memory via the established
+    /// create-from-clips flow: InboxClips promote (clipsToBundle), loose
+    /// MediaReferences attach via createEdge (absorbedMediaRefs).
+    private func startAddSelectedToMemory() {
+        let ids = unconnectedSelection.selectedIds
+        let inboxClips = InboxManifest.shared.clips.filter { ids.contains($0.clipId) }
+        let refIds = ids.subtracting(Set(inboxClips.map(\.clipId)))
+        var refs: [MediaReference] = []
+        if !refIds.isEmpty {
+            let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+            req.predicate = NSPredicate(format: "id IN %@", refIds)
+            refs = (try? context.fetch(req)) ?? []
+        }
+        unconnectedBundle = SessionListView.BundleRequest(
+            session: ClipGroup(clips: inboxClips),
+            clipsToBundle: inboxClips,
+            absorbedMediaRefs: refs
+        )
+        unconnectedSelection.clear()
     }
 
     // MARK: - Filter branch
@@ -179,7 +283,7 @@ struct ClipsTabView: View {
             // Unconnected = connectionCount == 0 — the cleanup lens, as a
             // UNIFIED list across backing types (P7-3, July 19 2026):
             // unpromoted InboxClips + detached/loose MediaReferences.
-            UnconnectedListView(type: type, onOpen: { editingClip = $0 })
+            UnconnectedListView(type: type, onOpen: { editingClip = $0 }, selection: unconnectedSelection)
         }
     }
 
@@ -1182,6 +1286,7 @@ private struct UnconnectedItem: Identifiable {
 struct UnconnectedListView: View {
     let type: ClipsType
     let onOpen: (ClipEditorModal.Source) -> Void
+    @ObservedObject var selection: UnconnectedSelection
     @ObservedObject var inbox: InboxManifest = .shared
     @Environment(\.managedObjectContext) private var context
     @State private var looseRefs: [MediaReference] = []
@@ -1197,7 +1302,18 @@ struct UnconnectedListView: View {
                     .padding(.top, 20)
             } else {
                 ForEach(items) { item in
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        // Inclusion checkbox (Sort model) — tap to select for
+                        // the bottom-bar Delete / Add-to-memory actions.
+                        Button {
+                            selection.toggle(item.id)
+                        } label: {
+                            Image(systemName: selection.selectedIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 20))
+                                .foregroundStyle(selection.selectedIds.contains(item.id) ? Crucible.Color.accent : Crucible.Color.ink4)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(selection.selectedIds.contains(item.id) ? "Selected" : "Not selected")
                         ClipAtomView(model: item.model, register: .operational, isDenseContainer: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         ClipEditButton(action: { onOpen(item.source) })
@@ -1266,4 +1382,18 @@ struct UnconnectedListView: View {
         req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         looseRefs = (try? context.fetch(req)) ?? []
     }
+}
+
+/// Multi-select state for the Unconnected cleanup (P7-3). Held at the
+/// ClipsTabView level so the action bar can pin to the screen bottom while
+/// `UnconnectedListView` (inside the scroll) drives the checkboxes.
+/// Selecting is the Sort inclusion model — a checkbox per row, always
+/// visible; the bar appears once ≥1 is selected.
+@MainActor
+final class UnconnectedSelection: ObservableObject {
+    @Published var selectedIds: Set<UUID> = []
+    func toggle(_ id: UUID) {
+        if selectedIds.contains(id) { selectedIds.remove(id) } else { selectedIds.insert(id) }
+    }
+    func clear() { selectedIds.removeAll() }
 }
