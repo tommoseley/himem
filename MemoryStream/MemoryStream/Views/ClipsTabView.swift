@@ -73,29 +73,36 @@ struct ClipsTabView: View {
     /// nav-bus route.
     @State private var toastAutoDismissTask: Task<Void, Never>? = nil
     /// Unconnected multi-select (P7-3). Drives the pinned action bar.
-    @StateObject private var unconnectedSelection = UnconnectedSelection()
+    @StateObject private var selection = ClipsSelection()
     /// "Delete N clips?" confirm — clips have no Recently Deleted yet, so
     /// batch delete is permanent; the confirm is the interim net.
-    @State private var showUnconnectedDeleteConfirm = false
+    @State private var showDeleteConfirm = false
     /// Carries the selected clips into the "Add to a memory" create flow.
-    @State private var unconnectedBundle: SessionListView.BundleRequest? = nil
+    @State private var selectionBundle: SessionListView.BundleRequest? = nil
 
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        ClipsHeader(
-                            status: $status,
-                            type: $type,
-                            onSearchTap: { showSearch = true },
-                            onSettingsTap: { showSettings = true },
-                            onHelpTap: { showTutorials = true }
-                        )
+                        if selection.selecting {
+                            // Photos-style selecting top bar (mock, July 2026)
+                            // replaces the status header: Cancel · N selected ·
+                            // Select all.
+                            selectingTopBar
+                        } else {
+                            ClipsHeader(
+                                status: $status,
+                                type: $type,
+                                onSearchTap: { showSearch = true },
+                                onSettingsTap: { showSettings = true },
+                                onHelpTap: { showTutorials = true }
+                            )
+                        }
                         content
                             .padding(.horizontal, 16)
                             .padding(.top, 6)
-                            .padding(.bottom, 12)
+                            .padding(.bottom, selection.selecting ? 84 : 12)
                     }
                 }
                 if let toastMemoryId = memoryNav.justCreatedMemoryId {
@@ -116,14 +123,14 @@ struct ClipsTabView: View {
                     .padding(.bottom, 12)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                if status == .unconnected && !unconnectedSelection.selectedIds.isEmpty {
-                    unconnectedActionBar
+                if selection.selecting {
+                    selectionActionBar
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .animation(.easeOut(duration: 0.22), value: unconnectedSelection.selectedIds.isEmpty)
+            .animation(.easeOut(duration: 0.22), value: selection.selecting)
             .animation(.easeOut(duration: 0.22), value: memoryNav.justCreatedMemoryId)
             .background(Crucible.Color.paper.ignoresSafeArea())
             .navigationTitle("Clips")
@@ -160,7 +167,7 @@ struct ClipsTabView: View {
             .sheet(item: $editingClip) { source in
                 ClipEditorModal(source: source)
             }
-            .sheet(item: $unconnectedBundle) { request in
+            .sheet(item: $selectionBundle) { request in
                 CreateMemoryFromClipsSheet(
                     clips: request.clipsToBundle,
                     session: request.session,
@@ -169,12 +176,13 @@ struct ClipsTabView: View {
                     viewModel: viewModel
                 )
             }
-            .onChange(of: status) { _, newStatus in
-                // Leaving Unconnected drops the multi-select.
-                if newStatus != .unconnected { unconnectedSelection.clear() }
+            .onChange(of: status) { _, _ in
+                // Selection is per-filter (the visible id set differs), so
+                // switching filters leaves selecting mode.
+                selection.exit()
             }
-            .alert("Delete \(unconnectedSelection.selectedIds.count) clips?", isPresented: $showUnconnectedDeleteConfirm) {
-                Button("Delete", role: .destructive) { performUnconnectedDelete() }
+            .alert(selection.count == 1 ? "Delete 1 clip?" : "Delete \(selection.count) clips?", isPresented: $showDeleteConfirm) {
+                Button("Delete", role: .destructive) { performSelectionDelete() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 // Clips have no Recently Deleted yet — batch delete is
@@ -197,11 +205,32 @@ struct ClipsTabView: View {
         }
     }
 
-    // MARK: - Unconnected multi-select cleanup (P7-3)
+    // MARK: - Multi-select (P7-4 — general across New · All · Unconnected)
 
-    /// Pinned action bar for the Unconnected selection: Add to a memory…
-    /// (ochre) + Delete N (danger). Appears when ≥1 clip is selected.
-    private var unconnectedActionBar: some View {
+    /// The selecting-mode top bar (mock, July 2026) — replaces the status
+    /// header while `selection.selecting`: Cancel (exit) · N selected ·
+    /// Select all (of the visible ids the content view registered).
+    private var selectingTopBar: some View {
+        HStack {
+            Button("Cancel") { selection.exit() }
+                .font(.system(size: 15))
+                .foregroundStyle(Crucible.Color.ink2)
+            Spacer()
+            Text(selection.count == 1 ? "1 selected" : "\(selection.count) selected")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Crucible.Color.ink)
+            Spacer()
+            Button("Select all") { selection.selectAll() }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Crucible.Color.accent)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+    }
+
+    /// Pinned bottom action bar shown throughout selecting mode: Add to a
+    /// memory… (ochre) + Delete N (danger). Both disable at 0 selected.
+    private var selectionActionBar: some View {
         HStack(spacing: 10) {
             Button { startAddSelectedToMemory() } label: {
                 Text("Add to a memory…")
@@ -212,15 +241,19 @@ struct ClipsTabView: View {
                     .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 12))
             }
             .buttonStyle(.plain)
-            Button { showUnconnectedDeleteConfirm = true } label: {
-                Text("Delete \(unconnectedSelection.selectedIds.count)")
+            .disabled(selection.count == 0)
+            .opacity(selection.count == 0 ? 0.5 : 1)
+            Button { showDeleteConfirm = true } label: {
+                Text(selection.count == 0 ? "Delete" : "Delete \(selection.count)")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Crucible.Color.danger)
-                    .frame(maxWidth: .infinity)
                     .frame(minHeight: 48)
+                    .padding(.horizontal, 18)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Crucible.Color.danger, lineWidth: 1.5))
             }
             .buttonStyle(.plain)
+            .disabled(selection.count == 0)
+            .opacity(selection.count == 0 ? 0.5 : 1)
         }
         .padding(12)
         .background(Crucible.Color.card, in: RoundedRectangle(cornerRadius: 16))
@@ -231,9 +264,9 @@ struct ClipsTabView: View {
     /// manifest dispose (tombstone + watch ack), MediaReferences → hard
     /// delete. Both are the established delete paths (arbiter-consistent).
     /// Permanent — gated behind the confirm alert (no clip Recently
-    /// Deleted yet).
-    private func performUnconnectedDelete() {
-        let ids = unconnectedSelection.selectedIds
+    /// Deleted yet). Same partition on every filter (New/All/Unconnected).
+    private func performSelectionDelete() {
+        let ids = selection.selectedIds
         let clipIds = InboxManifest.shared.clips.filter { ids.contains($0.clipId) }.map(\.clipId)
         let refIds = ids.subtracting(Set(clipIds))
         if !clipIds.isEmpty { InboxManifest.shared.removeBatch(clipIds: clipIds) }
@@ -241,14 +274,16 @@ struct ClipsTabView: View {
             EntryLifecycleService(storage: .shared, processingEngine: .shared)
                 .deleteMediaReferences(ids: refIds)
         }
-        unconnectedSelection.clear()
+        selection.exit()
     }
 
     /// Routes the selection into one new memory via the established
     /// create-from-clips flow: InboxClips promote (clipsToBundle), loose
-    /// MediaReferences attach via createEdge (absorbedMediaRefs).
+    /// MediaReferences attach via createEdge (absorbedMediaRefs). Same mix
+    /// handling on every filter.
     private func startAddSelectedToMemory() {
-        let ids = unconnectedSelection.selectedIds
+        guard selection.count > 0 else { return }
+        let ids = selection.selectedIds
         let inboxClips = InboxManifest.shared.clips.filter { ids.contains($0.clipId) }
         let refIds = ids.subtracting(Set(inboxClips.map(\.clipId)))
         var refs: [MediaReference] = []
@@ -257,12 +292,12 @@ struct ClipsTabView: View {
             req.predicate = NSPredicate(format: "id IN %@", refIds)
             refs = (try? context.fetch(req)) ?? []
         }
-        unconnectedBundle = SessionListView.BundleRequest(
+        selectionBundle = SessionListView.BundleRequest(
             session: ClipGroup(clips: inboxClips),
             clipsToBundle: inboxClips,
             absorbedMediaRefs: refs
         )
-        unconnectedSelection.clear()
+        selection.exit()
     }
 
     // MARK: - Filter branch
@@ -278,12 +313,38 @@ struct ClipsTabView: View {
             newFilterContent
         case .all:
             // All = everything (no connection or review filter).
-            FlatClipsListView(type: type, connection: .any, onOpen: { editingClip = .managed($0) })
+            VStack(alignment: .leading, spacing: 10) {
+                selectCaption("All clips.")
+                FlatClipsListView(type: type, connection: .any, selection: selection, onOpen: { editingClip = .managed($0) })
+            }
         case .unconnected:
             // Unconnected = connectionCount == 0 — the cleanup lens, as a
             // UNIFIED list across backing types (P7-3, July 19 2026):
             // unpromoted InboxClips + detached/loose MediaReferences.
-            UnconnectedListView(type: type, onOpen: { editingClip = $0 }, selection: unconnectedSelection)
+            VStack(alignment: .leading, spacing: 10) {
+                selectCaption("Clips not connected to any memory.")
+                UnconnectedListView(type: type, onOpen: { editingClip = $0 }, selection: selection)
+            }
+        }
+    }
+
+    /// The resting caption row that carries the quiet "Select" entry into
+    /// multi-select mode (mock, July 2026). Hidden while already selecting
+    /// (the top bar takes over). The generalized read of the mock's
+    /// Unconnected "Select" — one entry per filter's top caption row.
+    @ViewBuilder
+    private func selectCaption(_ text: String) -> some View {
+        if !selection.selecting {
+            HStack {
+                Text(text)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Crucible.Color.ink3)
+                Spacer()
+                Button("Select") { selection.enter() }
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.accent)
+            }
+            .padding(.horizontal, 2)
         }
     }
 
@@ -339,7 +400,7 @@ struct ClipsTabView: View {
                 DayHeader(date: group.day)
                 VStack(spacing: 8) {
                     ForEach(ClipsListItem.group(refs: group.refs)) { item in
-                        ClipsListItemRow(item: item, onOpen: { editingClip = .managed($0) })
+                        ClipsListItemRow(item: item, onOpen: { editingClip = .managed($0) }, selection: selection)
                     }
                 }
             }
@@ -682,6 +743,15 @@ enum ClipsListItem: Identifiable {
         }
     }
 
+    /// The selectable clip ids this row represents. A burst selects as a
+    /// unit (like a session batch-select), so its circle toggles every ref.
+    var refIds: [UUID] {
+        switch self {
+        case .single(let ref): return [ref.id]
+        case .burst(let refs):  return refs.map(\.id)
+        }
+    }
+
     /// Walks refs (assumed sorted newest-first) and coalesces
     /// contiguous photo/video runs whose adjacent captures land within
     /// 60 seconds of one another **and** share a placeName. Voice
@@ -739,30 +809,71 @@ struct ClipsListItemRow: View {
     /// is the one edit affordance; the row body is non-interactive — no
     /// whole-row-to-edit).
     let onOpen: (MediaReference) -> Void
+    /// P7-4 multi-select. Non-nil = this list supports selecting; the
+    /// leading circle appears (and the whole row toggles) only in mode.
+    @ObservedObject var selection: ClipsSelection
 
     var body: some View {
-        switch item {
-        case .single(let ref):
-            HStack(spacing: 8) {
-                Group {
-                    if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
-                        MediaClipRow(ref: ref)
-                    } else {
-                        LooseClipRow(ref: ref)
-                    }
+        if selection.selecting {
+            // Selecting mode: the whole row is one toggle target; the ✎
+            // edit affordance stands down (Photos-style).
+            Button { selection.toggleAll(item.refIds) } label: {
+                HStack(spacing: 10) {
+                    SelectCircle(checked: selection.isChecked(all: item.refIds))
+                    rowCore.frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                ClipEditButton(action: { onOpen(ref) })
+                .contentShape(Rectangle())
             }
-        case .burst(let refs):
+            .buttonStyle(.plain)
+        } else {
             HStack(spacing: 8) {
-                BurstRow(refs: refs)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let first = refs.first {
-                    ClipEditButton(action: { onOpen(first) })
-                }
+                rowCore.frame(maxWidth: .infinity, alignment: .leading)
+                ClipEditButton(action: { onOpen(primaryRef) })
             }
         }
+    }
+
+    @ViewBuilder private var rowCore: some View {
+        switch item {
+        case .single(let ref):
+            if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
+                MediaClipRow(ref: ref)
+            } else {
+                LooseClipRow(ref: ref)
+            }
+        case .burst(let refs):
+            BurstRow(refs: refs)
+        }
+    }
+
+    /// The ref the ✎ edit opens (the single, or a burst's first).
+    private var primaryRef: MediaReference {
+        switch item {
+        case .single(let ref): return ref
+        case .burst(let refs):  return refs.first!
+        }
+    }
+}
+
+/// The Photos-style selection circle (mock, July 2026): 22px, hairline
+/// ink4 ring at rest → accent fill + white check when selected. Shared by
+/// every selectable row/session on the Clips tab.
+struct SelectCircle: View {
+    let checked: Bool
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(checked ? Crucible.Color.accent : Color.clear)
+            Circle()
+                .strokeBorder(checked ? Crucible.Color.accent : Crucible.Color.ink4, lineWidth: 2)
+            if checked {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(width: 22, height: 22)
+        .accessibilityLabel(checked ? "Selected" : "Not selected")
     }
 }
 
@@ -1179,6 +1290,8 @@ struct FlatClipsListView: View {
     /// (All), `.unconnected` = `connectionCount == 0` (Unconnected, the
     /// cleanup lens). Independent of the type axis.
     var connection: ConnectionLens = .any
+    /// P7-4 multi-select (shared across filters).
+    @ObservedObject var selection: ClipsSelection
     /// Opens the unified `ClipEditorModal` (threaded from `ClipsTabView`).
     let onOpen: (MediaReference) -> Void
 
@@ -1196,7 +1309,7 @@ struct FlatClipsListView: View {
                 DayHeader(date: group.day)
                 VStack(spacing: 8) {
                     ForEach(ClipsListItem.group(refs: group.refs)) { item in
-                        ClipsListItemRow(item: item, onOpen: onOpen)
+                        ClipsListItemRow(item: item, onOpen: onOpen, selection: selection)
                     }
                 }
             }
@@ -1260,6 +1373,8 @@ struct FlatClipsListView: View {
         }
         groups = grouped.map { (day: $0.key, refs: $0.value) }
             .sorted { $0.day > $1.day }
+        // Register the visible id set for Select-all / drag (P7-4).
+        selection.registerVisible(groups.flatMap { $0.refs.map(\.id) })
     }
 }
 
@@ -1286,7 +1401,7 @@ private struct UnconnectedItem: Identifiable {
 struct UnconnectedListView: View {
     let type: ClipsType
     let onOpen: (ClipEditorModal.Source) -> Void
-    @ObservedObject var selection: UnconnectedSelection
+    @ObservedObject var selection: ClipsSelection
     @ObservedObject var inbox: InboxManifest = .shared
     @Environment(\.managedObjectContext) private var context
     @State private var looseRefs: [MediaReference] = []
@@ -1303,42 +1418,53 @@ struct UnconnectedListView: View {
             } else {
                 ForEach(items) { item in
                     VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 10) {
-                            // Inclusion checkbox (Sort model) — tap to select
-                            // for the bottom-bar Delete / Add-to-memory actions.
-                            Button {
-                                selection.toggle(item.id)
-                            } label: {
-                                Image(systemName: selection.selectedIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
-                                    .font(.system(size: 20))
-                                    .foregroundStyle(selection.selectedIds.contains(item.id) ? Crucible.Color.accent : Crucible.Color.ink4)
+                        if selection.selecting {
+                            // Selecting mode: whole row toggles; ✎ stands down.
+                            Button { selection.toggle(item.id) } label: {
+                                HStack(spacing: 10) {
+                                    SelectCircle(checked: selection.selectedIds.contains(item.id))
+                                    ClipAtomView(model: item.model, register: .operational, isDenseContainer: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel(selection.selectedIds.contains(item.id) ? "Selected" : "Not selected")
-                            ClipAtomView(model: item.model, register: .operational, isDenseContainer: true)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            ClipEditButton(action: { onOpen(item.source) })
+                        } else {
+                            HStack(spacing: 10) {
+                                ClipAtomView(model: item.model, register: .operational, isDenseContainer: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                ClipEditButton(action: { onOpen(item.source) })
+                            }
                         }
                         // Honest provenance on a previously-shaped clip (P7-3).
                         if wasInAMemory(item) {
                             Text("Was in a memory · now unconnected")
                                 .font(.system(size: 11.5))
                                 .foregroundStyle(Crucible.Color.ink4)
-                                .padding(.leading, 30)
+                                .padding(.leading, selection.selecting ? 32 : 0)
                         }
                     }
                 }
             }
         }
-        .onAppear { reloadRefs() }
+        .onAppear { reloadRefs(); registerVisibleIds() }
         .onDisappear { refsReload.cancel() }
         .onChange(of: type) { _, _ in reloadRefs() }
+        .onChange(of: looseRefs) { _, _ in registerVisibleIds() }
+        .onChange(of: inbox.clips) { _, _ in registerVisibleIds() }
         .onReceive(NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
             object: context
         )) { _ in
             refsReload.fire { reloadRefs() }
         }
+    }
+
+    /// Publishes the current visible id set for Select-all / drag (P7-4).
+    /// Kept out of `body` (mutating shared published state during a render
+    /// pass would loop); driven by the data-change hooks instead.
+    private func registerVisibleIds() {
+        selection.registerVisible(buildItems().map(\.id))
     }
 
     /// True for a MediaReference that was previously attached to a memory
@@ -1403,16 +1529,59 @@ struct UnconnectedListView: View {
     }
 }
 
-/// Multi-select state for the Unconnected cleanup (P7-3). Held at the
-/// ClipsTabView level so the action bar can pin to the screen bottom while
-/// `UnconnectedListView` (inside the scroll) drives the checkboxes.
-/// Selecting is the Sort inclusion model — a checkbox per row, always
-/// visible; the bar appears once ≥1 is selected.
+/// Multi-select state for the Clips tab — a **general clips-list
+/// capability** across every status filter (New · All · Unconnected),
+/// not Unconnected-only (P7-4, July 2026). Held at the ClipsTabView level
+/// so the top bar (Cancel · N selected · Select all) and the bottom
+/// action bar (Add to a memory… · Delete N) pin to the screen while the
+/// per-filter content views (`SessionListView`, `FlatClipsListView`,
+/// `UnconnectedListView`) render the row/session select circles.
+///
+/// The model is **clip-level**: `selectedIds` holds individual clip ids
+/// (InboxClip.clipId or MediaReference.id). A *session* is a derived
+/// checkbox — checked iff all its clip ids are selected — so toggling a
+/// session simply adds/removes its clip ids. That keeps Delete / Add
+/// (which already partition by backing) working unchanged.
+///
+/// `selecting` is the Photos-style **mode** (mock, July 2026): at rest a
+/// quiet "Select" enters it; the circles and bars appear only in mode.
 @MainActor
-final class UnconnectedSelection: ObservableObject {
+final class ClipsSelection: ObservableObject {
+    @Published var selecting = false
     @Published var selectedIds: Set<UUID> = []
+    /// Ordered, de-duplicated visible selectable ids in the active filter,
+    /// registered by the content view on data change. Drives Select-all
+    /// and drag-to-select (which map a position → a run of these ids).
+    @Published var visibleIds: [UUID] = []
+
+    func enter() { selecting = true }
+    /// Leaves the mode and drops the selection (Cancel, or a filter change).
+    func exit() {
+        selecting = false
+        selectedIds.removeAll()
+    }
     func toggle(_ id: UUID) {
         if selectedIds.contains(id) { selectedIds.remove(id) } else { selectedIds.insert(id) }
     }
+    /// Explicit set — used by drag-to-select, which paints a target state
+    /// across a run rather than toggling each row independently.
+    func set(_ id: UUID, selected: Bool) {
+        if selected { selectedIds.insert(id) } else { selectedIds.remove(id) }
+    }
+    /// Session-level toggle: a session is "checked" iff every clip is
+    /// selected, so toggling flips the whole set together.
+    func toggleAll(_ ids: [UUID]) {
+        if ids.allSatisfy({ selectedIds.contains($0) }) {
+            ids.forEach { selectedIds.remove($0) }
+        } else {
+            ids.forEach { selectedIds.insert($0) }
+        }
+    }
+    func isChecked(all ids: [UUID]) -> Bool {
+        !ids.isEmpty && ids.allSatisfy { selectedIds.contains($0) }
+    }
+    func selectAll() { selectedIds = Set(visibleIds) }
+    func registerVisible(_ ids: [UUID]) { visibleIds = ids }
     func clear() { selectedIds.removeAll() }
+    var count: Int { selectedIds.count }
 }
