@@ -49,11 +49,30 @@ struct ClipDetailView: View {
     }
 
     var body: some View {
+        clipBody
+            // "New = unseen, opened by you" (P7-2). Editing via the ✎
+            // modal already marks a clip reviewed; *viewing* it here is
+            // equally "opened by you", so the New lens must drop it too.
+            // reviewed only feeds the New-bench filter — marking a ref
+            // that lives in a memory is harmless (it's never on the bench).
+            .onAppear(perform: markReviewed)
+    }
+
+    @ViewBuilder private var clipBody: some View {
         switch source {
         case .managed(let ref):
             MediaReferenceClipDetail(ref: ref)
         case .inbox(let clip):
             InboxClipDetail(clipId: clip.clipId)
+        }
+    }
+
+    private func markReviewed() {
+        switch source {
+        case .managed(let ref):
+            BenchClipReviewStore.markReviewed(ref.id)
+        case .inbox(let clip):
+            InboxManifest.shared.markReviewed(clipId: clip.clipId)
         }
     }
 }
