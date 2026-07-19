@@ -895,8 +895,12 @@ final class EntryLifecycleService {
             req.predicate = NSPredicate(format: "id == %@", edgeId as CVarArg)
             req.fetchLimit = 1
             guard let edge = try storage.viewContext.fetch(req).first else { return }
+            let detachedRefId = edge.clipId
             storage.viewContext.delete(edge)
             try storage.save(context: storage.viewContext)
+            // Mark the clip "was in a memory" (P7-3) — a user detach; the
+            // Unconnected row's line only shows once it's at 0 edges.
+            PreviouslyConnectedStore.record(detachedRefId)
         } catch {
             ErrorState.shared.report(.deleteFailed(error.localizedDescription))
         }
@@ -925,6 +929,7 @@ final class EntryLifecycleService {
             guard let edge = try storage.viewContext.fetch(edgeReq).first else { return }
             storage.viewContext.delete(edge)
             try storage.save(context: storage.viewContext)
+            PreviouslyConnectedStore.record(refId)
         } catch {
             ErrorState.shared.report(.deleteFailed(error.localizedDescription))
         }

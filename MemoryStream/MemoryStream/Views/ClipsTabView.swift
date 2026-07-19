@@ -1302,21 +1302,30 @@ struct UnconnectedListView: View {
                     .padding(.top, 20)
             } else {
                 ForEach(items) { item in
-                    HStack(spacing: 10) {
-                        // Inclusion checkbox (Sort model) — tap to select for
-                        // the bottom-bar Delete / Add-to-memory actions.
-                        Button {
-                            selection.toggle(item.id)
-                        } label: {
-                            Image(systemName: selection.selectedIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 20))
-                                .foregroundStyle(selection.selectedIds.contains(item.id) ? Crucible.Color.accent : Crucible.Color.ink4)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 10) {
+                            // Inclusion checkbox (Sort model) — tap to select
+                            // for the bottom-bar Delete / Add-to-memory actions.
+                            Button {
+                                selection.toggle(item.id)
+                            } label: {
+                                Image(systemName: selection.selectedIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(selection.selectedIds.contains(item.id) ? Crucible.Color.accent : Crucible.Color.ink4)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(selection.selectedIds.contains(item.id) ? "Selected" : "Not selected")
+                            ClipAtomView(model: item.model, register: .operational, isDenseContainer: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            ClipEditButton(action: { onOpen(item.source) })
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(selection.selectedIds.contains(item.id) ? "Selected" : "Not selected")
-                        ClipAtomView(model: item.model, register: .operational, isDenseContainer: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        ClipEditButton(action: { onOpen(item.source) })
+                        // Honest provenance on a previously-shaped clip (P7-3).
+                        if wasInAMemory(item) {
+                            Text("Was in a memory · now unconnected")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(Crucible.Color.ink4)
+                                .padding(.leading, 30)
+                        }
                     }
                 }
             }
@@ -1330,6 +1339,16 @@ struct UnconnectedListView: View {
         )) { _ in
             refsReload.fire { reloadRefs() }
         }
+    }
+
+    /// True for a MediaReference that was previously attached to a memory
+    /// (P7-3) — drives the "was in a memory · now unconnected" line.
+    /// InboxClips are never previously-connected.
+    private func wasInAMemory(_ item: UnconnectedItem) -> Bool {
+        if case .managed(let ref) = item.source {
+            return PreviouslyConnectedStore.wasConnected(ref.id)
+        }
+        return false
     }
 
     private var emptyMessage: String {

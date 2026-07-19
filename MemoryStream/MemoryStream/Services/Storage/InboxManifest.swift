@@ -1104,3 +1104,33 @@ enum BenchClipReviewStore {
         Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
     }
 }
+
+/// Per-device "was in a memory" marker (P7-3, July 19 2026). A
+/// `MediaReference` with `edges == 0` is otherwise indistinguishable
+/// between never-connected (phone-bench capture) and previously-attached-
+/// then-detached; this records the latter so the Unconnected row can show
+/// the honest "was in a memory · now unconnected" line. Recorded only on a
+/// USER detach (remove-from-memory / Let Go), never a system path.
+///
+/// Per-device + no-deploy, consistent with `reviewed`: the line is a
+/// nicety, not load-bearing. Accepted limitation: the marker doesn't
+/// survive reinstall or cross-device (a clip let-go on another device
+/// shows without the line) — resolves with the same post-v1
+/// bench→MediaReference unification as `reviewed`.
+enum PreviouslyConnectedStore {
+    private static let key = "com.himem.bench.previouslyConnectedRefIds"
+
+    static func wasConnected(_ id: UUID) -> Bool {
+        ids().contains(id.uuidString)
+    }
+
+    static func record(_ id: UUID) {
+        var s = ids()
+        guard s.insert(id.uuidString).inserted else { return }
+        UserDefaults.standard.set(Array(s), forKey: key)
+    }
+
+    private static func ids() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
+    }
+}
