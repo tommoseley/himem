@@ -167,15 +167,17 @@ struct ClipsTabView: View {
     private var content: some View {
         switch status {
         case .new:
-            // Status=New shows the workbench (sessions + unplaced
-            // stack). Type filter is not applied to the New view in
-            // this cut — the workbench renders mixed sessions by
-            // design; narrowing to a single type there is a follow-
-            // up when the July 12 spec's "new videos only" case
-            // gets an on-device use pattern to design against.
+            // New = unseen (reviewed == false). The workbench (sessions +
+            // unplaced stack) filtered to unreviewed clips (P7-2 predicate).
+            // Type filter is not applied to the workbench in this cut — a
+            // follow-up when "new videos only" gets a use pattern.
             newFilterContent
         case .all:
-            FlatClipsListView(type: type, onOpen: { editingClip = .managed($0) })
+            // All = everything (no connection or review filter).
+            FlatClipsListView(type: type, connection: .any, onOpen: { editingClip = .managed($0) })
+        case .unconnected:
+            // Unconnected = connectionCount == 0 — the cleanup lens.
+            FlatClipsListView(type: type, connection: .unconnected, onOpen: { editingClip = .managed($0) })
         }
     }
 
@@ -196,10 +198,14 @@ struct ClipsTabView: View {
         // deleted ref for a re-render window; `$0.id` on an
         // invalidated fault traps with `EXC_BREAKPOINT`. Money-tested
         // by `ClipsUnplacedFilterTests`.
+        // New = unseen: hide reviewed refs (P7-2). A returned ref stays on
+        // New until opened; once reviewed it's reachable via All /
+        // Unconnected, but off the fresh-triage lens.
         let visibleUnplaced = ClipsUnplacedFilter.visible(
             refs: unplacedRefs,
             absorbed: absorbedBus.absorbedRefIds
         )
+        .filter { !BenchClipReviewStore.isReviewed($0.id) }
         // P7-1 (July 18 2026): the new/unshaped session block goes on TOP;
         // the returned-from-memory day-grouped stack (older, previously-
         // connected-now-loose refs, running back months) goes BELOW. The
@@ -207,7 +213,7 @@ struct ClipsTabView: View {
         // under months of reverse-chron and "new arrivals appeared after
         // May 19." Whatever is surfaced as "to look at" leads the screen.
         VStack(alignment: .leading, spacing: 12) {
-            SessionListView(viewModel: viewModel)
+            SessionListView(viewModel: viewModel, hideReviewed: true)
             if !visibleUnplaced.isEmpty {
                 unplacedDayGroupedStack(refs: visibleUnplaced)
             }
@@ -320,14 +326,15 @@ struct MemoryCreatedToast: View {
 /// into `New · All · Voice · Photos · Notes`) is retired — it
 /// hid Video entirely and conflated two orthogonal decisions.
 enum ClipsStatus: String, CaseIterable, Identifiable, Hashable {
-    case new, all
+    case new, all, unconnected
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .new: return "New"
-        case .all: return "All"
+        case .new:         return "New"
+        case .all:         return "All"
+        case .unconnected: return "Unconnected"
         }
     }
 }
@@ -441,12 +448,11 @@ struct ClipsHeader: View {
         .padding(.bottom, 4)
     }
 
-    /// Toggle order: **All then New** (Tom, 2026-07-12) — reads
-    /// left-to-right as the "wider" view first, `New` as the
-    /// active-triage subset. Independent of the `ClipsStatus` enum
-    /// declaration order (which stays semantic: `new` is the default
-    /// state, `all` is the fallback).
-    private static let statusOrder: [ClipsStatus] = [.all, .new]
+    /// Chip order **All · New · Unconnected** (Tom, 2026-07-19) — the
+    /// wider view first, `New` the default triage subset, `Unconnected`
+    /// the cleanup lens on the right. Independent of the `ClipsStatus`
+    /// enum declaration order.
+    private static let statusOrder: [ClipsStatus] = [.all, .new, .unconnected]
 
     private var statusToggle: some View {
         HStack(spacing: 2) {
@@ -1063,8 +1069,14 @@ struct FlatClipsListView: View {
     /// photos (invisibly), which retired July 12 2026 when Video
     /// became a first-class filter.
     let type: ClipsType
+    /// The status connection lens (P7, July 19 2026): `.any` = everything
+    /// (All), `.unconnected` = `connectionCount == 0` (Unconnected, the
+    /// cleanup lens). Independent of the type axis.
+    var connection: ConnectionLens = .any
     /// Opens the unified `ClipEditorModal` (threaded from `ClipsTabView`).
     let onOpen: (MediaReference) -> Void
+
+    enum ConnectionLens { case any, unconnected }
     @Environment(\.managedObjectContext) private var context
     @State private var groups: [(day: Date, refs: [MediaReference])] = []
     /// Same debounce as `ClipsTabView.unplacedReload` — coalesces
@@ -1092,6 +1104,7 @@ struct FlatClipsListView: View {
         .onAppear { reload() }
         .onDisappear { groupsReload.cancel() }
         .onChange(of: type) { _, _ in reload() }
+        .onChange(of: connection) { _, _ in reload() }
         .onReceive(NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
             object: context
@@ -1112,32 +1125,27 @@ struct FlatClipsListView: View {
 
     private func reload() {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        var subpredicates: [NSPredicate] = []
         switch type {
         case .voice:
-            req.predicate = NSPredicate(
-                format: "mediaType == %@",
-                MediaReference.MediaType.voice.rawValue
-            )
+            subpredicates.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.voice.rawValue))
         case .photos:
             // Split from Video (July 12 2026 lock). `.photos` = images
             // only here; videos have their own case.
-            req.predicate = NSPredicate(
-                format: "mediaType == %@",
-                MediaReference.MediaType.image.rawValue
-            )
+            subpredicates.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.image.rawValue))
         case .video:
-            req.predicate = NSPredicate(
-                format: "mediaType == %@",
-                MediaReference.MediaType.video.rawValue
-            )
+            subpredicates.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.video.rawValue))
         case .notes:
-            req.predicate = NSPredicate(
-                format: "mediaType == %@",
-                MediaReference.MediaType.note.rawValue
-            )
+            subpredicates.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.note.rawValue))
         case .all:
             break
         }
+        // Unconnected lens: zero edges (the same predicate the New-view
+        // unplaced stack uses). ANDed with the type filter.
+        if connection == .unconnected {
+            subpredicates.append(NSPredicate(format: "edges.@count == 0"))
+        }
+        req.predicate = subpredicates.isEmpty ? nil : NSCompoundPredicate(andPredicateWithSubpredicates: subpredicates)
         req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         let refs = (try? context.fetch(req)) ?? []
         let cal = Calendar.current

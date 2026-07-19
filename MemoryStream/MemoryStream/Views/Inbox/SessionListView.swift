@@ -20,6 +20,10 @@ struct SessionListView: View {
     @ObservedObject var inbox: InboxManifest = .shared
     @ObservedObject var arrivals: InboxArrivalTracker = .shared
     @ObservedObject var viewModel: JournalViewModel
+    /// New = unseen (P7-2): when true, reviewed clips are filtered out of
+    /// the sessions so the New lens shows only fresh, un-eyeballed intake.
+    /// Default false (All shows everything).
+    var hideReviewed: Bool = false
     @Environment(\.managedObjectContext) private var context
 
     @State private var sessions: [ClipGroup] = []
@@ -223,12 +227,16 @@ struct SessionListView: View {
     private func computeSessions() -> [ClipGroup] {
         let inFlight = arrivals.clipsInFlight.keys
         let solo = inbox.soloClipIds
+        // New = unseen: drop reviewed clips so a session the user has
+        // already eyeballed leaves the New lens (P7-2). All shows
+        // everything (hideReviewed == false).
+        let base = hideReviewed ? inbox.clips.filter { !$0.reviewed } : inbox.clips
         guard !inFlight.isEmpty else {
-            return ClipSessionGrouper.group(inbox.clips, soloClipIds: solo)
+            return ClipSessionGrouper.group(base, soloClipIds: solo)
         }
         let inFlightSet = Set(inFlight)
         return ClipSessionGrouper.group(
-            inbox.clips.filter { !inFlightSet.contains($0.clipId) },
+            base.filter { !inFlightSet.contains($0.clipId) },
             soloClipIds: solo
         )
     }
