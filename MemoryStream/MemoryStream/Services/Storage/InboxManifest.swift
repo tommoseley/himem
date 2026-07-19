@@ -442,6 +442,39 @@ final class InboxManifest: ObservableObject {
         replace(with: next)
     }
 
+    /// Batch variant — marks every listed clip reviewed in a single
+    /// persist. Used when opening a session card marks the whole session
+    /// seen at once (P7-2, "open the container → its contents are seen"),
+    /// so a 5-clip session doesn't write the manifest five times. No-op
+    /// for ids already reviewed or absent; if nothing changes, no write.
+    func markReviewed(clipIds: [UUID]) {
+        let targets = Set(clipIds)
+        var changed = false
+        let next = clips.map { clip -> InboxClip in
+            guard targets.contains(clip.clipId), !clip.reviewed else { return clip }
+            changed = true
+            return InboxClip(
+                clipId: clip.clipId,
+                capturedAt: clip.capturedAt,
+                duration: clip.duration,
+                transcript: clip.transcript,
+                latitude: clip.latitude,
+                longitude: clip.longitude,
+                source: clip.source,
+                audioFilename: clip.audioFilename,
+                transcriptionAttempted: clip.transcriptionAttempted,
+                rollGroupId: clip.rollGroupId,
+                status: clip.status,
+                disposedAt: clip.disposedAt,
+                announcedAt: clip.announcedAt,
+                fileSizeBytes: clip.fileSizeBytes,
+                reviewed: true
+            )
+        }
+        guard changed else { return }
+        replace(with: next)
+    }
+
     /// What ack the iPhone needs to send to the watch for a disposed
     /// clipId. Roll-session clips collapse into a single rollGroup ack
     /// — one message clears the watch's pending row (keyed on the

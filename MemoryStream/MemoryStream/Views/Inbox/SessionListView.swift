@@ -224,13 +224,18 @@ struct SessionListView: View {
     /// double-render: once as a transcribing IncomingCard and once
     /// as a session-list row with the legitimate-but-confusing
     /// "Transcribing…" body variant.
-    private func computeSessions() -> [ClipGroup] {
+    /// `applyFilter: false` derives sessions from the *unfiltered* inbox
+    /// even under the New lens. The opened session detail uses it: once
+    /// you're inside a session, marking its clips reviewed (P7-2) must
+    /// not make the session vanish out from under you (the New-filtered
+    /// derivation would drop every just-marked clip → AutoDismiss).
+    private func computeSessions(applyFilter: Bool = true) -> [ClipGroup] {
         let inFlight = arrivals.clipsInFlight.keys
         let solo = inbox.soloClipIds
         // New = unseen: drop reviewed clips so a session the user has
         // already eyeballed leaves the New lens (P7-2). All shows
         // everything (hideReviewed == false).
-        let base = hideReviewed ? inbox.clips.filter { !$0.reviewed } : inbox.clips
+        let base = (applyFilter && hideReviewed) ? inbox.clips.filter { !$0.reviewed } : inbox.clips
         guard !inFlight.isEmpty else {
             return ClipSessionGrouper.group(base, soloClipIds: solo)
         }
@@ -643,7 +648,7 @@ struct SessionListView: View {
         // arrives inside it — the snapshot could lag behind a mutation
         // made two navigation levels deep. Cheap: one grouping pass over
         // a small inbox per render of a single opened session.
-        if let session = computeSessions().first(where: { $0.id == sessionId }) {
+        if let session = computeSessions(applyFilter: false).first(where: { $0.id == sessionId }) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     sessionMetaRow(session)
@@ -655,8 +660,25 @@ struct SessionListView: View {
             .background(Crucible.Color.paper.ignoresSafeArea())
             .navigationTitle("Session")
             .navigationBarTitleDisplayMode(.inline)
+            // Open the container → its contents are seen (Tom, July 19):
+            // opening a session card marks every clip in it reviewed in
+            // one act, so the session leaves New as a batch rather than
+            // demanding one open per clip. Derived unfiltered above so
+            // this doesn't dismiss the screen it just cleared.
+            .onAppear { markSessionReviewed(session) }
         } else {
             AutoDismissView()
+        }
+    }
+
+    /// Marks every clip in an opened session reviewed (P7-2 per-session
+    /// rule). Voice clips ride the manifest (one batched persist);
+    /// absorbed media refs use the per-device bench store. Idempotent —
+    /// re-opening a fully-seen session is a no-op (no write).
+    private func markSessionReviewed(_ session: ClipGroup) {
+        inbox.markReviewed(clipIds: session.clips.map(\.clipId))
+        for ref in absorbedMediaBySessionId[session.id] ?? [] {
+            BenchClipReviewStore.markReviewed(ref.id)
         }
     }
 

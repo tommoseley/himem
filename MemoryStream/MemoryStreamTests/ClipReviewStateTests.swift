@@ -50,6 +50,44 @@ struct ClipReviewStateTests {
         #expect(decoded.reviewed == false)
     }
 
+    /// Money test for the per-session mark (July 19 2026): opening a
+    /// session card marks EVERY clip in it reviewed in one act, and only
+    /// those clips. A clip from another session is untouched, and a
+    /// second open is a no-op (idempotent, no crash).
+    @MainActor
+    @Test func markReviewed_batch_marksListedOnly_idempotent() {
+        let manifest = InboxManifest.shared
+        let snapshot = manifest.clips
+        defer {
+            for clip in manifest.clips where !snapshot.contains(where: { $0.clipId == clip.clipId }) {
+                manifest.remove(clipId: clip.clipId)
+            }
+        }
+        func seed() -> UUID {
+            let id = UUID()
+            manifest.acceptClip(InboxClip(
+                clipId: id, capturedAt: Date(), duration: 3, transcript: "",
+                latitude: nil, longitude: nil, source: "watch",
+                audioFilename: "test-\(id.uuidString).caf",
+                transcriptionAttempted: false, rollGroupId: nil))
+            return id
+        }
+        let a = seed(), b = seed(), other = seed()
+        func reviewed(_ id: UUID) -> Bool { manifest.clips.first { $0.clipId == id }?.reviewed ?? false }
+        #expect(reviewed(a) == false)
+
+        // Opening the session marks its two clips; `other` is a
+        // different session and stays New.
+        manifest.markReviewed(clipIds: [a, b])
+        #expect(reviewed(a) == true)
+        #expect(reviewed(b) == true)
+        #expect(reviewed(other) == false)
+
+        // Re-opening a fully-seen session is a no-op, not a crash.
+        manifest.markReviewed(clipIds: [a, b])
+        #expect(reviewed(a) == true)
+    }
+
     @Test func benchReviewStore_marksAndReads_idempotent() {
         let key = "com.himem.bench.reviewedRefIds"
         let saved = UserDefaults.standard.stringArray(forKey: key)
