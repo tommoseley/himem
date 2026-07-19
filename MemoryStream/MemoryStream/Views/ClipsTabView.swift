@@ -176,8 +176,10 @@ struct ClipsTabView: View {
             // All = everything (no connection or review filter).
             FlatClipsListView(type: type, connection: .any, onOpen: { editingClip = .managed($0) })
         case .unconnected:
-            // Unconnected = connectionCount == 0 — the cleanup lens.
-            FlatClipsListView(type: type, connection: .unconnected, onOpen: { editingClip = .managed($0) })
+            // Unconnected = connectionCount == 0 — the cleanup lens, as a
+            // UNIFIED list across backing types (P7-3, July 19 2026):
+            // unpromoted InboxClips + detached/loose MediaReferences.
+            UnconnectedListView(type: type, onOpen: { editingClip = $0 })
         }
     }
 
@@ -1154,5 +1156,114 @@ struct FlatClipsListView: View {
         }
         groups = grouped.map { (day: $0.key, refs: $0.value) }
             .sorted { $0.day > $1.day }
+    }
+}
+
+// MARK: - Unconnected (unified clip list)
+
+/// One row in the Unconnected list. Carries its backing so the row can
+/// both render (`ClipDisplayModel`) and open (`ClipEditorModal.Source`),
+/// spanning the two backing types (P7-3, July 19 2026).
+private struct UnconnectedItem: Identifiable {
+    let id: UUID
+    let model: ClipDisplayModel
+    let source: ClipEditorModal.Source
+    let capturedAt: Date
+}
+
+/// The Unconnected filter as a **unified list across backing types** —
+/// unpromoted `InboxClip`s (watch/phone, source glyph per row) + detached /
+/// loose `MediaReference`s (`edges == 0`). One reverse-chron list.
+///
+/// Read-only enabling slice: the multi-select (Delete / Add to a memory)
+/// and the "was in a memory · now unconnected" line (needs a per-device
+/// everConnected marker — no `everConnected` signal exists today) are the
+/// following slices per the July 19 sequencing.
+struct UnconnectedListView: View {
+    let type: ClipsType
+    let onOpen: (ClipEditorModal.Source) -> Void
+    @ObservedObject var inbox: InboxManifest = .shared
+    @Environment(\.managedObjectContext) private var context
+    @State private var looseRefs: [MediaReference] = []
+    @State private var refsReload = DebouncedTrigger(interval: .milliseconds(250))
+
+    var body: some View {
+        let items = buildItems()
+        return VStack(alignment: .leading, spacing: 8) {
+            if items.isEmpty {
+                Text(emptyMessage)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .padding(.top, 20)
+            } else {
+                ForEach(items) { item in
+                    HStack(spacing: 8) {
+                        ClipAtomView(model: item.model, register: .operational, isDenseContainer: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        ClipEditButton(action: { onOpen(item.source) })
+                    }
+                }
+            }
+        }
+        .onAppear { reloadRefs() }
+        .onDisappear { refsReload.cancel() }
+        .onChange(of: type) { _, _ in reloadRefs() }
+        .onReceive(NotificationCenter.default.publisher(
+            for: .NSManagedObjectContextObjectsDidChange,
+            object: context
+        )) { _ in
+            refsReload.fire { reloadRefs() }
+        }
+    }
+
+    private var emptyMessage: String {
+        switch type {
+        case .all:    return "Nothing unconnected — every clip is in a memory."
+        case .voice:  return "No unconnected voice clips."
+        case .photos: return "No unconnected photos."
+        case .video:  return "No unconnected videos."
+        case .notes:  return "No unconnected notes."
+        }
+    }
+
+    private func buildItems() -> [UnconnectedItem] {
+        var items: [UnconnectedItem] = []
+        // Unpromoted inbox clips are always unconnected (they have no edges
+        // until promoted) and are voice (the Watch is audio-only; phone
+        // bench captures land as MediaReferences). Include under All / Voice.
+        if type == .all || type == .voice {
+            for clip in inbox.clips where clip.status != .disposed {
+                items.append(UnconnectedItem(
+                    id: clip.clipId,
+                    model: ClipDisplayModel(inboxClip: clip, sessionStart: nil),
+                    source: .inbox(clip),
+                    capturedAt: clip.capturedAt
+                ))
+            }
+        }
+        for ref in looseRefs {
+            items.append(UnconnectedItem(
+                id: ref.id,
+                model: ClipDisplayModel(mediaReference: ref),
+                source: .managed(ref),
+                capturedAt: ref.createdAt ?? .distantPast
+            ))
+        }
+        return items.sorted { $0.capturedAt > $1.capturedAt }
+    }
+
+    private func reloadRefs() {
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        var subs: [NSPredicate] = [NSPredicate(format: "edges.@count == 0")]
+        switch type {
+        case .voice:  subs.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.voice.rawValue))
+        case .photos: subs.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.image.rawValue))
+        case .video:  subs.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.video.rawValue))
+        case .notes:  subs.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.note.rawValue))
+        case .all:    break
+        }
+        req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: subs)
+        req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+        looseRefs = (try? context.fetch(req)) ?? []
     }
 }

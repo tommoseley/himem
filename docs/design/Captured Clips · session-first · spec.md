@@ -56,6 +56,7 @@ They combine naturally: *New + 0 memories*, *Reviewed + 0 memories*, *Reviewed +
 - **Cleanup lives in the Unconnected filter.** Tap **Unconnected** → the zero-connection pile → **multi-select → Delete / Add to a memory** (Photos-style; reuses the Sort multi-select and its single ochre commit). Delete here is clip-deletion (**"Delete this Clip"**, destroys the atom, → Recently Deleted).
 - **No branching at deletion time.** Let Go / Delete-project add **no** clip checkbox or modal — the honest sentence ("The clips stay…") is enough. Cleanup is a separate, deliberate act on the bench, not a fork inside a calm deletion flow.
 - **The Unconnected count is never a nag.** No badge, no "N to clear." Unconnected is a filter you *choose* to open when you want to tidy — the workbench-not-queue rule still holds.
+- **Unconnected is a unified list across backing types (locked July 19 2026).** It surfaces *every* zero-connection clip regardless of storage — unpromoted inbox `InboxClip`s (watch/phone/Siri arrivals not yet made into a memory) **and** detached/never-attached `MediaReference`s. An unpromoted watch clip is the most unconnected thing there is; excluding it would make the cleanup lens lie. A small source glyph (watch/phone) rides each row. *(Today `All`/`Unconnected` render only the flat `MediaReference` list; this unified list is the bench→unified-clip change — the same unification that will let the type axis apply to New. Until it lands, that's a flagged gap, not the target.)*
 
 ## Idle-gap sessioning (locked June 30 2026)
 

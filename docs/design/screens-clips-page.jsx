@@ -847,7 +847,12 @@ function ScrSingleClipSession() {
 // A clip that was PREVIOUSLY shaped reads honestly ("was in a memory · now
 // unconnected") — it is NOT re-badged New (New = unseen).
 // ═══════════════════════════════════════════════════════════════
-function LooseRow({ mediaIcon, time, day, preview, wasShaped, selecting, checked }) {
+function LooseRow({ mediaIcon, time, day, preview, wasShaped, source, selecting, checked }) {
+  const srcGlyph = source === 'watch'
+    ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 6l1-3h4l1 3M9 18l1 3h4l1-3"/></svg>
+    : source === 'phone'
+    ? <svg width="9" height="11" viewBox="0 0 24 24" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>
+    : null;
   return (
     <div style={{
       background: PX.card, border: '1px solid ' + (checked ? PX.accent : PX.hairline), borderRadius: 13,
@@ -865,9 +870,10 @@ function LooseRow({ mediaIcon, time, day, preview, wasShaped, selecting, checked
       )}
       <span style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, marginTop: 1, background: PX.wash1, color: PX.ink3, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{mediaIcon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11.5, color: PX.ink3, marginBottom: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: PX.ink3, marginBottom: 3 }}>
           <span style={{ fontWeight: 600, color: PX.ink2, fontVariantNumeric: 'tabular-nums' }}>{time}</span>
           <span style={{ color: PX.ink4 }}>·</span><span>{day}</span>
+          {srcGlyph && <span style={{ display: 'inline-flex', alignItems: 'center' }}>{srcGlyph}</span>}
           {wasShaped && <><span style={{ flex: 1 }} /><span style={{ fontSize: 10.5, color: PX.ink4, fontStyle: 'italic' }}>was in a memory · now unconnected</span></>}
         </div>
         <div style={{ fontSize: 13.5, color: PX.ink2, lineHeight: 1.42, letterSpacing: -0.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>“{preview}”</div>
@@ -887,11 +893,13 @@ function ScrClipsLoose() {
           <span style={{ flex: 1 }} />
           <span style={{ fontSize: 13.5, fontWeight: 600, color: PX.accent }}>Select</span>
         </div>
-        <LooseRow mediaIcon={MIC} time="2:34 PM" day="May 21" preview="…" />
-        <LooseRow mediaIcon={NOTE} time="8:45 PM" day="Jun 12" preview="Test this for me" />
-        <LooseRow mediaIcon={MIC} time="10:07 AM" day="May 27" preview="456-7-8, 910." />
+        {/* unified list: unpromoted inbox clips (watch/phone) AND detached
+            MediaReferences — anything with 0 connections, regardless of backing type. */}
+        <LooseRow mediaIcon={MIC} time="2:34 PM" day="May 21" source="watch" preview="…" />
+        <LooseRow mediaIcon={NOTE} time="8:45 PM" day="Jun 12" source="phone" preview="Test this for me" />
+        <LooseRow mediaIcon={MIC} time="10:07 AM" day="May 27" source="watch" preview="456-7-8, 910." />
         <LooseRow mediaIcon={MIC} time="4:44 PM" day="Jun 12" wasShaped preview="I was raised very, very Catholic. Still a little scared, honestly." />
-        <LooseRow mediaIcon={MIC} time="12:45 PM" day="Jun 9" preview="Voice clip" />
+        <LooseRow mediaIcon={MIC} time="12:45 PM" day="Jun 9" source="phone" preview="Voice clip" />
       </div>
       <TabBar active="clips" />
     </PhoneScreen>
@@ -911,9 +919,9 @@ function ScrClipsLooseSelecting() {
         <span style={{ fontSize: 15, fontWeight: 600, color: PX.accent }}>Select all</span>
       </div>
       <div style={{ flex: 1, overflow: 'hidden', padding: '2px 14px 10px', display: 'flex', flexDirection: 'column', gap: 9 }}>
-        <LooseRow mediaIcon={MIC} time="2:34 PM" day="May 21" preview="…" selecting checked />
-        <LooseRow mediaIcon={NOTE} time="8:45 PM" day="Jun 12" preview="Test this for me" selecting checked />
-        <LooseRow mediaIcon={MIC} time="10:07 AM" day="May 27" preview="456-7-8, 910." selecting checked />
+        <LooseRow mediaIcon={MIC} time="2:34 PM" day="May 21" source="watch" preview="…" selecting checked />
+        <LooseRow mediaIcon={NOTE} time="8:45 PM" day="Jun 12" source="phone" preview="Test this for me" selecting checked />
+        <LooseRow mediaIcon={MIC} time="10:07 AM" day="May 27" source="watch" preview="456-7-8, 910." selecting checked />
         <LooseRow mediaIcon={MIC} time="4:44 PM" day="Jun 12" wasShaped preview="I was raised very, very Catholic. Still a little scared, honestly." selecting />
         <LooseRow mediaIcon={MIC} time="12:45 PM" day="Jun 9" preview="Voice clip" selecting />
       </div>
