@@ -178,8 +178,10 @@ struct ClipsTabView: View {
             }
             .onChange(of: status) { _, _ in
                 // Selection is per-filter (the visible id set differs), so
-                // switching filters leaves selecting mode.
+                // switching filters leaves selecting mode and drops the
+                // now-stale visible registry.
                 selection.exit()
+                selection.resetVisible()
             }
             .alert(selection.count == 1 ? "Delete 1 clip?" : "Delete \(selection.count) clips?", isPresented: $showDeleteConfirm) {
                 Button("Delete", role: .destructive) { performSelectionDelete() }
@@ -379,12 +381,17 @@ struct ClipsTabView: View {
         // shipped build had these reversed, so a fresh session landed
         // under months of reverse-chron and "new arrivals appeared after
         // May 19." Whatever is surfaced as "to look at" leads the screen.
+        let unplacedIds = visibleUnplaced.map(\.id)
         VStack(alignment: .leading, spacing: 12) {
-            SessionListView(viewModel: viewModel, hideReviewed: true)
+            SessionListView(viewModel: viewModel, hideReviewed: true, selection: selection)
             if !visibleUnplaced.isEmpty {
                 unplacedDayGroupedStack(refs: visibleUnplaced)
             }
         }
+        // Register the unplaced-stack ids for New's Select-all (SessionListView
+        // registers its session clips under "sessions").
+        .onAppear { selection.registerVisible(unplacedIds, source: "unplaced") }
+        .onChange(of: unplacedIds) { _, ids in selection.registerVisible(ids, source: "unplaced") }
     }
 
     /// Returned-from-memory clips, grouped by createdAt day, and within
@@ -1374,7 +1381,7 @@ struct FlatClipsListView: View {
         groups = grouped.map { (day: $0.key, refs: $0.value) }
             .sorted { $0.day > $1.day }
         // Register the visible id set for Select-all / drag (P7-4).
-        selection.registerVisible(groups.flatMap { $0.refs.map(\.id) })
+        selection.registerVisible(groups.flatMap { $0.refs.map(\.id) }, source: "flat")
     }
 }
 
@@ -1464,7 +1471,7 @@ struct UnconnectedListView: View {
     /// Kept out of `body` (mutating shared published state during a render
     /// pass would loop); driven by the data-change hooks instead.
     private func registerVisibleIds() {
-        selection.registerVisible(buildItems().map(\.id))
+        selection.registerVisible(buildItems().map(\.id), source: "flat")
     }
 
     /// True for a MediaReference that was previously attached to a memory
@@ -1549,10 +1556,12 @@ struct UnconnectedListView: View {
 final class ClipsSelection: ObservableObject {
     @Published var selecting = false
     @Published var selectedIds: Set<UUID> = []
-    /// Ordered, de-duplicated visible selectable ids in the active filter,
-    /// registered by the content view on data change. Drives Select-all
-    /// and drag-to-select (which map a position → a run of these ids).
-    @Published var visibleIds: [UUID] = []
+    /// De-duplicated visible selectable ids in the active filter, merged
+    /// across the sources that contribute to one filter (New = session
+    /// clips + the unplaced stack). Drives Select-all. Registered per
+    /// source and merged so two content views don't clobber each other.
+    @Published private(set) var visibleIds: [UUID] = []
+    private var visibleBySource: [String: [UUID]] = [:]
 
     func enter() { selecting = true }
     /// Leaves the mode and drops the selection (Cancel, or a filter change).
@@ -1581,7 +1590,22 @@ final class ClipsSelection: ObservableObject {
         !ids.isEmpty && ids.allSatisfy { selectedIds.contains($0) }
     }
     func selectAll() { selectedIds = Set(visibleIds) }
-    func registerVisible(_ ids: [UUID]) { visibleIds = ids }
+    /// Registers one source's visible ids and re-merges. Sources: "flat"
+    /// (All / Unconnected), "sessions" + "unplaced" (New).
+    func registerVisible(_ ids: [UUID], source: String) {
+        visibleBySource[source] = ids
+        var seen = Set<UUID>(); var out: [UUID] = []
+        for group in visibleBySource.values {
+            for id in group where !seen.contains(id) { seen.insert(id); out.append(id) }
+        }
+        visibleIds = out
+    }
+    /// Clears the visible registry — called on a filter switch so a stale
+    /// source's ids can't leak into the next filter's Select-all.
+    func resetVisible() {
+        visibleBySource.removeAll()
+        visibleIds = []
+    }
     func clear() { selectedIds.removeAll() }
     var count: Int { selectedIds.count }
 }
