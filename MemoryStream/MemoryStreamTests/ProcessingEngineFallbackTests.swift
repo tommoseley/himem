@@ -33,8 +33,7 @@ struct ProcessingEngineFallbackTests {
                 entities: [.init(type: "person", value: entityValue, confidence: 0.95)],
                 topics: [topic],
                 summary: "cloud summary",
-                title: title,
-                nextSteps: nil
+                title: title
             )
         }
     }
@@ -271,8 +270,7 @@ struct ProcessingEngineFallbackTests {
                 entities: [.init(type: "person", value: entityValue, confidence: 0.95)],
                 topics: [topic],
                 summary: "on-device summary",
-                title: title,
-                nextSteps: nil
+                title: title
             )
         }
     }
@@ -424,8 +422,7 @@ struct ProcessingEngineFallbackTests {
                 entities: [.init(type: "person", value: "Sarah", confidence: 0.95)],
                 topics: ["Garden"],
                 summary: "cloud summary",
-                title: title,
-                nextSteps: nil
+                title: title
             )
         }
     }

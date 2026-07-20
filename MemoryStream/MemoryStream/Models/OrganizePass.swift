@@ -98,6 +98,11 @@ extension OrganizePass {
         case summary
         case topics
         case mentions
+        /// DORMANT (RH-6, July 20 2026): `nextSteps` is cut from v1 — no
+        /// organize output produces it and no UI consumes it. The enum case
+        /// is deliberately KEPT so a post-v1 re-add (with a durable editable
+        /// home) can reuse the accepted-row plumbing without a schema/JSON
+        /// migration. Nothing writes this row today.
         case nextSteps
     }
 

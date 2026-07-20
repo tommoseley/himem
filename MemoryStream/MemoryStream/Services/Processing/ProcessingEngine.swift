@@ -497,11 +497,11 @@ final class ProcessingEngine {
     /// Returned topics that match an existing palette entry (case-
     /// insensitive, whitespace-trimmed) are rewritten to the palette's
     /// canonical casing; non-matches pass through unchanged. Other
-    /// fields on `AnalysisResult` (entities, summary, title,
-    /// nextSteps) are preserved bit-for-bit. The "matches first,
-    /// novelties next" ordering matches `TopicPalette.Partition`'s
-    /// own ordering — the review UI can derive the NEW vs existing
-    /// split by re-running the partition at render time.
+    /// fields on `AnalysisResult` (entities, summary, title) are
+    /// preserved bit-for-bit. The "matches first, novelties next"
+    /// ordering matches `TopicPalette.Partition`'s own ordering — the
+    /// review UI can derive the NEW vs existing split by re-running the
+    /// partition at render time.
     static func canonicalizeTopics(
         result: ClaudeAPIService.AnalysisResult,
         against existingTopics: [String]
@@ -512,8 +512,7 @@ final class ProcessingEngine {
             entities: result.entities,
             topics: canonicalTopics,
             summary: result.summary,
-            title: result.title,
-            nextSteps: result.nextSteps
+            title: result.title
         )
     }
 
