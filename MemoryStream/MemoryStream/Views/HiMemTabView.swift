@@ -55,6 +55,11 @@ struct HiMemTabView: View {
     /// §Clip triage (July 12 2026): "No FAB on an opened clip —
     /// it's an opened item, not a capture surface."
     @ObservedObject private var clipDetailPresence = ClipDetailPresentationContext.shared
+    /// True while Clips multi-select is active — the bottom action bar
+    /// (Add to a memory… / Delete N) owns the bottom of the screen, so the
+    /// capture FAB steps aside (it overlaps Delete otherwise). Scoped to
+    /// the Clips tab below so other tabs keep their FAB.
+    @ObservedObject private var clipsSelection = ClipsSelection.shared
     /// Signals "open Memory Detail for this id" — the Create-one-
     /// memory flow (`CreateMemoryFromClipsSheet`) sets it after a
     /// successful save so the user lands on the freshly-created
@@ -126,7 +131,8 @@ struct HiMemTabView: View {
             // Projects at the list level + opens the New Project
             // sheet (no modality picker), on every other case +
             // opens the ad-hoc modality stack.
-            if memoryDetailPresence.currentMemoryId == nil && clipDetailPresence.currentClipId == nil {
+            if memoryDetailPresence.currentMemoryId == nil && clipDetailPresence.currentClipId == nil
+                && !(clipsSelection.selecting && selection == .clips) {
                 switch currentIntent {
                 case .openNewProjectSheet:
                     NewProjectFAB(onTap: {

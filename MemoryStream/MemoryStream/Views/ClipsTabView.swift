@@ -73,7 +73,7 @@ struct ClipsTabView: View {
     /// nav-bus route.
     @State private var toastAutoDismissTask: Task<Void, Never>? = nil
     /// Unconnected multi-select (P7-3). Drives the pinned action bar.
-    @StateObject private var selection = ClipsSelection()
+    @ObservedObject private var selection = ClipsSelection.shared
     /// "Delete N clips?" confirm — clips have no Recently Deleted yet, so
     /// batch delete is permanent; the confirm is the interim net.
     @State private var showDeleteConfirm = false
@@ -1582,6 +1582,11 @@ struct UnconnectedListView: View {
 /// quiet "Select" enters it; the circles and bars appear only in mode.
 @MainActor
 final class ClipsSelection: ObservableObject {
+    /// Shared so the tab shell (`HiMemTabView`) can read `selecting` to
+    /// step the capture FAB aside while multi-select owns the bottom bar,
+    /// without threading a binding through the TabView.
+    static let shared = ClipsSelection()
+
     @Published var selecting = false
     @Published var selectedIds: Set<UUID> = []
     /// De-duplicated visible selectable ids in the active filter, merged
