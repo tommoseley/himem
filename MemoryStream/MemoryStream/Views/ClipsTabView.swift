@@ -268,6 +268,7 @@ struct ClipsTabView: View {
                     .frame(minHeight: 48)
                     .padding(.horizontal, 18)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Crucible.Color.danger, lineWidth: 1.5))
+                    .contentShape(Rectangle()) // edge-to-edge tap (stroke pill interior is transparent)
             }
             .buttonStyle(.plain)
             .disabled(selection.count == 0)

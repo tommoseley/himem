@@ -389,6 +389,7 @@ private struct MediaReferenceClipDetail: View {
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Crucible.Color.danger, lineWidth: 1)
                     )
+                    .contentShape(Rectangle()) // edge-to-edge tap (stroke pill interior is transparent)
             }
             if attachedCount > 0 {
                 Text("This is attached to \(attachedCount) \(attachedCount == 1 ? "memory" : "memories").")
@@ -662,6 +663,7 @@ private struct InboxClipDetail: View {
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(Crucible.Color.danger, lineWidth: 1)
                 )
+                .contentShape(Rectangle()) // edge-to-edge tap (stroke pill interior is transparent)
         }
     }
 

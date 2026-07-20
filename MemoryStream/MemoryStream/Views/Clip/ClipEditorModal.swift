@@ -411,6 +411,7 @@ struct ClipEditorModal: View {
                     .foregroundStyle(Crucible.Color.danger)
                     .frame(maxWidth: .infinity, minHeight: 50)
                     .overlay(RoundedRectangle(cornerRadius: 13).stroke(Crucible.Color.danger, lineWidth: 1))
+                    .contentShape(Rectangle()) // edge-to-edge tap (stroke pill interior is transparent)
             }
             .buttonStyle(.plain)
         }
