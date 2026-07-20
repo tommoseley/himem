@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Value snapshot of a Recently-Deleted clip (P8, July 19 2026) — a flat
 /// preview + type + recycledAt, so the bin's list holds no managed-object
@@ -8,6 +9,13 @@ struct RecycledClipDisplay: Identifiable, Equatable {
     let preview: String
     let typeLabel: String
     let recycledAt: Date?
+    /// Thumbnail source for photo/video rows — the same `(osIdentifier,
+    /// mediaType)` the live clip row resolves through `ThumbnailService`
+    /// (July 20 2026 fix). Nil for voice/note and unpromoted bench clips.
+    /// Recycle never deletes the blob or evicts the thumbnail cache, so this
+    /// resolves fine for a recycled clip — no `recycledAt` gating is involved.
+    let thumbnailOSIdentifier: String?
+    let thumbnailMediaType: MediaReference.MediaType?
 
     init(ref: MediaReference) {
         id = ref.id
@@ -17,6 +25,13 @@ struct RecycledClipDisplay: Identifiable, Equatable {
         case .image: typeLabel = "Photo"
         case .video: typeLabel = "Video"
         case .note:  typeLabel = "Note"
+        }
+        if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
+            thumbnailOSIdentifier = ref.osIdentifier
+            thumbnailMediaType = ref.mediaTypeEnum
+        } else {
+            thumbnailOSIdentifier = nil
+            thumbnailMediaType = nil
         }
         let candidates = [ref.transcript, ref.text, ref.mediaDescription]
         let firstReal = candidates
@@ -30,6 +45,8 @@ struct RecycledClipDisplay: Identifiable, Equatable {
         id = clip.clipId
         recycledAt = clip.recycledAt
         typeLabel = "Voice"
+        thumbnailOSIdentifier = nil
+        thumbnailMediaType = nil
         let t = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         preview = t.isEmpty ? "(voice clip)" : t
     }
@@ -249,6 +266,7 @@ private struct ClipGhostCard: View {
     let clip: RecycledClipDisplay
     let onRestore: () -> Void
     let onDelete: () -> Void
+    @State private var thumbnail: UIImage?
 
     private var daysRemaining: Int {
         guard let recycledAt = clip.recycledAt else { return 30 }
@@ -256,8 +274,34 @@ private struct ClipGhostCard: View {
         return max(0, 30 - elapsed)
     }
 
+    /// Photo/video rows carry a leading thumbnail, resolved the same way the
+    /// live clip row does (July 20 2026). Nil source (voice/note) → no tile.
+    @ViewBuilder private var thumbnailLeading: some View {
+        if clip.thumbnailOSIdentifier != nil {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8).fill(Crucible.Color.sunk)
+                if let thumbnail {
+                    Image(uiImage: thumbnail).resizable().scaledToFill()
+                } else {
+                    Image(systemName: clip.thumbnailMediaType == .video ? "video" : "photo")
+                        .foregroundStyle(Crucible.Color.ink4)
+                }
+                if clip.thumbnailMediaType == .video {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white)
+                        .shadow(radius: 2)
+                }
+            }
+            .frame(width: 52, height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
+            thumbnailLeading
+            VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(clip.typeLabel)
                     .font(.system(size: 15, weight: .semibold))
@@ -300,6 +344,7 @@ private struct ClipGhostCard: View {
                 }
                 .buttonStyle(.plain)
             }
+            }
         }
         .padding(14)
         .background(Crucible.Color.card)
@@ -307,6 +352,16 @@ private struct ClipGhostCard: View {
         .modifier(WarmShadow(level: 1))
         .saturation(0)
         .opacity(0.75)
+        // Resolve the thumbnail the SAME way the live clip row does
+        // (MediaClipRow) — cache-or-generate from the media file. No
+        // recycledAt gating; recycle keeps the blob + the thumbnail cache.
+        .task(id: clip.id) {
+            guard thumbnail == nil, let osId = clip.thumbnailOSIdentifier else { return }
+            let mediaType = clip.thumbnailMediaType ?? .image
+            if let name = await ThumbnailService.shared.cacheThumbnail(for: osId, mediaType: mediaType) {
+                thumbnail = ThumbnailService.shared.cachedThumbnail(filename: name)
+            }
+        }
     }
 }
 
