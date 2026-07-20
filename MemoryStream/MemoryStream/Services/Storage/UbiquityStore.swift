@@ -1,4 +1,5 @@
 import Foundation
+import CoreData
 
 /// Single source of truth for "where does HiMem put media files?"
 ///
@@ -378,5 +379,92 @@ final class UbiquityStore: @unchecked Sendable {
         }
         if let coordinationError { throw coordinationError }
         if let writeError { throw writeError }
+    }
+}
+
+// MARK: - RH-8 orphaned-blob cleanup sweep (one-time migration)
+
+/// One-time cleanup migration (RH-8, July 20 2026) that sweeps the BACKLOG
+/// of already-orphaned media blobs — files the old purge paths left in the
+/// iCloud Files container after deleting only the DB row / manifest entry.
+///
+/// **DESTRUCTIVE.** `plan(...)` is the non-destructive dry-run (returns the
+/// orphan URLs, deletes nothing); `execute(plan:)` is the deletion. The
+/// deletion is gated behind a deliberate trigger — it never runs on its own.
+///
+/// **Orphan predicate:** a container file is an orphan iff its filename is
+/// referenced by NO live-or-recycled clip AND it is older than the age guard
+/// (so an in-flight arrival that has a file but no DB/manifest row yet is
+/// never swept). The keep-set includes RECYCLED-not-purged clips, so a
+/// soft-deleted clip's blob is safe.
+enum MediaBlobOrphanSweep {
+
+    struct Candidate: Equatable {
+        let url: URL
+        let filename: String
+        let modifiedAt: Date
+    }
+
+    /// Pure predicate (unit-testable): the orphans among `candidates`.
+    static func orphans(candidates: [Candidate], referencedFilenames: Set<String>, olderThan cutoff: Date) -> [URL] {
+        candidates
+            .filter { !referencedFilenames.contains($0.filename) && $0.modifiedAt < cutoff }
+            .map(\.url)
+    }
+
+    /// Enumerates real files across the media subdirectories.
+    static func gatherCandidates(store: UbiquityStore = .shared) -> [Candidate] {
+        let dirs = [store.audioDirectory, store.photosDirectory, store.videosDirectory, store.inboxDirectory]
+        let fm = FileManager.default
+        var out: [Candidate] = []
+        for dir in dirs {
+            guard let items = try? fm.contentsOfDirectory(
+                at: dir,
+                includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+            for url in items {
+                let vals = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isDirectoryKey])
+                if vals?.isDirectory == true { continue }
+                out.append(Candidate(
+                    url: url,
+                    filename: url.lastPathComponent,
+                    modifiedAt: vals?.contentModificationDate ?? .distantPast
+                ))
+            }
+        }
+        return out
+    }
+
+    /// The keep-set: every `MediaReference.osIdentifier` (live AND recycled)
+    /// plus every non-disposed `InboxClip.audioFilename` (active AND
+    /// recycled). No `recycledAt` filter — recycled blobs must survive.
+    @MainActor
+    static func referencedFilenames(context: NSManagedObjectContext, manifest: InboxManifest = .shared) -> Set<String> {
+        var names = Set<String>()
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        for ref in (try? context.fetch(req)) ?? [] {
+            names.insert(ref.osIdentifier) // ubiquity filename; PhotoKit ids contain "/" and never match a container filename
+        }
+        names.formUnion(manifest.referencedAudioFilenames)
+        return names
+    }
+
+    /// The non-destructive dry-run: the list of orphan blob URLs.
+    @MainActor
+    static func plan(context: NSManagedObjectContext, now: Date = Date(), ageGuardHours: Int = 1) -> [URL] {
+        let cutoff = Calendar.current.date(byAdding: .hour, value: -ageGuardHours, to: now) ?? now
+        return orphans(
+            candidates: gatherCandidates(),
+            referencedFilenames: referencedFilenames(context: context),
+            olderThan: cutoff
+        )
+    }
+
+    /// Coordinated-deletes each planned orphan. DESTRUCTIVE — call only after
+    /// the plan has been reviewed.
+    static func execute(plan: [URL]) {
+        for url in plan { UbiquityStore.shared.removeFromStore(at: url) }
+        NSLog("[HiMem][Sweep] executed — deleted \(plan.count) orphaned blob(s)")
     }
 }

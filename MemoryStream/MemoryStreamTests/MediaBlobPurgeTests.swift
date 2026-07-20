@@ -69,4 +69,31 @@ struct MediaBlobPurgeTests {
         // Photos library, never ours to delete.
         #expect(EntryLifecycleService.ownedBlobURL(for: makeRef(storage, type: .image, osIdentifier: "ABCD-1234/L0/001")) == nil)
     }
+
+    // MARK: - Orphan-sweep predicate (the destructive migration's decision)
+
+    /// The sweep predicate: sweep only files that are BOTH unreferenced AND
+    /// older than the age guard. A referenced file (incl. a recycled clip's
+    /// blob) is kept; a recent unreferenced file (a possible in-flight
+    /// arrival with no DB/manifest row yet) is kept.
+    @Test func orphanSweep_sweepsOldUnreferenced_keepsReferencedAndRecent() {
+        let now = Date()
+        let old = now.addingTimeInterval(-3600)     // 1h ago
+        let recent = now.addingTimeInterval(-60)    // 1m ago
+        let cutoff = now.addingTimeInterval(-1800)  // 30m age guard
+
+        func cand(_ name: String, _ at: Date) -> MediaBlobOrphanSweep.Candidate {
+            .init(url: URL(fileURLWithPath: "/c/\(name)"), filename: name, modifiedAt: at)
+        }
+        let referenced = cand("kept.caf", old)          // referenced → keep
+        let orphan = cand("orphan.caf", old)            // unreferenced + old → sweep
+        let inflight = cand("inflight.caf", recent)     // unreferenced but recent → keep
+
+        let result = MediaBlobOrphanSweep.orphans(
+            candidates: [referenced, orphan, inflight],
+            referencedFilenames: ["kept.caf"],
+            olderThan: cutoff
+        )
+        #expect(result == [orphan.url])
+    }
 }

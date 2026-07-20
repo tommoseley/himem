@@ -630,6 +630,15 @@ final class InboxManifest: ObservableObject {
         replace(with: (clips + [restored]).sorted { $0.capturedAt > $1.capturedAt })
     }
 
+    /// Audio filenames still referenced by a non-disposed clip — active OR
+    /// recycled-not-purged. The RH-8 orphan sweep's inbox keep-set: a
+    /// recycled clip's staged blob must NEVER be swept, so recycled clips are
+    /// included. Disposed tombstones carry `audioFilename == ""` and are
+    /// excluded (their file is already gone / to-be-purged).
+    var referencedAudioFilenames: Set<String> {
+        Set((clips + recycledClips).map(\.audioFilename).filter { !$0.isEmpty })
+    }
+
     /// Recently-Deleted bench clips (snapshot), newest-deleted first — the
     /// bin reads this on reload.
     func loadRecycledClips() -> [InboxClip] {
