@@ -475,6 +475,7 @@ struct CreateMemoryFromClipsSheet: View {
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
     }

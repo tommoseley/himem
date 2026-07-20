@@ -246,6 +246,7 @@ private struct MediaReferenceClipDetail: View {
                         style: StrokeStyle(lineWidth: 1, dash: [5, 4])
                     )
             )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add a description")
@@ -388,6 +389,7 @@ private struct MediaReferenceClipDetail: View {
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Crucible.Color.danger, lineWidth: 1)
                     )
+                    .contentShape(Rectangle()) // edge-to-edge tap (stroke pill interior is transparent)
             }
             if attachedCount > 0 {
                 Text("This is attached to \(attachedCount) \(attachedCount == 1 ? "memory" : "memories").")
@@ -661,6 +663,7 @@ private struct InboxClipDetail: View {
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(Crucible.Color.danger, lineWidth: 1)
                 )
+                .contentShape(Rectangle()) // edge-to-edge tap (stroke pill interior is transparent)
         }
     }
 

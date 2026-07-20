@@ -525,6 +525,7 @@ struct EntryExpandedView: View {
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit topics")
@@ -603,6 +604,7 @@ struct EntryExpandedView: View {
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit projects")
@@ -1133,6 +1135,7 @@ struct EntryExpandedView: View {
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit mentions")
