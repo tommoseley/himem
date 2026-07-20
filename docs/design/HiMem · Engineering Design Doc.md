@@ -225,12 +225,12 @@ The schema is versioned by a UserDefaults **flag suffix** (`com.himem.cloudkit.s
 
 **Version log** (`StorageService.swift:189-221`): V1 initial · V2 assist-quota retirement (removed `AssistBalance` + `OrganizePass.nextStepsMarkdown`; moved `ProcessingTask` to the Local store) · V3 `MediaReference.mediaDescription` · V5 Phase-4 clean-cut (v3 is the only model version, legacy migration removed) · **V6 `Project.recycledAt`** · **V7** B4 mentions batch (`Mention` entity + `JournalEntry.mentions` + `MediaReference.sourceDevice`) · **V8 `MediaReference.recycledAt`** (P8). Current flag: **V8**.
 
-**Deploy state:**
-- **Development:** the code publishes up to **V8** on a Debug launch (the V8 publish may itself be blocked while Apple's account migration is in progress).
-- **Production:** the code comments frame V6/V7/V8 as **one pending batched pre-TestFlight deploy**; the 2026-07-18 session log records **V7 as deployed to Production**. This is an unresolved repo-internal ambiguity (§13 D-schema).
-- **Open deploy: V8 `recycledAt` is held** — the ceremony (Dev → verify in dashboard → Deploy Schema Changes to Prod, before the next TestFlight) waits on Apple's account migration completing. **Do not deploy V8 to Production until the migration is done.** Note: the P8 *decision* logic is pure edge-count and needs no schema; only `MediaReference.recycledAt` needs the deploy, and `InboxClip.recycledAt` is a per-device manifest field that never deploys.
+**Deploy state (resolved July 20 2026 — RH-2 closed):** Apple's account migration completed and the **Schema Changes were deployed to Production via the CloudKit Dashboard.** The definitive ledger:
+- **Development:** V8 (the code publishes the current model on a Debug launch).
+- **Production: DEPLOYED through V8** — `Project.recycledAt` (V6), the mentions batch `Mention` + `JournalEntry.mentions` + `MediaReference.sourceDevice` (V7), and `MediaReference.recycledAt` (V8) are all live in Production. Dev and Prod are in sync at V8.
+- No held deploys. The earlier V6/V7 "pending" comments and the 2026-07-18 session-log ambiguity are superseded by this deploy — the whole V6→V8 batch is in Production. (`InboxClip.recycledAt` remains a per-device manifest field that never deploys; the P8 *decision* logic is pure edge-count and needed no schema.)
 
-**Consequence of skipping the deploy** (cite `CLAUDE.md`): outbound sync of the new field silently breaks in TestFlight/Production — local writes save and never propagate; recycled-clip state wouldn't cross devices. Local bin visibility is unaffected (the local store lightweight-migrates the optional attribute regardless).
+Because V8 is now in Production, clip-level Recently Deleted (`MediaReference.recycledAt`) **syncs cross-device**. Before the deploy, an undeployed synced attribute would save locally but silently fail to propagate; that risk is now cleared.
 
 ---
 
@@ -266,7 +266,7 @@ Recorded for a ruling; **not resolved here.** Severity is my read.
 
 **Deployment / build / stale text:**
 
-- **D-schema · V6/V7 Production deploy ambiguity** — code comments say "pending batched Prod deploy"; the 2026-07-18 session log says V7 deployed. Reconcile the actual dashboard state (§12).
+- **D-schema · V6/V7 Production deploy ambiguity — RESOLVED (July 20 2026).** The whole V6→V8 batch is now deployed to Production (Apple's account migration cleared; deployed via the CloudKit Dashboard). Dev and Prod are in sync at V8; no held deploys. The stale "pending batched Prod deploy" code comments in `StorageService.swift` are now inaccurate — a coherence cleanup (fold into any storage-touching cycle). See §12.
 - **D15 · "Let Go sheet" wording** — the P8 directive said "sheet"; implemented as a dynamic footnote (a confirm dialog would violate the locked no-dialog deletion rule). Flagged at build time; needs Tom's confirm that the footnote is the intended surface.
 - **D16 · P7 Unconnected batch was hard-delete, now soft** — resolved in P8b (both backings soft, copy fixed); listed for completeness.
 - **D17 · Stale comments/refs** — assist-metering language in `EntryLifecycleService.appendClips` doc comment; "(Make a Memory · confirm sheet)" in `CreateMemoryFromClipsSheet`; the "Loose"→"Unconnected" line at `CLAUDE.md:149` (design CLAUDE.md); "raw Float32 PCM" watch header. All coherence cleanups.
