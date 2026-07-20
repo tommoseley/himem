@@ -392,6 +392,7 @@ struct ClipEditorModal: View {
             .foregroundStyle(Crucible.Color.accent)
             .frame(maxWidth: .infinity, minHeight: 46)
             .overlay(RoundedRectangle(cornerRadius: 13).stroke(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [5])))
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
     }

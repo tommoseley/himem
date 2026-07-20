@@ -356,11 +356,18 @@ private struct ClipGhostCard: View {
         // (MediaClipRow) — cache-or-generate from the media file. No
         // recycledAt gating; recycle keeps the blob + the thumbnail cache.
         .task(id: clip.id) {
-            guard thumbnail == nil, let osId = clip.thumbnailOSIdentifier else { return }
-            let mediaType = clip.thumbnailMediaType ?? .image
-            if let name = await ThumbnailService.shared.cacheThumbnail(for: osId, mediaType: mediaType) {
-                thumbnail = ThumbnailService.shared.cachedThumbnail(filename: name)
+            guard thumbnail == nil, let osId = clip.thumbnailOSIdentifier else {
+                NSLog("[HiMem][BinThumb] \(clip.id) no source (osId nil) — no tile")
+                return
             }
+            let mediaType = clip.thumbnailMediaType ?? .image
+            guard let name = await ThumbnailService.shared.cacheThumbnail(for: osId, mediaType: mediaType) else {
+                NSLog("[HiMem][BinThumb] \(clip.id) cacheThumbnail returned nil (blob not downloaded / decode failed) osId=\(osId) type=\(mediaType.rawValue)")
+                return
+            }
+            let img = ThumbnailService.shared.cachedThumbnail(filename: name)
+            if img == nil { NSLog("[HiMem][BinThumb] \(clip.id) cachedThumbnail(\(name)) read nil") }
+            thumbnail = img
         }
     }
 }

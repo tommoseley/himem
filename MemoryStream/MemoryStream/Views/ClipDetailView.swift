@@ -246,6 +246,7 @@ private struct MediaReferenceClipDetail: View {
                         style: StrokeStyle(lineWidth: 1, dash: [5, 4])
                     )
             )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add a description")
