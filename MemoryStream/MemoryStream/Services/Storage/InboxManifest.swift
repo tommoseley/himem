@@ -560,7 +560,10 @@ final class InboxManifest: ObservableObject {
     /// WC queue resurfaces hours/days later.
     func remove(clipId: UUID) {
         guard let clip = clips.first(where: { $0.clipId == clipId }) else { return }
-        try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
+        // RH-8: coordinated delete of the staged ubiquity-container audio.
+        // No-op when the file was already moved out (promotion moves audio
+        // into the voice store before this runs).
+        UbiquityStore.shared.removeFromStore(at: Self.audioURL(for: clip.audioFilename))
         // Snapshot the ack decision BEFORE the array is mutated — the
         // clip's rollGroupId is what we need to send.
         let actions = Self.ackActions(for: [clipId], in: clips)
@@ -627,6 +630,15 @@ final class InboxManifest: ObservableObject {
         replace(with: (clips + [restored]).sorted { $0.capturedAt > $1.capturedAt })
     }
 
+    /// Audio filenames still referenced by a non-disposed clip — active OR
+    /// recycled-not-purged. The RH-8 orphan sweep's inbox keep-set: a
+    /// recycled clip's staged blob must NEVER be swept, so recycled clips are
+    /// included. Disposed tombstones carry `audioFilename == ""` and are
+    /// excluded (their file is already gone / to-be-purged).
+    var referencedAudioFilenames: Set<String> {
+        Set((clips + recycledClips).map(\.audioFilename).filter { !$0.isEmpty })
+    }
+
     /// Recently-Deleted bench clips (snapshot), newest-deleted first — the
     /// bin reads this on reload.
     func loadRecycledClips() -> [InboxClip] {
@@ -639,7 +651,9 @@ final class InboxManifest: ObservableObject {
     /// is untouched, so this persists directly rather than republishing.
     func purgeRecycledClip(clipId: UUID) {
         guard let clip = recycledClips.first(where: { $0.clipId == clipId }) else { return }
-        try? FileManager.default.removeItem(at: Self.audioURL(for: clip.audioFilename))
+        // RH-8: the staged audio lives in the iCloud Files ubiquity container
+        // — delete it NSFileCoordinator-wrapped (was a bare removeItem).
+        UbiquityStore.shared.removeFromStore(at: Self.audioURL(for: clip.audioFilename))
         recycledClips.removeAll { $0.clipId == clipId }
         disposedClips.append(tombstone(from: clip))
         persist()
@@ -996,6 +1010,9 @@ final class InboxManifest: ObservableObject {
             var stillRecycled: [InboxClip] = []
             for clip in recycled {
                 if let at = clip.recycledAt, at < cutoff {
+                    // RH-8: expiry is a permanent purge — delete the backing
+                    // blob (was leaked: it only tombstoned the row).
+                    UbiquityStore.shared.removeFromStore(at: Self.audioURL(for: clip.audioFilename))
                     disposedClips.append(tombstone(from: clip))
                 } else {
                     stillRecycled.append(clip)

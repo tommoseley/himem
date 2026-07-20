@@ -45,6 +45,9 @@ struct SettingsView: View {
     @State private var showResetTutorialAlert = false
     @State private var showAggregateScanAlert = false
     @State private var aggregateScanResult = ""
+    // RH-8 orphaned-blob sweep (destructive; deliberate trigger only).
+    @State private var showSweepAlert = false
+    @State private var sweepPlan: [URL] = []
     @State private var showSeedClusterAlert = false
     @State private var seedClusterMessage = ""
     @AppStorage("himem.debug.useLeanOrganizerPrompt") private var useLeanOrganizerPrompt = false
@@ -382,6 +385,25 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
 
+                    // RH-8: sweep the backlog of orphaned media blobs left in
+                    // iCloud Files by the old purge paths. Runs the dry-run
+                    // plan first and shows the count; deletion happens only on
+                    // the destructive confirm. Keep-set = live + recycled
+                    // clips; age-guarded so in-flight arrivals aren't swept.
+                    Button {
+                        sweepPlan = MediaBlobOrphanSweep.plan(context: storage.viewContext)
+                        showSweepAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash.slash.fill")
+                                .foregroundStyle(Crucible.Color.danger)
+                            Text("Sweep orphaned media blobs")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
                     // Seeds a real multi-clip Sort cluster through the actual
                     // grouping path so the cluster editor (and the aggregate
                     // arbiter check that needs a multi-clip context) is
@@ -434,6 +456,21 @@ struct SettingsView: View {
                     Button("OK", role: .cancel) { }
                 } message: {
                     Text(aggregateScanResult)
+                }
+                .alert("Orphaned media sweep", isPresented: $showSweepAlert) {
+                    if sweepPlan.isEmpty {
+                        Button("OK", role: .cancel) { }
+                    } else {
+                        Button("Delete \(sweepPlan.count) forever", role: .destructive) {
+                            MediaBlobOrphanSweep.execute(plan: sweepPlan)
+                            sweepPlan = []
+                        }
+                        Button("Cancel", role: .cancel) { }
+                    }
+                } message: {
+                    Text(sweepPlan.isEmpty
+                         ? "No orphaned media blobs found — the container matches the live + recycled clips."
+                         : "\(sweepPlan.count) orphaned blob(s) in iCloud Files aren't referenced by any live or recycled clip (older than the 1-hour age guard). Delete permanently? This can't be undone.")
                 }
                 .alert("Test cluster", isPresented: $showSeedClusterAlert) {
                     Button("OK", role: .cancel) { }

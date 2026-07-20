@@ -493,13 +493,13 @@ final class EntryLifecycleService {
                 if let cacheFile = ref.thumbnailCacheFilename {
                     ThumbnailService.shared.evictThumbnail(filename: cacheFile)
                 }
-                // For voice refs, osIdentifier is the audio file path — delete
-                // it from disk so X-discard doesn't leave orphan audio files.
-                // (Photos and videos live in PhotoKit, not our sandbox; we
-                // intentionally leave those in place.)
-                if ref.mediaTypeEnum == .voice {
-                    AudioPlayerService.deleteAudio(filename: ref.osIdentifier)
-                }
+                // RH-8: permanent hard-delete removes the backing blob for
+                // EVERY owned media type (voice/photo/video) — the old
+                // voice-only guard orphaned photos/videos in iCloud Files. The
+                // "photos/videos live in PhotoKit" premise was stale (media
+                // moved to the ubiquity container). PhotoKit-referenced media
+                // and notes have no owned file → skipped.
+                Self.deleteOwnedBlob(for: ref)
                 storage.viewContext.delete(ref)
             }
             try storage.save(context: storage.viewContext)
@@ -1075,14 +1075,32 @@ final class EntryLifecycleService {
             if let cacheFile = ref.thumbnailCacheFilename {
                 ThumbnailService.shared.evictThumbnail(filename: cacheFile)
             }
-            if ref.mediaTypeEnum == .voice {
-                AudioPlayerService.deleteAudio(filename: ref.osIdentifier)
-            }
+            Self.deleteOwnedBlob(for: ref) // RH-8: coordinated blob delete, all media types
             storage.viewContext.delete(ref)
             try storage.save(context: storage.viewContext)
         } catch {
             ErrorState.shared.report(.deleteFailed(error.localizedDescription))
         }
+    }
+
+    /// The OWNED iCloud Files URL for a clip's backing blob, or nil when
+    /// HiMem owns no deletable file: a **note** (text lives in Core Data) or
+    /// a **PhotoKit-referenced** asset (the user's Photos library, never
+    /// ours). Voice/photo/video resolve to their ubiquity subdirectory.
+    static func ownedBlobURL(for ref: MediaReference) -> URL? {
+        guard ref.mediaTypeEnum != .note else { return nil }
+        switch MediaResolver.resolve(osIdentifier: ref.osIdentifier, mediaType: ref.mediaTypeEnum) {
+        case .ubiquity(let url): return url
+        case .photoKit:          return nil
+        }
+    }
+
+    /// Permanently removes a clip's backing blob from iCloud Files
+    /// (NSFileCoordinator-wrapped, no-op if already gone). ONLY the
+    /// permanent-purge paths call this; soft-recycle/restore never do.
+    static func deleteOwnedBlob(for ref: MediaReference) {
+        guard let url = ownedBlobURL(for: ref) else { return }
+        UbiquityStore.shared.removeFromStore(at: url)
     }
 
     /// Recently-Deleted clips (recycledAt != nil), newest-deleted first,
@@ -1109,9 +1127,7 @@ final class EntryLifecycleService {
             if let cacheFile = ref.thumbnailCacheFilename {
                 ThumbnailService.shared.evictThumbnail(filename: cacheFile)
             }
-            if ref.mediaTypeEnum == .voice {
-                AudioPlayerService.deleteAudio(filename: ref.osIdentifier)
-            }
+            Self.deleteOwnedBlob(for: ref) // RH-8: coordinated blob delete, all media types
             storage.viewContext.delete(ref)
         }
         try? storage.save(context: storage.viewContext)
