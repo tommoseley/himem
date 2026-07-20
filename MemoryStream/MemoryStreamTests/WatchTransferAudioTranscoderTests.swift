@@ -44,6 +44,27 @@ struct WatchTransferAudioTranscoderTests {
         return url
     }
 
+    /// RH-3 (July 20 2026) — the phone's `compressIfPossible` skips
+    /// recompression when the arrived clip already conforms to the transfer
+    /// contract (mono/16k/AAC), because the watch already transcoded it; an
+    /// AAC→AAC re-encode measured ~2.7× attenuation. The skip guard's
+    /// predicate is `isTransferReady`: conforming → skip, non-conforming →
+    /// compress. This asserts both branches distinctly.
+    @Test func recompressionSkip_conformingSkips_nonConformingCompresses() throws {
+        // Non-conforming raw PCM (stereo/48k) → NOT transfer-ready → compress.
+        let raw = try writeSourcePCM(channels: 2, sampleRate: 48_000, seconds: 1.0)
+        defer { try? FileManager.default.removeItem(at: raw) }
+        #expect(WatchTransferAudioTranscoder.isTransferReady(raw) == false,
+                "raw stereo/48k PCM must NOT read as conforming — it needs compression")
+
+        // Conforming mono/16k/AAC (transcoder output) → transfer-ready → skip.
+        let conforming = tempURL("m4a")
+        defer { try? FileManager.default.removeItem(at: conforming) }
+        try WatchTransferAudioTranscoder.transcodeToTransferFormat(source: raw, destination: conforming)
+        #expect(WatchTransferAudioTranscoder.isTransferReady(conforming) == true,
+                "an already mono/16k/AAC clip must read as conforming so compressIfPossible skips it")
+    }
+
     /// The money test: 3ch/48k/Float32 PCM → mono/16k/AAC.
     @Test func transcode_producesMono16kAAC() throws {
         let source = try writeSourcePCM(channels: 2, sampleRate: 48_000, seconds: 1.0)
