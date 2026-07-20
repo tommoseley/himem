@@ -22,6 +22,8 @@ struct SettingsView: View {
     }
     // Channel B (daily nudge) storage retired 2026-07-07.
     @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
+    /// RH-1: the one persisted Captured-Clips arrivals control (was cosmetic).
+    @State private var arrivalsEnabled: Bool = NotificationPreference.arrivalsEnabled
     // autoSaveDelay removed — Composer uses explicit commit
 
     private let storage = StorageService.shared
@@ -759,12 +761,16 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
         case .authorized, .provisional, .ephemeral:
-            HStack {
-                Text("Notifications")
-                Spacer()
-                Text("On")
-                    .foregroundStyle(Crucible.Color.ink3)
+            // RH-1: a real toggle (the persisted app preference the
+            // coordinator consults), not just a permission-state row. Ochre
+            // on-state per Crucible (never iOS green — green is semantic-only).
+            Toggle(isOn: Binding(
+                get: { arrivalsEnabled },
+                set: { arrivalsEnabled = $0; NotificationPreference.arrivalsEnabled = $0 }
+            )) {
+                Text("Clip arrivals")
             }
+            .tint(Crucible.Color.accent)
         @unknown default:
             EmptyView()
         }

@@ -313,8 +313,10 @@ struct PermissionWizardView: View {
     }
 
     private func handleNotifications() async {
-        // Channel A (Captured Clips arrivals) is implicit — no persisted
-        // preference. Channel B retired 2026-07-07.
+        // RH-1 (July 20 2026): the toggle is now a real persisted control the
+        // coordinator consults before every passive push (was cosmetic).
+        // Channel B retired 2026-07-07.
+        NotificationPreference.arrivalsEnabled = notifyClipsOn
         if notifyClipsOn {
             _ = try? await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound, .badge])
