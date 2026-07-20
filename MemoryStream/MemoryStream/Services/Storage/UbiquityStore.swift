@@ -327,6 +327,37 @@ final class UbiquityStore: @unchecked Sendable {
         return resultURL
     }
 
+    /// Deletes a file from the store, **NSFileCoordinator-wrapped** (RH-8,
+    /// July 20 2026). A bare `FileManager.removeItem` on a ubiquity file
+    /// races iCloud's file-presenter and can leave the deletion
+    /// un-propagated; the coordinate wrap is the delete-side sibling of
+    /// `copyIntoStore`/`moveIntoStore`. Graceful no-op if the file is
+    /// already gone (the user may have removed it from Files.app — a missing
+    /// blob is a calm state). Refuses any URL outside this container so a
+    /// PhotoKit-referenced asset (the user's Photos library, never ours) can
+    /// never be deleted through here. Only permanent purge calls this;
+    /// soft-recycle/restore never touch blobs.
+    func removeFromStore(at url: URL) {
+        // Only delete files under our OWN store root — the ubiquity container
+        // OR the sandbox fallback when iCloud is unavailable. `isUnderContainer`
+        // is ubiquity-only (returns false with no iCloud), which would wrongly
+        // refuse deletes on a signed-out device; guard on `documentsRoot` so a
+        // PhotoKit URL / anything foreign is still refused, but our own blobs
+        // delete in both storage modes.
+        guard url.path.hasPrefix(documentsRoot.path) else {
+            NSLog("[HiMem][Ubiquity] removeFromStore refused non-store url=\(url.lastPathComponent)")
+            return
+        }
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        coordinator.coordinate(writingItemAt: url, options: .forDeleting, error: &coordinationError) { writeURL in
+            try? FileManager.default.removeItem(at: writeURL) // no-op if already gone
+        }
+        if let coordinationError {
+            NSLog("[HiMem][Ubiquity] removeFromStore coordination failed url=\(url.lastPathComponent): \(coordinationError.localizedDescription)")
+        }
+    }
+
     /// Writes raw `Data` into the store at `destinationURL` via
     /// `NSFileCoordinator`. Used by PHPicker import and CameraService
     /// to drop bytes from PHAsset extracts into the ubiquity container.
