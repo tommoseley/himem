@@ -22,7 +22,7 @@ May 2026. Locked for v1.
 | Surface | What's there |
 |---|---|
 | Navigation | `Clips · Memories · Projects` bottom tab bar (three peers). Projects is the third tab. *(The old `Memories ⟷ Projects` top segmented control is retired — it omitted Clips and duplicated the bottom nav. See CLAUDE.md · Phone and `HiMem · Home.html`.)* |
-| Projects tab | Topic-filter strip (filters by *contains-topic*, not *is-topic*). List of project cards (title, derived topic pips, memory count, last-activity date). Single inline `+ New project` row at the bottom of the list, **and** the context-aware **FAB** (creates a new project — same name+goal sheet the inline row opens; two paths, one sheet, per CLAUDE.md § Phone context-aware-FAB lock July 10 2026, which supersedes the earlier "No FAB" bug-fix). |
+| Projects tab | Topic-filter strip (filters by *contains-topic*, not *is-topic*). List of project cards (title, **goal line**, derived topic pips, memory count, last-activity date). Single inline `+ New project` row at the bottom of the list, **and** the context-aware **FAB** (creates a new project — same name+goal sheet the inline row opens; two paths, one sheet, per CLAUDE.md § Phone context-aware-FAB lock July 10 2026, which supersedes the earlier "No FAB" bug-fix). |
 | New project sheet | Two fields: `name` + `goal`. No topic picker. |
 | Project detail | Nav: Back-to-Projects + (share) cluster — **no toolbar trash, no `+`** (delete moved to a bottom full-width button; add moved to the FAB). Serif title with an explicit **✎ Edit** button beside the header (opens the Edit Project sheet — the one edit affordance, matching ✎ everywhere). Italic serif goal line. Derived topic chips. Memory count. *Find the thread* affordance (or summary card, if a run exists). Memory list below. **Full-width red "Delete Project" button at the very bottom**, below all content (deletion lock). The **in-project FAB** offers two paths: **create a new memory in this project**, and **search existing memories to add** (in-context capture + add-existing). |
 | Settings → Projects | Top-level row, `N active`. Never buried. (Already shipping.) |
@@ -41,6 +41,16 @@ May 2026. Locked for v1.
 
 - **Tapping a memory card inside a project opens the canonical Memory Detail** — the full clip stream, boxed ✎ → the unified Clip Editor modal, and the Compact/Full toggle — **not** a bespoke summary-only card. It adds only the project-context pieces: the **"In [project]"** membership chips + dashed **"Add to project"**, and the bottom fate buttons.
 - **Bottom fate buttons, in order:** full-width **"Remove from [project]"** (recycle/unlink glyph, de-associate only — memory survives; toast + Undo, no confirm), then the memory's own full-width red **"Let Go of this Memory"** (July 13 Trash lock — dissolves the derived layer; **its clips survive** and return to the bench, subtext: "The clips stay — they'll be available to start other memories"). The stale label **"Delete memory" is retired.**
+
+## Managing project membership from a memory (locked July 17 2026 — membership-from-memory)
+
+> Projects are one of three association types (topics · mentions · projects) that now share **one managed-chip model** — see `AI Organize · spec.md` § "The unified managed-chip model" and `HiMem · Associations.html`. The rules below are the project-specific instance of that model.
+
+Membership is managed from *inside the memory*, not only from the Projects tab — a direct consequence of perishability ("never make the user back out and navigate to associate") and the many-to-many Memory × Project edge. Two halves of one affordance:
+
+- **The memory shows which projects it's in.** Persistent **"In [project]" chips** on the memory (Memory Detail + the memory-context of the Clip Editor). Each chip taps through to that project; each is removable to de-associate (the same **Remove from project** — memory survives everywhere else). This is the memory-side mirror of a project's member list.
+- **"Add to project" creates-or-adds, in place.** A dashed **"Add to project"** affordance beside the chips opens a sheet offering **New project** (inline name + goal — the same sheet the Projects tab's new-project row/FAB opens) *and* Add to existing. Confirm associates *this memory*. No back-out-and-navigate.
+- **Carve-out (named, not drift):** creating a project from a memory yields a project *with that one memory already connected*, not an empty container. This is an **association** action (add-to-a-new-project), distinct from the Projects-FAB creating an empty project — and it's an allowed exception to "surfaces create their own objects" precisely because a memory *is* in flight at that moment (the trigger), so capturing the connection in place honors perishability rather than violating the FAB rule.
 
 ## Project Assist · “Find the thread”
 
@@ -133,6 +143,21 @@ No starter counters, no per-run accounting, no `packBalance`. If Free is offered
 - Header chrome glyphs (search, collapse, settings) were iOS system blue — they move to warm ink. Reserve blue strictly for AI.
 - Duplicate "new project" affordance on the Projects tab (inline row + FAB) collapses to the inline row only. *(Reversed July 17 2026 — the context-aware FAB lock (CLAUDE.md § Phone, July 10 2026) restores the FAB as a second path to the same name+goal sheet; inline row and FAB coexist, both open one sheet. Not a duplicate capability — two doors, one room.)*
 - "Selection = check" on the Add-memory sheet is a Crucible violation (selection should be a ring; completion is a check). Flagged for a follow-up sweep.
+
+## Post-v1 candidate: Project templates (logged July 20 2026 — NOT v1)
+
+A project today is a container + a goal. The idea worth keeping for after launch: a **template gives a new project a default operating pattern** — expected cadence, how clips group, useful prompts, suggested metadata, and what the project may become — as *helpful defaults the user can ignore*, never a rigid workflow.
+
+The reframe that makes it more than starter folders: **a template also shapes the AI organization prompt.** Composition becomes `core organize prompt + project-template prompt + the project's goal/context + the captured material`. So the project stops being a bucket and becomes a **lens** — it changes what HiMem *notices*:
+- *Trip journal* — one memory per day; preserve chronology + geography + route; emphasize experiences, surprises, conversations, sensory detail; title around the day's story, not the date.
+- *Family history* — one memory per story/person/event; prioritize people, relationships, dates, uncertainty, conflicting recollections.
+- *Creative project* — one memory per session/idea; preserve alternatives, decisions, evolution.
+- *Health journey* — one memory per day/change; emphasize patterns and interventions without forcing a story.
+- Others: home renovation (per milestone), conference (per session/speaker/day).
+
+Plus a one-sentence user customization of the lens — e.g. *"This trip is about Judi and me experiencing retirement together, not documenting every attraction"* — which meaningfully shifts what the AI surfaces.
+
+**Why not v1:** it depends on the per-project organize-prompt composition (an AI-contract change) and a template model; the ordinary workflow (capture all day → consolidate into one memory → place in a project) already works as-is and is the right thing to stress-test on the 45-day trip first. Origin: GPT conversation, July 20 2026 — the trip use case exposed the want. Related deferred: "auto-suggest which project a new memory belongs to at capture time" (already listed below) is the capture-side half of the same idea.
 
 ## Out of scope for MVP
 
