@@ -17,10 +17,10 @@ import FoundationModels
 /// drift, visible-photo claims, occasional voice slip) are
 /// hand-editable and the UI does not promise authority.
 ///
-/// **No `nextSteps`.** Per `AI Organize · spec.md` §6, `nextSteps` is
-/// a Plus-only field. The on-device schema omits it entirely — the
-/// 3B model fabricates forward actions when given the field, even
-/// when the clips don't state them.
+/// **No `nextSteps`.** Cut from v1 entirely (RH-6, July 20 2026) — it's
+/// no longer on `AnalysisResult` and no UI consumes it. The on-device
+/// schema never had it: the 3B model fabricates forward actions when given
+/// the field, even when the clips don't state them.
 ///
 /// **Mention typing.** The on-device prompt returns mentions as
 /// untyped strings (the model lacks reliable typing at the 3B scale).
@@ -32,7 +32,7 @@ final class OnDeviceOrganizer: Organizer {
 
     /// Structured output schema for FoundationModels. Mirrors the
     /// spike's `OrganizeOutput` — title, summary, topics, mentions.
-    /// No `nextSteps` (Plus-only).
+    /// No `nextSteps` (cut from v1, RH-6).
     @Generable
     struct OrganizeOutput: Equatable {
         @Guide(description: "A concrete noun phrase, 3–8 words.")
@@ -251,7 +251,7 @@ final class OnDeviceOrganizer: Organizer {
     /// - Mentions → entities with type `idea` (untyped mentions, full
     ///   confidence). The Memory Detail UI groups them under a single
     ///   "Mentions" section.
-    /// - `nextSteps` is nil (Plus-only field, not produced on-device).
+    /// - `nextSteps` no longer exists on `AnalysisResult` (cut from v1, RH-6).
     static func mapToAnalysisResult(_ output: OrganizeOutput) -> ClaudeAPIService.AnalysisResult {
         let entities = output.mentions.map { mention in
             ClaudeAPIService.EntityResult(
@@ -264,8 +264,7 @@ final class OnDeviceOrganizer: Organizer {
             entities: entities,
             topics: output.topics,
             summary: output.summary,
-            title: output.title,
-            nextSteps: nil
+            title: output.title
         )
     }
 }
