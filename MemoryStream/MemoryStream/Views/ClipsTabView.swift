@@ -190,10 +190,10 @@ struct ClipsTabView: View {
                 Button("Delete", role: .destructive) { performSelectionDelete() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                // Clips have no Recently Deleted yet — batch delete is
-                // permanent, so the copy is honest (distinct from the
-                // memory/project soft-delete language).
-                Text("This can't be undone. The clips and their transcripts are deleted.")
+                // P8b: batch delete now soft-deletes to Recently Deleted on
+                // both backings (recoverable 30 days), so the copy matches
+                // the memory/project soft-delete language.
+                Text("Moves to Recently Deleted · kept for 30 days.")
             }
             .navigationDestination(isPresented: $showSearch) {
                 SearchView(
@@ -287,10 +287,13 @@ struct ClipsTabView: View {
         let ids = selection.selectedIds
         let clipIds = InboxManifest.shared.clips.filter { ids.contains($0.clipId) }.map(\.clipId)
         let refIds = ids.subtracting(Set(clipIds))
-        if !clipIds.isEmpty { InboxManifest.shared.removeBatch(clipIds: clipIds) }
+        // P8b: both backings now SOFT-delete to Recently Deleted (recoverable
+        // 30 days) — inbox clips via the manifest recycledAt, refs via
+        // MediaReference.recycledAt. No longer permanent.
+        if !clipIds.isEmpty { InboxManifest.shared.recycleClips(clipIds: clipIds) }
         if !refIds.isEmpty {
             EntryLifecycleService(storage: .shared, processingEngine: .shared)
-                .deleteMediaReferences(ids: refIds)
+                .recycleClips(refIds: refIds)
         }
         selection.exit()
     }

@@ -171,6 +171,8 @@ Watch, don't chase: the spreading test-flake (`DebouncedTriggerTests`, now `Jour
 
 **Hard precondition (blocking, not fast-follow):** retired clips need clip-level **Recently Deleted** — `MediaReference.recycledAt` (rides the next CloudKit deploy) + `RecycleBinView` clip support. The auto-retire path must not ship before the net exists.
 
+**Scope correction (July 20 2026 — the net covers BOTH clip backings):** the precondition was first scoped to `MediaReference` only, but dogfood showed the bench delete surfaces (single "Delete this Clip" on an unpromoted clip, and the Unconnected batch "Delete N") operate on **`InboxClip`s** (manifest rows, not `MediaReference`s) and so hit no bin — they permanently tombstoned. Ruling: **uniform bin.** `InboxClip` gets a **per-device manifest `recycledAt`** (no schema, no deploy — mirrors the `reviewed` per-device pattern; restore returns the clip to the bench and re-enters session grouping) alongside `MediaReference.recycledAt`. **Every Clips-bench delete is now recoverable 30 days** on both backings; the Unconnected batch soft-deletes too (its "can't be undone" copy is retired). The batch is no longer permanently destructive.
+
 **Consequence:** shrinks — does not remove — the Unconnected bucket (genuinely-free, never-attached clips still live there); P7's Unconnected cleanup surface stays.
 
 **CC action:** implement the edge-count decision inside the memory-delete transaction; wire the split-count Let Go sheet; ship `recycledAt` clip-level Recently Deleted alongside. Bug-First; four-part handoff.

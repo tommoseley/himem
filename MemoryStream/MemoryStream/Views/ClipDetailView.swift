@@ -665,7 +665,9 @@ private struct InboxClipDetail: View {
     }
 
     private func performDelete() {
-        InboxManifest.shared.remove(clipId: clipId)
+        // P8b: soft-delete the bench clip to Recently Deleted (per-device
+        // manifest recycledAt), not a permanent tombstone.
+        InboxManifest.shared.recycleClip(clipId: clipId)
         dismiss()
     }
 }

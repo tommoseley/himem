@@ -24,6 +24,15 @@ struct RecycledClipDisplay: Identifiable, Equatable {
             .first { !$0.isEmpty }
         preview = firstReal ?? "(no text)"
     }
+
+    /// P8b: an unpromoted bench clip (manifest row) — voice-only, per-device.
+    init(inboxClip clip: InboxClip) {
+        id = clip.clipId
+        recycledAt = clip.recycledAt
+        typeLabel = "Voice"
+        let t = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        preview = t.isEmpty ? "(voice clip)" : t
+    }
 }
 
 struct RecycleBinView: View {
@@ -40,10 +49,15 @@ struct RecycleBinView: View {
     @State private var recycledEntries: [EntryDisplayModel] = []
     @State private var recycledProjects: [ProjectDisplayModel] = []
     @State private var recycledClips: [RecycledClipDisplay] = []
+    /// P8b: recycled unpromoted bench clips (manifest-backed, per-device).
+    @State private var recycledInboxClips: [RecycledClipDisplay] = []
     @State private var showEmptyConfirm = false
     @Environment(\.dismiss) private var dismiss
 
-    private var isEmpty: Bool { recycledEntries.isEmpty && recycledProjects.isEmpty && recycledClips.isEmpty }
+    private var isEmpty: Bool {
+        recycledEntries.isEmpty && recycledProjects.isEmpty
+            && recycledClips.isEmpty && recycledInboxClips.isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -97,6 +111,18 @@ struct RecycleBinView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                         }
+                        ForEach(recycledInboxClips) { clip in
+                            ClipGhostCard(clip: clip, onRestore: {
+                                InboxManifest.shared.restoreClip(clipId: clip.id)
+                                reload()
+                            }, onDelete: {
+                                InboxManifest.shared.purgeRecycledClip(clipId: clip.id)
+                                reload()
+                            })
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        }
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -123,11 +149,13 @@ struct RecycleBinView: View {
                     viewModel.emptyRecycleBin()
                     recycledProjects.forEach { projectVM.purgeProject(id: $0.id) }
                     recycledClips.forEach { lifecycle.purgeClip(refId: $0.id) }
+                    recycledInboxClips.forEach { InboxManifest.shared.purgeRecycledClip(clipId: $0.id) }
                     reload()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                let n = recycledEntries.count + recycledProjects.count + recycledClips.count
+                let n = recycledEntries.count + recycledProjects.count
+                    + recycledClips.count + recycledInboxClips.count
                 Text("\(n) item\(n == 1 ? "" : "s") will be permanently deleted.")
             }
         }
@@ -140,6 +168,7 @@ struct RecycleBinView: View {
         recycledEntries = viewModel.loadRecycledEntries()
         recycledProjects = projectVM.loadRecycledProjects()
         recycledClips = lifecycle.loadRecycledClips()
+        recycledInboxClips = InboxManifest.shared.loadRecycledClips().map { RecycledClipDisplay(inboxClip: $0) }
     }
 }
 

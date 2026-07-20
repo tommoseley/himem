@@ -1032,6 +1032,26 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Batch soft-delete (P8b) — the Unconnected "Delete N" MediaReference
+    /// portion. One save for the whole set; each ref's referencing memories
+    /// regenerate (the exclusion filter drops the recycled clip).
+    func recycleClips(refIds: Set<UUID>) {
+        guard !refIds.isEmpty else { return }
+        do {
+            let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+            req.predicate = NSPredicate(format: "id IN %@", refIds)
+            let refs = try storage.viewContext.fetch(req)
+            let now = Date()
+            for ref in refs { ref.recycledAt = now }
+            try storage.save(context: storage.viewContext)
+            for ref in refs {
+                for edge in ref.edgesArray { regenerateContent(forEntryId: edge.memoryId) }
+            }
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
     /// Restore a clip from Recently Deleted — clears `recycledAt`; kept
     /// edges bring it back to the memories it was in.
     func restoreClip(refId: UUID) {
