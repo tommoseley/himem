@@ -81,6 +81,27 @@ struct RecycleBinView: View {
     private var showMemories: Bool { filter == .all || filter == .memories }
     private var showProjects: Bool { filter == .all || filter == .projects }
 
+    /// True when the active filter (other than All) has nothing, though the
+    /// bin isn't globally empty — a blank area reads as "broken/loading," so
+    /// we surface one calm recognition line instead (no count).
+    private var activeFilterEmpty: Bool {
+        switch filter {
+        case .all:      return false // a non-empty bin always has something under All
+        case .clips:    return recycledClips.isEmpty && recycledInboxClips.isEmpty
+        case .memories: return recycledEntries.isEmpty
+        case .projects: return recycledProjects.isEmpty
+        }
+    }
+
+    private var emptyFilterMessage: String {
+        switch filter {
+        case .clips:    return "No deleted clips"
+        case .memories: return "No deleted memories"
+        case .projects: return "No deleted projects"
+        case .all:      return ""
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -102,6 +123,15 @@ struct RecycleBinView: View {
                         HiMemSegmentedControl(options: RecycleBinFilter.allCases, selection: $filter, label: \.label)
                             .padding(.top, 10)
                             .padding(.bottom, 6)
+                        if activeFilterEmpty {
+                            Spacer()
+                            Text(emptyFilterMessage)
+                                .font(.subheadline)
+                                .foregroundStyle(Crucible.Color.ink3)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                            Spacer()
+                        } else {
                         List {
                         if showMemories {
                         ForEach(recycledEntries) { entry in
@@ -163,6 +193,7 @@ struct RecycleBinView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        }
                     }
                 }
             }
