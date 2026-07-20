@@ -35,6 +35,20 @@ struct RecycledClipDisplay: Identifiable, Equatable {
     }
 }
 
+/// Recently Deleted type filter (July 20 2026). All is leftmost + default.
+enum RecycleBinFilter: String, CaseIterable, Identifiable, Hashable {
+    case all, clips, memories, projects
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .all:      return "All"
+        case .clips:    return "Clips"
+        case .memories: return "Memories"
+        case .projects: return "Projects"
+        }
+    }
+}
+
 struct RecycleBinView: View {
     @ObservedObject var viewModel: JournalViewModel
     /// F1 (2026-07-17): Recently Deleted now also holds soft-deleted projects.
@@ -52,12 +66,20 @@ struct RecycleBinView: View {
     /// P8b: recycled unpromoted bench clips (manifest-backed, per-device).
     @State private var recycledInboxClips: [RecycledClipDisplay] = []
     @State private var showEmptyConfirm = false
+    /// Type selector (July 20 2026) — All · Clips · Memories · Projects,
+    /// All leftmost + default. A pure UI filter over the bin; "Empty" stays
+    /// global (see the toolbar), not scoped to this.
+    @State private var filter: RecycleBinFilter = .all
     @Environment(\.dismiss) private var dismiss
 
     private var isEmpty: Bool {
         recycledEntries.isEmpty && recycledProjects.isEmpty
             && recycledClips.isEmpty && recycledInboxClips.isEmpty
     }
+
+    private var showClips: Bool { filter == .all || filter == .clips }
+    private var showMemories: Bool { filter == .all || filter == .memories }
+    private var showProjects: Bool { filter == .all || filter == .projects }
 
     var body: some View {
         NavigationStack {
@@ -74,7 +96,14 @@ struct RecycleBinView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List {
+                    VStack(spacing: 0) {
+                        // Reuses the Clips-header segmented control (not a
+                        // lookalike). Pure filter — no per-type counts.
+                        HiMemSegmentedControl(options: RecycleBinFilter.allCases, selection: $filter, label: \.label)
+                            .padding(.top, 10)
+                            .padding(.bottom, 6)
+                        List {
+                        if showMemories {
                         ForEach(recycledEntries) { entry in
                             GhostCard(entry: entry, onRestore: {
                                 viewModel.restoreEntry(entryId: entry.id)
@@ -87,6 +116,8 @@ struct RecycleBinView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                         }
+                        }
+                        if showProjects {
                         ForEach(recycledProjects) { project in
                             ProjectGhostCard(project: project, recycledAt: nil, onRestore: {
                                 projectVM.restoreProject(id: project.id)
@@ -99,6 +130,11 @@ struct RecycleBinView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                         }
+                        }
+                        if showClips {
+                        // Clips = both backings (promoted MediaReferences +
+                        // unpromoted InboxClips). No "stays in your library"
+                        // subline — a clip is the atom; nothing lives beneath it.
                         ForEach(recycledClips) { clip in
                             ClipGhostCard(clip: clip, onRestore: {
                                 lifecycle.restoreClip(refId: clip.id)
@@ -123,9 +159,11 @@ struct RecycleBinView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                         }
+                        }
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
                 }
             }
             .background(Crucible.Color.paper)

@@ -562,6 +562,53 @@ enum ClipsType: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+// MARK: - Shared segmented control
+
+/// The ochre-track segmented pill used by the Clips header status lens —
+/// factored out (July 20 2026) so Recently Deleted's type selector reuses
+/// the exact control, not a lookalike. Generic over any identifiable option
+/// with a display label. Selection language matches the Clips lock (Tom,
+/// 2026-07-12): accent fill + accentInk bold text when selected; ink2
+/// medium otherwise, on a `wash1` track.
+struct HiMemSegmentedControl<Option: Identifiable & Equatable>: View {
+    let options: [Option]
+    @Binding var selection: Option
+    let label: (Option) -> String
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options) { opt in
+                segment(for: opt)
+            }
+        }
+        .padding(3)
+        .background(Crucible.Color.wash1, in: RoundedRectangle(cornerRadius: 10))
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func segment(for opt: Option) -> some View {
+        let selected = selection == opt
+        return Button {
+            selection = opt
+        } label: {
+            Text(label(opt))
+                .font(.system(size: 13.5, weight: selected ? .bold : .medium))
+                .tracking(-0.1)
+                .foregroundStyle(selected ? Crucible.Color.accentInk : Crucible.Color.ink2)
+                .padding(.horizontal, 20)
+                .frame(minHeight: 32)
+                .background(
+                    selected ? Crucible.Color.accent : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 8)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label(opt))
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+}
+
 // MARK: - Home top bar (unified across every tab)
 
 /// The canonical top bar per `docs/design/screens-home.jsx` §HomeTopBar:
@@ -659,38 +706,9 @@ struct ClipsHeader: View {
     private static let statusOrder: [ClipsStatus] = [.all, .new, .unconnected]
 
     private var statusToggle: some View {
-        HStack(spacing: 2) {
-            ForEach(Self.statusOrder) { s in
-                statusSegment(for: s)
-            }
-        }
-        .padding(3)
-        .background(Crucible.Color.wash1, in: RoundedRectangle(cornerRadius: 10))
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private func statusSegment(for s: ClipsStatus) -> some View {
-        let selected = status == s
-        return Button {
-            status = s
-        } label: {
-            Text(s.label)
-                .font(.system(size: 13.5, weight: selected ? .bold : .medium))
-                .tracking(-0.1)
-                .foregroundStyle(selected ? Crucible.Color.accentInk : Crucible.Color.ink2)
-                .padding(.horizontal, 20)
-                .frame(minHeight: 32)
-                .background(
-                    selected ? Crucible.Color.accent : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 8)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(s.label)
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        HiMemSegmentedControl(options: Self.statusOrder, selection: $status, label: \.label)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var typeChipRow: some View {
