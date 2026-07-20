@@ -65,21 +65,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let cat = notification.request.content.categoryIdentifier
-        let userInfo = notification.request.content.userInfo
         if cat == WatchInboxNotificationCoordinator.categoryIdentifier {
-            let reason = userInfo["reason"] as? String
-            if reason == "stale",
-               let clipIdString = userInfo["clipId"] as? String,
-               let clipId = UUID(uuidString: clipIdString) {
-                Task { @MainActor in
-                    let shouldPresent = WatchInboxNotificationCoordinator.shared
-                        .handleStaleFire(clipId: clipId, now: Date())
-                    completionHandler(shouldPresent ? [.banner, .sound, .list, .badge] : [.badge])
-                }
-                return
-            }
-            // App in foreground = no push (banner on Today does the work).
-            completionHandler([.badge])
+            // Passive-only Captured-Clips arrivals (RH-1): in the foreground
+            // the in-app Clips dot does the work — present nothing, no badge.
+            completionHandler([])
             return
         }
         completionHandler([.banner, .sound, .list, .badge])

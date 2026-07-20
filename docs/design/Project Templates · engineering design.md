@@ -61,6 +61,21 @@ Data-model consequence (refines §5.2): the three axes are separate fields, not 
 
 Unchanged: `Clip (evidence) → Memory (context) → Project (intent)`. A template is a **property of a Project** that (a) seeds project defaults and (b) contributes a prompt fragment to the organize pass of member memories. It does not create a new object type and does not alter edge semantics.
 
+### 4a · Meaning-in-context lives on the edge (recursive-edge principle, July 20 2026)
+
+A memory can belong to **0–N projects with different templates**, and the same memory *means something different in each*. Example: "Stopped at Devil's Tower, took this picture" is a **travel-day highlight** in *2026 Road Trip* and a **session/scouting entry** in *Astrophotography Log* — same evidence, two meanings.
+
+The resolution the ontology is already shaped for: **context-specific meaning belongs on the edge, not the object — recursively.**
+- Clip is evidence; its meaning *in a memory* lives on the **clip×memory edge** (the annotation, already built).
+- Memory is context; its meaning *in a project* lives on the **memory×project edge** — the project-scoped lens view + (later) the domain-metadata extraction.
+
+Consequences (bind the domain-metadata design, §12):
+- **The memory stays single and authoritative** — one clip set, one core summary (lens-free or lightly lens-shaded), its own topics/mentions. Never two contradictory summaries; there is always one canonical memory.
+- **Domain metadata is EDGE-scoped, not memory-scoped** — a memory in two templated projects carries *Road-Trip*'s extraction on one edge and *Astro-Log*'s on the other; neither overwrites the other because they live on different edges. This directly resolves the §12 "which schema applies?" collision and supersedes §6.3's earlier "lens = invoking project's" phrasing (that reached for edge-scoping but put it on the pass, not the carrier).
+- **Honest Label holds on every edge** — each edge's view draws only from the same clips; the schema decides *what to look for*, never what to invent.
+- **Cost:** extraction runs per (memory × templated-project) pairing, a Plus/Connect characteristic; fine, since most memories are in 0–1 projects and the multi-project-different-schema case is the rich exception.
+- **v1 carrier note:** `MemoryClipEdge` already carries per-edge payload (annotation); the **memory×project edge is today a plain membership link** (`JournalEntry.projects`, Nullify many-to-many) with no payload. When domain schemas are built, the per-project metadata/lens-view must land on a **memory×project edge entity** from day one — putting it on the memory would be the migration trap. Building that edge entity is itself part of the §12 phase, not v1.
+
 ## 5 · Data model
 
 All authoritative data stays in the user's **CloudKit private DB** (custody rule unchanged — no user content in HiMem's custody). Two shipped-vs-built options:
@@ -173,3 +188,34 @@ Block capture, force a naming step, gate a memory behind "which day is this," or
 ## 11 · What this doc does NOT change
 
 The v1 ship path. Templates are post-launch. The ordinary workflow — capture all day → review the workbench → consolidate into one memory → place it in the trip project — already works, and the 45-day trip is the intended real-world stress test of exactly that before any of this is built.
+
+---
+
+## 12 · Extension: domain metadata schemas (logged July 20 2026 — LATER than templates; own phase)
+
+The trip and an **astrophotography log** use the same HiMem machinery but care about completely different things — an astro session wants target, location + Bortle class, moon illumination, focal length / aperture / ISO / exposure, frame count, focus method, what failed, what to change next time; organized as **Intent → Conditions → Setup → Captures → Results → Lessons → Next attempt**, not as a narrative. Title + summary + topics + mentions stop being enough once a project is *domain-aware*. This is the extension where a template stops being "a prompt + defaults" and becomes a **domain model**.
+
+### 12.1 The shape
+- **A template defines a typed metadata schema** (lightweight JSON-Schema-like: keyed fields with `type` + `description`), *not* just a prompt.
+- **The project** stores the template binding + project-specific config.
+- **A memory** stores *extracted values* conforming to that schema (JSON-backed, `schemaVersion`-stamped).
+- **Clips** remain the raw evidence, untouched.
+- **Creation + project intelligence** consume both the narrative *and* the structured metadata — enabling cross-session pattern surfacing ("best results with the 14mm came at f/2 · 15s"; "failed sessions involved late scouting").
+
+The organize prompt becomes **partly generated from the schema**: "extract these fields where the captured material supports them; do not invent missing values; preserve uncertainty; keep each value traceable to its clip."
+
+### 12.2 Three rules (non-negotiable if this is built)
+1. **Metadata is optional.** A memory must still work beautifully with zero fields extracted. Never a form gate; never a required completion. (Perishability + "capture asks nothing but the thought.")
+2. **Every extracted value is traceable to clips.** A metadata value carries a reference to the clip/segment it came from. Untraceable AI-filled metadata is how a structured layer becomes untrustworthy — and it's a direct Honest-Label requirement (nothing the clips don't contain). No provenance → don't store it.
+3. **Schemas are versioned.** `schemaVersion` per template; adding fields must never break old memories. Old memories read under the version they were extracted with; re-extraction is explicit.
+
+### 12.3 Why it's a *later* phase than templates (§8), not part of them
+- It's an **AI-contract + storage-model change of a different magnitude**: typed extraction, per-memory JSON metadata with provenance, cross-session aggregation. Templates (§1–11) deliver value with three optional `Project` fields and a prompt fragment; this needs a schema registry, a metadata store on the memory, and a provenance link to clips.
+- **Storage/custody:** the extracted metadata is user content → CloudKit private DB (developer-unreadable), same custody rule as everything else. Whether it's a typed Core Data structure vs. a validated JSON blob on `JournalEntry` is an open call (OQ-6) — but "ungoverned JSON blob" is explicitly rejected; the schema governs it.
+- It turns HiMem into a platform for **specialized memory systems without hardcoding each specialty** — powerful, and exactly why it must not be rushed: an untyped or un-versioned first cut would be a migration trap.
+
+### 12.4 New open questions (added to §10)
+- **OQ-6 · Metadata storage form.** Typed Core Data entity per schema vs. a single validated-JSON attribute on `JournalEntry` (schema-checked at write). Lean: JSON attribute + a schema validator (flexible, versionable, no per-template migration), *provided* provenance + validation are enforced in code.
+- **OQ-7 · Provenance model.** How a metadata value references its source clip/segment (edge? inline clipId + char range?). Must exist before any extraction ships (rule 2).
+- **OQ-8 · Cross-session aggregation.** Where pattern-surfacing lives (a project-level pass over member metadata) and its tier (almost certainly Plus/Connect or Studio) — and it must obey Honest Label (describe the pattern, don't prescribe).
+- **OQ-9 · Schema authoring.** Built-in schemas only at first; user-defined schemas are a far-later Studio-tier idea (ties to OQ-4 user templates).

@@ -2,136 +2,100 @@ import Foundation
 import UserNotifications
 import UIKit
 
-/// Pure-function gate for the single-clip passive-push rule. Lives
-/// outside the coordinator so it can be tested without UIKit or
-/// `UNUserNotificationCenter` plumbing. The coordinator wires the
-/// runtime values; tests feed scenarios directly.
-enum SingleClipPushGate {
-    enum Decision: Equatable {
-        case fire
+/// Pure decision for the Captured-Clips arrival push (RH-1, July 20 2026).
+/// Lives outside the coordinator so it can be tested without UIKit /
+/// `UNUserNotificationCenter`. The coordinator supplies runtime values.
+///
+/// **Passive-only, one channel** per `docs/design/CLAUDE.md` §Notifications:
+/// there is exactly one Captured-Clips notification class and it never
+/// interrupts. The active burst / inbox-threshold / stale classes were
+/// **deleted** (RH-1) — a stale-clip buzz is "the app raising the skipped
+/// thing," forbidden by `Kingfisher · North Star.md` and the App Store
+/// "no nudges" promise.
+enum PassiveArrivalPush {
+    enum Outcome: Equatable {
+        /// Post immediately (trigger nil).
+        case fireNow
+        /// In quiet hours — defer to the next 7 AM so it lands once, silently,
+        /// in the morning with current state.
+        case deferToMorning
         case suppressed(reason: SuppressionReason)
     }
 
     enum SuppressionReason: String, Equatable {
-        case foreground
+        case disabled     // the user turned Captured-Clips arrivals off
+        case foreground   // app is active; the in-app dot does the work
         case snoozed
         case muted
     }
 
-    static func evaluate(
+    /// Quiet hours 10 PM – 7 AM local (`CLAUDE.md` §Notifications):
+    /// first-of-stretch defers to 7 AM.
+    static let quietHoursStart = 22
+    static let quietHoursEnd = 7
+
+    static func decide(
+        enabled: Bool,
         isAppForeground: Bool,
         snoozedUntil: Date?,
         mutedUntil: Date?,
-        now: Date
-    ) -> Decision {
+        now: Date,
+        calendar: Calendar = .current
+    ) -> Outcome {
+        if !enabled { return .suppressed(reason: .disabled) }
         if isAppForeground { return .suppressed(reason: .foreground) }
         if let s = snoozedUntil, s > now { return .suppressed(reason: .snoozed) }
         if let m = mutedUntil, m > now { return .suppressed(reason: .muted) }
-        return .fire
+        let hour = calendar.component(.hour, from: now)
+        if hour >= quietHoursStart || hour < quietHoursEnd { return .deferToMorning }
+        return .fireNow
     }
 }
 
-/// Notification policy for watch-clip arrivals, per the Watch → Memory
-/// flow spec (`docs/design/CLAUDE.md` → Notifications).
+/// Notification policy for Captured-Clips arrivals — **one passive channel**
+/// (`docs/design/CLAUDE.md` §Notifications, Channel A). Every arrival, when
+/// the app isn't foreground and the user hasn't disabled / snoozed / muted,
+/// posts a single silent `.passive` notification (no sound, no numeric
+/// badge) that lands in Notification Center / on the lock screen without
+/// waking the device. In quiet hours (10 PM–7 AM) it defers to 7 AM.
+/// Subsequent arrivals replace the one pending/delivered notification in
+/// place with the current count.
 ///
-/// Four trigger classes:
-///   - **Single-clip passive** — every arrival when app is *not* foreground.
-///     `.passive` interruption level: lands silently in Notification Center
-///     / on the lock screen, no sound, no haptic, no screen wake. Exempt
-///     from daily cap / 4-hour suppression / quiet hours (passive by
-///     definition doesn't interrupt). Respects snooze + mute because those
-///     are explicit user intent.
-///   - **Burst** — ≥ 3 clips arrive in a 5-min window. `.active`
-///     interruption level (the user is actively dumping thoughts; the
-///     batch is worth noting).
-///   - **Threshold** — inbox crosses 10 clips. `.active`.
-///   - **Stale** — a clip sits unreviewed for > 24 h. Per-clip scheduled
-///     `UNCalendarNotificationTrigger`, re-evaluates trigger condition at
-///     fire time so we never fire empty. `.active`.
-///
-/// Rules for active pushes only (burst / threshold / stale):
-///   - Daily cap 1 push across all *active* triggers, reset at local midnight.
-///   - 4-hour suppression after any *active* push.
-///   - Quiet hours 10 PM – 7 AM local: deferred to the next 7 AM.
-///
-/// Rules for all pushes:
-///   - App in foreground: no push (the inbox banner does the work).
-///   - Snooze 4h or Mute-for-today: respected.
-///   - Burst coalescing: clips within 5 min of an existing burst push are
-///     added to that session's count without re-firing.
-///   - Stale fires at most 7 times per clip, then stops.
-///
-/// Snooze (4 h) and Mute-for-today inline actions are wired through
-/// `UNNotificationCategory.watchInboxArrival`; their state is persisted
-/// in `UserDefaults` and consulted by `canFire(now:)`.
-///
-/// Persistence: all state lives in `UserDefaults.standard` under the
-/// `wic.*` keyspace. No external dependencies — the coordinator can be
-/// reset cleanly by removing those keys.
+/// Snooze 4h + Mute-for-today inline actions ride the
+/// `watch_inbox_arrival` category; their state persists in the `wic.*`
+/// UserDefaults keyspace.
 @MainActor
 final class WatchInboxNotificationCoordinator {
     static let shared = WatchInboxNotificationCoordinator()
 
     // MARK: - Identifiers
 
-    /// `UNNotificationCategory` identifier for our inbox-arrival push.
-    /// Carries Snooze 4h + Mute for today inline actions.
     static let categoryIdentifier = "watch_inbox_arrival"
     static let actionSnooze4hIdentifier = "snooze_4h"
     static let actionMuteTodayIdentifier = "mute_today"
 
-    /// UN request identifiers. All three notification surfaces use a
-    /// single stable identifier each so iOS replaces a prior delivered
-    /// notification in Notification Center rather than letting them
-    /// stack. Per `docs/design/CLAUDE.md` → Notifications, Channel A:
-    /// "one pending notification at a time, body re-rendered in place."
-    /// Before 2026-05-26 the stale and single-passive identifiers
-    /// embedded clipId / a fresh UUID, which is what produced Tom's
-    /// "three stacked stale notifications" screenshot.
+    /// One stable identifier so iOS replaces the prior notification rather
+    /// than stacking (Channel A: "one pending notification at a time").
     static let inboxRequestId = "watch_inbox_arrival"
-    static let inboxStaleRequestId = "watch_inbox_stale"
-    static let inboxSinglePassiveRequestId = "watch_inbox_single"
+    /// Legacy identifiers from the retired active/stale classes — still
+    /// cleared on inbox-empty so a pre-RH-1 delivered notification can't
+    /// linger.
+    private static let legacyRequestIds = ["watch_inbox_stale", "watch_inbox_single"]
 
     // MARK: - Persisted state
 
     private let defaults = UserDefaults.standard
     private enum Keys {
-        static let lastPushAt = "wic.lastPushAt"
         static let snoozedUntil = "wic.snoozedUntil"
         static let mutedUntil = "wic.mutedUntil"
-        static let burstWindowStart = "wic.burstWindowStart"
-        static let burstWindowCount = "wic.burstWindowCount"
-        static let staleFiresByClip = "wic.staleFiresByClip"
-        static let pushedThresholdAtCount = "wic.pushedThresholdAtCount"
     }
-
-    /// Thresholds and durations, all per the spec.
-    private static let burstClipCount = 3
-    private static let burstWindowSeconds: TimeInterval = 5 * 60
-    private static let thresholdInboxCount = 10
-    private static let staleAgeSeconds: TimeInterval = 24 * 3600
-    private static let dailyCapSuppressionSeconds: TimeInterval = 4 * 3600
-    private static let quietHoursStart = 22  // 10 PM
-    private static let quietHoursEnd = 7     // 7 AM
-    private static let staleFireCap = 7
-
-    // MARK: - Bootstrap
 
     private init() {}
 
-    /// Register the notification category + inline actions. Call once at
-    /// app launch.
+    /// Register the notification category + inline actions. Call once at launch.
     func registerCategories() {
-        let snooze = UNNotificationAction(
-            identifier: Self.actionSnooze4hIdentifier,
-            title: "Snooze 4h",
-            options: []
-        )
-        let mute = UNNotificationAction(
-            identifier: Self.actionMuteTodayIdentifier,
-            title: "Mute for today",
-            options: []
-        )
+        let snooze = UNNotificationAction(identifier: Self.actionSnooze4hIdentifier, title: "Snooze 4h", options: [])
+        let mute = UNNotificationAction(identifier: Self.actionMuteTodayIdentifier, title: "Mute for today", options: [])
         let category = UNNotificationCategory(
             identifier: Self.categoryIdentifier,
             actions: [snooze, mute],
@@ -141,43 +105,25 @@ final class WatchInboxNotificationCoordinator {
         UNUserNotificationCenter.current().setNotificationCategories([category])
     }
 
-    // MARK: - Lifecycle hooks (call from `InboxManifest` mutations)
+    // MARK: - Lifecycle hooks
 
-    /// Called from `WatchSessionDelegate.didReceive(file:)` after the
-    /// clip has been added to `InboxManifest`. Schedules the per-clip
-    /// 24h stale trigger, evaluates burst/threshold for an immediate
-    /// active push, and — if no active push fired — posts a silent
-    /// `.passive` single-clip notification so the user knows something
-    /// arrived without being interrupted.
+    /// Called from `WatchSessionDelegate.didReceive(file:)` after the clip is
+    /// added to `InboxManifest`. Posts (or defers) the single passive push.
     func clipArrived(clipId: UUID, capturedAt: Date) {
-        let now = Date()
-        scheduleStaleTrigger(for: clipId)
-        let firedActivePush = evaluateBurstAndThreshold(now: now)
-        if !firedActivePush {
-            firePassiveSingleClipPushIfAllowed(now: now)
-        }
+        firePassiveArrival(now: Date())
     }
 
-    /// Called when a clip leaves the inbox (moved into an Entry or
-    /// discarded). The stale notification is shared across clips
-    /// (single identifier), so we only cancel + clear the per-clip
-    /// fire counter when the inbox becomes empty after this removal.
-    /// Otherwise the pending stale should still fire for the
-    /// remaining clips.
+    /// Called when a clip leaves the inbox. Clears the notification when the
+    /// inbox becomes empty (the spec: it disappears when the user clears).
     func clipRemoved(clipId: UUID) {
-        var fires = staleFiresByClip
-        fires.removeValue(forKey: clipId.uuidString)
-        staleFiresByClip = fires
-        if InboxManifest.shared.count == 0 {
-            cancelPendingStaleNotification()
-            UNUserNotificationCenter.current().removeDeliveredNotifications(
-                withIdentifiers: [Self.inboxStaleRequestId, Self.inboxSinglePassiveRequestId, Self.inboxRequestId]
-            )
-        }
+        guard InboxManifest.shared.count == 0 else { return }
+        let center = UNUserNotificationCenter.current()
+        let ids = [Self.inboxRequestId] + Self.legacyRequestIds
+        center.removePendingNotificationRequests(withIdentifiers: ids)
+        center.removeDeliveredNotifications(withIdentifiers: ids)
     }
 
-    /// Inline action handler — called from the
-    /// `UNUserNotificationCenterDelegate` when the user picks an action.
+    /// Inline action handler — Snooze 4h / Mute-for-today.
     func handleAction(identifier: String) {
         switch identifier {
         case Self.actionSnooze4hIdentifier:
@@ -193,291 +139,75 @@ final class WatchInboxNotificationCoordinator {
         }
     }
 
-    // MARK: - Trigger evaluation
+    // MARK: - The passive push
 
-    /// Burst + threshold are evaluated synchronously on each clip
-    /// arrival. Stale is event-driven via its scheduled trigger.
-    /// Returns `true` when an active push fired so the caller can skip
-    /// the passive single-clip fallback.
-    @discardableResult
-    private func evaluateBurstAndThreshold(now: Date) -> Bool {
-        // Burst window bookkeeping: extend the window if a clip arrived
-        // within 5 min of the window start; otherwise open a fresh one.
-        var windowStart = burstWindowStart
-        var count = burstWindowCount
-        if let start = windowStart, now.timeIntervalSince(start) <= Self.burstWindowSeconds {
-            count += 1
-        } else {
-            windowStart = now
-            count = 1
-        }
-        burstWindowStart = windowStart
-        burstWindowCount = count
-
-        let inboxCount = InboxManifest.shared.count
-
-        // Burst: ≥ 3 clips inside the window → fire (subject to canFire).
-        if count >= Self.burstClipCount, canFire(now: now) {
-            firePush(body: burstBody(count: count), now: now, reason: "burst")
-            return true
-        }
-
-        // Threshold: inbox crosses 10 (we push once when it first
-        // exceeds; the `pushedThresholdAtCount` watermark prevents
-        // re-firing as the count fluctuates around the boundary).
-        if inboxCount > Self.thresholdInboxCount, canFire(now: now),
-           inboxCount > pushedThresholdAtCount {
-            firePush(body: thresholdBody(count: inboxCount), now: now, reason: "threshold")
-            pushedThresholdAtCount = inboxCount
-            return true
-        }
-
-        // If the inbox dipped back under threshold, reset the watermark
-        // so a future crossing fires again.
-        if inboxCount <= Self.thresholdInboxCount {
-            pushedThresholdAtCount = 0
-        }
-        return false
-    }
-
-    // MARK: - Single-clip passive push
-
-    /// Posts a silent `.passive` notification announcing the inbox
-    /// has new clips, IFF the app isn't foreground and the user hasn't
-    /// snoozed or muted. `.passive` lands in Notification Center / on
-    /// the lock screen without lighting the screen, vibrating, or
-    /// playing a sound — exempt from daily-cap / 4-hour suppression /
-    /// quiet-hours rules that exist to control active-push fatigue.
-    ///
-    /// **Single stable identifier**: per the May 2026 spec
-    /// (`docs/design/CLAUDE.md` → Notifications, Channel A), there is
-    /// one pending captured-clips notification at a time. Subsequent
-    /// arrivals replace the prior delivered notification in place with
-    /// updated body + badge. Before this fix the identifier embedded a
-    /// fresh UUID, so passive notifications stacked in Notification
-    /// Center until manually dismissed.
-    private func firePassiveSingleClipPushIfAllowed(now: Date) {
-        let gate = SingleClipPushGate.evaluate(
+    private func firePassiveArrival(now: Date) {
+        let outcome = PassiveArrivalPush.decide(
+            enabled: NotificationPreference.arrivalsEnabled,
             isAppForeground: UIApplication.shared.applicationState == .active,
             snoozedUntil: snoozedUntil,
             mutedUntil: mutedUntil,
             now: now
         )
-        guard case .fire = gate else {
-            NSLog("[HiMem][Notify] single-clip passive suppressed: \(gate)")
-            return
+        switch outcome {
+        case .suppressed(let reason):
+            NSLog("[HiMem][Notify] arrival suppressed: \(reason.rawValue)")
+        case .fireNow:
+            postPassive(trigger: nil)
+        case .deferToMorning:
+            postPassive(trigger: quietHoursMorningTrigger())
         }
+    }
 
-        let inboxCount = InboxManifest.shared.count
+    private func postPassive(trigger: UNNotificationTrigger?) {
+        let count = InboxManifest.shared.count
         let content = UNMutableNotificationContent()
         content.title = "HiMem"
-        content.body = passiveBody(count: inboxCount)
+        content.body = passiveBody(count: count)
         content.categoryIdentifier = Self.categoryIdentifier
-        content.userInfo = ["reason": "single"]
-        content.badge = NSNumber(value: inboxCount)
+        content.userInfo = ["reason": "arrival"]
         content.sound = nil
         content.interruptionLevel = .passive
+        // No numeric badge — `CLAUDE.md` §Phone "App-icon badge: none."
+        content.badge = nil
 
-        let request = UNNotificationRequest(
-            identifier: Self.inboxSinglePassiveRequestId,
-            content: content,
-            trigger: nil
-        )
-        // Clear any prior delivered passive notification with this id so
-        // the new fire replaces it in Notification Center rather than
-        // stacking. Without this, iOS would still leave the prior one
-        // visible (replacement happens on identifier match for pending,
-        // not delivered).
-        UNUserNotificationCenter.current().removeDeliveredNotifications(
-            withIdentifiers: [Self.inboxSinglePassiveRequestId]
-        )
-        UNUserNotificationCenter.current().add(request) { error in
+        let request = UNNotificationRequest(identifier: Self.inboxRequestId, content: content, trigger: trigger)
+        let center = UNUserNotificationCenter.current()
+        // One at a time: replace any prior delivered/pending arrival.
+        center.removeDeliveredNotifications(withIdentifiers: [Self.inboxRequestId])
+        center.removePendingNotificationRequests(withIdentifiers: [Self.inboxRequestId])
+        center.add(request) { error in
             if let error {
-                NSLog("[HiMem][Notify] single-clip passive fire failed: \(error.localizedDescription)")
+                NSLog("[HiMem][Notify] passive arrival fire failed: \(error.localizedDescription)")
             } else {
-                NSLog("[HiMem][Notify] single-clip passive fired (count=\(inboxCount))")
-            }
-        }
-        // Deliberately do NOT update lastPushAt — passive notifications
-        // shouldn't count toward the daily-cap budget that gates active
-        // pushes.
-    }
-
-    // MARK: - Stale (per-clip scheduled triggers)
-
-    private func scheduleStaleTrigger(for clipId: UUID) {
-        let fires = staleFiresByClip[clipId.uuidString] ?? 0
-        if fires >= Self.staleFireCap { return }
-
-        let fireDate = Date().addingTimeInterval(Self.staleAgeSeconds)
-        let cal = Calendar.current
-        let components = cal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: fireDate)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-
-        let content = UNMutableNotificationContent()
-        content.title = "HiMem"
-        content.body = staleBody()
-        content.categoryIdentifier = Self.categoryIdentifier
-        content.userInfo = ["reason": "stale", "clipId": clipId.uuidString]
-        content.badge = NSNumber(value: InboxManifest.shared.count)
-
-        let request = UNNotificationRequest(
-            identifier: Self.inboxStaleRequestId,
-            content: content,
-            trigger: trigger
-        )
-        // Clear any prior delivered stale notification with the shared
-        // identifier so the user sees ONE stale notification at most.
-        // Without this, iOS leaves prior delivered notifications in
-        // Notification Center even when a new request with the same id
-        // is scheduled (replacement happens for pending only).
-        UNUserNotificationCenter.current().removeDeliveredNotifications(
-            withIdentifiers: [Self.inboxStaleRequestId]
-        )
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error {
-                NSLog("[HiMem][Notify] stale schedule failed for \(clipId): \(error.localizedDescription)")
+                NSLog("[HiMem][Notify] passive arrival \(trigger == nil ? "fired" : "deferred to 7am") (count=\(count))")
             }
         }
     }
 
-    /// Cancels the (single, shared) pending stale notification. Used
-    /// when the inbox is fully cleared — the spec says the notification
-    /// should disappear when the user clears the inbox.
-    private func cancelPendingStaleNotification() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: [Self.inboxStaleRequestId]
-        )
-    }
-
-    /// Called from the foreground-presentation delegate when a stale
-    /// trigger fires. Returns true if the push should be presented; the
-    /// caller (`UNUserNotificationCenterDelegate.willPresent`) is then
-    /// expected to apply its standard suppression. Side-effects: when
-    /// returning true we also bump the per-clip fire counter; when
-    /// false we suppress and schedule the *next* attempt 24 h later
-    /// (still subject to the 7-fire cap).
-    func handleStaleFire(clipId: UUID, now: Date) -> Bool {
-        // Re-evaluate: is the clip still in the inbox?
-        guard InboxManifest.shared.clips.contains(where: { $0.clipId == clipId }) else {
-            return false
-        }
-        // Suppression rules (app foreground / daily cap / quiet hours / snooze / mute).
-        guard canFire(now: now) else {
-            // Re-schedule for next 7am if quiet, otherwise 24h out.
-            // Cheapest: re-arm a fresh 24h trigger to retry tomorrow.
-            scheduleStaleTrigger(for: clipId)
-            return false
-        }
-        // Bump counter; record this push.
-        var fires = staleFiresByClip
-        fires[clipId.uuidString] = (fires[clipId.uuidString] ?? 0) + 1
-        staleFiresByClip = fires
-        lastPushAt = now
-        return true
-    }
-
-    // MARK: - canFire rules
-
-    private func canFire(now: Date) -> Bool {
-        // App foreground? No push.
-        if UIApplication.shared.applicationState == .active { return false }
-        // Snoozed?
-        if let snoozed = snoozedUntil, snoozed > now { return false }
-        if let muted = mutedUntil, muted > now { return false }
-        // Daily cap (one push per calendar day, local time).
-        if let last = lastPushAt, Calendar.current.isDate(last, inSameDayAs: now) {
-            return false
-        }
-        // 4-hour suppression after any push.
-        if let last = lastPushAt, now.timeIntervalSince(last) < Self.dailyCapSuppressionSeconds {
-            return false
-        }
-        // Quiet hours: defer instead of fire. (Burst/Threshold callers
-        // will retry on the next clip arrival; stale callers reschedule.)
-        if isInQuietHours(now) { return false }
-        return true
-    }
-
-    private func isInQuietHours(_ date: Date) -> Bool {
-        let hour = Calendar.current.component(.hour, from: date)
-        // 22 (10pm) through 06 (6:59am).
-        return hour >= Self.quietHoursStart || hour < Self.quietHoursEnd
+    /// Fires at the next 7:00 AM local — the quiet-hours deferral target.
+    private func quietHoursMorningTrigger() -> UNNotificationTrigger {
+        var comps = DateComponents()
+        comps.hour = PassiveArrivalPush.quietHoursEnd
+        comps.minute = 0
+        return UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
     }
 
     private func endOfTodayLocal(from date: Date) -> Date {
         let cal = Calendar.current
         let startOfToday = cal.startOfDay(for: date)
-        // 24 hours later is start of tomorrow = end of today.
         return cal.date(byAdding: .day, value: 1, to: startOfToday) ?? date.addingTimeInterval(86400)
-    }
-
-    // MARK: - Fire push
-
-    private func firePush(body: String, now: Date, reason: String) {
-        let content = UNMutableNotificationContent()
-        content.title = "HiMem"
-        content.body = body
-        content.categoryIdentifier = Self.categoryIdentifier
-        content.userInfo = ["reason": reason]
-        content.badge = NSNumber(value: InboxManifest.shared.count)
-        content.sound = .default
-        content.interruptionLevel = .active
-
-        let request = UNNotificationRequest(
-            identifier: Self.inboxRequestId,
-            content: content,
-            trigger: nil
-        )
-        // Clear any prior delivered notification with this id so the
-        // new fire registers as a fresh delivery (buzz + sound).
-        UNUserNotificationCenter.current().removeDeliveredNotifications(
-            withIdentifiers: [Self.inboxRequestId]
-        )
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error {
-                NSLog("[HiMem][Notify] \(reason) fire failed: \(error.localizedDescription)")
-            } else {
-                NSLog("[HiMem][Notify] \(reason) fired: \(body)")
-            }
-        }
-        lastPushAt = now
     }
 
     // MARK: - Copy
 
-    private func burstBody(count: Int) -> String {
-        "\(count) voice clips ready to organize"
-    }
-
-    private func thresholdBody(count: Int) -> String {
-        "You have \(count) voice clips waiting"
-    }
-
-    private func staleBody() -> String {
-        "Some clips are still waiting to be organized"
-    }
-
-    /// Passive single-clip body. Single clip reads naturally; multi-
-    /// clip uses the count so the user sees the in-place update when
-    /// a new arrival re-renders the existing notification body.
-    ///
-    /// **Source-agnostic** per `CLAUDE.md` §Phone / Locked Decisions
-    /// § Clips surface: clips arrive from +, Watch, and Siri, so the
-    /// headline names none of them. Handoff · code-anchored punch list
-    /// (2026-07-13) P1 · Source-agnostic Clips copy.
+    /// Source-agnostic per `CLAUDE.md` §Phone (clips arrive from +, Watch,
+    /// Siri) — the headline names no source.
     private func passiveBody(count: Int) -> String {
-        count <= 1
-            ? "There are new clips you can review"
-            : "\(count) voice clips waiting"
+        count <= 1 ? "There are new clips you can review" : "\(count) voice clips waiting"
     }
 
     // MARK: - UserDefaults accessors
-
-    private var lastPushAt: Date? {
-        get { defaults.object(forKey: Keys.lastPushAt) as? Date }
-        set { defaults.set(newValue, forKey: Keys.lastPushAt) }
-    }
 
     private var snoozedUntil: Date? {
         get { defaults.object(forKey: Keys.snoozedUntil) as? Date }
@@ -487,35 +217,5 @@ final class WatchInboxNotificationCoordinator {
     private var mutedUntil: Date? {
         get { defaults.object(forKey: Keys.mutedUntil) as? Date }
         set { defaults.set(newValue, forKey: Keys.mutedUntil) }
-    }
-
-    private var burstWindowStart: Date? {
-        get { defaults.object(forKey: Keys.burstWindowStart) as? Date }
-        set { defaults.set(newValue, forKey: Keys.burstWindowStart) }
-    }
-
-    private var burstWindowCount: Int {
-        get { defaults.integer(forKey: Keys.burstWindowCount) }
-        set { defaults.set(newValue, forKey: Keys.burstWindowCount) }
-    }
-
-    private var pushedThresholdAtCount: Int {
-        get { defaults.integer(forKey: Keys.pushedThresholdAtCount) }
-        set { defaults.set(newValue, forKey: Keys.pushedThresholdAtCount) }
-    }
-
-    private var staleFiresByClip: [String: Int] {
-        get {
-            guard let data = defaults.data(forKey: Keys.staleFiresByClip),
-                  let decoded = try? JSONDecoder().decode([String: Int].self, from: data) else {
-                return [:]
-            }
-            return decoded
-        }
-        set {
-            if let data = try? JSONEncoder().encode(newValue) {
-                defaults.set(data, forKey: Keys.staleFiresByClip)
-            }
-        }
     }
 }
