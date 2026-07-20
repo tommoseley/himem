@@ -19,12 +19,14 @@ function ScrProjectsList() {
           topics={['content','tech']}
           count={14}
           date="May 13"
+          goal="Ship a calm memory-keeper worth paying for."
         />
         <ProjectCard
           title="AI essay — second draft"
           topics={['content','howWeWork']}
           count={6}
           date="May 9"
+          goal="Say what recognition-over-generation really means."
         />
         {/* New project — ochre action, 44px tap row */}
         <div style={{
@@ -383,8 +385,9 @@ function SerifTitle({ children, size = 22, style }) {
 //    reuses Memory Detail wholesale (Projects · MVP spec § Opening a member memory).
 //    Bottom fate, per the buttons + July 13 Trash locks:
 //      • Remove from [project] (Recycle) — memory LEAVES this project, survives.
-//      • Let Go of this Memory (Trash) — dissolves the memory; its CLIPS survive
-//        and return to the bench. → Recently Deleted.
+//      • Let Go of this Memory (Trash) — dissolves the memory; clips used
+//        ELSEWHERE stay, clips unique to this memory → Recently Deleted
+//        (last-reference rule, July 19 2026; sheet discloses the split).
 // ─────────────────────────────────────────────────────────────
 function ScrProjectMemberOpen() {
   return (
@@ -451,7 +454,7 @@ function ScrProjectMemberOpen() {
             Let Go of this Memory
           </div>
           <div style={{ fontSize: 11.5, color: PX.ink3, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>
-            The clips stay — they’ll be available to start other memories.
+            8 clips are also used elsewhere and will stay · 5 are only here and move to Recently Deleted for 30 days.
           </div>
         </div>
       </div>

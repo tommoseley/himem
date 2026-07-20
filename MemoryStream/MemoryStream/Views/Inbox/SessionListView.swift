@@ -226,8 +226,9 @@ struct SessionListView: View {
     /// for absorption into a voice session's time window.
     private func fetchUnplacedNonVoiceRefs() -> [MediaReference] {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        // P8: exclude recycled clips from session absorption candidates.
         req.predicate = NSPredicate(
-            format: "edges.@count == 0 AND mediaType != %@",
+            format: "edges.@count == 0 AND recycledAt == nil AND mediaType != %@",
             MediaReference.MediaType.voice.rawValue
         )
         req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]

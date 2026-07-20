@@ -69,6 +69,13 @@ public class MediaReference: NSManagedObject, Identifiable {
     /// exclusively encoded here per the v1 ontology (clip is evidence;
     /// interpretation lives on the edge).
     @NSManaged public var edges: NSSet?
+    /// Non-nil = this clip is in Recently Deleted (P8, July 19 2026).
+    /// Set by an explicit "Delete this Clip", a batch delete, OR the
+    /// last-reference auto-retire when its only memory is Let Go. A
+    /// recycled clip is excluded from every bench/memory query and purged
+    /// after 30 days. Rides the V8 CloudKit deploy. Mirrors
+    /// `JournalEntry.recycledAt` / `Project.recycledAt`.
+    @NSManaged public var recycledAt: Date?
 }
 
 extension MediaReference {

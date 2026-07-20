@@ -207,7 +207,11 @@ extension JournalEntry {
     /// to `linkedAt`, then `ref.createdAt`). Walks edges — the legacy
     /// `mediaReferences` set is unused (v2 shim, retired in v3).
     var mediaReferencesArray: [MediaReference] {
-        edgesArray.compactMap { $0.clip }
+        // P8 (July 19 2026): a recycled clip (`recycledAt != nil`) is in
+        // Recently Deleted — excluded from every memory it's edged to, so a
+        // "Delete this Clip" (soft) vanishes from all its memories while the
+        // edge is preserved for restore. The edge stays; the clip hides.
+        edgesArray.compactMap { $0.clip }.filter { $0.recycledAt == nil }
     }
 
     /// Sorted list of `MemoryClipEdge`s linking this memory to its

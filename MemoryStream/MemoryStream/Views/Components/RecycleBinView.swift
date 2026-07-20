@@ -1,20 +1,49 @@
 import SwiftUI
 
+/// Value snapshot of a Recently-Deleted clip (P8, July 19 2026) — a flat
+/// preview + type + recycledAt, so the bin's list holds no managed-object
+/// lifetimes. Sibling of `EntryDisplayModel` / `ProjectDisplayModel`.
+struct RecycledClipDisplay: Identifiable, Equatable {
+    let id: UUID
+    let preview: String
+    let typeLabel: String
+    let recycledAt: Date?
+
+    init(ref: MediaReference) {
+        id = ref.id
+        recycledAt = ref.recycledAt
+        switch ref.mediaTypeEnum {
+        case .voice: typeLabel = "Voice"
+        case .image: typeLabel = "Photo"
+        case .video: typeLabel = "Video"
+        case .note:  typeLabel = "Note"
+        }
+        let candidates = [ref.transcript, ref.text, ref.mediaDescription]
+        let firstReal = candidates
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+        preview = firstReal ?? "(no text)"
+    }
+}
+
 struct RecycleBinView: View {
     @ObservedObject var viewModel: JournalViewModel
     /// F1 (2026-07-17): Recently Deleted now also holds soft-deleted projects.
-    /// Self-owned VM (reads StorageService.shared) — no threading through the
-    /// presenter. NOTE: a fully object-agnostic bin (one list + restore path
-    /// for memory/clip/project) is a real refactor — GhostCard is memory-
-    /// shaped and each type has its own VM — flagged as a follow-up; for now
-    /// projects are a second section reusing the same list/restore/purge shape.
+    /// P8 (2026-07-19): and recycled clips. Self-owned VMs (read
+    /// StorageService.shared) — no threading through the presenter. NOTE: a
+    /// fully object-agnostic bin (one list + restore path for
+    /// memory/clip/project) is a real refactor — GhostCard is memory-shaped
+    /// and each type has its own VM/service — flagged as a follow-up; for now
+    /// each type is a section reusing the same list/restore/purge shape.
     @StateObject private var projectVM = ProjectViewModel()
+    private let lifecycle = EntryLifecycleService(storage: .shared, processingEngine: .shared)
     @State private var recycledEntries: [EntryDisplayModel] = []
     @State private var recycledProjects: [ProjectDisplayModel] = []
+    @State private var recycledClips: [RecycledClipDisplay] = []
     @State private var showEmptyConfirm = false
     @Environment(\.dismiss) private var dismiss
 
-    private var isEmpty: Bool { recycledEntries.isEmpty && recycledProjects.isEmpty }
+    private var isEmpty: Bool { recycledEntries.isEmpty && recycledProjects.isEmpty && recycledClips.isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -56,6 +85,18 @@ struct RecycleBinView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                         }
+                        ForEach(recycledClips) { clip in
+                            ClipGhostCard(clip: clip, onRestore: {
+                                lifecycle.restoreClip(refId: clip.id)
+                                reload()
+                            }, onDelete: {
+                                lifecycle.purgeClip(refId: clip.id)
+                                reload()
+                            })
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        }
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -81,11 +122,12 @@ struct RecycleBinView: View {
                 Button("Delete All Forever", role: .destructive) {
                     viewModel.emptyRecycleBin()
                     recycledProjects.forEach { projectVM.purgeProject(id: $0.id) }
+                    recycledClips.forEach { lifecycle.purgeClip(refId: $0.id) }
                     reload()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                let n = recycledEntries.count + recycledProjects.count
+                let n = recycledEntries.count + recycledProjects.count + recycledClips.count
                 Text("\(n) item\(n == 1 ? "" : "s") will be permanently deleted.")
             }
         }
@@ -94,8 +136,79 @@ struct RecycleBinView: View {
 
     private func reload() {
         projectVM.purgeExpiredRecycledProjects()
+        lifecycle.purgeExpiredRecycledClips()
         recycledEntries = viewModel.loadRecycledEntries()
         recycledProjects = projectVM.loadRecycledProjects()
+        recycledClips = lifecycle.loadRecycledClips()
+    }
+}
+
+// MARK: - Clip Ghost Card
+
+/// Grayscale ghost card for a recycled clip (P8) — type · preview · days
+/// left + Restore/Delete, matching `GhostCard`/`ProjectGhostCard` styling.
+private struct ClipGhostCard: View {
+    let clip: RecycledClipDisplay
+    let onRestore: () -> Void
+    let onDelete: () -> Void
+
+    private var daysRemaining: Int {
+        guard let recycledAt = clip.recycledAt else { return 30 }
+        let elapsed = Calendar.current.dateComponents([.day], from: recycledAt, to: Date()).day ?? 0
+        return max(0, 30 - elapsed)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(clip.typeLabel)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink3)
+                Spacer()
+                Text("\(daysRemaining)d left")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Crucible.Color.sunk)
+                    .clipShape(Capsule())
+            }
+            Text(clip.preview)
+                .font(.subheadline)
+                .italic()
+                .foregroundStyle(Crucible.Color.ink3)
+                .lineLimit(2)
+            HStack(spacing: 12) {
+                Spacer()
+                Button(action: onRestore) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 12))
+                            .accessibilityHidden(true)
+                        Text("Restore").font(.caption).fontWeight(.semibold)
+                    }
+                    .foregroundStyle(Crucible.Color.accent)
+                }
+                .buttonStyle(.plain)
+                Button(action: onDelete) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12))
+                            .accessibilityHidden(true)
+                        Text("Delete").font(.caption).fontWeight(.semibold)
+                    }
+                    .foregroundStyle(Crucible.Color.danger)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(Crucible.Color.card)
+        .clipShape(RoundedRectangle(cornerRadius: Crucible.Radius.xl))
+        .modifier(WarmShadow(level: 1))
+        .saturation(0)
+        .opacity(0.75)
     }
 }
 

@@ -73,7 +73,7 @@ Current `createMemory()` does the data correctly — moves audio, `saveEntry(...
 
 | Opened item | Button label | What actually happens | Copy under it |
 |---|---|---|---|
-| **Memory** | **Let Go of this Memory** | The memory (title · summary · topics · annotations — the *derived layer*) dissolves. **Its clips survive** and return to availability (loose/New), free to join other memories. Evidence is never destroyed by letting go of context. | "The clips stay — they'll be available to start other memories." |
+| **Memory** | **Let Go of this Memory** | The memory (title · summary · topics · annotations — the *derived layer*) dissolves. **Clips used elsewhere survive** and return to availability; **clips unique to this memory move to Recently Deleted** with it (last-reference rule, July 19 2026). | "8 clips are also used elsewhere and will stay · 5 are only here and move to Recently Deleted for 30 days." (split disclosed, never asked) |to join other memories. Evidence is never destroyed by letting go of context. | "The clips stay — they'll be available to start other memories." |
 | **Clip** | **Delete this Clip** | Destroys the **atom**. It is removed from **every** memory that references it. | "This clip is attached to N memories. Deleting it removes it from all of them." (N is live-computed from the reference count; singular/zero handled: "not attached to any memory yet" / "attached to 1 memory".) |
 | **Memory, within a Project** | **Remove from Project** | De-associates the memory from the project. The memory survives everywhere else. (Unchanged; stated for the full trio.) | — |
 

@@ -218,7 +218,15 @@ final class StorageService {
         //         ExtractedEntity→Mention DATA migration is separate
         //         (`MentionMigration`, run via LaunchScreenView), not a
         //         schema concern.
-        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV7"
+        //   V8 — `MediaReference.recycledAt` added for the P8 last-reference
+        //         deletion rule + clip-level Recently Deleted (July 19 2026).
+        //         Without this bump the field never publishes to Development,
+        //         so a recycled clip's recycledAt doesn't round-trip and the
+        //         clip never reaches the bin (same class of bug as V6). Rides
+        //         the batched pre-TestFlight Production deploy with the still-
+        //         pending V6/V7 fields. THE DECISION LOGIC (edge-count) needs
+        //         no schema — only recycledAt does.
+        let schemaInitKey = "com.himem.cloudkit.schemaInitializedV8"
         if !UserDefaults.standard.bool(forKey: schemaInitKey) {
             // Only mark the version flag set on actual success. If we
             // failed silently (e.g. account daemon temporarily refused

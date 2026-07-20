@@ -444,7 +444,8 @@ struct ClipsTabView: View {
 
     private func loadUnplaced() {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-        req.predicate = NSPredicate(format: "edges.@count == 0")
+        // P8: exclude recycled clips (in Recently Deleted) from the bench.
+        req.predicate = NSPredicate(format: "edges.@count == 0 AND recycledAt == nil")
         req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         unplacedRefs = (try? context.fetch(req)) ?? []
     }
@@ -1398,6 +1399,8 @@ struct FlatClipsListView: View {
         if connection == .unconnected {
             subpredicates.append(NSPredicate(format: "edges.@count == 0"))
         }
+        // P8: recycled clips (Recently Deleted) never show on any Clips lens.
+        subpredicates.append(NSPredicate(format: "recycledAt == nil"))
         req.predicate = subpredicates.isEmpty ? nil : NSCompoundPredicate(andPredicateWithSubpredicates: subpredicates)
         req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         let refs = (try? context.fetch(req)) ?? []
@@ -1550,7 +1553,11 @@ struct UnconnectedListView: View {
 
     private func reloadRefs() {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-        var subs: [NSPredicate] = [NSPredicate(format: "edges.@count == 0")]
+        // P8: exclude recycled clips from the Unconnected list.
+        var subs: [NSPredicate] = [
+            NSPredicate(format: "edges.@count == 0"),
+            NSPredicate(format: "recycledAt == nil"),
+        ]
         switch type {
         case .voice:  subs.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.voice.rawValue))
         case .photos: subs.append(NSPredicate(format: "mediaType == %@", MediaReference.MediaType.image.rawValue))

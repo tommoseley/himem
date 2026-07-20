@@ -158,6 +158,27 @@ Watch, don't chase: the spreading test-flake (`DebouncedTriggerTests`, now `Jour
 
 ---
 
+## P8 · Last-reference deletion rule (locked July 19 2026 — narrowly reverses the P6 "clips always survive Let Go" lock)
+
+**Spec source:** `CLAUDE.md` § Phone (deletion sub-rule, Let Go) · `Memory Detail · unified editing model.md` (Deletion rows) · `HiMem · evidence and context.md` · `Captured Clips · session-first · spec.md` § Unconnected cleanup. Origin: dogfood — letting go of a memory left a pile of unexpected orphan clips ("untenable"). **This supersedes P6's blanket "its clips survive."**
+
+**The rule (memory-deletion-only, decided from current edge counts at delete time — no `everConnected`/history field, no deploy for the decision itself):**
+- Deleting a memory: a clip with **edge count > 1** (used by another memory) **stays**; a clip whose **single remaining edge is this memory** **moves to Recently Deleted** with it.
+- **Detach-a-clip-from-its-last-memory does NOT auto-retire** — the clip stays Unconnected on the bench ("not *here*" ≠ "not wanted").
+- **AI reorganization never auto-retires** — structural change, not user rejection.
+- **Delete a clip** → Recently Deleted (explicit, unchanged).
+- The Let Go sheet **discloses the split, never asks**: "8 clips are also used elsewhere and will stay · 5 are only here and move to Recently Deleted for 30 days." No checkbox forest.
+
+**Hard precondition (blocking, not fast-follow):** retired clips need clip-level **Recently Deleted** — `MediaReference.recycledAt` (rides the next CloudKit deploy) + `RecycleBinView` clip support. The auto-retire path must not ship before the net exists.
+
+**Consequence:** shrinks — does not remove — the Unconnected bucket (genuinely-free, never-attached clips still live there); P7's Unconnected cleanup surface stays.
+
+**CC action:** implement the edge-count decision inside the memory-delete transaction; wire the split-count Let Go sheet; ship `recycledAt` clip-level Recently Deleted alongside. Bug-First; four-part handoff.
+
+*Deferred post-v1 candidate (logged, not this cycle):* **AI suggests alternative summaries** — merged with the deferred voice-register picker (m1737); honest reframings (emphasis/length) only, never alternate tone; likely free (taste, not intelligence). Cheapest honest form is a *"Show another"* re-run on the reorganize review sheet, not a grid.
+
+---
+
 ## P7 · Clips filter cycle — New·All·Unconnected + top-ordering + source-glyph write-side (July 18 2026; label July 19 2026)
 
 **Spec source:** `Captured Clips · session-first · spec.md` § "Clip lifecycle + the status lens" and § "Unconnected-clip cleanup" (locked July 18 2026); `CLAUDE.md` § Phone (status axis redefined). One coherent cycle — the dogfood Clips screen (9-screenshot set, July 18) exposed all of these together.

@@ -46,6 +46,9 @@ struct EntryExpandedView: View {
     // through `applyEditsImmediately`, and the per-sheet target ids).
     @State private var editedTitle = ""
     @State private var removedMediaIds: Set<UUID> = []
+    /// P8 Let Go split disclosure, computed once on appear (nil → the static
+    /// footnote shows until it's ready).
+    @State private var letGoSplitFootnote: String? = nil
     /// Non-nil while `PlaceClipSheet` is presented on top of this
     /// memory. Carries the clip id being relocated so the sheet can
     /// resolve the ref + wire "Remove from this memory" against this
@@ -279,10 +282,14 @@ struct EntryExpandedView: View {
                             dismiss()
                         }
                     }
-                    BottomDeleteButton(kind: .delete(noun: "memory")) {
+                    BottomDeleteButton(
+                        kind: .delete(noun: "memory"),
+                        footnoteOverride: letGoSplitFootnote
+                    ) {
                         onRecycle?(entry.id)
                         dismiss()
                     }
+                    .onAppear { letGoSplitFootnote = computeLetGoSplit() }
                 }
                 .padding(.top, 24)
             }
@@ -1231,6 +1238,27 @@ struct EntryExpandedView: View {
 
     // MARK: - Chronological capture stream helpers
 
+    /// P8 last-reference disclosure (July 19 2026) — computed at open time
+    /// (`onAppear`, into `letGoSplitFootnote`), splits this memory's *live*
+    /// clips into "used elsewhere → stay" vs "only here → move to Recently
+    /// Deleted." Fetches the managed entry (the view holds a value
+    /// `EntryDisplayModel`) and mirrors the rule `EntryLifecycleService.recycle`
+    /// applies (same `referencingMemoryCount`), so the footnote can't drift
+    /// from what Let Go actually does. Discloses, never asks.
+    private func computeLetGoSplit() -> String {
+        let ctx = StorageService.shared.viewContext
+        let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        req.predicate = NSPredicate(format: "id == %@", entry.id as CVarArg)
+        req.fetchLimit = 1
+        guard let managed = try? ctx.fetch(req).first else {
+            return BottomDeleteButton.letGoFootnote(stayCount: 0, moveCount: 0)
+        }
+        let clips = managed.mediaReferencesArray // excludes already-recycled
+        let move = clips.filter { $0.referencingMemoryCount == 1 }.count
+        let stay = clips.count - move
+        return BottomDeleteButton.letGoFootnote(stayCount: stay, moveCount: move)
+    }
+
     /// Removes a media reference immediately rather than batching it with
     /// title/content edits via the existing onSave path. Used by the
     /// chronological capture stream's per-panel delete.
@@ -1238,17 +1266,18 @@ struct EntryExpandedView: View {
         let ids = removedMediaIds
         guard !ids.isEmpty else { return }
         // Delete always destroys per `Memory Detail · unified editing
-        // model.md:66`. Remove-from-memory is a separate placement
-        // action reached via "Where does this belong?".
+        // model.md:66` — P8: soft to Recently Deleted (30-day net), not a
+        // hard destroy. Remove-from-memory is a separate placement action
+        // reached via "Where does this belong?".
         for id in ids {
-            lifecycle.deleteMediaReference(refId: id)
+            lifecycle.recycleClip(refId: id)
         }
         lifecycle.regenerateContent(forEntryId: entry.id)
         removedMediaIds = []
     }
 
     private func deleteNoteFragment(id: UUID) {
-        lifecycle.deleteMediaReference(refId: id)
+        lifecycle.recycleClip(refId: id)
         lifecycle.regenerateContent(forEntryId: entry.id)
     }
 

@@ -635,7 +635,10 @@ struct ClipEditorModal: View {
 
     private func deleteClip() {
         switch source {
-        case .managed(let ref): lifecycle.deleteMediaReference(refId: ref.id)
+        // P8: soft-delete a promoted clip to Recently Deleted. An unpromoted
+        // bench clip has no bin backing (it's a manifest row, not a
+        // MediaReference) — it still tombstones as before.
+        case .managed(let ref): lifecycle.recycleClip(refId: ref.id)
         case .inbox(let clip):  InboxManifest.shared.remove(clipId: clip.clipId)
         }
         player.stop()

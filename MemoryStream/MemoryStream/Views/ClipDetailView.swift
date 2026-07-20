@@ -405,7 +405,9 @@ private struct MediaReferenceClipDetail: View {
 
     private func performDelete() {
         let service = EntryLifecycleService(storage: storage, processingEngine: ProcessingEngine.shared)
-        service.deleteMediaReference(refId: ref.id)
+        // P8: "Delete this Clip" soft-deletes to Recently Deleted (30 days),
+        // honoring the button's footnote — restorable, not destroyed.
+        service.recycleClip(refId: ref.id)
         dismiss()
     }
 }

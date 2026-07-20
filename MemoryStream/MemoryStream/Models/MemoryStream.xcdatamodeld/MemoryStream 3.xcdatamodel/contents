@@ -105,6 +105,7 @@
         <attribute name="text" optional="YES" attributeType="String"/>
         <attribute name="mediaDescription" optional="YES" attributeType="String"/>
         <attribute name="sourceDevice" optional="YES" attributeType="String"/>
+        <attribute name="recycledAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="edges" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MemoryClipEdge" inverseName="clip" inverseEntity="MemoryClipEdge"/>
     </entity>
     <entity name="MemoryClipEdge" representedClassName="MemoryClipEdge" syncable="YES">
