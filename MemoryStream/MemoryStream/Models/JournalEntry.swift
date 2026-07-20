@@ -272,8 +272,20 @@ extension JournalEntry {
     /// the prompt whenever even one new clip has been added.
     var clipsAddedSinceLastOrganize: Int {
         guard let lastOrganizedAt else { return 0 }
-        let clips = mediaReferencesArray.filter { ($0.createdAt ?? .distantPast) > lastOrganizedAt }
-        return clips.count
+        // "Added since organize" is a property of the EDGE (when the clip
+        // joined THIS memory), not the clip's capture time. A clip
+        // captured last week but attached to this memory today is new
+        // *here* — the Move/Add spec's "identical to new clips arriving"
+        // (`Memory Detail · unified editing model.md` §Moving clips).
+        // Keying off `ref.createdAt` silently dropped that case: an old
+        // clip added via the FAB never marked the memory stale, so it
+        // never offered Reorganize. Fall back to `ref.createdAt` for
+        // legacy edges with no `linkedAt`.
+        return edgesArray.filter { edge in
+            guard let ref = edge.clip, ref.recycledAt == nil else { return false }
+            let addedHere = edge.linkedAt ?? ref.createdAt ?? .distantPast
+            return addedHere > lastOrganizedAt
+        }.count
     }
 
     /// Count of pre-existing clips whose content was edited after the
@@ -283,9 +295,14 @@ extension JournalEntry {
     /// Zero when never organized.
     var clipsEditedSinceLastOrganize: Int {
         guard let lastOrganizedAt else { return 0 }
-        return mediaReferencesArray.filter { ref in
-            // Newly added → counted as "added", not "edited".
-            guard (ref.createdAt ?? .distantPast) <= lastOrganizedAt else { return false }
+        // Same edge-based "added to this memory" notion as
+        // `clipsAddedSinceLastOrganize` — so a clip attached after the
+        // organize is counted there (added), never double-counted here
+        // (edited).
+        return edgesArray.filter { edge in
+            guard let ref = edge.clip, ref.recycledAt == nil else { return false }
+            let addedHere = edge.linkedAt ?? ref.createdAt ?? .distantPast
+            guard addedHere <= lastOrganizedAt else { return false }
             guard let edited = ref.lastEditedAt else { return false }
             return edited > lastOrganizedAt
         }.count

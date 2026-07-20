@@ -179,6 +179,12 @@ struct StaleOnEditTests {
         let v2 = try storage.createMediaReference(for: entry, localIdentifier: "v2.m4a", mediaType: .voice)
         v2.transcript = "second"
         v2.createdAt = Date(timeIntervalSinceReferenceDate: 1)
+        // Back-date each edge's linkedAt to its clip's capture time — in
+        // production the capture paths stamp `linkedAt == createdAt`, so a
+        // genuinely-existing clip joined its memory at capture. Staleness
+        // now reads the edge (when the clip joined THIS memory), so the
+        // "existing clip" fiction must set linkedAt, not just createdAt.
+        for edge in entry.edgesArray { edge.linkedAt = edge.clip?.createdAt }
         // Organize ran AFTER both clips were captured but BEFORE the user
         // came back to edit them.
         entry.lastOrganizedAt = Date(timeIntervalSinceReferenceDate: 10)

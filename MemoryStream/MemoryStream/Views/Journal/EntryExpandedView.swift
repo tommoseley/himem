@@ -46,6 +46,25 @@ struct EntryExpandedView: View {
     // through `applyEditsImmediately`, and the per-sheet target ids).
     @State private var editedTitle = ""
     @State private var removedMediaIds: Set<UUID> = []
+    /// Memory Detail FAB · path 2: presents `AddExistingClipsSheet` to
+    /// attach loose bench clips to this memory
+    /// (`Memory Detail · unified editing model.md` §"Adding clips to a
+    /// memory").
+    @State private var showAddExistingClips = false
+    /// True while the bottom "Let Go of this Memory" button is on screen.
+    /// The append FAB hides so the full-width Delete owns the bottom-right
+    /// — the same suppression rule the Clips multi-select FAB follows.
+    /// Paired with `bodyScrolled` so the FAB stays reachable on a short
+    /// (non-scrolling) memory, where Delete is visible at rest and hiding
+    /// the FAB would strand the only add affordance.
+    @State private var letGoOnScreen = false
+    /// True once the body has scrolled from its resting top — the
+    /// "deliberate scroll to Delete" signal that makes the Let Go
+    /// suppression safe on short memories.
+    @State private var bodyScrolled = false
+    /// The scrolling body's height, captured to decide when the Let Go
+    /// button has risen into the FAB's corner.
+    @State private var bodyViewportHeight: CGFloat = 0
     /// P8 Let Go split disclosure, computed once on appear (nil → the static
     /// footnote shows until it's ready).
     @State private var letGoSplitFootnote: String? = nil
@@ -188,6 +207,23 @@ struct EntryExpandedView: View {
         // over a custom swipe modifier traps vertical drags before the
         // parent `ScrollView` can claim them.
         List {
+            // Zero-height top anchor: reports the body's scroll offset so
+            // the append FAB's Let-Go suppression only engages after a
+            // deliberate scroll (see `bodyScrolled`). Invisible, no row
+            // chrome — purely a measurement seam.
+            Color.clear
+                .frame(height: 0)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: MemoryBodyTopKey.self,
+                            value: proxy.frame(in: .named(Self.bodyCoordSpace)).minY
+                        )
+                    }
+                )
             // Header rhythm per `AI Organize · spec.md §2c` and
             // `screens-topics.jsx` `ScrMemoryWithTopics`: title →
             // timestamp → summary → topic chip row. The topics row
@@ -290,6 +326,16 @@ struct EntryExpandedView: View {
                         dismiss()
                     }
                     .onAppear { letGoSplitFootnote = computeLetGoSplit() }
+                    // Report the Let Go button's top edge so the append
+                    // FAB can yield the corner once it's on screen.
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: LetGoButtonMinYKey.self,
+                                value: proxy.frame(in: .named(Self.bodyCoordSpace)).minY
+                            )
+                        }
+                    )
                 }
                 .padding(.top, 24)
             }
@@ -382,6 +428,21 @@ struct EntryExpandedView: View {
                 )
             }
         }
+        // Memory Detail FAB · path 2 — add existing loose clips. The
+        // sheet is pure selection; the attach runs here (host owns
+        // `lifecycle`) via `attachExistingClips` — new edges in append
+        // order, content regenerated, memory marked stale (offers
+        // Reorganize), never auto-organized.
+        .sheet(isPresented: $showAddExistingClips) {
+            AddExistingClipsSheet { clipIds in
+                let added = lifecycle.attachExistingClips(entryId: entry.id, clipIds: clipIds)
+                if added > 0 {
+                    // The clip set changed — refresh the Let Go split
+                    // disclosure (some added clips may be used elsewhere).
+                    letGoSplitFootnote = computeLetGoSplit()
+                }
+            }
+        }
         // Capture-flow host attached to the List (NavigationStack-level
         // hosting controller), NOT the outer ZStack (`UIHostingController
         // <RootModifier>`). On iOS 26 the `UIPresentationController`-based
@@ -417,16 +478,65 @@ struct EntryExpandedView: View {
             // `editCoordinator` flips on any title/summary/transcript
             // edit; the FAB disappears until the edit commits or
             // cancels.
-            if !editCoordinator.isAnyEditing {
+            if !editCoordinator.isAnyEditing && !(letGoOnScreen && bodyScrolled) {
                 AppendFAB(
                     onSelect: { modality in
                         appendCoordinator.activeCaptureModality = modality
                     },
-                    accessibilityLabel: "Add to memory"
+                    accessibilityLabel: "Add to memory",
+                    // Path 2 (`Memory Detail · unified editing model.md`
+                    // §"Adding clips to a memory"): the leading pill adds
+                    // existing loose clips from the bench — the same
+                    // stack shape the in-project FAB uses ("make new here,
+                    // or add one you already have"). The capture modality
+                    // stack below is path 1 (capture new into this memory).
+                    leadingAction: AppendFABLeadingAction(
+                        label: "Add existing clips",
+                        systemImage: "tray.and.arrow.down",
+                        onTap: { showAddExistingClips = true }
+                    )
                 )
             }
         }
+        // Overlap fix (`Adding clips to a memory` directive): the append
+        // FAB yields the bottom-right corner to the full-width "Let Go of
+        // this Memory" button once that button scrolls on screen — the
+        // same suppression rule the Clips multi-select FAB follows. The
+        // Let Go button reports its top edge in this named space; when it
+        // rises into the viewport, `letGoVisible` flips and the FAB above
+        // is dropped from the hierarchy.
+        .coordinateSpace(name: Self.bodyCoordSpace)
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { bodyViewportHeight = proxy.size.height }
+                    .onChange(of: proxy.size.height) { _, h in bodyViewportHeight = h }
+            }
+        )
+        .onPreferenceChange(LetGoButtonMinYKey.self) { minY in
+            // Default `.greatestFiniteMagnitude` = the button isn't laid
+            // out (scrolled far below / not rendered) → FAB stays. Once
+            // the button's top edge crosses into the viewport, it's "on
+            // screen". Small margin avoids edge flicker. The FAB only
+            // actually hides when this is paired with `bodyScrolled`.
+            guard bodyViewportHeight > 0 else { return }
+            let onScreen = minY < bodyViewportHeight - 8
+            if onScreen != letGoOnScreen { letGoOnScreen = onScreen }
+        }
+        .onPreferenceChange(MemoryBodyTopKey.self) { topY in
+            // The top anchor sits at ~0 at rest and goes negative as the
+            // user scrolls down. A generous threshold keeps a short,
+            // non-scrolling memory (top pinned near 0) from ever reading
+            // as scrolled — so its always-visible Delete never strands
+            // the FAB.
+            let scrolled = topY < -20
+            if scrolled != bodyScrolled { bodyScrolled = scrolled }
+        }
     }
+
+    /// Named coordinate space for measuring the Let Go button's position
+    /// relative to the scrolling body (the overlap-fix gate).
+    private static let bodyCoordSpace = "memoryDetailBody"
 
     // MARK: - Body sections (decomposed from var body)
 
@@ -1581,6 +1691,30 @@ private struct MediaFragmentEditorStack: ViewModifier {
             .fullScreenCover(item: $videoPlayerForItem) { item in
                 VideoPlayerSheet(item: item)
             }
+    }
+}
+
+/// Reports the "Let Go of this Memory" button's top edge (minY) within
+/// the Memory Detail body's named coordinate space, so the append FAB
+/// can suppress itself once the button scrolls on screen. Default
+/// `.greatestFiniteMagnitude` means "not laid out" (the button is far
+/// below the fold, or the List hasn't rendered it) → FAB stays visible.
+/// Reduces to the smallest reported minY (there is only one reporter).
+private struct LetGoButtonMinYKey: PreferenceKey {
+    static let defaultValue: CGFloat = .greatestFiniteMagnitude
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = min(value, nextValue())
+    }
+}
+
+/// Reports the Memory Detail body's top edge (minY) within its named
+/// coordinate space — ~0 at rest, negative once scrolled down. Lets the
+/// FAB's Let-Go suppression require a deliberate scroll, so a short,
+/// non-scrolling memory (Delete visible at rest) keeps its Add FAB.
+private struct MemoryBodyTopKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

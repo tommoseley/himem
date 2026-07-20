@@ -125,6 +125,7 @@
 		A100000734 /* EntryQueryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000734 /* EntryQueryService.swift */; };
 		A100000735 /* VoiceRecordingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000735 /* VoiceRecordingController.swift */; };
 		A100000736 /* EntryAppendCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000736 /* EntryAppendCoordinator.swift */; };
+		A100000790 /* AddExistingClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000790 /* AddExistingClipsSheet.swift */; };
 		A100000737 /* JournalErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000737 /* JournalErrorBanner.swift */; };
 		A100000740 /* JournalCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000740 /* JournalCaptureCoordinator.swift */; };
 		A100000741 /* InboxTranscriptionDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000741 /* InboxTranscriptionDispatcher.swift */; };
@@ -390,6 +391,7 @@
 		B100000734 /* EntryQueryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryQueryService.swift; sourceTree = "<group>"; };
 		B100000735 /* VoiceRecordingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingController.swift; sourceTree = "<group>"; };
 		B100000736 /* EntryAppendCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryAppendCoordinator.swift; sourceTree = "<group>"; };
+		B100000790 /* AddExistingClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddExistingClipsSheet.swift; sourceTree = "<group>"; };
 		B100000737 /* JournalErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalErrorBanner.swift; sourceTree = "<group>"; };
 		B100000740 /* JournalCaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCaptureCoordinator.swift; sourceTree = "<group>"; };
 		B100000741 /* InboxTranscriptionDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxTranscriptionDispatcher.swift; sourceTree = "<group>"; };
@@ -683,6 +685,7 @@
 				B100000019 /* EntryCardView.swift */,
 				B100000045 /* EntryExpandedView.swift */,
 				B100000736 /* EntryAppendCoordinator.swift */,
+				B100000790 /* AddExistingClipsSheet.swift */,
 				B100000737 /* JournalErrorBanner.swift */,
 				B100000740 /* JournalCaptureCoordinator.swift */,
 				B100000205 /* ChronologicalCaptureStream.swift */,
@@ -1315,6 +1318,7 @@
 				A100000734 /* EntryQueryService.swift in Sources */,
 				A100000735 /* VoiceRecordingController.swift in Sources */,
 				A100000736 /* EntryAppendCoordinator.swift in Sources */,
+				A100000790 /* AddExistingClipsSheet.swift in Sources */,
 				A100000737 /* JournalErrorBanner.swift in Sources */,
 				A100000740 /* JournalCaptureCoordinator.swift in Sources */,
 				A100000741 /* InboxTranscriptionDispatcher.swift in Sources */,

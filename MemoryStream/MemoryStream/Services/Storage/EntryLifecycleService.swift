@@ -785,6 +785,53 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Attaches N existing bench clips (loose `MediaReference`s, already
+    /// captured and transcribed) to an existing memory as new
+    /// `MemoryClipEdge`s in append order, then reconciles `entry.content`.
+    /// Backs the Memory Detail FAB's "Add existing clips" path
+    /// (`Memory Detail · unified editing model.md` §"Adding clips to a
+    /// memory").
+    ///
+    /// **No re-organization**, exactly like `appendClips`. Each new edge
+    /// is stamped `linkedAt = now`, which pushes the memory past its
+    /// last-organize watermark (`JournalEntry.clipsAddedSinceLastOrganize`
+    /// reads the edge, not the clip's capture time) — so Memory Detail
+    /// shows the stale "N new clips · Reorganize" callout and the user
+    /// spends the pass on tap, never automatically (AI Organize §8; the
+    /// Move/Add spec's "identical to new clips arriving"). This is why
+    /// the path must NOT ride `append()` — that queues a ProcessingTask
+    /// and (on Plus) auto-organizes.
+    ///
+    /// Idempotent per (memory, clip) via `createEdge` — re-adding an
+    /// already-attached clip is a no-op. Recycled clips are skipped.
+    /// `clipIds` order is honored: they attach in the order given, after
+    /// the memory's existing clips. Returns the count newly attached.
+    @discardableResult
+    func attachExistingClips(entryId: UUID, clipIds: [UUID]) -> Int {
+        guard !clipIds.isEmpty else { return 0 }
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return 0 }
+            let ctx = storage.viewContext
+            let now = Date()
+            var attached = 0
+            for clipId in clipIds {
+                let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+                req.predicate = NSPredicate(format: "id == %@", clipId as CVarArg)
+                req.fetchLimit = 1
+                guard let ref = try ctx.fetch(req).first, ref.recycledAt == nil else { continue }
+                let before = entry.edgesArray.count
+                try StorageService.createEdge(from: entry, to: ref, linkedAt: now, in: ctx)
+                if entry.edgesArray.count > before { attached += 1 }
+            }
+            entry.content = Self.joinedContent(from: entry)
+            try storage.save(context: ctx)
+            return attached
+        } catch {
+            ErrorState.shared.report(.editFailed(error.localizedDescription))
+            return 0
+        }
+    }
+
     // MARK: - Create memory from N voice clips (Captured Clips → Start a Memory)
 
     /// Creates a new memory whose evidence is the supplied voice clips.
