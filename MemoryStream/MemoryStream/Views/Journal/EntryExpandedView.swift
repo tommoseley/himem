@@ -82,7 +82,7 @@ struct EntryExpandedView: View {
     /// this container. Non-nil while the QuickLook is presented
     /// over a photo tap. Video keeps its own `videoPlayerForItem`
     /// full-screen cover.
-    @State private var photoViewerItem: QuickLookItem? = nil
+    @State private var photoViewerItem: MediaDisplayItem? = nil
     /// Non-nil while the full-screen video player is presented.
     /// Set when the user taps a video's play badge in the
     /// chronological capture stream. Pre-launch addition (Tom
@@ -1034,23 +1034,15 @@ struct EntryExpandedView: View {
                 },
                 onViewPhoto: { item in
                     // Slice 9 (Memory Detail Full stream
-                    // convergence): photo thumbnail tap opens
-                    // QuickLook over the memory. The description
-                    // edit path is now inline inside `MediaCard`
-                    // via `ClipEditor(field: .description)` — this
-                    // callback owns consume only, matching Q3's
-                    // edit-vs-consume separation.
-                    switch MediaResolver.resolve(osIdentifier: item.localIdentifier,
-                                                 mediaType: item.mediaType) {
-                    case .ubiquity(let url):
-                        photoViewerItem = QuickLookItem(url: url)
-                    case .photoKit:
-                        // Legacy PHAsset paths don't resolve to a
-                        // file URL; the miss is rare post-ubiquity
-                        // migration and silent (same behavior the
-                        // retired sheet had).
-                        break
-                    }
+                    // convergence): photo thumbnail tap opens the
+                    // full-screen photo viewer over the memory. The
+                    // description edit path is now inline inside
+                    // `MediaCard` via `ClipEditor(field: .description)`
+                    // — this callback owns consume only, matching Q3's
+                    // edit-vs-consume separation. `PhotoViewerSheet`
+                    // resolves the bytes itself (ubiquity or legacy
+                    // PhotoKit), so this just hands off the item.
+                    photoViewerItem = item
                 },
                 onCommitMediaDescription: { mediaId, newText in
                     updateMediaDescription(id: mediaId, text: newText)
@@ -1636,20 +1628,20 @@ private struct CommitFooter: View {
 /// directly — CRAP audit 2026-06-07.
 private struct MediaFragmentEditorStack: ViewModifier {
     /// Slice 9 (Memory Detail Full stream convergence):
-    /// `PhotoDescriptionEditSheet` retired. The QuickLook viewer
-    /// it hosted moves up to this stack so a photo tap in
-    /// `MediaCard` can still consume the file directly. Video
-    /// keeps its own full-screen cover. (Voice playback + transcript edit
+    /// `PhotoDescriptionEditSheet` retired. Photo + video consume both
+    /// present a full-screen viewer on black with a standard dismiss
+    /// (tap · swipe-down · ✕) — `PhotoViewerSheet` replaces the bare
+    /// `QuickLookViewer`, which showed no dismiss chrome in a SwiftUI
+    /// sheet (device bug, 2026-07-21). (Voice playback + transcript edit
     /// moved to the unified modal / inline row play — AudioPlayerSheet
     /// retired 2026-07-17.)
-    @Binding var photoViewerItem: QuickLookItem?
+    @Binding var photoViewerItem: MediaDisplayItem?
     @Binding var videoPlayerForItem: MediaDisplayItem?
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $photoViewerItem) { item in
-                QuickLookViewer(url: item.url)
-                    .ignoresSafeArea()
+            .fullScreenCover(item: $photoViewerItem) { item in
+                PhotoViewerSheet(item: item)
             }
             .fullScreenCover(item: $videoPlayerForItem) { item in
                 VideoPlayerSheet(item: item)

@@ -171,4 +171,13 @@ struct ClipEditorModalSourceTests {
         #expect(ClipEditorModal.sourceGlyphName(for: "mac") == nil)
         #expect(ClipEditorModal.sourceGlyphName(for: nil) == nil)
     }
+
+    /// The edit surface titles itself "Edit Clip" (device fix 2026-07-21;
+    /// was the ambiguous "CLIP"), and stays distinct from the read-only
+    /// `ClipDetailView` ("Clip") so a user can tell "opened" from
+    /// "editing" at a glance. Guards against a silent revert of the rename.
+    @Test func editorTitle_isEditClip_andDistinctFromReadOnly() {
+        #expect(ClipEditorModal.editorTitle == "Edit Clip")
+        #expect(ClipEditorModal.editorTitle != "Clip")
+    }
 }

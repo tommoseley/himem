@@ -59,6 +59,19 @@ struct ClipEditorModal: View {
     @State private var annotationDraft: String? = nil
     @State private var placing = false
 
+    // Zone 1 photo/video hero — the thumbnail + full-screen consume.
+    // Resolved the same way `MediaClipRow` does (ThumbnailService), and
+    // "Tap to view full size" routes to the full-screen viewer. This
+    // wiring was lost when `ClipEditorModal` replaced
+    // `PhotoDescriptionEditSheet` (device bug, 2026-07-21).
+    @State private var heroThumbnail: UIImage? = nil
+    @State private var photoConsumeItem: MediaDisplayItem? = nil
+    @State private var videoConsumeItem: MediaDisplayItem? = nil
+
+    /// Title of the clip EDIT surface — distinct from the read-only
+    /// `ClipDetailView` ("Clip") so the two surfaces never read the same.
+    static let editorTitle = "Edit Clip"
+
     // MARK: - Body
 
     var body: some View {
@@ -74,7 +87,10 @@ struct ClipEditorModal: View {
             deleteFooter
         }
         .background(Crucible.Color.paper.ignoresSafeArea())
-        .task(id: source.id) { await loadDurationIfNeeded() }
+        .task(id: source.id) {
+            await loadDurationIfNeeded()
+            await loadHeroThumbnailIfNeeded()
+        }
         // "Opened by you" — the single point where a clip becomes Reviewed
         // (P7-2). Covers every open path (bench, session, cluster, Memory
         // Detail) since they all present this modal. Per-device, idempotent.
@@ -95,9 +111,13 @@ struct ClipEditorModal: View {
         }
         .onDisappear { if player.isPlaying { player.stop() } }
         .sheet(isPresented: $placing) { placementSheet }
+        // Full-screen consume (Q3 "tap to view full size"). Both viewers
+        // carry a standard dismiss (tap · swipe-down · ✕).
+        .fullScreenCover(item: $photoConsumeItem) { PhotoViewerSheet(item: $0) }
+        .fullScreenCover(item: $videoConsumeItem) { VideoPlayerSheet(item: $0) }
     }
 
-    // MARK: - Top bar (bare-text exception place: Cancel · CLIP · Done)
+    // MARK: - Top bar (bare-text exception place: Cancel · Edit Clip · Done)
 
     private var topBar: some View {
         HStack {
@@ -105,10 +125,12 @@ struct ClipEditorModal: View {
                 .font(.system(size: 15.5))
                 .foregroundStyle(Crucible.Color.ink2)
             Spacer()
-            Text("CLIP")
-                .font(.system(size: 11, weight: .bold))
-                .tracking(1.4)
-                .foregroundStyle(Crucible.Color.ink3)
+            // This is the *edit* surface for a clip; the title says so.
+            // The read-only "opened clip" view (`ClipDetailView`) titles
+            // itself "Clip" — the two surfaces stay distinct.
+            Text(Self.editorTitle)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink)
             Spacer()
             Button("Done") { commitOpenEdits(); player.stop(); dismiss() }
                 .font(.system(size: 15.5, weight: .semibold))
@@ -161,7 +183,36 @@ struct ClipEditorModal: View {
                 Spacer(minLength: 0)
             }
         case .photo, .video:
-            HStack(spacing: 13) {
+            Button { openConsume() } label: {
+                HStack(spacing: 13) {
+                    heroThumbnailTile
+                    VStack(alignment: .leading, spacing: 4) {
+                        metadataLine
+                        Text("Tap to view full size")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.aiBlue)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// 68×68 hero tile — the real thumbnail (resolved via
+    /// `ThumbnailService`, same source `MediaClipRow` uses) with a media
+    /// glyph as the placeholder until it loads, and a play badge on video.
+    @ViewBuilder
+    private var heroThumbnailTile: some View {
+        ZStack {
+            if let heroThumbnail {
+                Image(uiImage: heroThumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 68, height: 68)
+                    .clipShape(RoundedRectangle(cornerRadius: 13))
+            } else {
                 RoundedRectangle(cornerRadius: 13)
                     .fill(Crucible.Color.sunk)
                     .frame(width: 68, height: 68)
@@ -169,13 +220,16 @@ struct ClipEditorModal: View {
                         Image(systemName: media == .video ? "video.fill" : "photo.fill")
                             .foregroundStyle(Crucible.Color.ink3)
                     )
-                VStack(alignment: .leading, spacing: 4) {
-                    metadataLine
-                    Text("Tap to view full size")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.aiBlue)
-                }
-                Spacer(minLength: 0)
+            }
+            if media == .video {
+                Circle()
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 26, height: 26)
+                    .overlay(
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.black)
+                    )
             }
         }
     }
@@ -670,6 +724,44 @@ struct ClipEditorModal: View {
                     contentDraft = text
                 }
             }
+        }
+    }
+
+    /// The `MediaDisplayItem` for this clip's photo/video hero. Only
+    /// managed refs carry photo/video (inbox clips are voice-only).
+    private var heroDisplayItem: MediaDisplayItem? {
+        guard case .managed(let ref) = source else { return nil }
+        return MediaDisplayItem(
+            id: ref.id,
+            localIdentifier: ref.osIdentifier,
+            mediaType: ref.mediaTypeEnum,
+            thumbnailCacheFilename: ref.thumbnailCacheFilename,
+            isAccessible: ref.isAccessible
+        )
+    }
+
+    /// Tap on the hero / "Tap to view full size" → full-screen consume.
+    private func openConsume() {
+        guard let item = heroDisplayItem else { return }
+        switch item.mediaType {
+        case .image: photoConsumeItem = item
+        case .video: videoConsumeItem = item
+        default:     break
+        }
+    }
+
+    /// Resolve the 68×68 hero thumbnail the same way `MediaClipRow` does
+    /// (`ThumbnailService.cacheThumbnail → cachedThumbnail`). No-op for
+    /// voice/note and for inbox clips.
+    private func loadHeroThumbnailIfNeeded() async {
+        guard heroThumbnail == nil,
+              case .managed(let ref) = source,
+              ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video else { return }
+        if let name = await ThumbnailService.shared.cacheThumbnail(
+            for: ref.osIdentifier,
+            mediaType: ref.mediaTypeEnum
+        ) {
+            heroThumbnail = ThumbnailService.shared.cachedThumbnail(filename: name)
         }
     }
 
