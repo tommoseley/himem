@@ -125,7 +125,6 @@
 		A100000734 /* EntryQueryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000734 /* EntryQueryService.swift */; };
 		A100000735 /* VoiceRecordingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000735 /* VoiceRecordingController.swift */; };
 		A100000736 /* EntryAppendCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000736 /* EntryAppendCoordinator.swift */; };
-		A100000790 /* AddExistingClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000790 /* AddExistingClipsSheet.swift */; };
 		A100000737 /* JournalErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000737 /* JournalErrorBanner.swift */; };
 		A100000740 /* JournalCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000740 /* JournalCaptureCoordinator.swift */; };
 		A100000741 /* InboxTranscriptionDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000741 /* InboxTranscriptionDispatcher.swift */; };
@@ -143,6 +142,7 @@
 		A100000763 /* ProjectAssistViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000763 /* ProjectAssistViewModel.swift */; };
 		A100000770 /* LaunchSignposter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000770 /* LaunchSignposter.swift */; };
 		A100000780 /* PermissionWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000780 /* PermissionWizardView.swift */; };
+		A100000790 /* AddExistingClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000790 /* AddExistingClipsSheet.swift */; };
 		A100000802 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
 		A100000803 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
 		A100000811 /* WatchAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* WatchAudioSessionConfig.swift */; };
@@ -162,8 +162,8 @@
 		A100000991 /* TutorialsHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000991 /* TutorialsHubView.swift */; };
 		A100000992 /* TutorialOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000992 /* TutorialOrchestrator.swift */; };
 		A100000993 /* QuickLookViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000993 /* QuickLookViewer.swift */; };
-		A100000998 /* PhotoViewerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000998 /* PhotoViewerSheet.swift */; };
 		A100000994 /* BottomDeleteButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000994 /* BottomDeleteButton.swift */; };
+		A100000998 /* PhotoViewerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000998 /* PhotoViewerSheet.swift */; };
 		A100000CFF /* ClipsUnplacedFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000CFF /* ClipsUnplacedFilter.swift */; };
 		A200000010 /* MemoryClipEdge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000010 /* MemoryClipEdge.swift */; };
 		A200000020 /* HiMemTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000020 /* HiMemTabView.swift */; };
@@ -392,7 +392,6 @@
 		B100000734 /* EntryQueryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryQueryService.swift; sourceTree = "<group>"; };
 		B100000735 /* VoiceRecordingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingController.swift; sourceTree = "<group>"; };
 		B100000736 /* EntryAppendCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryAppendCoordinator.swift; sourceTree = "<group>"; };
-		B100000790 /* AddExistingClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddExistingClipsSheet.swift; sourceTree = "<group>"; };
 		B100000737 /* JournalErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalErrorBanner.swift; sourceTree = "<group>"; };
 		B100000740 /* JournalCaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCaptureCoordinator.swift; sourceTree = "<group>"; };
 		B100000741 /* InboxTranscriptionDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxTranscriptionDispatcher.swift; sourceTree = "<group>"; };
@@ -410,6 +409,7 @@
 		B100000763 /* ProjectAssistViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistViewModel.swift; sourceTree = "<group>"; };
 		B100000770 /* LaunchSignposter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSignposter.swift; sourceTree = "<group>"; };
 		B100000780 /* PermissionWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionWizardView.swift; sourceTree = "<group>"; };
+		B100000790 /* AddExistingClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddExistingClipsSheet.swift; sourceTree = "<group>"; };
 		B100000801 /* WatchTransferAudioTranscoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchTransferAudioTranscoder.swift; path = Shared/WatchTransferAudioTranscoder.swift; sourceTree = "<group>"; };
 		B100000810 /* WatchAudioSessionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchAudioSessionConfig.swift; path = Shared/WatchAudioSessionConfig.swift; sourceTree = "<group>"; };
 		B100000900 /* UbiquityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UbiquityStore.swift; sourceTree = "<group>"; };
@@ -427,8 +427,8 @@
 		B100000991 /* TutorialsHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorialsHubView.swift; sourceTree = "<group>"; };
 		B100000992 /* TutorialOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TutorialOrchestrator.swift; path = MemoryStream/Services/Tutorials/TutorialOrchestrator.swift; sourceTree = SOURCE_ROOT; };
 		B100000993 /* QuickLookViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookViewer.swift; sourceTree = "<group>"; };
-		B100000998 /* PhotoViewerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoViewerSheet.swift; sourceTree = "<group>"; };
 		B100000994 /* BottomDeleteButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomDeleteButton.swift; sourceTree = "<group>"; };
+		B100000998 /* PhotoViewerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoViewerSheet.swift; sourceTree = "<group>"; };
 		B100000CFF /* ClipsUnplacedFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipsUnplacedFilter.swift; sourceTree = "<group>"; };
 		B200000010 /* MemoryClipEdge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryClipEdge.swift; sourceTree = "<group>"; };
 		B200000020 /* HiMemTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiMemTabView.swift; sourceTree = "<group>"; };

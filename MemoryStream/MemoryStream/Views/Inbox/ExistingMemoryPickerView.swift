@@ -1,65 +1,97 @@
 import SwiftUI
 import CoreData
 
-/// Inline picker for the Captured Clips "Add to existing memory" mode of
-/// the bundle confirm sheet. Per `docs/design/Captured Clips · session-
-/// first · spec.md` § Bundle confirm sheet · Add-to-existing-memory mode.
+/// Inline picker for the "Add to a memory" flows — the clip Edit sheet's
+/// placement (`PlaceClipSheet`) and the Captured Clips bundle-confirm
+/// "Add to existing memory" mode (`CreateMemoryFromClipsSheet`).
 ///
-/// Filter: memories with at least one MediaReference in the last 7 days,
-/// sorted by most-recent-clip descending. Per-row: Source Serif title
-/// (reflective seam — same family as the AI-suggested new-memory title)
-/// + SF Pro 12 sub-line with topic dot + topic name + date · clip count
-/// + right-edge selection ring.
+/// Shows **every** non-recycled memory, most-recent first, with an inline
+/// **search field** (title or date). A library of 30–40 memories needs
+/// filtering, and the picker must be able to reach *any* memory — the
+/// earlier build listed only memories with a clip in the last 7 days and
+/// disabled the "Search all" escape, so older memories were unreachable
+/// (device bug, 2026-07-21).
 ///
-/// Empty 7-day window state shows the helper copy and a visible search
-/// row. The search row at the bottom of the list is the documented exit
-/// for older memories ("Search all memories…").
+/// Per-row: Source Serif title (reflective seam) + SF Pro sub-line with
+/// topic dot + topic name + date · clip count + right-edge selection ring.
 struct ExistingMemoryPickerView: View {
     @Binding var selectedEntryId: UUID?
-    /// Fires when the user taps the "Search all memories…" row. The
-    /// parent sheet dismisses and routes to global search. Today this
-    /// just dismisses the bundle sheet — the spec calls for opening
-    /// global search prefiltered to memories; threading that through
-    /// the navigation stack is a follow-up.
-    let onSearchTapped: () -> Void
 
-    @State private var entries: [JournalEntry] = []
+    @State private var allEntries: [JournalEntry] = []
+    @State private var searchText: String = ""
 
     private let storage = StorageService.shared
-    private static let sevenDays: TimeInterval = 7 * 24 * 60 * 60
+
+    private var visibleEntries: [JournalEntry] {
+        Self.filter(allEntries, query: searchText)
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                if entries.isEmpty {
-                    emptyState
-                        .padding(.top, 24)
-                        .padding(.bottom, 12)
-                } else {
-                    ForEach(entries, id: \.id) { entry in
-                        row(entry)
-                        if entry.id != entries.last?.id {
-                            Rectangle()
-                                .fill(Crucible.Color.hairline)
-                                .frame(height: 0.5)
-                                .padding(.leading, 14)
+        VStack(spacing: 10) {
+            searchField
+            ScrollView {
+                VStack(spacing: 0) {
+                    if allEntries.isEmpty {
+                        emptyState(title: "No memories yet",
+                                   detail: "Memories you create will show up here.")
+                            .padding(.vertical, 28)
+                    } else if visibleEntries.isEmpty {
+                        emptyState(title: "No matches",
+                                   detail: "No memory matches “\(searchText)”.")
+                            .padding(.vertical, 28)
+                    } else {
+                        ForEach(visibleEntries, id: \.id) { entry in
+                            row(entry)
+                            if entry.id != visibleEntries.last?.id {
+                                Rectangle()
+                                    .fill(Crucible.Color.hairline)
+                                    .frame(height: 0.5)
+                                    .padding(.leading, 14)
+                            }
                         }
                     }
                 }
-                // Search row hidden for v1 — the destination ("global
-                // search prefiltered to memories") isn't wired yet, so
-                // showing the affordance would route the user to a
-                // dismiss-only no-op. Restored once the Search route
-                // lands.
+                .background(Crucible.Color.card)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Crucible.Color.hairline, lineWidth: 1)
+                )
             }
-            .background(Crucible.Color.card)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Crucible.Color.hairline, lineWidth: 1)
-            )
         }
-        .onAppear { entries = fetchRecent() }
+        .onAppear { allEntries = Self.fetchAllMemories(in: storage.viewContext) }
+    }
+
+    // MARK: - Search field
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Crucible.Color.ink3)
+            TextField("Search memories by title or date", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Crucible.Color.ink4)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Crucible.Color.card)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Crucible.Color.hairline, lineWidth: 1)
+        )
     }
 
     // MARK: - Row
@@ -75,7 +107,7 @@ struct ExistingMemoryPickerView: View {
         } label: {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(rowTitle(entry))
+                    Text(Self.rowTitle(entry))
                         .font(.system(size: 17, design: .serif))
                         .foregroundStyle(Crucible.Color.ink)
                         .lineLimit(1)
@@ -91,22 +123,13 @@ struct ExistingMemoryPickerView: View {
         .buttonStyle(.plain)
     }
 
-    private func rowTitle(_ entry: JournalEntry) -> String {
-        let t = entry.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return t.isEmpty ? "Untitled memory" : t
-    }
-
     private func rowSubline(_ entry: JournalEntry) -> some View {
         let topicName = entry.topicsArray.first?.name
-        let mostRecent = mostRecentClipDate(entry)
-        let dateStr: String = {
-            let cal = Calendar.current
-            if cal.isDateInToday(mostRecent) { return "Today" }
-            if cal.isDateInYesterday(mostRecent) { return "Yesterday" }
-            let f = DateFormatter(); f.dateFormat = "MMM d"
-            return f.string(from: mostRecent)
-        }()
-        let clipCount = entry.mediaReferencesArray.filter { $0.mediaTypeEnum == .voice }.count
+        let mostRecent = Self.mostRecentClipDate(entry)
+        let dateStr = Self.shortDateString(mostRecent)
+        // Count all clips (any media type), not just voice — a photo-only
+        // memory should not read "0 clips".
+        let clipCount = entry.mediaReferencesArray.count
         let clipStr = clipCount == 1 ? "1 clip" : "\(clipCount) clips"
         return HStack(spacing: 6) {
             if topicName != nil {
@@ -149,59 +172,76 @@ struct ExistingMemoryPickerView: View {
         }
     }
 
-    // MARK: - Empty / search
-
-    private var emptyState: some View {
+    private func emptyState(title: String, detail: String) -> some View {
         VStack(spacing: 6) {
-            Text("No recent memories")
+            Text(title)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Crucible.Color.ink)
-            Text("Search to find an older one.")
+            Text(detail)
                 .font(.system(size: 13))
                 .foregroundStyle(Crucible.Color.ink3)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 14)
     }
 
-    private var searchRow: some View {
-        Button(action: onSearchTapped) {
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Crucible.Color.ink3)
-                Text("Search all memories…")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Crucible.Color.ink2)
-                Spacer()
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
+    // MARK: - Fetch / filter / format (testable statics)
 
-    // MARK: - Fetch
-
-    /// Memories with at least one MediaReference whose `createdAt` is
-    /// within the last 7 days. Sorted by most-recent-clip desc. The
-    /// `ANY mediaReferences.createdAt` predicate runs in Core Data; the
-    /// secondary sort by max-clip-date is done in Swift because Core
-    /// Data can't aggregate across a to-many relationship in a fetch
-    /// sort descriptor.
-    private func fetchRecent() -> [JournalEntry] {
-        let cutoff = Date().addingTimeInterval(-Self.sevenDays)
+    /// Every non-recycled memory, sorted by most-recent-clip descending.
+    /// The secondary sort is done in Swift because Core Data can't
+    /// aggregate across a to-many relationship in a fetch sort descriptor.
+    /// (Was a 7-day `ANY edges.clip.createdAt` window — the cause of the
+    /// "only ~3 memories" bug.)
+    static func fetchAllMemories(in ctx: NSManagedObjectContext) -> [JournalEntry] {
         let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
-        req.predicate = NSPredicate(
-            format: "isRecycled == NO AND ANY edges.clip.createdAt >= %@",
-            cutoff as NSDate
-        )
-        let raw = (try? storage.viewContext.fetch(req)) ?? []
+        // `!= YES` (not `== NO`) so CloudKit-synced records that stored the
+        // flag as nil still appear — the same nil-safe form the main
+        // Memories fetch uses (`JournalEntry` recycled predicate).
+        req.predicate = NSPredicate(format: "isRecycled != YES")
+        let raw = (try? ctx.fetch(req)) ?? []
         return raw.sorted { mostRecentClipDate($0) > mostRecentClipDate($1) }
     }
 
-    private func mostRecentClipDate(_ entry: JournalEntry) -> Date {
+    /// Case-insensitive filter over title + a date haystack (so "jul",
+    /// "18", "2026", "today" all match). Empty query → everything.
+    static func filter(_ entries: [JournalEntry], query: String) -> [JournalEntry] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return entries }
+        return entries.filter { searchHaystack(for: $0).contains(q) }
+    }
+
+    /// Lowercased title + several date renderings of the most-recent clip,
+    /// so a query can match either the words or the date.
+    static func searchHaystack(for entry: JournalEntry) -> String {
+        let date = mostRecentClipDate(entry)
+        let cal = Calendar.current
+        var parts: [String] = [rowTitle(entry)]
+        if cal.isDateInToday(date) { parts.append("today") }
+        if cal.isDateInYesterday(date) { parts.append("yesterday") }
+        let fmts = ["MMM d", "MMMM d", "MMM d yyyy", "MMMM d, yyyy", "M/d/yy", "yyyy", "EEEE"]
+        let df = DateFormatter()
+        for f in fmts {
+            df.dateFormat = f
+            parts.append(df.string(from: date))
+        }
+        return parts.joined(separator: " ").lowercased()
+    }
+
+    static func rowTitle(_ entry: JournalEntry) -> String {
+        let t = entry.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return t.isEmpty ? "Untitled memory" : t
+    }
+
+    static func shortDateString(_ date: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(date) { return "Today" }
+        if cal.isDateInYesterday(date) { return "Yesterday" }
+        let f = DateFormatter(); f.dateFormat = "MMM d"
+        return f.string(from: date)
+    }
+
+    static func mostRecentClipDate(_ entry: JournalEntry) -> Date {
         entry.mediaReferencesArray
             .compactMap { $0.createdAt }
             .max() ?? entry.createdAt

@@ -75,16 +75,7 @@ struct CreateMemoryFromClipsSheet: View {
                     topicChips
                     projectChips
                 } else {
-                    ExistingMemoryPickerView(
-                        selectedEntryId: $selectedExistingEntryId,
-                        onSearchTapped: {
-                            // TODO: route to global search prefiltered to
-                            // memories per spec. For first cut, dismissing
-                            // the sheet returns the user to Captured Clips
-                            // where they can navigate to Search themselves.
-                            dismiss()
-                        }
-                    )
+                    ExistingMemoryPickerView(selectedEntryId: $selectedExistingEntryId)
                 }
                 Spacer(minLength: 0)
             }

@@ -56,24 +56,31 @@ struct PlaceClipSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    destinationPicker
-                    Group {
-                        switch destination {
-                        case .existingMemory:
-                            existingMemoryBody
-                        case .newMemory:
-                            newMemoryBody
-                        case .removeFromThisMemory:
-                            removeBody
-                        }
+            // NOT wrapped in a ScrollView: the existing-memory picker owns
+            // its own scroll (search field + scrollable list), and nesting
+            // it inside an outer ScrollView collapsed its height to a few
+            // rows (device bug, 2026-07-21). The short new/remove bodies
+            // get a trailing Spacer instead.
+            VStack(alignment: .leading, spacing: 16) {
+                destinationPicker
+                Group {
+                    switch destination {
+                    case .existingMemory:
+                        existingMemoryBody
+                    case .newMemory:
+                        newMemoryBody
+                    case .removeFromThisMemory:
+                        removeBody
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if destination != .existingMemory {
+                    Spacer(minLength: 0)
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
             .background(Crucible.Color.paper)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
@@ -142,10 +149,7 @@ struct PlaceClipSheet: View {
 
     private var existingMemoryBody: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ExistingMemoryPickerView(
-                selectedEntryId: $selectedEntryId,
-                onSearchTapped: { dismiss() }
-            )
+            ExistingMemoryPickerView(selectedEntryId: $selectedEntryId)
             if sourceMemoryId != nil {
                 Text("Moves the clip out of this memory into the one you pick.")
                     .font(.system(size: 11.5))
