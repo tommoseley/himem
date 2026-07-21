@@ -111,8 +111,10 @@ Project (CloudKit private DB) — NEW optional fields:
 
 **Decisions embedded:**
 - Templates are **app-versioned**, bound-by-id on the project. The project pins `templateVersion` so a later catalog change doesn't silently re-organize old memories (see OQ-3).
+- **Copied-vs-referenced-vs-override (added July 20 2026 — resolves template-update ambiguity):** `structureCadence` and `potentialCreations` are **copied defaults** (seeded from the catalog at create; a later catalog change does NOT replace them). The catalog's **organizing + rollup prompts are referenced** (resolved via `templateId` + pinned `templateVersion`, so the version controls which prompt is active). `lensCustomization` is a **user override** (never touched by catalog updates).
+- **`potentialCreations` is NOT a Phase-1 CloudKit field.** Nothing consumes it until Studio/Create exists (today the app is Free/Plus only; Create is future-facing UI). Keep creation possibilities in the **bundled template definition** for the first cut; add a project-level field only when something reads it. Don't ship a synced field whose only purpose is to preserve a future idea.
 - `lensCustomization` is the *only* free-text field and it is user content → private DB, developer-unreadable, like everything else.
-- **No new entity, no per-memory template field.** A memory inherits its lens from its project(s) at organize time (see §6.3 for the multi-project case).
+- **No new entity, no per-memory template field.** A memory does **not** inherit a lens into its canonical fields (see §6.3); project-scoped interpretation waits for the edge carrier (§4a).
 
 ### 5.3 Migration
 Purely additive optional fields on `Project`. Lightweight Core Data migration (`shouldMigrateStoreAutomatically` + `shouldInferMappingModelAutomatically`, matching the `recycledAt` precedent). One CloudKit schema deploy (Dev → verify → Prod ceremony). Existing projects: `templateId == nil` → identical to today.
@@ -142,8 +144,14 @@ The core prompt **always leads and always wins**. The lens can shift *emphasis* 
 
 Each fragment is validated against the Honest-Label rubric in the same calibration harness used for the core prompt (`OnDeviceOrganizerCalibrationTests`), with per-template fixtures.
 
-### 6.3 Multi-project memories (a real edge)
-A memory belongs to **0–N projects**. If a memory is in two templated projects with different lenses, whose lens applies? Ruled default (see OQ-2): **the lens applies at the moment of an *explicit* organize/reorganize invoked from within a project context** — the lens is the *invoking* project's. A memory organized from the generic Memories surface uses the **core prompt only** (no lens), because there's no single project intent in play. This keeps the composition deterministic and avoids blending contradictory lenses.
+### 6.3 Multi-project memories (a real edge) — lens does NOT touch the canonical memory (revised July 20 2026)
+
+A memory belongs to **0–N projects**, and today the organizer writes results back to the memory's *single* canonical fields (title/summary/topics/mentions). There is no project-scoped version of those fields. So a lens applied at organize time would make the **last project used to reorganize win everywhere** — reorganize a road-trip memory from the trip project and the astro project now sees the travel interpretation, and vice-versa. That's a semantic context-leak, not a deterministic rule.
+
+**Ruling (supersedes the earlier "invoking-project's lens" phrasing; aligns with §4a edge-scoping):** a project lens **may interpret a memory in the project's context, but must never silently rewrite what the memory is everywhere else.** Therefore:
+- **Canonical memory organization stays lens-free** until a **project-scoped carrier** exists (the memory×project edge entity, §4a) to hold project-specific interpretation.
+- **Lenses are used first only where the output is already project-scoped** — *Find the thread* (project rollup) interprets the project without rewriting any member memory. That is the safe home for a lens today.
+- A memory organized from the generic Memories surface uses the **core prompt only** — unchanged.
 
 ### 6.4 Tier
 The lens rides the existing organize tiers: **Free** = manual organize (on-device where supported), lens included in the on-device prompt; **Plus** = automatic + frontier. Templates themselves (adopting one, the defaults, the prompts) are **free** — they're structure, not intelligence. This matches "gate intelligence, not counts." *Find the thread* remains the Plus/Connect capability; a template can supply it a richer rollup prompt, but running it stays Plus.
@@ -161,29 +169,31 @@ At **new-project** creation (the name+goal sheet — reached from the inline row
 ### 7.3 What a template must never do
 Block capture, force a naming step, gate a memory behind "which day is this," or auto-file without disclosure. Perishability wins: capture stays one action from anywhere; templates shape *reflection*, never *capture*.
 
-## 8 · Phasing
+## 8 · Phasing (revised July 20 2026 — project-scoped output before lens-on-memory)
 
-- **Phase 0 (this doc):** design + ruling on open questions. No code.
-- **Phase 1 — binding + defaults (no AI):** `Project.templateId/version/lensCustomization` fields + migration + deploy; template picker at create; in-project prompts + cadence hints. Ships value without touching the organize prompt. Verifiable, low-risk.
-- **Phase 2 — the lens (AI):** prompt composition + per-template lens fragments + calibration fixtures; on-device + frontier. This is the load-bearing half; gated on Phase-1 stability and a green Honest-Label rubric per template.
-- **Phase 3 — rollup lenses:** template-specific *Find the thread* rollup prompts (route/highlights for trips, timeline for family history). Plus-tier.
-- **Phase 4 (Studio/Create, far):** final outputs — trip journal, photo book draft, shareable recap.
+Key reorder: **project-scoped intelligence (Find the thread) comes before any lens that touches a memory**, because it interprets the project without rewriting member memories (§6.3). Lens-on-canonical-memory is deferred to last and **gated on the edge carrier existing** (§4a).
+
+- **Phase 0 (this doc):** design + rulings. No code.
+- **Phase 1 — project pattern (no AI on memories):** `Project.templateId/version/structureCadence/lensCustomization` fields + migration + deploy; template picker at create; cadence hints + "continue today's memory" (builds on the existing `.createMemoryInProject` FAB path); suggested prompts. **Honest scope:** this is *foundation + modest UX value* — it improves project setup and daily continuation, but with automatic placement out (N3) and bench grouping unchanged (OQ-5) it does **not** by itself remove the 45-day shaping/placing repetition. Don't oversell it as the trip solution.
+- **Phase 2 — project intelligence (lens, project-scoped only):** template-aware *Find the thread* — trip route/highlights/recurring themes; family-history chronology + uncertainty; creative decisions + rejected directions. The lens lives here first because the output is the project rollup, not the memory. Plus-tier.
+- **Phase 3 — Create (Studio, far):** journal / essay outline / photo-book structure / recap.
+- **Phase 4 — project-scoped memory interpretation:** *only after* a memory×project edge carrier exists (§4a) to hold per-project derived interpretation/metadata. This is where a lens may finally shade an individual memory's view — on the edge, never on the canonical memory.
 
 ## 9 · Risks
 
 - **R1 · Lens vs. Honest Label.** A lens that emphasizes "story" can tip the model toward embellishment. Mitigation: additive-emphasis-only phrasing; core prompt leads; per-template rubric fixtures; ship a template's lens only when it passes the same calibration bar as the core.
 - **R2 · Rigid-workflow creep.** Templates could accrete required steps. Mitigation: N1 is a hard non-goal; every template affordance is ignorable by construction; review any template addition against "does this ever block a gesture?"
 - **R3 · Template versioning drift.** A catalog update could retro-change how old memories read. Mitigation: projects pin `templateVersion`; re-organize uses the pinned version unless the user opts into the new one (OQ-3).
-- **R4 · Multi-project lens ambiguity.** §6.3 rules it, but it needs a decision, not a guess (OQ-2).
+- **R4 · Multi-project lens ambiguity.** Resolved (§6.3 / OQ-2): lens never touches the canonical memory; project-scoped output only until the edge carrier exists.
 - **R5 · Scope gravity.** "Templates" invites endless template requests. Mitigation: ship 1–2 (trip + one other) as the proof; the catalog is versioned and additive so more come later without rework.
 
 ## 10 · Open questions (need rulings before Phase 1)
 
-- **OQ-1 · Launch set.** Which templates ship first? Recommendation: **Trip** (the proven use case) + **None**; add family-history/creative/health as fast-follows once the lens rubric holds.
-- **OQ-2 · Multi-project lens.** Confirm §6.3 (lens = invoking project's; generic surface = core-only), or prefer another rule.
-- **OQ-3 · Version pinning.** On a catalog update, do templated projects stay pinned to their creation-version lens (recommended) with an opt-in "use the updated lens," or float to latest?
-- **OQ-4 · Custom/user templates.** v-later: can users save their own template from a project? Out for the first cut; note if the data model should leave room (it does — `templateId` could point at a user-defined catalog entry in the private DB later).
-- **OQ-5 · Cadence enforcement strength.** Is the cadence purely a *suggestion* for the "continue today's memory" hint, or does it also bias clip grouping on the bench? Recommendation: suggestion only for v1 of templates; bench grouping stays time+place as today.
+- **OQ-1 · Launch set.** Ruled (July 20): **Trip + None**; family-history/creative/health as fast-follows once the lens rubric holds.
+- **OQ-2 · Multi-project lens.** Ruled (July 20): **reject** any invoking-project lens on the *canonical* memory — the last-reorganized project would win everywhere. Lenses apply only to **project-scoped output (Find the thread)** until the memory×project edge carrier exists (§6.3, §4a). Generic surface = core-only.
+- **OQ-3 · Version pinning.** Ruled (July 20): **pin** to the creation-version behavior; allow an explicit opt-in upgrade later; never silently change the meaning of existing projects.
+- **OQ-4 · Custom/user templates.** Ruled (July 20): **defer completely.** Keep `templateId` extensible (could point at a user-defined private-DB catalog entry later); design nothing now.
+- **OQ-5 · Cadence enforcement strength.** Ruled (July 20): **suggestion only** — drives the "continue today's memory" hint; bench grouping stays time+place, unchanged.
 
 ## 11 · What this doc does NOT change
 

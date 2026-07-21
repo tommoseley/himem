@@ -10,6 +10,13 @@
 
 ## BLOCKERS — must land before submit
 
+### RH-8 · Purge orphans media blobs in iCloud Files (CONFIRMED on device)
+After deleting everything on-device, **80 audio + 21 photos + 6 videos remained** in the iCloud Files container — purge deletes the `MediaReference`/`InboxClip` metadata but leaves the blob. A storage leak *and* a custody-hygiene problem (ghost files in the user's HiMem folder for clips they deleted).
+- **Fix every permanent-purge path** — `purgeClip`, `purgeExpiredRecycledClips`, the InboxClip tombstone purge, and RecycleBinView **"Empty"** — to delete the backing file via `UbiquityStore` (NSFileCoordinator-wrapped); no-op gracefully if the user already removed it (calm missing-file state, never an error).
+- **Soft-recycle and Restore must NOT touch blobs** — only *permanent* purge deletes; restore only re-points (blob still present because soft-recycle left it).
+- **One-time cleanup migration** for the already-orphaned blobs: match container files against live + recycled `MediaReference` (osIdentifier/path) + InboxClip staged files; delete the unreferenced remainder. **Guard hard**: a blob belonging to a *recycled-but-not-yet-purged* clip must never be swept. Report the orphan-detection predicate before running any destructive sweep.
+- Bug-First. Pure local + iCloud Files, **no CloudKit schema** — safe during Apple's migration.
+
 ### RH-1 · Notifications → passive-only (the one North-Star violation)
 **Ruling (Tom, July 20):** the whole passive rule, no finesse. Fix D1–D5:
 - **Delete** the burst (≥3/5min), inbox-threshold (>10), and stale (>24h unreviewed) notification classes entirely — do not preserve them because they exist. The stale-clip buzz is "the app raising the skipped thing," forbidden by the North Star and the App Store "no nudges" promise.

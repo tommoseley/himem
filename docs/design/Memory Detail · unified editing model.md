@@ -70,6 +70,18 @@ Dogfood surfaced the need: a clip lands in the wrong memory (mis-clustered by So
 
 *Specimen: `Himem · Memory Detail.html` § "Moving clips between memories" → `clip-move-sheet` + `clip-empty-after-move`.*
 
+## Adding clips to a memory — the in-memory FAB (locked July 20 2026)
+
+Dogfood surfaced the gap: a memory could lose clips (detach, move) but had no way to *add* one. The context-aware FAB rule already covers it — **+ creates/adds the unit of whatever collection you're looking at; inside a memory you're looking at a collection of clips, so + adds a clip to *this* memory.**
+
+Two paths (mirrors the in-project FAB's new-vs-add-existing sheet):
+- **Capture a new clip** (voice/photo/video/note) directly into this memory — the composer opens in this memory's context; on save the clip attaches here (no bench detour).
+- **Add existing clips** — the placement/picker sheet over the loose/Unconnected bench (reuse the same picker the clip's "Add to a memory" and the Unconnected multi-select use); selected clips attach.
+
+Mechanics: each added clip attaches via a new `MemoryClipEdge` (append semantics); memory `content` regenerates (`joinedContent`); **no auto-reorganize** (append never re-runs the organize pass — the summary stays until manual Reorganize, per the no-auto-reprocess rule). New clips append in `orderInMemory`/`capturedAt` order.
+
+**FAB must not overlap the bottom Delete button (build bug, see screenshot 2026-07-20).** The full-width **"Let Go of this Memory"** button owns the bottom of the scroll; the circular **+** currently floats over its right edge. Same class as the Clips multi-select overlap: **the FAB hides when the bottom Delete button is on screen** (i.e. the user has scrolled to the destructive footer) — the two never co-occupy the bottom-right. The FAB also already hides during any active text edit (rule 3 above); this extends the same discipline to the Delete footer.
+
 ## Committing an edit (accept / cancel) — by weight
 
 The commit model **scales with how much an edit can change**, so a person never wonders "does this one have a Cancel?":

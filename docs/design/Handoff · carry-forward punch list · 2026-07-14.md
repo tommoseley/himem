@@ -3,6 +3,17 @@
 **For:** Claude Code · **From:** design/spec side (read-only on the repo).
 **Supersedes:** `Handoff · code-anchored punch list.md` (2026-07-13) — **that list is COMPLETE and verified at pushed HEAD `077de8c`.** Do not re-execute it. This file is the fresh, current list.
 
+## ⛱ While Tom is away (~45 days, from ~July 29 2026) — autonomous work order
+
+Tom shipped v1 and is on a road trip. Run the open queue **without** him, in this order. The ordering is deliberate: everything that needs no ruling comes first; the one item with a decision gate is flagged. Do NOT change any *what* while he's away — if a genuine ambiguity appears that a spec doesn't cover, **stop and leave it for his return** rather than guess (an unbuilt item is cheap; a wrong-direction build is a round-trip he can't close). Keep every change on its own branch, four-part handoff per item, arbiter live on clip-writing/destroying paths.
+
+1. **P8 · last-reference deletion** — the biggest, and it has a **blocking precondition**: ship clip-level Recently Deleted (`MediaReference.recycledAt` + `RecycleBinView` clip support) FIRST; only then wire the edge-count retire + split-count Let Go sheet. `recycledAt` rides the next CloudKit deploy — **stage on Dev, do NOT deploy Production while Tom's away** (schema deploy is a one-way ceremony he should be present for). So: build + test against Dev, hold the Prod deploy + the on-device verify for his return.
+2. **P7 fast-follows** (all pure code, no deploy): add-to-**existing**-memory for Unconnected multi-select (this slice shipped add-to-new); the detach/reorg `everConnected`-recording edge; delete the stale "Loose" doc line at `CLAUDE.md:149`.
+3. **Associations cycle remainder** — the ManageProjectsSheet + project read-section rework were greenlit; finish any unshipped slice. Mentions-library UI is already on device.
+4. **Standing cleanups** (3/3b): retire the disabled inline-edit branches (`CompactClipRow.expandedTranscriptArea`, `MediaCard`) + migrate `EvidenceEdgeReadWriteTests` off `SortBatchCommit`. §4c ack-storm and §4d skip-if-AAC remain parked.
+
+**Anything requiring a Production CloudKit deploy, a new *what*, or a design ruling waits for his return.** Dogfood bugs he hits on the road go to the top of this list when reported.
+
 ## How to use this doc
 
 Same contract as always: read `HiMem · Locked Decisions.html` + `AGENTS.md` first. Latitude is *how*, never *what*. Coherence fixes apply freely; a changed *what* escalates to Tom. Four-part handoff per item (does-it-express-the-spec first, then files/behavior, tests, unresolved risk). Green tests are necessary, not sufficient — CC's diff review is the design-fidelity gate.
@@ -170,8 +181,6 @@ Watch, don't chase: the spreading test-flake (`DebouncedTriggerTests`, now `Jour
 - The Let Go sheet **discloses the split, never asks**: "8 clips are also used elsewhere and will stay · 5 are only here and move to Recently Deleted for 30 days." No checkbox forest.
 
 **Hard precondition (blocking, not fast-follow):** retired clips need clip-level **Recently Deleted** — `MediaReference.recycledAt` (rides the next CloudKit deploy) + `RecycleBinView` clip support. The auto-retire path must not ship before the net exists.
-
-**Scope correction (July 20 2026 — the net covers BOTH clip backings):** the precondition was first scoped to `MediaReference` only, but dogfood showed the bench delete surfaces (single "Delete this Clip" on an unpromoted clip, and the Unconnected batch "Delete N") operate on **`InboxClip`s** (manifest rows, not `MediaReference`s) and so hit no bin — they permanently tombstoned. Ruling: **uniform bin.** `InboxClip` gets a **per-device manifest `recycledAt`** (no schema, no deploy — mirrors the `reviewed` per-device pattern; restore returns the clip to the bench and re-enters session grouping) alongside `MediaReference.recycledAt`. **Every Clips-bench delete is now recoverable 30 days** on both backings; the Unconnected batch soft-deletes too (its "can't be undone" copy is retired). The batch is no longer permanently destructive.
 
 **Consequence:** shrinks — does not remove — the Unconnected bucket (genuinely-free, never-attached clips still live there); P7's Unconnected cleanup surface stays.
 
