@@ -97,7 +97,10 @@ struct PlaceClipSheet: View {
                 }
             }
         }
-        .presentationDetents([.fraction(0.68), .large])
+        // Default to full height: the "Add to a memory" picker is a
+        // searchable all-memories list; at 40+ memories it needs the room
+        // without a drag. `.large` first = the opening detent.
+        .presentationDetents([.large, .fraction(0.68)])
         .presentationDragIndicator(.visible)
     }
 
