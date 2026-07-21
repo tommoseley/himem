@@ -14,6 +14,25 @@ enum TypeScope: String, CaseIterable, Equatable {
     case video
 }
 
+/// Which object a search returns (`Himem · Search.html` §"Object scope").
+/// Default `.memories` — the narrative unit; a memory's searchable text
+/// already includes its clips' transcripts, so it covers spoken words.
+/// `.clips` surfaces matching clips directly (essential: a loose clip is
+/// invisible to a memory-only search). `.all` interleaves both.
+enum ObjectScope: String, CaseIterable, Equatable {
+    case memories
+    case clips
+    case all
+
+    var label: String {
+        switch self {
+        case .memories: return "Memories"
+        case .clips:    return "Clips"
+        case .all:      return "All"
+        }
+    }
+}
+
 enum ScopeParser {
 
     static func parse(_ raw: String, now: Date = Date(), calendar: Calendar = .current) -> ParsedQuery {

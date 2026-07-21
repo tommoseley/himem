@@ -5,6 +5,9 @@ struct SearchView: View {
     @StateObject private var voiceSpeech = SpeechService()
     @FocusState private var fieldFocused: Bool
     @State private var showVoice = false
+    /// A clip result tapped through — opens the unified Clip Editor
+    /// (`Himem · Search.html`: "a clip result taps through to the clip").
+    @State private var clipSource: ClipEditorModal.Source? = nil
 
     let onSelectEntry: (UUID) -> Void
     let onCaptureNewWith: (String) -> Void
@@ -36,12 +39,16 @@ struct SearchView: View {
                 VStack(spacing: 0) {
                     searchField
                     if viewModel.state == .results {
+                        ObjectScopeWhenBar(viewModel: viewModel)
                         ScopeChipsBar(viewModel: viewModel)
                     }
                     stateBody
                 }
                 .transition(.opacity)
             }
+        }
+        .sheet(item: $clipSource) { source in
+            ClipEditorModal(source: source)
         }
         .animation(.easeInOut(duration: 0.2), value: showVoice)
         .navigationBarTitleDisplayMode(.inline)
@@ -111,7 +118,8 @@ struct SearchView: View {
                        onSelectEntry: openEntry)
         case .results:
             ResultsBody(viewModel: viewModel,
-                        onSelectEntry: openEntry)
+                        onSelectEntry: openEntry,
+                        onSelectClip: { ref in clipSource = .managed(ref) })
         case .noResults:
             NoResultsBody(viewModel: viewModel,
                           onCapture: {
@@ -337,6 +345,7 @@ private struct FilterSuggestionsSection: View {
 private struct ResultsBody: View {
     @ObservedObject var viewModel: SearchViewModel
     let onSelectEntry: (UUID) -> Void
+    let onSelectClip: (MediaReference) -> Void
     @State private var showRecycled: Bool = false
 
     var body: some View {
@@ -346,32 +355,65 @@ private struct ResultsBody: View {
             // queries returning hundreds, it avoids materializing every row
             // and the snippet-highlight work behind it on first frame.
             LazyVStack(alignment: .leading, spacing: Crucible.Space.lg) {
-                if !viewModel.resultCountSummary.isEmpty {
-                    Text(viewModel.resultCountSummary)
-                        .font(.footnote)
-                        .foregroundStyle(Crucible.Color.ink3)
-                        .padding(.horizontal, Crucible.Space.lg)
+                if viewModel.objectScope == .memories {
+                    memoriesResults
+                } else {
+                    flatResults
                 }
-                ForEach(viewModel.groupedHits(), id: \.0) { group, list in
-                    VStack(alignment: .leading, spacing: Crucible.Space.sm) {
-                        SectionHeader(title: group.label)
-                            .padding(.horizontal, Crucible.Space.lg)
-                        ForEach(list) { hit in
-                            Button { onSelectEntry(hit.id) } label: {
-                                ResultRow(hit: hit, matchTerm: viewModel.parsedQuery.text)
-                                    .padding(.horizontal, Crucible.Space.lg)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                if !viewModel.recycledHits.isEmpty {
+                if viewModel.objectScope != .clips && !viewModel.recycledHits.isEmpty {
                     recycledSection
                 }
                 FilterSuggestionsSection(viewModel: viewModel)
                     .padding(.horizontal, Crucible.Space.lg)
             }
             .padding(.vertical, Crucible.Space.md)
+        }
+    }
+
+    /// Memories scope — grouped by date bucket (the reflective view).
+    @ViewBuilder
+    private var memoriesResults: some View {
+        if !viewModel.resultCountSummary.isEmpty {
+            Text(viewModel.resultCountSummary)
+                .font(.footnote)
+                .foregroundStyle(Crucible.Color.ink3)
+                .padding(.horizontal, Crucible.Space.lg)
+        }
+        ForEach(viewModel.groupedHits(), id: \.0) { group, list in
+            VStack(alignment: .leading, spacing: Crucible.Space.sm) {
+                SectionHeader(title: group.label)
+                    .padding(.horizontal, Crucible.Space.lg)
+                ForEach(list) { hit in
+                    Button { onSelectEntry(hit.id) } label: {
+                        ResultRow(hit: hit, matchTerm: viewModel.parsedQuery.text)
+                            .padding(.horizontal, Crucible.Space.lg)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// Clips / All scopes — a flat list, relevance-first then recency,
+    /// clips interleaved with memories (All). A clip taps through to the
+    /// clip; a memory to the memory.
+    @ViewBuilder
+    private var flatResults: some View {
+        ForEach(viewModel.flatResults) { item in
+            switch item {
+            case .memory(let hit):
+                Button { onSelectEntry(hit.id) } label: {
+                    ResultRow(hit: hit, matchTerm: viewModel.parsedQuery.text)
+                        .padding(.horizontal, Crucible.Space.lg)
+                }
+                .buttonStyle(.plain)
+            case .clip(let clipHit):
+                Button { onSelectClip(clipHit.ref) } label: {
+                    ClipResultRow(hit: clipHit, matchTerm: viewModel.parsedQuery.text)
+                        .padding(.horizontal, Crucible.Space.lg)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -672,6 +714,249 @@ private struct ResultRow: View {
             return Text(highlight(String(hit.entry.content.prefix(140)), term: matchTerm))
         }
         return Text(String(hit.entry.content.prefix(140)))
+    }
+}
+
+// MARK: - Object scope + When facets (Himem · Search.html)
+
+private struct ObjectScopeWhenBar: View {
+    @ObservedObject var viewModel: SearchViewModel
+    @State private var showWhen = false
+
+    var body: some View {
+        HStack(spacing: Crucible.Space.sm) {
+            // Object scope — Memories · Clips · All (default Memories).
+            HStack(spacing: 2) {
+                ForEach(ObjectScope.allCases, id: \.self) { scope in
+                    let active = viewModel.objectScope == scope
+                    Button { viewModel.setObjectScope(scope) } label: {
+                        Text(scope.label)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(active ? .white : Crucible.Color.ink2)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(active ? Crucible.Color.accent : Color.clear)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(3)
+            .background(Crucible.Color.sunk)
+            .clipShape(Capsule())
+
+            Spacer(minLength: 0)
+
+            whenChip
+        }
+        .padding(.horizontal, Crucible.Space.lg)
+        .padding(.bottom, Crucible.Space.sm)
+    }
+
+    private var whenChip: some View {
+        let active = viewModel.whenRange != nil
+        return HStack(spacing: 0) {
+            Button { showWhen = true } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(viewModel.whenLabel.map { "When: \($0)" } ?? "When")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(active ? .white : Crucible.Color.ink2)
+                .padding(.leading, 12)
+                .padding(.trailing, active ? 6 : 12)
+                .padding(.vertical, 7)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showWhen) {
+                WhenPopover(viewModel: viewModel, isPresented: $showWhen)
+                    .presentationCompactAdaptation(.popover)
+            }
+            if active {
+                Button { viewModel.clearWhen() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(.trailing, 9)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear date range")
+            }
+        }
+        .background(active ? Crucible.Color.accent : Crucible.Color.sunk)
+        .clipShape(Capsule())
+    }
+}
+
+private struct WhenPopover: View {
+    @ObservedObject var viewModel: SearchViewModel
+    @Binding var isPresented: Bool
+
+    @State private var showCustom = false
+    @State private var customFrom = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
+    @State private var customTo = Date()
+
+    private var currentYear: Int { Calendar.current.component(.year, from: Date()) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                presetRow("Any time", range: nil)
+                presetRow("This year", range: Self.yearInterval(currentYear))
+                presetRow("Last year", range: Self.yearInterval(currentYear - 1))
+                // Individual years from the Memory Box span, older than
+                // "Last year" (which has its own preset).
+                ForEach(viewModel.whenYearPresets.filter { $0 <= currentYear - 2 }, id: \.self) { year in
+                    presetRow(String(year), range: Self.yearInterval(year))
+                }
+
+                Divider().padding(.vertical, 6)
+
+                DisclosureGroup(isExpanded: $showCustom) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        DatePicker("From", selection: $customFrom, displayedComponents: .date)
+                        DatePicker("To", selection: $customTo, displayedComponents: .date)
+                        Button { applyCustom() } label: {
+                            Text("Apply range")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Crucible.Color.accent)
+                                .frame(maxWidth: .infinity, minHeight: 40)
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .font(.system(size: 13))
+                    .padding(.top, 6)
+                } label: {
+                    Text("Custom range")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.ink)
+                }
+                .tint(Crucible.Color.ink2)
+            }
+            .padding(16)
+        }
+        .frame(width: 280)
+        .frame(maxHeight: 420)
+    }
+
+    private func presetRow(_ label: String, range: DateInterval?) -> some View {
+        let isActive = (range == nil && viewModel.whenRange == nil)
+            || (range != nil && viewModel.whenRange == range)
+        return Button {
+            viewModel.setWhen(range: range, label: range == nil ? nil : label)
+            isPresented = false
+        } label: {
+            HStack {
+                Text(label)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Crucible.Color.ink)
+                Spacer()
+                if isActive {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.accent)
+                }
+            }
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func applyCustom() {
+        let cal = Calendar.current
+        let lo = min(customFrom, customTo)
+        let hi = max(customFrom, customTo)
+        let start = cal.startOfDay(for: lo)
+        // Inclusive of the "to" day → end is the start of the following day.
+        let end = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: hi)) ?? hi
+        let f = DateFormatter(); f.dateFormat = "MMM d, yyyy"
+        let label = "\(f.string(from: lo)) – \(f.string(from: hi))"
+        viewModel.setWhen(range: DateInterval(start: start, end: end), label: label)
+        isPresented = false
+    }
+
+    static func yearInterval(_ year: Int) -> DateInterval {
+        var comps = DateComponents(); comps.year = year; comps.month = 1; comps.day = 1
+        let cal = Calendar.current
+        let start = cal.date(from: comps) ?? Date()
+        let end = cal.date(byAdding: .year, value: 1, to: start) ?? start
+        return DateInterval(start: start, end: end)
+    }
+}
+
+// MARK: - Clip result row (Clips / All scopes)
+
+private struct ClipResultRow: View {
+    let hit: SearchEngine.ClipHit
+    let matchTerm: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: clipGlyph)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink3)
+                Text(clipKind)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink)
+                Text("·")
+                    .foregroundStyle(Crucible.Color.ink4)
+                Text(hit.status)
+                    .font(.system(size: 12))
+                    .foregroundStyle(hit.ref.referencingMemoryCount == 0 ? Crucible.Color.warn : Crucible.Color.ink3)
+            }
+
+            snippetText
+                .font(.system(size: 13))
+                .foregroundStyle(Crucible.Color.ink2)
+                .lineSpacing(2)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+
+            Text(relativeLabel(for: hit.ref.createdAt ?? .distantPast))
+                .font(.system(size: 11.5))
+                .foregroundStyle(Crucible.Color.ink3)
+                .monospacedDigit()
+                .padding(.top, 1)
+        }
+        .padding(.vertical, 11)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Crucible.Color.divider).frame(height: 0.5)
+        }
+    }
+
+    private var clipGlyph: String {
+        switch hit.ref.mediaTypeEnum {
+        case .voice: return "waveform"
+        case .note:  return "text.alignleft"
+        case .image: return "photo"
+        case .video: return "video"
+        }
+    }
+
+    private var clipKind: String {
+        switch hit.ref.mediaTypeEnum {
+        case .voice: return "Voice clip"
+        case .note:  return "Note"
+        case .image: return "Photo"
+        case .video: return "Video"
+        }
+    }
+
+    private var snippetText: Text {
+        if let snippet = hit.snippet {
+            return Text(highlight(snippet.text, term: snippet.matchTerm))
+        }
+        let body = hit.ref.transcript ?? hit.ref.text ?? hit.ref.mediaDescription ?? ""
+        if !matchTerm.isEmpty {
+            return Text(highlight(String(body.prefix(140)), term: matchTerm))
+        }
+        return Text(String(body.prefix(140)))
     }
 }
 
