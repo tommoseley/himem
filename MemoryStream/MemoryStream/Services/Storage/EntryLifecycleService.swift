@@ -813,12 +813,21 @@ final class EntryLifecycleService {
             guard let entry = try fetchEntry(id: entryId) else { return 0 }
             let ctx = storage.viewContext
             let now = Date()
-            var attached = 0
-            for clipId in clipIds {
+            // Resolve the selected clips, drop missing/recycled, and
+            // append in capturedAt order — spec: "New clips append in
+            // orderInMemory/capturedAt order" (`Memory Detail · unified
+            // editing model.md` §"Adding clips to a memory"), the same
+            // chronological bulk-append `appendClips` does. The order the
+            // user tapped clips in the picker does not determine placement.
+            let refs: [MediaReference] = clipIds.compactMap { clipId in
                 let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
                 req.predicate = NSPredicate(format: "id == %@", clipId as CVarArg)
                 req.fetchLimit = 1
-                guard let ref = try ctx.fetch(req).first, ref.recycledAt == nil else { continue }
+                guard let ref = try? ctx.fetch(req).first, ref.recycledAt == nil else { return nil }
+                return ref
+            }.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
+            var attached = 0
+            for ref in refs {
                 let before = entry.edgesArray.count
                 try StorageService.createEdge(from: entry, to: ref, linkedAt: now, in: ctx)
                 if entry.edgesArray.count > before { attached += 1 }

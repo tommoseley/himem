@@ -131,6 +131,29 @@ struct MemoryAddExistingClipsTests {
         #expect(refreshed.content == "the original clip\n\nfirst added\n\nsecond added")
     }
 
+    /// Spec (`Memory Detail · unified editing model.md` §"Adding clips
+    /// to a memory"): "New clips append in `orderInMemory`/**capturedAt**
+    /// order" — same chronological bulk-append as `appendClips`, NOT the
+    /// order the user happened to tap them. Select newer-then-older; they
+    /// must still land oldest-first after the memory's existing clips.
+    @Test func attachExistingClips_appendsInCapturedAtOrder_notTapOrder() throws {
+        let (storage, service) = makeService()
+        let organizedAt = Date()
+        let entry = try seedOrganizedMemory(in: storage, organizedAt: organizedAt)
+
+        // older = -300, newer = -100.
+        let older = try makeLooseClip(in: storage, filename: "older.caf", transcript: "older", createdAt: organizedAt.addingTimeInterval(-300))
+        let newer = try makeLooseClip(in: storage, filename: "newer.caf", transcript: "newer", createdAt: organizedAt.addingTimeInterval(-100))
+
+        // User taps NEWER first, then OLDER.
+        let n = service.attachExistingClips(entryId: entry.id, clipIds: [newer.id, older.id])
+        #expect(n == 2)
+
+        let refreshed = try #require(fetchEntry(entry.id, in: storage))
+        let orderedIds = refreshed.edgesArray.map { $0.clip?.osIdentifier }
+        #expect(orderedIds == ["orig.caf", "older.caf", "newer.caf"], "Appended clips order by capturedAt, not tap order")
+    }
+
     /// The regression guard: `attachExistingClips` must NOT queue a
     /// ProcessingTask. If someone "simplifies" it onto `append()`, this
     /// fails — `append()` reprocesses and (on Plus) auto-organizes,
