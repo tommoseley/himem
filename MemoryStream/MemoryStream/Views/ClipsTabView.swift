@@ -888,6 +888,28 @@ enum ClipsListItem: Identifiable {
     }
 }
 
+extension MediaReference {
+    /// Adapts a bench clip to the `MediaDisplayItem` the shared
+    /// Memory-Detail cards (`CompactClipRow` / `MediaCard`) consume, so
+    /// the bench renders through the exact same components — one clip
+    /// pattern, no drift (convergence 2026-07-22).
+    var displayItem: MediaDisplayItem {
+        MediaDisplayItem(
+            id: id,
+            localIdentifier: osIdentifier,
+            mediaType: mediaTypeEnum,
+            thumbnailCacheFilename: thumbnailCacheFilename,
+            isAccessible: isAccessible,
+            transcript: transcript,
+            text: text,
+            mediaDescription: mediaDescription,
+            createdAt: createdAt ?? .distantPast,
+            placeName: placeName,
+            referencingMemoryCount: referencingMemoryCount
+        )
+    }
+}
+
 // MARK: - Row dispatch
 
 /// Dispatches a `ClipsListItem` to the right row component. Wrapped in
@@ -895,10 +917,10 @@ enum ClipsListItem: Identifiable {
 /// pushes ClipDetailView on tap.
 struct ClipsListItemRow: View {
     let item: ClipsListItem
-    /// The boxed ✎ Edit opens the unified `ClipEditorModal`. On a single
-    /// clip it edits that clip; on an expanded burst each per-clip ✎ opens
-    /// its own clip. A burst carries NO top-level ✎ (July 22 2026 — kills
-    /// the clip-1 `refs.first` bug).
+    /// The boxed ✎ Edit opens the unified `ClipEditorModal`. It lives
+    /// INSIDE the shared card (`CompactClipRow` / `MediaCard`), never
+    /// floating outside — and a burst carries no top-level ✎ (each
+    /// per-clip card has its own).
     let onOpen: (MediaReference) -> Void
     /// P7-4 multi-select. Non-nil = this list supports selecting; the
     /// leading circle appears (and the whole row toggles) only in mode.
@@ -907,73 +929,91 @@ struct ClipsListItemRow: View {
     var isExpanded: Bool = false
     var onToggleExpand: () -> Void = {}
 
-    private var singleRef: MediaReference? {
-        if case .single(let ref) = item { return ref }
-        return nil
-    }
+    // Consume surfaces, presented per-row (only the tapped row fires).
+    @State private var photoViewerItem: MediaDisplayItem? = nil
+    @State private var videoViewerItem: MediaDisplayItem? = nil
+    @ObservedObject private var audioPlayer = AudioPlayerService.shared
 
     var body: some View {
-        if selection.selecting {
-            // Selecting mode: the whole row is one toggle target; the ✎
-            // edit affordance stands down (Photos-style).
-            Button { selection.toggleAll(item.refIds) } label: {
-                HStack(spacing: 10) {
-                    DragSelectCircle(checked: selection.isChecked(all: item.refIds), selection: selection)
-                    rowCore.frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .reportsClipRowFrame(item.refIds, enabled: true)
-        } else {
-            VStack(spacing: 0) {
-                collapsedRow
-                if isExpanded {
-                    expandedContent
-                }
-            }
-        }
-    }
-
-    /// The collapsed row: the media/text core (tap-to-expand when the item
-    /// is expandable), a disclosure carat for expandable items, and a
-    /// top-level ✎ for singles only.
-    private var collapsedRow: some View {
-        HStack(spacing: 8) {
-            if item.isExpandable {
-                // Carat + card-body tap both expand (single-open accordion).
-                Button { toggle() } label: {
-                    rowCore
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+        Group {
+            if selection.selecting {
+                // Selecting mode keeps the dense compact rows — the whole
+                // row is one toggle target; the ✎ stands down (Photos-style).
+                Button { selection.toggleAll(item.refIds) } label: {
+                    HStack(spacing: 10) {
+                        DragSelectCircle(checked: selection.isChecked(all: item.refIds), selection: selection)
+                        selectingCore.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                ClipsRowDisclosureCaret(isExpanded: isExpanded, action: toggle)
+                .reportsClipRowFrame(item.refIds, enabled: true)
             } else {
-                rowCore.frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if item.hasTopLevelEdit, let ref = singleRef {
-                ClipEditButton(action: { onOpen(ref) })
+                convergedCard
             }
         }
+        .fullScreenCover(item: $photoViewerItem) { PhotoViewerSheet(item: $0) }
+        .fullScreenCover(item: $videoViewerItem) { VideoPlayerSheet(item: $0) }
     }
 
-    @ViewBuilder private var expandedContent: some View {
+    /// The bench clip rendered through the SAME Memory-Detail cards — so
+    /// the user reads them as one object (convergence 2026-07-22):
+    /// voice/note → `CompactClipRow` (compact collapse → transcript
+    /// in-envelope, ✎ inside); photo/video → `MediaCard` (banner + PHOTO
+    /// badge, ✎ inside); a burst stays a dense strip that expands to its
+    /// clips as per-clip `MediaCard`s.
+    @ViewBuilder private var convergedCard: some View {
         switch item {
         case .single(let ref):
-            // Voice/note only reach here (isExpandable) — full transcript.
-            ClipsRowTranscriptExpand(ref: ref)
+            switch ref.mediaTypeEnum {
+            case .voice, .note:
+                CompactClipRow(
+                    item: ref.displayItem,
+                    isOpen: isExpanded,
+                    onTap: { toggle() },
+                    onPlay: ref.mediaTypeEnum == .voice ? { playAudio(ref) } : nil,
+                    onDelete: {},   // never rendered: onEdit routes edit/delete to the modal
+                    onEdit: { onOpen(ref) },
+                    isPlaying: isPlaying(ref)
+                )
+            case .image, .video:
+                mediaCard(ref)
+            }
         case .burst(let refs):
-            // All N clips as per-clip rows, each with its own ✎ → modal.
-            ClipsRowBurstExpand(refs: refs, onOpen: onOpen)
+            burstCard(refs)
         }
     }
 
-    private func toggle() {
-        withAnimation(.easeOut(duration: 0.22)) { onToggleExpand() }
+    private func mediaCard(_ ref: MediaReference) -> some View {
+        MediaCard(
+            item: ref.displayItem,
+            onPlayVideo: ref.mediaTypeEnum == .video ? { videoViewerItem = ref.displayItem } : nil,
+            onViewPhoto: ref.mediaTypeEnum == .image ? { photoViewerItem = ref.displayItem } : nil,
+            onEdit: { onOpen(ref) }
+        )
     }
 
-    @ViewBuilder private var rowCore: some View {
+    /// A media burst: a dense strip that expands (carat / card-body tap) to
+    /// its clips as full per-clip `MediaCard`s, each with its own ✎. The
+    /// collapsed strip is the one place the bench stays denser than Memory
+    /// Detail — a 12-photo day must not open as 12 banners.
+    @ViewBuilder private func burstCard(_ refs: [MediaReference]) -> some View {
+        VStack(spacing: 8) {
+            Button { toggle() } label: {
+                BurstRow(refs: refs, isExpanded: isExpanded)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if isExpanded {
+                ForEach(refs, id: \.id) { ref in
+                    mediaCard(ref)
+                }
+            }
+        }
+    }
+
+    /// Dense rows used only in selecting mode (multi-select density).
+    @ViewBuilder private var selectingCore: some View {
         switch item {
         case .single(let ref):
             if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
@@ -985,71 +1025,18 @@ struct ClipsListItemRow: View {
             BurstRow(refs: refs)
         }
     }
-}
 
-/// The expand/collapse carat on a flat Clips row — a down-chevron that
-/// rotates to up when open. Distinct from the ✎ (edit): carat = expand.
-private struct ClipsRowDisclosureCaret: View {
-    let isExpanded: Bool
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "chevron.down")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Crucible.Color.ink3)
-                .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isExpanded ? "Collapse" : "Expand")
+    private func toggle() {
+        withAnimation(.easeOut(duration: 0.22)) { onToggleExpand() }
     }
-}
 
-/// A single voice/note row's full transcript, revealed in place on expand.
-private struct ClipsRowTranscriptExpand: View {
-    @ObservedObject var ref: MediaReference
-    var body: some View {
-        let text = (ref.mediaTypeEnum == .note ? ref.text : ref.transcript)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        Text(text.isEmpty ? "No transcript yet." : "\u{201C}\(text)\u{201D}")
-            .font(.system(size: 14))
-            .lineSpacing(2)
-            .foregroundStyle(text.isEmpty ? Crucible.Color.ink3 : Crucible.Color.ink)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 13)
-            .padding(.top, 2)
-            .padding(.bottom, 12)
+    private func isPlaying(_ ref: MediaReference) -> Bool {
+        audioPlayer.isPlaying && audioPlayer.currentFile == ref.osIdentifier
     }
-}
 
-/// A media burst's clips, revealed in place on expand — one row per clip
-/// (thumbnail · type · time) with its own boxed ✎ → the Clip Editor. This
-/// is how a session is edited per-clip, never clip-1-only.
-private struct ClipsRowBurstExpand: View {
-    let refs: [MediaReference]
-    let onOpen: (MediaReference) -> Void
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(refs.enumerated()), id: \.element.id) { idx, ref in
-                if idx > 0 {
-                    Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
-                }
-                HStack(spacing: 8) {
-                    ClipAtomView(
-                        model: ClipDisplayModel(mediaReference: ref, duration: nil, sessionStart: ref.createdAt),
-                        register: .operational,
-                        isDenseContainer: true
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    ClipEditButton(action: { onOpen(ref) })
-                }
-                .padding(.vertical, 5)
-            }
-        }
-        .padding(.horizontal, 13)
-        .padding(.top, 4)
-        .padding(.bottom, 10)
+    private func playAudio(_ ref: MediaReference) {
+        if isPlaying(ref) { audioPlayer.stop() }
+        else { audioPlayer.play(filename: ref.osIdentifier) }
     }
 }
 
@@ -1274,6 +1261,9 @@ struct MediaClipRow: View {
 /// the "wall of identical Photo rows" dogfood failure.
 struct BurstRow: View {
     let refs: [MediaReference]
+    /// Non-nil in the accordion (a media burst that expands to its clips):
+    /// renders an in-card rotating carat. Nil in selecting mode (no carat).
+    var isExpanded: Bool? = nil
     @State private var thumbnails: [UUID: UIImage] = [:]
 
     var body: some View {
@@ -1336,6 +1326,13 @@ struct BurstRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            if let isExpanded {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .accessibilityLabel(isExpanded ? "Collapse" : "Expand")
+            }
         }
     }
 

@@ -67,4 +67,37 @@ struct ClipsListItemAffordanceTests {
         #expect(item.isExpandable == false)
         #expect(item.hasTopLevelEdit == true)
     }
+
+    /// The convergence adapter (2026-07-22): the bench renders through the
+    /// shared Memory-Detail cards (`CompactClipRow` / `MediaCard`) via
+    /// `MediaReference.displayItem`. If this mapping drifts, the shared
+    /// cards get wrong data — guard every field the cards read.
+    @Test func displayItem_mapsAllFieldsForSharedCards() {
+        let s = StorageService(inMemory: true)
+        let r = ref(s, .voice, at: Date(timeIntervalSince1970: 1_700_000_000))
+        r.transcript = "hello world"
+        r.mediaDescription = nil
+        r.placeName = "Kingfisher Wharf"
+        try! s.viewContext.save()
+
+        let d = r.displayItem
+        #expect(d.id == r.id)
+        #expect(d.localIdentifier == r.osIdentifier)
+        #expect(d.mediaType == .voice)
+        #expect(d.transcript == "hello world")
+        #expect(d.placeName == "Kingfisher Wharf")
+        #expect(d.createdAt == r.createdAt)
+        #expect(d.isAccessible == r.isAccessible)
+    }
+
+    @Test func displayItem_photo_carriesDescriptionAndType() {
+        let s = StorageService(inMemory: true)
+        let r = ref(s, .image, at: Date())
+        r.mediaDescription = "sunset over the harbor"
+        try! s.viewContext.save()
+
+        let d = r.displayItem
+        #expect(d.mediaType == .image)
+        #expect(d.mediaDescription == "sunset over the harbor")
+    }
 }
