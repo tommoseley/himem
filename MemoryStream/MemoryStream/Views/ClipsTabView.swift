@@ -46,6 +46,8 @@ struct ClipsTabView: View {
     /// The clip being edited in the unified `ClipEditorModal` sheet (Clip-editor
     /// cycle 2) — supersedes the pushed `ClipDetailView` for the bench.
     @State private var editingClip: ClipEditorModal.Source?
+    /// Single-open accordion for the New view's loose-clip flat stack.
+    @State private var expandedUnplacedItemId: String? = nil
     /// Coalesces a burst of `NSManagedObjectContextObjectsDidChange`
     /// notifications (which flood the main thread during CloudKit
     /// import waves around freshly-arrived watch clips) into a
@@ -437,7 +439,15 @@ struct ClipsTabView: View {
                 DayHeader(date: group.day)
                 VStack(spacing: 8) {
                     ForEach(ClipsListItem.group(refs: group.refs)) { item in
-                        ClipsListItemRow(item: item, onOpen: { editingClip = .managed($0) }, selection: selection)
+                        ClipsListItemRow(
+                            item: item,
+                            onOpen: { editingClip = .managed($0) },
+                            selection: selection,
+                            isExpanded: expandedUnplacedItemId == item.id,
+                            onToggleExpand: {
+                                expandedUnplacedItemId = (expandedUnplacedItemId == item.id) ? nil : item.id
+                            }
+                        )
                     }
                 }
             }
@@ -808,6 +818,30 @@ enum ClipsListItem: Identifiable {
         }
     }
 
+    /// Whether the carat expands the row in place (single-open accordion,
+    /// July 22 2026). A **single voice/note** expands to its full
+    /// transcript; a **media burst** expands to its N clips. A single
+    /// photo/video has no transcript to reveal in place — its ✎ opens the
+    /// modal directly.
+    var isExpandable: Bool {
+        switch self {
+        case .burst: return true
+        case .single(let ref): return ref.mediaTypeEnum == .voice || ref.mediaTypeEnum == .note
+        }
+    }
+
+    /// Whether the collapsed row carries a top-level ✎ that edits one
+    /// clip. A **burst never does** — editing a burst is per-clip inside
+    /// the expanded accordion, never a silent clip-1 (the July 22 bug: a
+    /// session-level ✎ deterministically opened `refs.first`). A single
+    /// clip's ✎ edits that clip directly.
+    var hasTopLevelEdit: Bool {
+        switch self {
+        case .burst:  return false
+        case .single: return true
+        }
+    }
+
     /// Walks refs (assumed sorted newest-first) and coalesces
     /// contiguous photo/video runs whose adjacent captures land within
     /// 60 seconds of one another **and** share a placeName. Voice
@@ -861,13 +895,22 @@ enum ClipsListItem: Identifiable {
 /// pushes ClipDetailView on tap.
 struct ClipsListItemRow: View {
     let item: ClipsListItem
-    /// The boxed ✎ Edit opens the unified `ClipEditorModal` (2026-07-17: ✎ Edit
-    /// is the one edit affordance; the row body is non-interactive — no
-    /// whole-row-to-edit).
+    /// The boxed ✎ Edit opens the unified `ClipEditorModal`. On a single
+    /// clip it edits that clip; on an expanded burst each per-clip ✎ opens
+    /// its own clip. A burst carries NO top-level ✎ (July 22 2026 — kills
+    /// the clip-1 `refs.first` bug).
     let onOpen: (MediaReference) -> Void
     /// P7-4 multi-select. Non-nil = this list supports selecting; the
     /// leading circle appears (and the whole row toggles) only in mode.
     @ObservedObject var selection: ClipsSelection
+    /// Single-open accordion state, owned by the list container.
+    var isExpanded: Bool = false
+    var onToggleExpand: () -> Void = {}
+
+    private var singleRef: MediaReference? {
+        if case .single(let ref) = item { return ref }
+        return nil
+    }
 
     var body: some View {
         if selection.selecting {
@@ -883,11 +926,51 @@ struct ClipsListItemRow: View {
             .buttonStyle(.plain)
             .reportsClipRowFrame(item.refIds, enabled: true)
         } else {
-            HStack(spacing: 8) {
-                rowCore.frame(maxWidth: .infinity, alignment: .leading)
-                ClipEditButton(action: { onOpen(primaryRef) })
+            VStack(spacing: 0) {
+                collapsedRow
+                if isExpanded {
+                    expandedContent
+                }
             }
         }
+    }
+
+    /// The collapsed row: the media/text core (tap-to-expand when the item
+    /// is expandable), a disclosure carat for expandable items, and a
+    /// top-level ✎ for singles only.
+    private var collapsedRow: some View {
+        HStack(spacing: 8) {
+            if item.isExpandable {
+                // Carat + card-body tap both expand (single-open accordion).
+                Button { toggle() } label: {
+                    rowCore
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                ClipsRowDisclosureCaret(isExpanded: isExpanded, action: toggle)
+            } else {
+                rowCore.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if item.hasTopLevelEdit, let ref = singleRef {
+                ClipEditButton(action: { onOpen(ref) })
+            }
+        }
+    }
+
+    @ViewBuilder private var expandedContent: some View {
+        switch item {
+        case .single(let ref):
+            // Voice/note only reach here (isExpandable) — full transcript.
+            ClipsRowTranscriptExpand(ref: ref)
+        case .burst(let refs):
+            // All N clips as per-clip rows, each with its own ✎ → modal.
+            ClipsRowBurstExpand(refs: refs, onOpen: onOpen)
+        }
+    }
+
+    private func toggle() {
+        withAnimation(.easeOut(duration: 0.22)) { onToggleExpand() }
     }
 
     @ViewBuilder private var rowCore: some View {
@@ -902,13 +985,71 @@ struct ClipsListItemRow: View {
             BurstRow(refs: refs)
         }
     }
+}
 
-    /// The ref the ✎ edit opens (the single, or a burst's first).
-    private var primaryRef: MediaReference {
-        switch item {
-        case .single(let ref): return ref
-        case .burst(let refs):  return refs.first!
+/// The expand/collapse carat on a flat Clips row — a down-chevron that
+/// rotates to up when open. Distinct from the ✎ (edit): carat = expand.
+private struct ClipsRowDisclosureCaret: View {
+    let isExpanded: Bool
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink3)
+                .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "Collapse" : "Expand")
+    }
+}
+
+/// A single voice/note row's full transcript, revealed in place on expand.
+private struct ClipsRowTranscriptExpand: View {
+    @ObservedObject var ref: MediaReference
+    var body: some View {
+        let text = (ref.mediaTypeEnum == .note ? ref.text : ref.transcript)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        Text(text.isEmpty ? "No transcript yet." : "\u{201C}\(text)\u{201D}")
+            .font(.system(size: 14))
+            .lineSpacing(2)
+            .foregroundStyle(text.isEmpty ? Crucible.Color.ink3 : Crucible.Color.ink)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 13)
+            .padding(.top, 2)
+            .padding(.bottom, 12)
+    }
+}
+
+/// A media burst's clips, revealed in place on expand — one row per clip
+/// (thumbnail · type · time) with its own boxed ✎ → the Clip Editor. This
+/// is how a session is edited per-clip, never clip-1-only.
+private struct ClipsRowBurstExpand: View {
+    let refs: [MediaReference]
+    let onOpen: (MediaReference) -> Void
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(refs.enumerated()), id: \.element.id) { idx, ref in
+                if idx > 0 {
+                    Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
+                }
+                HStack(spacing: 8) {
+                    ClipAtomView(
+                        model: ClipDisplayModel(mediaReference: ref, duration: nil, sessionStart: ref.createdAt),
+                        register: .operational,
+                        isDenseContainer: true
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    ClipEditButton(action: { onOpen(ref) })
+                }
+                .padding(.vertical, 5)
+            }
+        }
+        .padding(.horizontal, 13)
+        .padding(.top, 4)
+        .padding(.bottom, 10)
     }
 }
 
@@ -953,10 +1094,6 @@ struct LooseClipRow: View {
                 }
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Crucible.Color.ink4)
-                .padding(.top, 2)
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 11)
@@ -1065,9 +1202,6 @@ struct MediaClipRow: View {
                 }
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Crucible.Color.ink4)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 9)
@@ -1202,9 +1336,6 @@ struct BurstRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Crucible.Color.ink4)
         }
     }
 
@@ -1359,6 +1490,8 @@ struct FlatClipsListView: View {
     /// CloudKit-import notification bursts into a single main-thread
     /// fetch. See `DebouncedTrigger`.
     @State private var groupsReload = DebouncedTrigger(interval: .milliseconds(250))
+    /// Single-open accordion: at most one flat row expanded at a time.
+    @State private var expandedItemId: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -1366,7 +1499,15 @@ struct FlatClipsListView: View {
                 DayHeader(date: group.day)
                 VStack(spacing: 8) {
                     ForEach(ClipsListItem.group(refs: group.refs)) { item in
-                        ClipsListItemRow(item: item, onOpen: onOpen, selection: selection)
+                        ClipsListItemRow(
+                            item: item,
+                            onOpen: onOpen,
+                            selection: selection,
+                            isExpanded: expandedItemId == item.id,
+                            onToggleExpand: {
+                                expandedItemId = (expandedItemId == item.id) ? nil : item.id
+                            }
+                        )
                     }
                 }
             }
