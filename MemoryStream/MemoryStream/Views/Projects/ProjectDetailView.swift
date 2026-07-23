@@ -54,6 +54,10 @@ struct ProjectDetailView: View {
     @StateObject private var suggestionsVM = ProjectSuggestionsViewModel()
     @StateObject private var assistVM = ProjectAssistViewModel()
     @ObservedObject private var entitlement = Entitlement.shared
+    /// Whether the current thread summary has been kept (Draft → committed).
+    /// Per-device via `ProjectThreadReviewStore`, keyed on the summary's
+    /// generated-at, so a re-run resets it. Recomputed on load and on keep.
+    @State private var summaryKept = false
 
     private let storage = StorageService.shared
 
@@ -383,6 +387,18 @@ struct ProjectDetailView: View {
         }
     }
 
+    /// Commits the current thread summary Draft → kept: records the keep
+    /// against this summary's generated-at (per-device) and drops the "give
+    /// this a glance" eyebrow. The summary text itself already persisted on
+    /// generation, so nothing is written to the project here — only the
+    /// review state advances, mirroring Memory Detail's "Keep this version".
+    private func handleKeepSummary() {
+        ProjectThreadReviewStore.markKept(
+            projectId: projectId, generatedAt: project?.lastThreadGeneratedAt
+        )
+        summaryKept = true
+    }
+
     /// "Find the thread" card — Project Assist entry point.
     /// Card with a 36-square AI-tint icon on the left, title +
     /// sub-line stacked in the middle, "Run" pill on the right.
@@ -532,10 +548,14 @@ struct ProjectDetailView: View {
                     Spacer(minLength: 8)
                     // Review-state label per the unified spec: AI-blue,
                     // quiet (never a button). Mirrors the "Draft
-                    // organized" pattern on Memory Detail.
-                    Text("Draft · give this a glance")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.aiBlue)
+                    // organized" pattern on Memory Detail — and, like it,
+                    // clears once the user commits (here: "Keep this
+                    // summary" → kept, eyebrow removed).
+                    if !summaryKept {
+                        Text("Draft · give this a glance")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.aiBlue)
+                    }
                 }
 
                 Text(summary)
@@ -543,6 +563,27 @@ struct ProjectDetailView: View {
                     .foregroundStyle(Crucible.Color.ink)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
+
+                // Keep this summary — rank-1 primary commit, the project
+                // analogue of Memory Detail's "Keep this version": filled
+                // ochre, full-width, ≥50pt, no sparkle (the USER commits,
+                // it's not an AI action). Promotes Draft → kept and removes
+                // the "give this a glance" eyebrow. Shown only while unkept;
+                // the generated summary already auto-persisted on completion,
+                // so this commits the *review*, never the content.
+                if !summaryKept {
+                    Button(action: handleKeepSummary) {
+                        Text("Keep this summary")
+                            .font(.system(size: 15.5, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: 50)
+                            .background(Crucible.Color.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Keep this summary")
+                }
 
                 // Re-run as a real AI button (blue, bordered, ≥44pt,
                 // named feature + trailing sparkle). Per the colour
@@ -583,6 +624,11 @@ struct ProjectDetailView: View {
                         .font(.system(size: 11.5))
                         .foregroundStyle(Crucible.Color.ink3)
                 }
+                // The tab capture-FAB steps aside while these actions are on
+                // screen (the project analogue of Memory Detail's FAB yielding
+                // to the Let Go footer) so it never overlaps Keep / re-run.
+                .onAppear { ProjectSummaryActionsPresence.shared.setOnScreen(true) }
+                .onDisappear { ProjectSummaryActionsPresence.shared.setOnScreen(false) }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -711,6 +757,9 @@ struct ProjectDetailView: View {
         request.predicate = NSPredicate(format: "id == %@", projectId as CVarArg)
         request.fetchLimit = 1
         project = try? storage.viewContext.fetch(request).first
+        summaryKept = ProjectThreadReviewStore.isKept(
+            projectId: projectId, generatedAt: project?.lastThreadGeneratedAt
+        )
     }
 
     private func loadProjectEntries() {
