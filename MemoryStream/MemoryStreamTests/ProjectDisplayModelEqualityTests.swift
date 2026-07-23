@@ -15,6 +15,7 @@ struct ProjectDisplayModelEqualityTests {
         id: UUID,
         name: String = "P",
         purpose: String? = nil,
+        shortSummary: String? = nil,
         memoryCount: Int = 1,
         topicNames: [String] = ["Travel"]
     ) -> ProjectDisplayModel {
@@ -22,6 +23,7 @@ struct ProjectDisplayModelEqualityTests {
             id: id,
             name: name,
             purpose: purpose,
+            shortSummary: shortSummary,
             memoryCount: memoryCount,
             topicNames: topicNames,
             updatedAt: Date(timeIntervalSince1970: 0),

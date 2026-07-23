@@ -221,6 +221,56 @@ final class OnDeviceOrganizer: Organizer {
         }
     }
 
+    // MARK: - Project short summary (compress the long summary)
+
+    /// Static instructions for the short-summary compression. The whole point
+    /// (locked 2026-07-23): the short is **derived from the contents of the
+    /// long summary alone** — it is a compression, never a re-reading of the
+    /// project's memories — so it cannot introduce anything the long summary
+    /// doesn't already state.
+    static let shortSummaryInstructions = """
+    You compress an already-written project summary into a single short line.
+
+    You are given ONE piece of text: a longer project summary. Your only job is \
+    to derive a one-line version FROM THAT TEXT ALONE. You are shortening it, \
+    not adding to it.
+
+    Rules:
+    - Use only what the long summary already states. Introduce no name, place, \
+    organization, date, number, or idea that is not present in the text you are \
+    given. If it is not in the long summary, it must not be in the short one.
+    - One sentence, roughly 8–16 words.
+    - Keep the second-person voice ("You're …") when the long summary uses it.
+    - Do not restate the project's name, do not wrap it in quotes, and never \
+    open with "This project…" or "The summary…". Just the essence of what it is \
+    about, exactly as the long text frames it.
+    """
+
+    /// Derives the one-line **short** project summary by compressing the
+    /// **long** summary's own text on-device (Apple Intelligence). The input is
+    /// the long summary and nothing else — see `shortSummaryInstructions`. This
+    /// is a good fit for on-device precisely because it is compression of
+    /// already-coherent prose, not synthesis from raw fragments; honesty is
+    /// still enforced by the caller gating the result against the long text via
+    /// `TruthReconciler` (strip → retry → extractive fallback), so a slip can
+    /// only come out plainer, never false. Throws `modelUnavailable` on a
+    /// device without Foundation Models — the caller then falls back to a
+    /// deterministic extractive one-liner drawn from the long summary.
+    func compressToShort(longSummary: String) async throws -> String {
+        if let unavailable = Self.availabilityError() {
+            throw unavailable
+        }
+        let session = LanguageModelSession(instructions: Self.shortSummaryInstructions)
+        let prompt = """
+        Long summary:
+        \(longSummary)
+
+        Write the one-line short version, derived only from the long summary above.
+        """
+        let response = try await session.respond(to: prompt, options: GenerationOptions())
+        return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Renders the memory text plus (when non-empty) the user's
     /// existing topic palette into the per-call prompt input. The
     /// palette section is the data side of spec §2c — without it the

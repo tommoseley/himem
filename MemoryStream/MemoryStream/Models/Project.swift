@@ -18,6 +18,15 @@ public class Project: NSManagedObject, Identifiable {
     /// re-charging an assist. Cleared by the user via Dismiss; the
     /// assist is NOT refunded (the call already happened).
     @NSManaged public var lastThreadSummary: String?
+    /// One-line short summary **derived by compressing `lastThreadSummary`**
+    /// (Apple Intelligence, on-device) — never a re-reading of the memories,
+    /// so it can add nothing the long summary doesn't already state. Produced
+    /// in the same Find-the-thread pass and gated against the long text by
+    /// `TruthReconciler`. Drives the project-list card line (falls back to the
+    /// goal when there's no thread yet). CloudKit-synced — rides the next
+    /// schema deploy (with `coverSource` et al.); see CLAUDE.md "CloudKit
+    /// Schema Changes."
+    @NSManaged public var projectSummaryShort: String?
     @NSManaged public var lastThreadGeneratedAt: Date?
     /// Soft-delete timestamp (F1 deletion lock, 2026-07-17). Non-nil = in
     /// Recently Deleted; restored by clearing it, purged after 30 days. The

@@ -36,12 +36,14 @@ struct ProjectCardView: View {
                         .foregroundStyle(Crucible.Color.ink3)
                 }
             }
-            // Goal — the project's intent, in its app-wide italic-serif
-            // identity. Hidden when unset (goal is optional). Two-line
-            // cap so a long goal doesn't dominate the card.
-            if let goal = project.purpose,
-               !goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(goal)
+            // Card subtitle — the short thread summary once Find-the-thread
+            // has run (the AI's one-line read of what the project became),
+            // falling back to the goal (the user's intent) when there's no
+            // thread yet: 0 memories or never run. Same italic-serif card
+            // identity for both; two-line cap. The goal itself still lives —
+            // and stays editable — in the detail header.
+            if let subtitle = project.cardSubtitle {
+                Text(subtitle)
                     .font(.system(size: 13, design: .serif))
                     .italic()
                     .foregroundStyle(Crucible.Color.ink2)
