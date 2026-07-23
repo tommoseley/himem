@@ -13,33 +13,43 @@ import FoundationModels
 /// **Not authoritative.** Per `AI Organize · spec.md` §2b/§9 and the
 /// spike findings, on-device output is presented as an *editable
 /// first draft*. The Memory Detail chip reads "Draft organized"
-/// until the user reviews. Three documented failure classes (purposive
-/// drift, visible-photo claims, occasional voice slip) are
-/// hand-editable and the UI does not promise authority.
+/// until the user reviews. Documented on-device (3B) ceilings — all
+/// hand-editable, and the UI never promises authority; the frontier/Plus
+/// path is expected to clear them (same standing as the §2b ceiling notes):
+/// purposive drift · visible-photo claims · occasional voice slip ·
+/// **subject-out POV slip** (writes "You…" for a pure observation — a solo
+/// sunset photo) · **invent-a-speaker** (attributes a first-person quote to
+/// a fabricated name when the clips name no one). Not open bugs.
+///
+/// Cross-memory contamination is NOT on this list — it was a real bug, fixed
+/// at the source: the library topics/mentions palette is no longer fed to
+/// the model (it fabricated other memories' people into unrelated ones), and
+/// name reuse is reconciled in code (`MentionReconciler` +
+/// `ProcessingEngine.canonicalizeMentions`).
 ///
 /// **No `nextSteps`.** Cut from v1 entirely (RH-6, July 20 2026) — it's
 /// no longer on `AnalysisResult` and no UI consumes it. The on-device
 /// schema never had it: the 3B model fabricates forward actions when given
 /// the field, even when the clips don't state them.
 ///
-/// **De-lexicalized cadence example (2026-07-23) — do not restore concrete
-/// nouns.** The "Cadence" rule's two examples use single-letter placeholders
-/// (A/B/C/D), never real nouns, ON PURPOSE. A 3B model parrots few-shot
-/// example prose into the summary body: the prior concrete example ("peppers,
-/// tomatoes, and eggplants … South Carolina garden … retirement") bled
-/// verbatim into an unrelated Lincoln-quote memory ("…alongside three clips
-/// of peppers, tomatoes, and eggplants") — an Honest-Label data-integrity
-/// failure (the summary asserted clips the memory doesn't contain). The
-/// abstraction IS the fix; a future edit must NOT "helpfully" swap the
-/// placeholders back to concrete nouns to "read better." The shapes are also
-/// **verb-free and POV-neutral** (only connective function words —
-/// while/and/since — remain): a first pass with concrete verbs ("You're
-/// noting A…") re-bled — the 3B model parroted the verb "noting" into 4 of 6
-/// calibration summaries and the "You're" pushed a subject-out memory to
-/// second person. So keep the shapes free of verbs and pronouns too; the
-/// separate owner-voice rule governs "You"/"You're". The cadence pedagogy
-/// (one flowing thought vs. a clipped status log) is preserved, so this is a
-/// coherence fix, not a spike-invalidating change — but re-run the FM-spike
+/// **The Cadence rule has NO positive example — do not add one (2026-07-23).**
+/// The rule is prose only ("write as ONE connected thought … never clipped
+/// declaratives, never a comma-list of fragments"). Every concrete Cadence
+/// EXAMPLE we tried bled into the output, because a 3B model treats a
+/// few-shot example as content to emit regardless of how abstract it is:
+///   1. Concrete nouns ("peppers, tomatoes, and eggplants … South Carolina
+///      garden … retirement") bled verbatim into an unrelated Lincoln-quote
+///      memory — an Honest-Label data-integrity failure (asserting clips the
+///      memory doesn't contain).
+///   2. Abstracting the nouns to placeholders but keeping verbs ("You're
+///      noting A…") → the model parroted "noting" into 4 of 6 calibration
+///      summaries; the "You're" pushed a subject-out memory to second person.
+///   3. Verb-free, POV-neutral shapes ("A, while B, and C") → the model
+///      latched onto the comma-list and produced "You, X, and Y" fragments.
+/// The example itself is the payload. So the positive example is GONE; the
+/// prose rule (plus a NEGATIVE characterization of the anti-patterns, using
+/// obvious X/Y placeholders) carries the pedagogy. A future edit must NOT
+/// "helpfully" add a warm/cold example sentence back — re-run the FM-spike
 /// QA panel after ANY prompt edit, since the prompt is the validated artifact.
 ///
 /// **Mention typing.** The on-device prompt returns mentions as
@@ -84,9 +94,7 @@ final class OnDeviceOrganizer: Organizer {
     - Every sentence about the owner must begin with "You" or "You're." Never "the user", "the author", "the clip", or "the memory" as a subject. Use names for everyone else.
     - If the memory has NO first-person voice — only a photo or a bare observation, nobody speaking as "I" — leave the owner out entirely. Do NOT write "You're capturing…" or "You…". Name only what is there. Example: for a sunset photo, "A deep-orange sunset over the ridge," not "You captured a sunset."
     - Do not add reasons, purposes, or causes the clips don't state. No "to ___," no "because ___."
-    - Cadence: write the summary as ONE connected thought, the way a thoughtful friend would recap — flowing, subordinated sentences that string the facts together. Never a run of short, clipped "You're X. You're Y. The Z is …" declaratives; that reads as a cold status log about the person. Keep the memory's own specific nouns; change only how they connect. The two shapes below are POV-neutral structural templates: A/B/C/D stand for THIS memory's real facts, and the connecting words (while / and / since) show how to subordinate them into one sentence. Copy NEITHER the letters NOR any verb or pronoun from these shapes — they teach connection only; the owner-voice rule above governs "You"/"You're":
-        Cold shape to avoid (clipped, separate declaratives): "A. B. C. D."
-        Warm shape to match (one connected, subordinated thought): "A, while B, and C since D."
+    - Cadence: write the summary as ONE connected thought, the way a thoughtful friend would recap — flowing, subordinated sentences that string the facts together, connected with subordinating words (while, and, since, as). Never a run of short, clipped "You're X. You're Y. The Z is …" declaratives; that reads as a cold status log about the person. And never a comma list of fragments ("You, X, and Y, three things"). Keep the memory's own specific nouns; change only how they connect.
     - Photo and video clips are not visible. Do not describe their visual content. Reference them by count only.
     - Topic selection: when the input lists the user's existing topics, prefer one of those exact labels if any fits this memory. Coin a new topic only when none of the existing topics reasonably fit.
     - Mention selection: when the input lists people, places, and projects the user has mentioned before, prefer one of those exact names if the memory refers to the same one. Coin a new mention only when none of the existing ones match.
