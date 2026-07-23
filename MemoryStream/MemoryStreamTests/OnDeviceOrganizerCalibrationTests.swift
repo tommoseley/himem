@@ -126,44 +126,63 @@ struct OnDeviceOrganizerCalibrationTests {
         print("[CALIB] === On-device organize calibration · \(Self.fixtures.count) fixtures ===")
 
         for f in Self.fixtures {
-            // Mirror production (palette-bleed fix #2, 2026-07-23): the
-            // mentions palette is NOT fed to the model — it fabricated
-            // library people into unrelated memories. Extract from the
-            // clips only, then reconcile against the library in code.
-            let result = try await OnDeviceOrganizer().organize(
-                content: f.clips,
-                existingTopics: f.existingTopics,
-                existingMentions: []
+            // Mirror production END-TO-END (2026-07-23): palette removed from
+            // the prompt (fix #2), then the Honest-Label gate — verify the
+            // summary → retry once → constrained extractive fallback. The
+            // GATED summary is what ships, so that is what the rubric grades.
+            let raw = try await OnDeviceOrganizer().organize(
+                content: f.clips, existingTopics: f.existingTopics, existingMentions: []
             )
-            let summary = result.summary
-            let title = result.title ?? ""
-            let topics = result.topics
+            let rawFabricated = HonestLabelGate.fabricatedProperNouns(in: raw.summary, sourceText: f.clips)
+
+            var summary = raw.summary
+            var title = raw.title ?? ""
+            var usedFallback = false
+            if HonestLabelGate.violates(summary: summary, sourceText: f.clips) {
+                let retry = try await OnDeviceOrganizer().organize(
+                    content: f.clips, existingTopics: f.existingTopics, existingMentions: []
+                )
+                if !HonestLabelGate.violates(summary: retry.summary, sourceText: f.clips) {
+                    summary = retry.summary; title = retry.title ?? ""
+                } else {
+                    summary = HonestLabelGate.extractiveSummary(fromClipText: f.clips)
+                    title = HonestLabelGate.extractiveTitle(fromClipText: f.clips)
+                    usedFallback = true
+                }
+            }
+            let topics = raw.topics
             let mentions = MentionReconciler.reconcile(
-                extracted: result.entities.map { $0.value },
+                extracted: raw.entities.map { $0.value }.filter { HonestLabelGate.isGrounded($0, in: f.clips) },
                 library: f.existingMentions
             )
 
-            // Mechanical rubric
+            // HONESTY (hard): the shipped summary must name no proper noun
+            // absent from the clips — the gate's contract, catching ANY
+            // invented name, not a banned list (the check the old fixed-
+            // string antiTarget missed on "Albert").
+            let gatedFabricated = HonestLabelGate.fabricatedProperNouns(in: summary, sourceText: f.clips)
+            let fabricationOK = gatedFabricated.isEmpty
+            let bannedHit = f.bannedPhrases.first { summary.lowercased().contains($0.lowercased()) || title.lowercased().contains($0.lowercased()) }
+            let antiTargetOK = bannedHit == nil
+            // QUALITY (soft — logged 3B ceilings; the extractive fallback
+            // reshapes POV/length by design). Reported, never hard-failed.
             let povOK = Self.povOK(summary, f.pov)
             let lengthOK = Self.wordCount(summary) <= f.summaryWordCeiling
             let cadenceOK = !Self.readsAsStaccato(summary)
-            let bannedHit = f.bannedPhrases.first { summary.lowercased().contains($0.lowercased()) || title.lowercased().contains($0.lowercased()) }
-            let antiTargetOK = bannedHit == nil
             let reuseOK = Self.reuseOK(topics: topics, mentions: mentions, f: f)
 
             print("""
-            [CALIB] --- Fixture \(f.n) · \(f.name) ---
+            [CALIB] --- Fixture \(f.n) · \(f.name)\(usedFallback ? " [extractive fallback]" : "") ---
+            [CALIB]   raw fabrication (pre-gate): \(rawFabricated.isEmpty ? "none" : rawFabricated.description)
             [CALIB]   title:   \(title)
             [CALIB]   summary: \(summary)
             [CALIB]   topics:  \(topics)   mentions: \(mentions)
-            [GRID]  F\(f.n) | POV:\(mark(povOK)) length(\(Self.wordCount(summary))≤\(f.summaryWordCeiling)):\(mark(lengthOK)) cadence:\(mark(cadenceOK)) antiTarget:\(mark(antiTargetOK))\(bannedHit.map { " (hit: \($0))" } ?? "") reuse:\(mark(reuseOK)) | claims/recognizable/descriptive = READ ABOVE
+            [GRID]  F\(f.n) | FABRICATION:\(mark(fabricationOK)) antiTarget:\(mark(antiTargetOK))\(bannedHit.map { " (hit: \($0))" } ?? "") | soft POV:\(mark(povOK)) length(\(Self.wordCount(summary))≤\(f.summaryWordCeiling)):\(mark(lengthOK)) cadence:\(mark(cadenceOK)) reuse:\(mark(reuseOK))
             """)
 
-            // Hard-fail only the unambiguous mechanical violations — the
-            // exact failure classes the anti-targets encode.
+            // HARD-fail on honesty only. Quality items are reported above.
+            if !fabricationOK { hardFailures.append("F\(f.n): fabricated proper noun(s) after gate: \(gatedFabricated)") }
             if !antiTargetOK { hardFailures.append("F\(f.n): banned phrase '\(bannedHit ?? "")'") }
-            if !povOK { hardFailures.append("F\(f.n): POV wrong for \(f.pov)") }
-            if !lengthOK { hardFailures.append("F\(f.n): summary \(Self.wordCount(summary))w > ceiling \(f.summaryWordCeiling)") }
         }
 
         print("[CALIB] === hard mechanical failures: \(hardFailures.count) ===")

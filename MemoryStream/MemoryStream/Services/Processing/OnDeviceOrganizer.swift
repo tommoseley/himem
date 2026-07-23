@@ -10,22 +10,29 @@ import FoundationModels
 /// drifts from the spike, the spike's QA panel is no longer a valid
 /// reference for output quality.
 ///
-/// **Not authoritative.** Per `AI Organize · spec.md` §2b/§9 and the
-/// spike findings, on-device output is presented as an *editable
-/// first draft*. The Memory Detail chip reads "Draft organized"
-/// until the user reviews. Documented on-device (3B) ceilings — all
-/// hand-editable, and the UI never promises authority; the frontier/Plus
-/// path is expected to clear them (same standing as the §2b ceiling notes):
+/// **Not authoritative — and the model quality is Apple's to move, not ours
+/// (2026-07-23).** Per `AI Organize · spec.md` §2b/§9, on-device output is an
+/// *editable first draft* ("Draft organized" until the user reviews). The
+/// on-device model is a **platform-controlled moving target**: it regressed
+/// under **iOS 27** ("much colder," and it began fabricating proper names).
+/// So HiMem's Honest-Label guarantee is **NOT staked on this model's prompt
+/// behavior** — prompt tuning against a model Apple changes every OS release
+/// is permanently unstable. Honesty is enforced in **deterministic code**
+/// (`HonestLabelGate`, applied on the on-device path in
+/// `ProcessingEngine.gateOnDeviceResult`): a proper name in the summary that
+/// the clips don't contain is rejected → retry once → constrained extractive
+/// fallback ("say less before saying false"). Documented 3B QUALITY ceilings
+/// that remain (hand-editable, frontier/Plus clears them, not open bugs):
 /// purposive drift · visible-photo claims · occasional voice slip ·
-/// **subject-out POV slip** (writes "You…" for a pure observation — a solo
-/// sunset photo) · **invent-a-speaker** (attributes a first-person quote to
-/// a fabricated name when the clips name no one). Not open bugs.
+/// subject-out POV slip · invent-a-speaker — the last is now caught by the
+/// gate before it ships, even though the model still produces it.
 ///
-/// Cross-memory contamination is NOT on this list — it was a real bug, fixed
-/// at the source: the library topics/mentions palette is no longer fed to
-/// the model (it fabricated other memories' people into unrelated ones), and
-/// name reuse is reconciled in code (`MentionReconciler` +
-/// `ProcessingEngine.canonicalizeMentions`).
+/// Cross-memory contamination was a real bug, fixed at the source: the
+/// library topics/mentions palette is no longer fed to the model (it
+/// fabricated other memories' people into unrelated ones), and name reuse is
+/// reconciled in code (`MentionReconciler` + `ProcessingEngine
+/// .canonicalizeMentions`). The gate + reconciler together are the durable
+/// architecture; the prompt is not load-bearing for honesty.
 ///
 /// **No `nextSteps`.** Cut from v1 entirely (RH-6, July 20 2026) — it's
 /// no longer on `AnalysisResult` and no UI consumes it. The on-device

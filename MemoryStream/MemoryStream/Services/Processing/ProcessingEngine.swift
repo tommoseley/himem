@@ -190,11 +190,16 @@ final class ProcessingEngine {
             // (§2c dedup) is reapplied in code by `canonicalizeMentions`
             // inside `applyAnalysisResult`. Topics palette stays (it did not
             // exhibit the fabrication and already has code canonicalization).
-            let result = try await onDeviceOrganizer.organize(
+            let raw = try await onDeviceOrganizer.organize(
                 content: content,
                 existingTopics: existingTopics,
                 existingMentions: []
             )
+            // Honest-Label gate (2026-07-23) — on-device path ONLY. Apple's
+            // 3B model quality is a moving target (regressed on iOS 27) that
+            // fabricates proper names; enforce honesty in code, not the
+            // prompt. Verify → retry once → constrained extractive fallback.
+            let result = await gateOnDeviceResult(raw, clipText: content, existingTopics: existingTopics)
             return await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
         } catch {
             // Detailed diagnostic logging — Apple's Foundation Models
@@ -213,6 +218,47 @@ final class ProcessingEngine {
             }
             return false
         }
+    }
+
+    /// **Honest-Label gate — on-device path ONLY.** Apple's on-device model
+    /// fabricates proper names the clips don't contain (worsened on iOS 27),
+    /// and it's a platform-controlled moving target — so honesty is enforced
+    /// here in deterministic code, not the prompt. If the summary names a
+    /// proper noun absent from the clips, retry the pass once; if it still
+    /// fabricates, fall back to a constrained extractive summary drawn from
+    /// the clips (cannot introduce a new name — "say less before saying
+    /// false"). Independently, any ungrounded mention is dropped. The
+    /// frontier/Plus path is stable and is NOT gated (see `processWithCloud`).
+    private func gateOnDeviceResult(
+        _ result: ClaudeAPIService.AnalysisResult,
+        clipText: String,
+        existingTopics: [String]
+    ) async -> ClaudeAPIService.AnalysisResult {
+        var gated = result
+        if HonestLabelGate.violates(summary: result.summary, sourceText: clipText) {
+            NSLog("[HiMem][HonestGate] on-device summary named a proper noun absent from the clips; retrying once")
+            if let retry = try? await onDeviceOrganizer.organize(
+                content: clipText, existingTopics: existingTopics, existingMentions: []
+               ),
+               !HonestLabelGate.violates(summary: retry.summary, sourceText: clipText) {
+                gated = retry
+            } else {
+                NSLog("[HiMem][HonestGate] retry still fabricated; falling back to extractive summary")
+                gated = ClaudeAPIService.AnalysisResult(
+                    entities: result.entities,
+                    topics: result.topics,
+                    summary: HonestLabelGate.extractiveSummary(fromClipText: clipText),
+                    title: HonestLabelGate.extractiveTitle(fromClipText: clipText)
+                )
+            }
+        }
+        // Drop ungrounded mentions (a fabricated name in the mentions field
+        // is the same violation, one field over). Grounded mentions still
+        // flow through `canonicalizeMentions` for §2c library dedup.
+        let grounded = gated.entities.filter { HonestLabelGate.isGrounded($0.value, in: clipText) }
+        return ClaudeAPIService.AnalysisResult(
+            entities: grounded, topics: gated.topics, summary: gated.summary, title: gated.title
+        )
     }
 
     // MARK: - Cloud Processing

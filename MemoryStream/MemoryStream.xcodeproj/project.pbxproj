@@ -198,7 +198,6 @@
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
-		A900000009 /* MentionReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000009 /* MentionReconciler.swift */; };
 		A900000002 /* OnDeviceOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000002 /* OnDeviceOrganizer.swift */; };
 		A900000003 /* ServerOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000003 /* ServerOrganizer.swift */; };
 		A900000004 /* DraftReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000004 /* DraftReviewSheet.swift */; };
@@ -206,6 +205,8 @@
 		A900000006 /* PricingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000006 /* PricingView.swift */; };
 		A900000007 /* AfterAGlanceNudge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000007 /* AfterAGlanceNudge.swift */; };
 		A900000008 /* ReorganizeReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000008 /* ReorganizeReviewSheet.swift */; };
+		A900000009 /* MentionReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000009 /* MentionReconciler.swift */; };
+		A900000010 /* HonestLabelGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000010 /* HonestLabelGate.swift */; };
 		A900000050 /* TopicPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000050 /* TopicPalette.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 		E2AD0E5C2FAD185F009FFEA1 /* Himem Watch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -464,7 +465,6 @@
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
-		B900000009 /* MentionReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionReconciler.swift; sourceTree = "<group>"; };
 		B900000002 /* OnDeviceOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceOrganizer.swift; sourceTree = "<group>"; };
 		B900000003 /* ServerOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOrganizer.swift; sourceTree = "<group>"; };
 		B900000004 /* DraftReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftReviewSheet.swift; sourceTree = "<group>"; };
@@ -472,6 +472,8 @@
 		B900000006 /* PricingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PricingView.swift; sourceTree = "<group>"; };
 		B900000007 /* AfterAGlanceNudge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AfterAGlanceNudge.swift; sourceTree = "<group>"; };
 		B900000008 /* ReorganizeReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorganizeReviewSheet.swift; sourceTree = "<group>"; };
+		B900000009 /* MentionReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionReconciler.swift; sourceTree = "<group>"; };
+		B900000010 /* HonestLabelGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HonestLabelGate.swift; sourceTree = "<group>"; };
 		B900000050 /* TopicPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicPalette.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
@@ -807,6 +809,7 @@
 				B100000014 /* ProcessingEngine.swift */,
 				B900000001 /* Organizer.swift */,
 				B900000009 /* MentionReconciler.swift */,
+				B900000010 /* HonestLabelGate.swift */,
 				B900000002 /* OnDeviceOrganizer.swift */,
 				B900000003 /* ServerOrganizer.swift */,
 				B900000050 /* TopicPalette.swift */,
@@ -1428,6 +1431,7 @@
 				A100000014 /* ProcessingEngine.swift in Sources */,
 				A900000001 /* Organizer.swift in Sources */,
 				A900000009 /* MentionReconciler.swift in Sources */,
+				A900000010 /* HonestLabelGate.swift in Sources */,
 				A900000002 /* OnDeviceOrganizer.swift in Sources */,
 				A900000003 /* ServerOrganizer.swift in Sources */,
 				A900000050 /* TopicPalette.swift in Sources */,
