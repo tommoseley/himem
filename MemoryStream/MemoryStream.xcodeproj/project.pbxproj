@@ -198,6 +198,7 @@
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
+		A900000009 /* MentionReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000009 /* MentionReconciler.swift */; };
 		A900000002 /* OnDeviceOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000002 /* OnDeviceOrganizer.swift */; };
 		A900000003 /* ServerOrganizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000003 /* ServerOrganizer.swift */; };
 		A900000004 /* DraftReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000004 /* DraftReviewSheet.swift */; };
@@ -463,6 +464,7 @@
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
+		B900000009 /* MentionReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionReconciler.swift; sourceTree = "<group>"; };
 		B900000002 /* OnDeviceOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceOrganizer.swift; sourceTree = "<group>"; };
 		B900000003 /* ServerOrganizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOrganizer.swift; sourceTree = "<group>"; };
 		B900000004 /* DraftReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftReviewSheet.swift; sourceTree = "<group>"; };
@@ -804,6 +806,7 @@
 			children = (
 				B100000014 /* ProcessingEngine.swift */,
 				B900000001 /* Organizer.swift */,
+				B900000009 /* MentionReconciler.swift */,
 				B900000002 /* OnDeviceOrganizer.swift */,
 				B900000003 /* ServerOrganizer.swift */,
 				B900000050 /* TopicPalette.swift */,
@@ -1424,6 +1427,7 @@
 				A100000013 /* ConnectivityMonitor.swift in Sources */,
 				A100000014 /* ProcessingEngine.swift in Sources */,
 				A900000001 /* Organizer.swift in Sources */,
+				A900000009 /* MentionReconciler.swift in Sources */,
 				A900000002 /* OnDeviceOrganizer.swift in Sources */,
 				A900000003 /* ServerOrganizer.swift in Sources */,
 				A900000050 /* TopicPalette.swift in Sources */,

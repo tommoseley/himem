@@ -183,12 +183,19 @@ final class ProcessingEngine {
     private func processWithOnDevice(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async -> Bool {
         let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
         do {
+            // Palette-bleed fix #2 (2026-07-23): the mentions palette is NOT
+            // put in front of the 3B model — it fabricated library people
+            // (Darlene/Ben) into memories that never named them. Extract
+            // mentions from THIS memory's clips only; the library reuse
+            // (§2c dedup) is reapplied in code by `canonicalizeMentions`
+            // inside `applyAnalysisResult`. Topics palette stays (it did not
+            // exhibit the fabrication and already has code canonicalization).
             let result = try await onDeviceOrganizer.organize(
                 content: content,
                 existingTopics: existingTopics,
-                existingMentions: existingMentions
+                existingMentions: []
             )
-            return await applyAnalysisResult(result, existingTopics: existingTopics, to: objectID, in: context)
+            return await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
         } catch {
             // Detailed diagnostic logging — Apple's Foundation Models
             // errors are opaque ("Detected content likely to be unsafe"
@@ -248,7 +255,7 @@ final class ProcessingEngine {
                 action: action
             )
 
-            return await applyAnalysisResult(result, existingTopics: existingTopics, to: objectID, in: context)
+            return await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
         } catch {
             NSLog("[HiMem][Organize] cloud pass failed, falling through: \(error.localizedDescription)")
             return false
@@ -465,8 +472,16 @@ final class ProcessingEngine {
     /// casing, not the model's. Without this step the model's case
     /// variants could leak into `OrganizePass.suggestedTopics` and
     /// surface to the user as fake "different" topic suggestions.
-    private func applyAnalysisResult(_ result: ClaudeAPIService.AnalysisResult, existingTopics: [String], to objectID: NSManagedObjectID, in context: NSManagedObjectContext) async -> Bool {
-        let canonicalResult = Self.canonicalizeTopics(result: result, against: existingTopics)
+    private func applyAnalysisResult(_ result: ClaudeAPIService.AnalysisResult, existingTopics: [String], existingMentions: [String], to objectID: NSManagedObjectID, in context: NSManagedObjectContext) async -> Bool {
+        // Canonicalize topics (existing behavior) AND mentions (palette-bleed
+        // fix #2, 2026-07-23): the mentions palette is no longer in the
+        // prompt, so the model extracts mentions from this memory's clips
+        // only; this reconciles near-identical variants against the library
+        // in code to keep §2c dedup without fabricating/mis-merging a name.
+        let canonicalResult = Self.canonicalizeMentions(
+            result: Self.canonicalizeTopics(result: result, against: existingTopics),
+            against: existingMentions
+        )
         return await context.perform { [self] in
             do {
                 let entry = try context.existingObject(with: objectID) as! JournalEntry
@@ -511,6 +526,29 @@ final class ProcessingEngine {
         return ClaudeAPIService.AnalysisResult(
             entities: result.entities,
             topics: canonicalTopics,
+            summary: result.summary,
+            title: result.title
+        )
+    }
+
+    /// Pure mention-reconciliation wrapper around `MentionReconciler` — the
+    /// mentions analog of `canonicalizeTopics`. Maps each extracted mention
+    /// to its canonical library form (near-identical variants only; never a
+    /// mis-merge), keeping §2c anti-fragmentation now that the library
+    /// palette is no longer fed to the model. Topics, summary, title are
+    /// preserved bit-for-bit.
+    static func canonicalizeMentions(
+        result: ClaudeAPIService.AnalysisResult,
+        against existingMentions: [String]
+    ) -> ClaudeAPIService.AnalysisResult {
+        let names = result.entities.map { $0.value }
+        let canonical = MentionReconciler.reconcile(extracted: names, library: existingMentions)
+        let entities = zip(result.entities, canonical).map { entity, name in
+            ClaudeAPIService.EntityResult(type: entity.type, value: name, confidence: entity.confidence)
+        }
+        return ClaudeAPIService.AnalysisResult(
+            entities: entities,
+            topics: result.topics,
             summary: result.summary,
             title: result.title
         )

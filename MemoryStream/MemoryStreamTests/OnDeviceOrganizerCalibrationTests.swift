@@ -86,7 +86,7 @@ struct OnDeviceOrganizerCalibrationTests {
             n: 4, name: "Idea capture — no fabricated nextSteps",
             clips: "Thinking about the onboarding — the problem isn't the permissions screens, it's that we throw people into an empty app. Maybe the coach marks should fire on first real use, not up front. Also we still haven't decided the free project cap.",
             existingTopics: library, existingMentions: people,
-            bannedPhrases: ["next step", "next steps", "reflecting on onboarding challenges"],
+            bannedPhrases: ["next step", "next steps", "reflecting on onboarding challenges", "Darlene"],
             expectReuseTopics: ["Onboarding", "Product"], expectReuseMentions: [],
             summaryWordCeiling: 60, pov: .secondPerson
         ),
@@ -94,7 +94,7 @@ struct OnDeviceOrganizerCalibrationTests {
             n: 5, name: "Pure-observation — subject-out",
             clips: "[photo] description: Sunset over the ridge behind the house, sky went deep orange.\n[no audio]",
             existingTopics: library, existingMentions: people,
-            bannedPhrases: ["breathtaking", "peaceful", "appreciate", "beauty of the evening"],
+            bannedPhrases: ["breathtaking", "peaceful", "appreciate", "beauty of the evening", "Darlene", "Ben"],
             expectReuseTopics: [], expectReuseMentions: [],
             summaryWordCeiling: 18, pov: .subjectOut
         ),
@@ -108,7 +108,7 @@ struct OnDeviceOrganizerCalibrationTests {
             n: 6, name: "Quote + photo — example-bleed guard (Lincoln)",
             clips: "[audio] \"I am not bound to win, but I am bound to be true. I am not bound to succeed, but I'm bound to live up to what light I have.\"\n[photo] (no description)",
             existingTopics: library, existingMentions: people,
-            bannedPhrases: ["pepper", "tomato", "eggplant", "garden", "retire", "south carolina"],
+            bannedPhrases: ["pepper", "tomato", "eggplant", "garden", "retire", "south carolina", "Darlene"],
             expectReuseTopics: [], expectReuseMentions: [],
             summaryWordCeiling: 45, pov: .secondPerson
         ),
@@ -126,15 +126,22 @@ struct OnDeviceOrganizerCalibrationTests {
         print("[CALIB] === On-device organize calibration · \(Self.fixtures.count) fixtures ===")
 
         for f in Self.fixtures {
+            // Mirror production (palette-bleed fix #2, 2026-07-23): the
+            // mentions palette is NOT fed to the model — it fabricated
+            // library people into unrelated memories. Extract from the
+            // clips only, then reconcile against the library in code.
             let result = try await OnDeviceOrganizer().organize(
                 content: f.clips,
                 existingTopics: f.existingTopics,
-                existingMentions: f.existingMentions
+                existingMentions: []
             )
             let summary = result.summary
             let title = result.title ?? ""
             let topics = result.topics
-            let mentions = result.entities.map { $0.value }
+            let mentions = MentionReconciler.reconcile(
+                extracted: result.entities.map { $0.value },
+                library: f.existingMentions
+            )
 
             // Mechanical rubric
             let povOK = Self.povOK(summary, f.pov)
