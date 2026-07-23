@@ -32,6 +32,9 @@ struct SettingsView: View {
     @ObservedObject private var inbox = InboxManifest.shared
     @ObservedObject private var entitlement = Entitlement.shared
     @State private var showPricing = false
+    @State private var isRestoring = false
+    @State private var restoreNotice: String?
+    @State private var showManageSubscriptions = false
     /// Live project count for the C3 "AI & Organizing" row. Backed
     /// by a Core Data fetch so the displayed "N of 3" stays honest
     /// when the user creates or deletes a project from elsewhere
@@ -195,6 +198,10 @@ struct SettingsView: View {
                     plusCard
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 4, trailing: 14))
+                        .listRowSeparator(.hidden)
+                    subscriptionLinksRow
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 6, trailing: 14))
                         .listRowSeparator(.hidden)
                 }
 
@@ -526,6 +533,12 @@ struct SettingsView: View {
             .sheet(isPresented: $showPricing) {
                 PricingView()
             }
+            .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
+            .alert("Restore Purchases", isPresented: restoreNoticeBinding) {
+                Button("OK", role: .cancel) { restoreNotice = nil }
+            } message: {
+                Text(restoreNotice ?? "")
+            }
             .onAppear {
                 loadTopics()
                 Task {
@@ -688,16 +701,62 @@ struct SettingsView: View {
         .buttonStyle(.plain)
     }
 
+    /// Restore + (for Plus) Manage-subscription — the App Review-required
+    /// affordances, always reachable from Settings regardless of tier.
+    /// Restore matters most for a fresh install / new device where no
+    /// transaction has arrived yet.
+    @ViewBuilder
+    private var subscriptionLinksRow: some View {
+        HStack(spacing: 8) {
+            Button(action: handleRestore) {
+                if isRestoring {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Text("Restore Purchases")
+                }
+            }
+            .disabled(isRestoring)
+            if entitlement.isPlus {
+                Text("·").foregroundStyle(Crucible.Color.ink4)
+                Button("Manage subscription") { showManageSubscriptions = true }
+            }
+            Spacer()
+        }
+        .font(.system(size: 12.5))
+        .foregroundStyle(Crucible.Color.aiBlue)
+    }
+
+    private var restoreNoticeBinding: Binding<Bool> {
+        Binding(get: { restoreNotice != nil }, set: { if !$0 { restoreNotice = nil } })
+    }
+
+    private func handleRestore() {
+        Task {
+            isRestoring = true
+            defer { isRestoring = false }
+            switch await StoreKitService.shared.restorePurchases() {
+            case .restored:
+                restoreNotice = "Your HiMem Plus subscription has been restored."
+            case .nothingToRestore:
+                restoreNotice = "No active HiMem Plus subscription was found on this Apple Account."
+            case .failed(let msg):
+                restoreNotice = msg
+            }
+        }
+    }
+
     /// Trailing label on the Plus card header. For Plus users this
     /// shows their state instead of a price.
     private var plusCardPriceLine: String {
         entitlement.isPlus ? "Subscribed" : "from \(monthlyPriceFallback)/mo"
     }
 
+    /// Live monthly price, or an em-dash while StoreKit loads — never a
+    /// hardcoded number that could flash a wrong price.
     private var monthlyPriceFallback: String {
         StoreKitService.shared
             .product(for: StoreKitService.ProductID.plusMonthly)?
-            .displayPrice ?? "$6.99"
+            .displayPrice ?? "—"
     }
 
     /// One AI & Organizing list row. Free users see a tappable row

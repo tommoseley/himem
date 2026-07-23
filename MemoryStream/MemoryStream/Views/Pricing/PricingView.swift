@@ -21,10 +21,20 @@ import StoreKit
 /// Apple ID for management since cancellations live there.
 struct PricingView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @ObservedObject private var storeKit = StoreKitService.shared
     @ObservedObject private var entitlement = Entitlement.shared
     @State private var purchaseError: String?
     @State private var isPurchasing: Bool = false
+    @State private var selectedPlan: Plan = .monthly
+    @State private var isRestoring: Bool = false
+    @State private var restoreNotice: String?
+    @State private var showManageSubscriptions: Bool = false
+
+    /// Which subscription the CTA buys. Monthly and yearly are upgrade/
+    /// downgrade peers in one group, so the toggle just picks which product
+    /// `purchase(_:)` receives.
+    private enum Plan { case monthly, yearly }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +49,12 @@ struct PricingView: View {
         } message: {
             Text(purchaseError ?? "")
         }
+        .alert("Restore Purchases", isPresented: restoreBinding) {
+            Button("OK", role: .cancel) { restoreNotice = nil }
+        } message: {
+            Text(restoreNotice ?? "")
+        }
+        .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
         .task {
             // Refresh metadata on appear so prices reflect the
             // user's locale even on first reach.
@@ -50,6 +66,10 @@ struct PricingView: View {
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { purchaseError != nil }, set: { if !$0 { purchaseError = nil } })
+    }
+
+    private var restoreBinding: Binding<Bool> {
+        Binding(get: { restoreNotice != nil }, set: { if !$0 { restoreNotice = nil } })
     }
 
     // MARK: - Header
@@ -198,28 +218,20 @@ struct PricingView: View {
 
     @ViewBuilder
     private var priceAndPurchase: some View {
-        HStack(alignment: .lastTextBaseline) {
-            HStack(alignment: .lastTextBaseline, spacing: 5) {
-                Text(monthlyPrice)
-                    .font(.system(size: 26, weight: .semibold, design: .serif))
-                    .foregroundStyle(Crucible.Color.ink)
-                Text("/ month")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Crucible.Color.ink3)
-            }
-            Spacer()
-            Text(yearlyPriceCopy)
-                .font(.system(size: 12.5))
-                .foregroundStyle(Crucible.Color.ink3)
+        // Monthly / Annual selector — both products are purchasable; the
+        // toggle picks which one the CTA buys.
+        HStack(spacing: 8) {
+            planOption(.monthly, price: monthlyPrice, period: "/ month", note: nil)
+            planOption(.yearly, price: yearlyPrice, period: "/ year", note: yearlySavingsNote)
         }
-        .padding(.bottom, 9)
+        .padding(.bottom, 10)
 
-        Button(action: handlePurchaseMonthly) {
+        Button(action: handlePurchase) {
             HStack(spacing: 8) {
                 if isPurchasing {
                     ProgressView().tint(.white)
                 }
-                Text(isPurchasing ? "Working…" : "Try Plus free for a week")
+                Text(isPurchasing ? "Working…" : "Start Plus")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
             }
@@ -229,25 +241,102 @@ struct PricingView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .disabled(isPurchasing || monthlyProduct == nil)
+        .disabled(isPurchasing || selectedProduct == nil)
+
+        // Auto-renewal disclosure — required adjacent to the CTA. Compliance
+        // boilerplate, verbatim (`LegalLinks.renewalDisclosure`).
+        Text(LegalLinks.renewalDisclosure)
+            .font(.system(size: 10.5))
+            .foregroundStyle(Crucible.Color.ink3)
+            .multilineTextAlignment(.center)
+            .lineSpacing(1.5)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+
+        // Restore + Terms/Privacy — the required functional links.
+        HStack(spacing: 6) {
+            Button(action: handleRestore) {
+                if isRestoring {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Text("Restore Purchases")
+                }
+            }
+            .disabled(isRestoring)
+            legalDot
+            Button("Terms") { openURL(LegalLinks.terms) }
+            legalDot
+            Button("Privacy") { openURL(LegalLinks.privacy) }
+        }
+        .font(.system(size: 11.5))
+        .foregroundStyle(Crucible.Color.aiBlue)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 9)
 
         Text("Keep using Free for as long as you like.")
             .font(.system(size: 11.5))
             .foregroundStyle(Crucible.Color.ink3)
             .frame(maxWidth: .infinity)
-            .padding(.top, 7)
+            .padding(.top, 6)
+    }
+
+    private var legalDot: some View {
+        Text("·").foregroundStyle(Crucible.Color.ink4)
+    }
+
+    /// One selectable plan card in the Monthly/Annual toggle.
+    @ViewBuilder
+    private func planOption(_ plan: Plan, price: String, period: String, note: String?) -> some View {
+        let selected = selectedPlan == plan
+        Button {
+            selectedPlan = plan
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .lastTextBaseline, spacing: 4) {
+                    Text(price)
+                        .font(.system(size: 20, weight: .semibold, design: .serif))
+                        .foregroundStyle(Crucible.Color.ink)
+                    Text(period)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
+                Text(note ?? " ")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.accent)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(selected ? Crucible.Color.accentTint : Crucible.Color.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: 11)
+                    .stroke(selected ? Crucible.Color.accent : Crucible.Color.divider,
+                            lineWidth: selected ? 1.5 : 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 11))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     @ViewBuilder
     private var plusFooter: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             Text("You're on Plus.")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Crucible.Color.ink)
-            Text("Manage your subscription in iOS Settings → Apple ID → Subscriptions.")
-                .font(.system(size: 12.5))
-                .foregroundStyle(Crucible.Color.ink3)
-                .multilineTextAlignment(.center)
+            Button("Manage subscription") { showManageSubscriptions = true }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Crucible.Color.aiBlue)
+            HStack(spacing: 6) {
+                Button("Restore Purchases", action: handleRestore).disabled(isRestoring)
+                legalDot
+                Button("Terms") { openURL(LegalLinks.terms) }
+                legalDot
+                Button("Privacy") { openURL(LegalLinks.privacy) }
+            }
+            .font(.system(size: 11.5))
+            .foregroundStyle(Crucible.Color.aiBlue)
         }
         .padding(.vertical, 12)
     }
@@ -262,30 +351,36 @@ struct PricingView: View {
         storeKit.product(for: StoreKitService.ProductID.plusYearly)
     }
 
-    /// Localized monthly price, or a serif em-dash placeholder while
-    /// StoreKit is still loading.
-    private var monthlyPrice: String {
-        monthlyProduct?.displayPrice ?? "—"
+    /// The product the CTA will purchase, per the toggle.
+    private var selectedProduct: Product? {
+        selectedPlan == .monthly ? monthlyProduct : yearlyProduct
     }
 
-    /// Yearly subline — "or $69.99 / year" or a quiet hint while
-    /// StoreKit warms.
-    private var yearlyPriceCopy: String {
-        if let yearly = yearlyProduct {
-            return "or \(yearly.displayPrice) / year"
-        }
-        return "or yearly"
+    /// Localized prices, or a serif em-dash placeholder while StoreKit loads
+    /// — never a hardcoded number that could flash wrong.
+    private var monthlyPrice: String { monthlyProduct?.displayPrice ?? "—" }
+    private var yearlyPrice: String { yearlyProduct?.displayPrice ?? "—" }
+
+    /// "Save 17%" style note on the annual card, computed from the live
+    /// StoreKit prices (12× monthly vs yearly) — nil until both load, so we
+    /// never assert a discount the prices don't support.
+    private var yearlySavingsNote: String? {
+        guard let m = monthlyProduct?.price, let y = yearlyProduct?.price else { return nil }
+        let fullYear = m * 12
+        guard fullYear > 0, y < fullYear else { return nil }
+        let pct = Int((((fullYear - y) / fullYear) as NSDecimalNumber).doubleValue * 100)
+        return pct > 0 ? "Save \(pct)%" : nil
     }
 
-    private func handlePurchaseMonthly() {
-        guard let product = monthlyProduct else { return }
+    private func handlePurchase() {
+        guard let product = selectedProduct else { return }
         Task {
             isPurchasing = true
             defer { isPurchasing = false }
             let result = await storeKit.purchase(product)
             switch result {
             case .success:
-                // StoreKitService.applyTransaction will reconcile
+                // StoreKitService.applyTransaction reconciles
                 // Entitlement.isPlus; dismiss so the user lands back
                 // where they were already.
                 dismiss()
@@ -295,6 +390,21 @@ struct PricingView: View {
                 purchaseError = "Purchase pending approval (e.g. Ask to Buy). You'll be notified when it clears."
             case .failed(let msg):
                 purchaseError = msg
+            }
+        }
+    }
+
+    private func handleRestore() {
+        Task {
+            isRestoring = true
+            defer { isRestoring = false }
+            switch await storeKit.restorePurchases() {
+            case .restored:
+                dismiss()
+            case .nothingToRestore:
+                restoreNotice = "No active HiMem Plus subscription was found on this Apple Account."
+            case .failed(let msg):
+                restoreNotice = msg
             }
         }
     }

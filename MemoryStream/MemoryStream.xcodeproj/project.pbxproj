@@ -207,6 +207,7 @@
 		A900000008 /* ReorganizeReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000008 /* ReorganizeReviewSheet.swift */; };
 		A900000009 /* MentionReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000009 /* MentionReconciler.swift */; };
 		A900000010 /* TruthReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000010 /* TruthReconciler.swift */; };
+		A900000011 /* LegalLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000011 /* LegalLinks.swift */; };
 		A900000050 /* TopicPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000050 /* TopicPalette.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 		E2AD0E5C2FAD185F009FFEA1 /* Himem Watch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -474,6 +475,7 @@
 		B900000008 /* ReorganizeReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorganizeReviewSheet.swift; sourceTree = "<group>"; };
 		B900000009 /* MentionReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionReconciler.swift; sourceTree = "<group>"; };
 		B900000010 /* TruthReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TruthReconciler.swift; sourceTree = "<group>"; };
+		B900000011 /* LegalLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalLinks.swift; sourceTree = "<group>"; };
 		B900000050 /* TopicPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicPalette.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
@@ -974,6 +976,7 @@
 				B100000654 /* ProjectCapPolicy.swift */,
 				B100000655 /* ProjectAssistGate.swift */,
 				B900000005 /* Entitlement.swift */,
+				B900000011 /* LegalLinks.swift */,
 				B100000656 /* OrganizeCardState.swift */,
 			);
 			path = Entitlement;
@@ -1367,6 +1370,7 @@
 				A100000654 /* ProjectCapPolicy.swift in Sources */,
 				A100000655 /* ProjectAssistGate.swift in Sources */,
 				A900000005 /* Entitlement.swift in Sources */,
+				A900000011 /* LegalLinks.swift in Sources */,
 				A100000656 /* OrganizeCardState.swift in Sources */,
 				A100000660 /* SuggestionPrefilter.swift in Sources */,
 				A100000760 /* ProjectMembershipSuggester.swift in Sources */,
