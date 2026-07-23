@@ -195,11 +195,16 @@ final class ProcessingEngine {
                 existingTopics: existingTopics,
                 existingMentions: []
             )
-            // Honest-Label gate (2026-07-23) — on-device path ONLY. Apple's
-            // 3B model quality is a moving target (regressed on iOS 27) that
-            // fabricates proper names; enforce honesty in code, not the
-            // prompt. Verify → retry once → constrained extractive fallback.
-            let result = await gateOnDeviceResult(raw, clipText: content, existingTopics: existingTopics)
+            // TruthReconciler (2026-07-23) — one Honest-Label gate for all AI
+            // output. On-device gets `.strict` grounding: Apple's 3B model is
+            // a moving target (regressed on iOS 27) that fabricates proper
+            // names, so honesty is enforced in code, not the prompt. Verify →
+            // retry once → constrained extractive fallback.
+            let result = await reconcileResult(raw, clipText: content, strictness: .strict) {
+                try? await self.onDeviceOrganizer.organize(
+                    content: content, existingTopics: existingTopics, existingMentions: []
+                )
+            }
             return await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
         } catch {
             // Detailed diagnostic logging — Apple's Foundation Models
@@ -220,44 +225,50 @@ final class ProcessingEngine {
         }
     }
 
-    /// **Honest-Label gate — on-device path ONLY.** Apple's on-device model
-    /// fabricates proper names the clips don't contain (worsened on iOS 27),
-    /// and it's a platform-controlled moving target — so honesty is enforced
-    /// here in deterministic code, not the prompt. If the summary names a
-    /// proper noun absent from the clips, retry the pass once; if it still
-    /// fabricates, fall back to a constrained extractive summary drawn from
-    /// the clips (cannot introduce a new name — "say less before saying
-    /// false"). Independently, any ungrounded mention is dropped. The
-    /// frontier/Plus path is stable and is NOT gated (see `processWithCloud`).
-    private func gateOnDeviceResult(
+    /// **TruthReconciler gate — runs on BOTH tiers.** Models are advisory;
+    /// code is authoritative. If the summary names an entity absent from the
+    /// clips (per `strictness` — `.strict` on-device, `.relaxed` for the
+    /// frontier's legitimate paraphrase), retry the pass once via `retry`; if
+    /// it still fabricates, fall back to a constrained extractive summary drawn
+    /// from the clips (cannot introduce a new name — "say less before saying
+    /// false"). The guarantee is HiMem's, not any vendor's, so the cloud/Plus
+    /// path passes through too (relaxed) rather than trusting the model
+    /// unchecked. The ungrounded-mention drop is `.strict`/on-device only (the
+    /// palette-bleed guard); the summary/title gate is the both-tier guarantee.
+    private func reconcileResult(
         _ result: ClaudeAPIService.AnalysisResult,
         clipText: String,
-        existingTopics: [String]
+        strictness: TruthReconciler.Strictness,
+        retry: () async -> ClaudeAPIService.AnalysisResult?
     ) async -> ClaudeAPIService.AnalysisResult {
-        var gated = result
-        if HonestLabelGate.violates(summary: result.summary, sourceText: clipText) {
-            NSLog("[HiMem][HonestGate] on-device summary named a proper noun absent from the clips; retrying once")
-            if let retry = try? await onDeviceOrganizer.organize(
-                content: clipText, existingTopics: existingTopics, existingMentions: []
-               ),
-               !HonestLabelGate.violates(summary: retry.summary, sourceText: clipText) {
-                gated = retry
+        var reconciled = result
+        if TruthReconciler.violates(summary: result.summary, sourceText: clipText, strictness: strictness) {
+            NSLog("[HiMem][TruthReconciler] summary named an entity absent from the clips (\(strictness)); retrying once")
+            if let retried = await retry(),
+               !TruthReconciler.violates(summary: retried.summary, sourceText: clipText, strictness: strictness) {
+                reconciled = retried
             } else {
-                NSLog("[HiMem][HonestGate] retry still fabricated; falling back to extractive summary")
-                gated = ClaudeAPIService.AnalysisResult(
+                NSLog("[HiMem][TruthReconciler] retry still fabricated; falling back to extractive summary")
+                reconciled = ClaudeAPIService.AnalysisResult(
                     entities: result.entities,
                     topics: result.topics,
-                    summary: HonestLabelGate.extractiveSummary(fromClipText: clipText),
-                    title: HonestLabelGate.extractiveTitle(fromClipText: clipText)
+                    summary: TruthReconciler.extractiveSummary(fromClipText: clipText),
+                    title: TruthReconciler.extractiveTitle(fromClipText: clipText)
                 )
             }
         }
-        // Drop ungrounded mentions (a fabricated name in the mentions field
-        // is the same violation, one field over). Grounded mentions still
-        // flow through `canonicalizeMentions` for §2c library dedup.
-        let grounded = gated.entities.filter { HonestLabelGate.isGrounded($0.value, in: clipText) }
+        // Ungrounded-mention drop is the on-device palette-bleed guard
+        // (`.strict` only): the 3B model fabricated library people into
+        // memories that never named them. On the relaxed/frontier tier the
+        // model extracts mentions FROM the clips and they pass through
+        // `canonicalizeMentions` reconciliation — we don't additionally drop
+        // there (dropping would be a no-op on well-behaved frontier output and
+        // only risks discarding a legitimately-grounded name). The both-tier
+        // honesty guarantee is the summary/title gate above.
+        guard strictness == .strict else { return reconciled }
+        let grounded = reconciled.entities.filter { TruthReconciler.isGrounded($0.value, in: clipText, strictness: .strict) }
         return ClaudeAPIService.AnalysisResult(
-            entities: grounded, topics: gated.topics, summary: gated.summary, title: gated.title
+            entities: grounded, topics: reconciled.topics, summary: reconciled.summary, title: reconciled.title
         )
     }
 
@@ -293,7 +304,7 @@ final class ProcessingEngine {
             // tier they end up at.
             let tier = await MainActor.run { self.readTier() }
             let action = isFallback ? "memory_organize_fallback" : "memory_organize"
-            let result = try await analyzer.analyzeEntry(
+            let raw = try await analyzer.analyzeEntry(
                 content,
                 existingTopics: existingTopics,
                 existingMentions: existingMentions,
@@ -301,6 +312,15 @@ final class ProcessingEngine {
                 action: action
             )
 
+            // TruthReconciler on the frontier/Plus path too — `.relaxed`
+            // grounding (a name that's a variant/paraphrase of one in the
+            // clips passes; a wholly-invented one still falls back). The
+            // guarantee is HiMem's, not Anthropic's.
+            let result = await reconcileResult(raw, clipText: content, strictness: .relaxed) {
+                try? await self.analyzer.analyzeEntry(
+                    content, existingTopics: existingTopics, existingMentions: existingMentions, tier: tier, action: action
+                )
+            }
             return await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
         } catch {
             NSLog("[HiMem][Organize] cloud pass failed, falling through: \(error.localizedDescription)")
@@ -379,6 +399,7 @@ final class ProcessingEngine {
         let shouldTryAnthropic = connectivity.isConnected && (plus || !hasAI)
 
         var cloudAttempted = false
+        var producedByOnDevice = false
         var result: ClaudeAPIService.AnalysisResult?
         if shouldTryAnthropic {
             cloudAttempted = true
@@ -397,6 +418,7 @@ final class ProcessingEngine {
                 existingTopics: existingTopics,
                 existingMentions: existingMentions
             )
+            producedByOnDevice = result != nil
         }
 
         // Cloud as last-resort fallback — mirrors `processEntry`'s
@@ -421,10 +443,25 @@ final class ProcessingEngine {
 
         guard let result else { return }
 
+        // TruthReconciler on the reorganize draft — this is the exact path the
+        // "You, Ben…" fabrication surfaced on (a reorganize draft), so it must
+        // pass the same gate. Reorganize writes only title + summary, so there
+        // is nothing to reconcile but the prose. The multi-tier cascade above
+        // already served as the retry; the extractive fallback is the final
+        // guarantee. Strictness matches the backend that produced the draft.
+        let strictness: TruthReconciler.Strictness = producedByOnDevice ? .strict : .relaxed
+        var draftTitle = result.title
+        var draftSummary = result.summary
+        if TruthReconciler.violates(summary: result.summary, sourceText: content, strictness: strictness) {
+            NSLog("[HiMem][TruthReconciler] reorganize draft named an entity absent from the clips (\(strictness)); falling back to extractive")
+            draftSummary = TruthReconciler.extractiveSummary(fromClipText: content)
+            draftTitle = TruthReconciler.extractiveTitle(fromClipText: content)
+        }
+
         await context.perform { [self] in
             do {
                 let entry = try context.existingObject(with: objectID) as! JournalEntry
-                storeReorganizePass(title: result.title, summaryText: result.summary, for: entry, in: context)
+                storeReorganizePass(title: draftTitle, summaryText: draftSummary, for: entry, in: context)
                 try context.save()
             } catch {
                 // Swallow — spec §8: failed passes change nothing.
@@ -567,8 +604,7 @@ final class ProcessingEngine {
         result: ClaudeAPIService.AnalysisResult,
         against existingTopics: [String]
     ) -> ClaudeAPIService.AnalysisResult {
-        let partition = TopicPalette.partition(returned: result.topics, existing: existingTopics)
-        let canonicalTopics = partition.existing + partition.new
+        let canonicalTopics = TruthReconciler.reconcileTopics(returned: result.topics, existing: existingTopics)
         return ClaudeAPIService.AnalysisResult(
             entities: result.entities,
             topics: canonicalTopics,
@@ -588,7 +624,7 @@ final class ProcessingEngine {
         against existingMentions: [String]
     ) -> ClaudeAPIService.AnalysisResult {
         let names = result.entities.map { $0.value }
-        let canonical = MentionReconciler.reconcile(extracted: names, library: existingMentions)
+        let canonical = TruthReconciler.reconcileMentions(extracted: names, library: existingMentions)
         let entities = zip(result.entities, canonical).map { entity, name in
             ClaudeAPIService.EntityResult(type: entity.type, value: name, confidence: entity.confidence)
         }

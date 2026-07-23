@@ -127,32 +127,33 @@ struct OnDeviceOrganizerCalibrationTests {
 
         for f in Self.fixtures {
             // Mirror production END-TO-END (2026-07-23): palette removed from
-            // the prompt (fix #2), then the Honest-Label gate — verify the
-            // summary → retry once → constrained extractive fallback. The
-            // GATED summary is what ships, so that is what the rubric grades.
+            // the prompt (fix #2), then TruthReconciler (`.strict` on-device) —
+            // verify the summary → retry once → constrained extractive
+            // fallback. The GATED summary is what ships, so that is what the
+            // rubric grades.
             let raw = try await OnDeviceOrganizer().organize(
                 content: f.clips, existingTopics: f.existingTopics, existingMentions: []
             )
-            let rawFabricated = HonestLabelGate.fabricatedProperNouns(in: raw.summary, sourceText: f.clips)
+            let rawFabricated = TruthReconciler.fabricatedEntities(in: raw.summary, sourceText: f.clips, strictness: .strict)
 
             var summary = raw.summary
             var title = raw.title ?? ""
             var usedFallback = false
-            if HonestLabelGate.violates(summary: summary, sourceText: f.clips) {
+            if TruthReconciler.violates(summary: summary, sourceText: f.clips, strictness: .strict) {
                 let retry = try await OnDeviceOrganizer().organize(
                     content: f.clips, existingTopics: f.existingTopics, existingMentions: []
                 )
-                if !HonestLabelGate.violates(summary: retry.summary, sourceText: f.clips) {
+                if !TruthReconciler.violates(summary: retry.summary, sourceText: f.clips, strictness: .strict) {
                     summary = retry.summary; title = retry.title ?? ""
                 } else {
-                    summary = HonestLabelGate.extractiveSummary(fromClipText: f.clips)
-                    title = HonestLabelGate.extractiveTitle(fromClipText: f.clips)
+                    summary = TruthReconciler.extractiveSummary(fromClipText: f.clips)
+                    title = TruthReconciler.extractiveTitle(fromClipText: f.clips)
                     usedFallback = true
                 }
             }
             let topics = raw.topics
-            let mentions = MentionReconciler.reconcile(
-                extracted: raw.entities.map { $0.value }.filter { HonestLabelGate.isGrounded($0, in: f.clips) },
+            let mentions = TruthReconciler.reconcileMentions(
+                extracted: raw.entities.map { $0.value }.filter { TruthReconciler.isGrounded($0, in: f.clips, strictness: .strict) },
                 library: f.existingMentions
             )
 
@@ -160,7 +161,7 @@ struct OnDeviceOrganizerCalibrationTests {
             // absent from the clips — the gate's contract, catching ANY
             // invented name, not a banned list (the check the old fixed-
             // string antiTarget missed on "Albert").
-            let gatedFabricated = HonestLabelGate.fabricatedProperNouns(in: summary, sourceText: f.clips)
+            let gatedFabricated = TruthReconciler.fabricatedEntities(in: summary, sourceText: f.clips, strictness: .strict)
             let fabricationOK = gatedFabricated.isEmpty
             let bannedHit = f.bannedPhrases.first { summary.lowercased().contains($0.lowercased()) || title.lowercased().contains($0.lowercased()) }
             let antiTargetOK = bannedHit == nil

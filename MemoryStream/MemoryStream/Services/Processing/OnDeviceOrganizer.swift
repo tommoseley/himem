@@ -18,10 +18,11 @@ import FoundationModels
 /// So HiMem's Honest-Label guarantee is **NOT staked on this model's prompt
 /// behavior** — prompt tuning against a model Apple changes every OS release
 /// is permanently unstable. Honesty is enforced in **deterministic code**
-/// (`HonestLabelGate`, applied on the on-device path in
-/// `ProcessingEngine.gateOnDeviceResult`): a proper name in the summary that
-/// the clips don't contain is rejected → retry once → constrained extractive
-/// fallback ("say less before saying false"). Documented 3B QUALITY ceilings
+/// (`TruthReconciler`, applied on BOTH tiers via
+/// `ProcessingEngine.reconcileResult` — on-device gets `.strict` grounding):
+/// a proper name in the summary that the clips don't contain is rejected →
+/// retry once → constrained extractive fallback ("say less before saying
+/// false"). Models are advisory; code is authoritative. Documented 3B QUALITY ceilings
 /// that remain (hand-editable, frontier/Plus clears them, not open bugs):
 /// purposive drift · visible-photo claims · occasional voice slip ·
 /// subject-out POV slip · invent-a-speaker — the last is now caught by the
@@ -30,9 +31,9 @@ import FoundationModels
 /// Cross-memory contamination was a real bug, fixed at the source: the
 /// library topics/mentions palette is no longer fed to the model (it
 /// fabricated other memories' people into unrelated ones), and name reuse is
-/// reconciled in code (`MentionReconciler` + `ProcessingEngine
-/// .canonicalizeMentions`). The gate + reconciler together are the durable
-/// architecture; the prompt is not load-bearing for honesty.
+/// reconciled in code (`MentionReconciler`, now TruthReconciler's first
+/// module, via `ProcessingEngine.canonicalizeMentions`). The reconciler is the
+/// durable architecture; the prompt is not load-bearing for honesty.
 ///
 /// **No `nextSteps`.** Cut from v1 entirely (RH-6, July 20 2026) — it's
 /// no longer on `AnalysisResult` and no UI consumes it. The on-device
