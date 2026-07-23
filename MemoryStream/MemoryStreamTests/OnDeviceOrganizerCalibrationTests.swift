@@ -98,6 +98,20 @@ struct OnDeviceOrganizerCalibrationTests {
             expectReuseTopics: [], expectReuseMentions: [],
             summaryWordCeiling: 18, pov: .subjectOut
         ),
+        // Example-bleed regression (2026-07-23): a quote + photo memory that
+        // shares NOTHING with the (former) concrete cadence example. The
+        // prior prompt bled "peppers, tomatoes, and eggplants … garden …
+        // retirement … South Carolina" verbatim into exactly this kind of
+        // unrelated memory (the Lincoln-quote data-integrity bug). With the
+        // cadence example de-lexicalized, none of those nouns may appear.
+        Fixture(
+            n: 6, name: "Quote + photo — example-bleed guard (Lincoln)",
+            clips: "[audio] \"I am not bound to win, but I am bound to be true. I am not bound to succeed, but I'm bound to live up to what light I have.\"\n[photo] (no description)",
+            existingTopics: library, existingMentions: people,
+            bannedPhrases: ["pepper", "tomato", "eggplant", "garden", "retire", "south carolina"],
+            expectReuseTopics: [], expectReuseMentions: [],
+            summaryWordCeiling: 45, pov: .secondPerson
+        ),
     ]
 
     // MARK: - Runner

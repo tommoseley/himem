@@ -22,6 +22,21 @@ import FoundationModels
 /// schema never had it: the 3B model fabricates forward actions when given
 /// the field, even when the clips don't state them.
 ///
+/// **De-lexicalized cadence example (2026-07-23) — do not restore concrete
+/// nouns.** The "Cadence" rule's two examples use single-letter placeholders
+/// (A/B/C/D), never real nouns, ON PURPOSE. A 3B model parrots few-shot
+/// example prose into the summary body: the prior concrete example ("peppers,
+/// tomatoes, and eggplants … South Carolina garden … retirement") bled
+/// verbatim into an unrelated Lincoln-quote memory ("…alongside three clips
+/// of peppers, tomatoes, and eggplants") — an Honest-Label data-integrity
+/// failure (the summary asserted clips the memory doesn't contain). The
+/// abstraction IS the fix; a future edit must NOT "helpfully" swap the
+/// placeholders back to concrete nouns to "read better." The cadence
+/// pedagogy (one flowing thought vs. a clipped status log) is preserved, so
+/// this is a coherence fix, not a spike-invalidating change — but re-run the
+/// FM-spike QA panel after ANY prompt edit, since the prompt is the
+/// validated artifact.
+///
 /// **Mention typing.** The on-device prompt returns mentions as
 /// untyped strings (the model lacks reliable typing at the 3B scale).
 /// All mentions are stored as `.idea` — the Memory Detail UI surfaces
@@ -64,9 +79,9 @@ final class OnDeviceOrganizer: Organizer {
     - Every sentence about the owner must begin with "You" or "You're." Never "the user", "the author", "the clip", or "the memory" as a subject. Use names for everyone else.
     - If the memory has NO first-person voice — only a photo or a bare observation, nobody speaking as "I" — leave the owner out entirely. Do NOT write "You're capturing…" or "You…". Name only what is there. Example: for a sunset photo, "A deep-orange sunset over the ridge," not "You captured a sunset."
     - Do not add reasons, purposes, or causes the clips don't state. No "to ___," no "because ___."
-    - Cadence: write the summary as ONE connected thought, the way a thoughtful friend would recap — flowing, subordinated sentences that string the facts together. Never a run of short, clipped "You're X. You're Y. The Z is …" declaratives; that reads as a cold status log about the person. Keep the specific nouns; change only how they connect.
-        Cold, avoid this: "You're tracking the needs of peppers, tomatoes, and eggplants. You're adjusting to a schedule change after retirement. The heat in South Carolina is affecting the garden."
-        Warm, match this: "You're tending peppers, tomatoes, and eggplants through a hot, humid South Carolina summer, and finding a new rhythm for the garden since retirement."
+    - Cadence: write the summary as ONE connected thought, the way a thoughtful friend would recap — flowing, subordinated sentences that string the facts together. Never a run of short, clipped "You're X. You're Y. The Z is …" declaratives; that reads as a cold status log about the person. Keep the memory's own specific nouns; change only how they connect. The two examples below are deliberately ABSTRACT — A/B/C/D are placeholders standing in for the memory's real nouns, NOT words to output; they show the connecting shape only:
+        Cold shape to avoid (clipped, separate declaratives): "You're noting A. You're adjusting to B. The C is affecting D."
+        Warm shape to match (one flowing, subordinated thought): "You're noting A through B, and finding a new C since D."
     - Photo and video clips are not visible. Do not describe their visual content. Reference them by count only.
     - Topic selection: when the input lists the user's existing topics, prefer one of those exact labels if any fits this memory. Coin a new topic only when none of the existing topics reasonably fit.
     - Mention selection: when the input lists people, places, and projects the user has mentioned before, prefer one of those exact names if the memory refers to the same one. Coin a new mention only when none of the existing ones match.
