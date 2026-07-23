@@ -43,3 +43,17 @@ final class MemoryDetailPresentationContext: ObservableObject {
     }
     #endif
 }
+
+/// True while a project's **thread-summary action row** (Keep this summary /
+/// Find the thread again) is on screen. Read by `HiMemTabView` so the tab-shell
+/// capture FAB steps aside rather than overlapping those actions — the project
+/// analogue of Memory Detail's "the append FAB yields the bottom-right corner
+/// to the Let Go footer" rule (`EntryExpandedView` §Overlap fix). Wired by the
+/// summary card's `onAppear`/`onDisappear`.
+@MainActor
+final class ProjectSummaryActionsPresence: ObservableObject {
+    static let shared = ProjectSummaryActionsPresence()
+    @Published private(set) var actionsOnScreen: Bool = false
+    private init() {}
+    func setOnScreen(_ value: Bool) { actionsOnScreen = value }
+}

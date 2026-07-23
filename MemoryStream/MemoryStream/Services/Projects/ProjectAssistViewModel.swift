@@ -156,3 +156,37 @@ protocol ProjectAssistAPI {
 }
 
 extension ClaudeAPIService: ProjectAssistAPI {}
+
+/// Per-device "kept" marker for a project's thread summary — the project
+/// analogue of the memory reorganize draft's "Keep this version" commit,
+/// and of `BenchClipReviewStore` for clip review-state.
+///
+/// **Keyed on the summary's `lastThreadGeneratedAt` instant**, so a fresh
+/// "Find the thread again" (which stamps a new generated-at) automatically
+/// falls back to Draft — no explicit un-keep needed. Persisted per-device in
+/// UserDefaults: like `reviewed` on clips, this is a review-state noise signal,
+/// not load-bearing content, so per-device is honest for v1 and needs **no
+/// CloudKit schema change / deploy** (the summary text + generated-at already
+/// sync; only the glance-state is local). Cross-device kept-sync rides the same
+/// post-v1 UX-metadata migration as the clip `reviewed` flag.
+enum ProjectThreadReviewStore {
+    private static let key = "com.himem.project.threadSummaryKeptAt"
+
+    /// Kept iff a kept-instant is recorded for this project that matches the
+    /// summary's current generated-at.
+    static func isKept(projectId: UUID, generatedAt: Date?) -> Bool {
+        guard let generatedAt, let stored = map()[projectId.uuidString] else { return false }
+        return abs(stored - generatedAt.timeIntervalSinceReferenceDate) < 0.5
+    }
+
+    static func markKept(projectId: UUID, generatedAt: Date?) {
+        guard let generatedAt else { return }
+        var m = map()
+        m[projectId.uuidString] = generatedAt.timeIntervalSinceReferenceDate
+        UserDefaults.standard.set(m, forKey: key)
+    }
+
+    private static func map() -> [String: Double] {
+        (UserDefaults.standard.dictionary(forKey: key) as? [String: Double]) ?? [:]
+    }
+}
