@@ -31,11 +31,16 @@ import FoundationModels
 /// of peppers, tomatoes, and eggplants") — an Honest-Label data-integrity
 /// failure (the summary asserted clips the memory doesn't contain). The
 /// abstraction IS the fix; a future edit must NOT "helpfully" swap the
-/// placeholders back to concrete nouns to "read better." The cadence
-/// pedagogy (one flowing thought vs. a clipped status log) is preserved, so
-/// this is a coherence fix, not a spike-invalidating change — but re-run the
-/// FM-spike QA panel after ANY prompt edit, since the prompt is the
-/// validated artifact.
+/// placeholders back to concrete nouns to "read better." The shapes are also
+/// **verb-free and POV-neutral** (only connective function words —
+/// while/and/since — remain): a first pass with concrete verbs ("You're
+/// noting A…") re-bled — the 3B model parroted the verb "noting" into 4 of 6
+/// calibration summaries and the "You're" pushed a subject-out memory to
+/// second person. So keep the shapes free of verbs and pronouns too; the
+/// separate owner-voice rule governs "You"/"You're". The cadence pedagogy
+/// (one flowing thought vs. a clipped status log) is preserved, so this is a
+/// coherence fix, not a spike-invalidating change — but re-run the FM-spike
+/// QA panel after ANY prompt edit, since the prompt is the validated artifact.
 ///
 /// **Mention typing.** The on-device prompt returns mentions as
 /// untyped strings (the model lacks reliable typing at the 3B scale).
@@ -79,9 +84,9 @@ final class OnDeviceOrganizer: Organizer {
     - Every sentence about the owner must begin with "You" or "You're." Never "the user", "the author", "the clip", or "the memory" as a subject. Use names for everyone else.
     - If the memory has NO first-person voice — only a photo or a bare observation, nobody speaking as "I" — leave the owner out entirely. Do NOT write "You're capturing…" or "You…". Name only what is there. Example: for a sunset photo, "A deep-orange sunset over the ridge," not "You captured a sunset."
     - Do not add reasons, purposes, or causes the clips don't state. No "to ___," no "because ___."
-    - Cadence: write the summary as ONE connected thought, the way a thoughtful friend would recap — flowing, subordinated sentences that string the facts together. Never a run of short, clipped "You're X. You're Y. The Z is …" declaratives; that reads as a cold status log about the person. Keep the memory's own specific nouns; change only how they connect. The two examples below are deliberately ABSTRACT — A/B/C/D are placeholders standing in for the memory's real nouns, NOT words to output; they show the connecting shape only:
-        Cold shape to avoid (clipped, separate declaratives): "You're noting A. You're adjusting to B. The C is affecting D."
-        Warm shape to match (one flowing, subordinated thought): "You're noting A through B, and finding a new C since D."
+    - Cadence: write the summary as ONE connected thought, the way a thoughtful friend would recap — flowing, subordinated sentences that string the facts together. Never a run of short, clipped "You're X. You're Y. The Z is …" declaratives; that reads as a cold status log about the person. Keep the memory's own specific nouns; change only how they connect. The two shapes below are POV-neutral structural templates: A/B/C/D stand for THIS memory's real facts, and the connecting words (while / and / since) show how to subordinate them into one sentence. Copy NEITHER the letters NOR any verb or pronoun from these shapes — they teach connection only; the owner-voice rule above governs "You"/"You're":
+        Cold shape to avoid (clipped, separate declaratives): "A. B. C. D."
+        Warm shape to match (one connected, subordinated thought): "A, while B, and C since D."
     - Photo and video clips are not visible. Do not describe their visual content. Reference them by count only.
     - Topic selection: when the input lists the user's existing topics, prefer one of those exact labels if any fits this memory. Coin a new topic only when none of the existing topics reasonably fit.
     - Mention selection: when the input lists people, places, and projects the user has mentioned before, prefer one of those exact names if the memory refers to the same one. Coin a new mention only when none of the existing ones match.
