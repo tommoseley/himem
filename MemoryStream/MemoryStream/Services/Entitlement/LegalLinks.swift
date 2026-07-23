@@ -5,16 +5,13 @@ import Foundation
 /// adjacent to any auto-renewable-subscription CTA — these must resolve when
 /// Apple taps them.
 ///
-/// - Important: These point at the AWS-deployed HiMem pages
-///   (`docs/design/HiMem · App Info.html` / `HiMem · Privacy Policy.html`).
-///   **CONFIRM the exact deployed URLs before submission** — a dead link is a
-///   3.1.2 rejection. If HiMem uses Apple's standard EULA rather than a custom
-///   one, `terms` may instead point at
-///   `https://www.apple.com/legal/internet-services/itunes/dev/stdeula/`.
+/// - Important: These are the live Kingfisher Studio pages. App Review taps
+///   them, so if either is ever renamed/moved the link must be updated here in
+///   the same change — a dead link is a 3.1.2 rejection.
 enum LegalLinks {
-    // TODO(tom): confirm these are the live AWS-hosted URLs before TestFlight/submit.
-    static let terms = URL(string: "https://himem.app/terms")!
-    static let privacy = URL(string: "https://himem.app/privacy")!
+    /// The License Agreement (EULA).
+    static let terms = URL(string: "https://kingfisherstudio.co/himem-license-agreement.html")!
+    static let privacy = URL(string: "https://kingfisherstudio.co/himem-privacy-policy.html")!
 
     /// Apple's expected auto-renewal disclosure, verbatim. Compliance
     /// boilerplate, not brand voice — do not reword.
