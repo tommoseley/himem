@@ -147,7 +147,10 @@ enum SortBatchCommit {
                 for: entry,
                 audioFilename: clip.audioFilename,
                 transcript: clip.transcript,
-                createdAt: clip.capturedAt
+                createdAt: clip.capturedAt,
+                // Carry the inbox clip's origin onto the ref (B4) — a watch
+                // clip promoted to a memory keeps its applewatch glyph.
+                sourceDevice: JournalEntry.SourceDevice(rawValue: clip.source)
             )
         }
         try? storage.save(context: storage.viewContext)

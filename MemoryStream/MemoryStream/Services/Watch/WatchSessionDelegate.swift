@@ -464,11 +464,13 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     /// rows, all sharing the master's `rollGroupId`. The master file
     /// is removed after a successful split so disk doesn't carry both.
     ///
-    /// Each finalized audio file is run through `AudioCompressor` before
-    /// being referenced by the manifest. Watch clips arrive as raw
-    /// Float32 PCM (~192 KB/sec) because watchOS lacks `AVAssetWriter`;
-    /// the phone compresses to AAC (~4 KB/sec, ~48× smaller) so the
-    /// on-device storage and CloudKit footprint stay bounded.
+    /// Each finalized audio file is passed through `compressIfPossible`
+    /// before being referenced by the manifest. **Since 4a (July 2026) the
+    /// watch transcodes to mono/16 kHz/AAC on-device before `transferFile`,
+    /// so arrived clips already conform** — `compressIfPossible` skips them
+    /// (RH-3) and only compresses a non-conforming file (e.g. a legacy raw
+    /// PCM artifact), which it downmixes/encodes to AAC. The stale "watch
+    /// clips arrive as raw Float32 PCM" premise was retired with 4a.
     ///
     /// Pure idempotency decision for `acceptArrivedClip`. Replaces
     /// the prior three-layer dedup (manifest-membership +
@@ -685,6 +687,16 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
 
     private static func compressIfPossible(at url: URL, label: String) async {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
+        // RH-3 (July 20 2026): the watch transcodes every clip to
+        // mono/16 kHz/AAC BEFORE `transferFile` (4a), so an arrived clip
+        // already conforms to the transfer contract. Re-encoding AAC→AAC here
+        // is wasteful and measured ~2.7× attenuation on the signature capture
+        // path. Skip when the file already conforms — reusing the transcoder's
+        // send-gate predicate so "conforming" can't drift between the two.
+        if WatchTransferAudioTranscoder.isTransferReady(url) {
+            NSLog("[HiMem][WC] compress skipped \(label): already mono/16k/AAC (transfer-contract-conforming)")
+            return
+        }
         let before = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
         // Snapshot the source format for diagnostics. Compressor
         // failures previously logged only the error text; the

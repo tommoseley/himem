@@ -65,6 +65,8 @@
 		A100000094 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000094 /* LocationService.swift */; };
 		A100000095 /* PlacemarkFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000095 /* PlacemarkFormatter.swift */; };
 		A100000096 /* ClipLocationResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000096 /* ClipLocationResolver.swift */; };
+		A100000097 /* Mention.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000097 /* Mention.swift */; };
+		A100000098 /* ManageMentionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000098 /* ManageMentionsSheet.swift */; };
 		A100000201 /* MediaTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000201 /* MediaTile.swift */; };
 		A100000204 /* TextSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000204 /* TextSegment.swift */; };
 		A100000205 /* ChronologicalCaptureStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000205 /* ChronologicalCaptureStream.swift */; };
@@ -140,6 +142,7 @@
 		A100000763 /* ProjectAssistViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000763 /* ProjectAssistViewModel.swift */; };
 		A100000770 /* LaunchSignposter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000770 /* LaunchSignposter.swift */; };
 		A100000780 /* PermissionWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000780 /* PermissionWizardView.swift */; };
+		A100000790 /* AddExistingClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000790 /* AddExistingClipsSheet.swift */; };
 		A100000802 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
 		A100000803 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
 		A100000811 /* WatchAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* WatchAudioSessionConfig.swift */; };
@@ -150,7 +153,6 @@
 		A100000910 /* EditTextSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000910 /* EditTextSheet.swift */; };
 		A100000950 /* TopicChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000950 /* TopicChip.swift */; };
 		A100000951 /* ManageTopicsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000951 /* ManageTopicsSheet.swift */; };
-		A100000952 /* ManagedChipEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000952 /* ManagedChipEdit.swift */; };
 		A100000970 /* TranscriptMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000970 /* TranscriptMode.swift */; };
 		A100000971 /* CompactTranscriptViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000971 /* CompactTranscriptViews.swift */; };
 		A100000980 /* VideoPlayerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000980 /* VideoPlayerSheet.swift */; };
@@ -161,6 +163,7 @@
 		A100000992 /* TutorialOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000992 /* TutorialOrchestrator.swift */; };
 		A100000993 /* QuickLookViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000993 /* QuickLookViewer.swift */; };
 		A100000994 /* BottomDeleteButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000994 /* BottomDeleteButton.swift */; };
+		A100000998 /* PhotoViewerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000998 /* PhotoViewerSheet.swift */; };
 		A100000CFF /* ClipsUnplacedFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000CFF /* ClipsUnplacedFilter.swift */; };
 		A200000010 /* MemoryClipEdge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000010 /* MemoryClipEdge.swift */; };
 		A200000020 /* HiMemTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000020 /* HiMemTabView.swift */; };
@@ -202,6 +205,9 @@
 		A900000006 /* PricingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000006 /* PricingView.swift */; };
 		A900000007 /* AfterAGlanceNudge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000007 /* AfterAGlanceNudge.swift */; };
 		A900000008 /* ReorganizeReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000008 /* ReorganizeReviewSheet.swift */; };
+		A900000009 /* MentionReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000009 /* MentionReconciler.swift */; };
+		A900000010 /* TruthReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000010 /* TruthReconciler.swift */; };
+		A900000011 /* LegalLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000011 /* LegalLinks.swift */; };
 		A900000050 /* TopicPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000050 /* TopicPalette.swift */; };
 		E2AD07912FA3D74D009FFEA1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */; };
 		E2AD0E5C2FAD185F009FFEA1 /* Himem Watch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E2AD0E3C2FAD185D009FFEA1 /* Himem Watch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -334,6 +340,8 @@
 		B100000094 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		B100000095 /* PlacemarkFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacemarkFormatter.swift; sourceTree = "<group>"; };
 		B100000096 /* ClipLocationResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipLocationResolver.swift; sourceTree = "<group>"; };
+		B100000097 /* Mention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mention.swift; sourceTree = "<group>"; };
+		B100000098 /* ManageMentionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageMentionsSheet.swift; sourceTree = "<group>"; };
 		B100000201 /* MediaTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaTile.swift; sourceTree = "<group>"; };
 		B100000204 /* TextSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSegment.swift; sourceTree = "<group>"; };
 		B100000205 /* ChronologicalCaptureStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronologicalCaptureStream.swift; sourceTree = "<group>"; };
@@ -404,6 +412,7 @@
 		B100000763 /* ProjectAssistViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistViewModel.swift; sourceTree = "<group>"; };
 		B100000770 /* LaunchSignposter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSignposter.swift; sourceTree = "<group>"; };
 		B100000780 /* PermissionWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionWizardView.swift; sourceTree = "<group>"; };
+		B100000790 /* AddExistingClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddExistingClipsSheet.swift; sourceTree = "<group>"; };
 		B100000801 /* WatchTransferAudioTranscoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchTransferAudioTranscoder.swift; path = Shared/WatchTransferAudioTranscoder.swift; sourceTree = "<group>"; };
 		B100000810 /* WatchAudioSessionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchAudioSessionConfig.swift; path = Shared/WatchAudioSessionConfig.swift; sourceTree = "<group>"; };
 		B100000900 /* UbiquityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UbiquityStore.swift; sourceTree = "<group>"; };
@@ -412,7 +421,6 @@
 		B100000910 /* EditTextSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTextSheet.swift; sourceTree = "<group>"; };
 		B100000950 /* TopicChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicChip.swift; sourceTree = "<group>"; };
 		B100000951 /* ManageTopicsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageTopicsSheet.swift; sourceTree = "<group>"; };
-		B100000952 /* ManagedChipEdit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedChipEdit.swift; sourceTree = "<group>"; };
 		B100000970 /* TranscriptMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptMode.swift; sourceTree = "<group>"; };
 		B100000971 /* CompactTranscriptViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactTranscriptViews.swift; sourceTree = "<group>"; };
 		B100000980 /* VideoPlayerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerSheet.swift; sourceTree = "<group>"; };
@@ -423,6 +431,7 @@
 		B100000992 /* TutorialOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TutorialOrchestrator.swift; path = MemoryStream/Services/Tutorials/TutorialOrchestrator.swift; sourceTree = SOURCE_ROOT; };
 		B100000993 /* QuickLookViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookViewer.swift; sourceTree = "<group>"; };
 		B100000994 /* BottomDeleteButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomDeleteButton.swift; sourceTree = "<group>"; };
+		B100000998 /* PhotoViewerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoViewerSheet.swift; sourceTree = "<group>"; };
 		B100000CFF /* ClipsUnplacedFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipsUnplacedFilter.swift; sourceTree = "<group>"; };
 		B200000010 /* MemoryClipEdge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryClipEdge.swift; sourceTree = "<group>"; };
 		B200000020 /* HiMemTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiMemTabView.swift; sourceTree = "<group>"; };
@@ -464,6 +473,9 @@
 		B900000006 /* PricingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PricingView.swift; sourceTree = "<group>"; };
 		B900000007 /* AfterAGlanceNudge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AfterAGlanceNudge.swift; sourceTree = "<group>"; };
 		B900000008 /* ReorganizeReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorganizeReviewSheet.swift; sourceTree = "<group>"; };
+		B900000009 /* MentionReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionReconciler.swift; sourceTree = "<group>"; };
+		B900000010 /* TruthReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TruthReconciler.swift; sourceTree = "<group>"; };
+		B900000011 /* LegalLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalLinks.swift; sourceTree = "<group>"; };
 		B900000050 /* TopicPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicPalette.swift; sourceTree = "<group>"; };
 		E286A8DA2F99475300960222 /* MemoryStreamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2AD07902FA3D74D009FFEA1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = SOURCE_ROOT; };
@@ -607,6 +619,7 @@
 				B100000204 /* TextSegment.swift */,
 				B100000301 /* CaptureModality.swift */,
 				B100000048 /* Project.swift */,
+				B100000097 /* Mention.swift */,
 				B100000626 /* OrganizePass.swift */,
 				B200000010 /* MemoryClipEdge.swift */,
 				B100000024 /* MemoryStream.xcdatamodeld */,
@@ -680,6 +693,7 @@
 				B100000019 /* EntryCardView.swift */,
 				B100000045 /* EntryExpandedView.swift */,
 				B100000736 /* EntryAppendCoordinator.swift */,
+				B100000790 /* AddExistingClipsSheet.swift */,
 				B100000737 /* JournalErrorBanner.swift */,
 				B100000740 /* JournalCaptureCoordinator.swift */,
 				B100000205 /* ChronologicalCaptureStream.swift */,
@@ -721,15 +735,16 @@
 				B100000027 /* SettingsView.swift */,
 				B100000028 /* NewTopicSheet.swift */,
 				B100000950 /* TopicChip.swift */,
-				B100000952 /* ManagedChipEdit.swift */,
 				B100000991 /* TutorialsHubView.swift */,
 				B100000992 /* TutorialOrchestrator.swift */,
 				B200000025 /* CoachmarkOrchestrator.swift */,
 				B200000026 /* CoachmarkView.swift */,
 				B100000993 /* QuickLookViewer.swift */,
+				B100000998 /* PhotoViewerSheet.swift */,
 				B100000994 /* BottomDeleteButton.swift */,
 				B200000034 /* NewProjectFAB.swift */,
 				B100000951 /* ManageTopicsSheet.swift */,
+				B100000098 /* ManageMentionsSheet.swift */,
 				B100000980 /* VideoPlayerSheet.swift */,
 				B100000732 /* TopicColorPicker.swift */,
 				B100000733 /* TopicEditorSheet.swift */,
@@ -795,6 +810,8 @@
 			children = (
 				B100000014 /* ProcessingEngine.swift */,
 				B900000001 /* Organizer.swift */,
+				B900000009 /* MentionReconciler.swift */,
+				B900000010 /* TruthReconciler.swift */,
 				B900000002 /* OnDeviceOrganizer.swift */,
 				B900000003 /* ServerOrganizer.swift */,
 				B900000050 /* TopicPalette.swift */,
@@ -959,6 +976,7 @@
 				B100000654 /* ProjectCapPolicy.swift */,
 				B100000655 /* ProjectAssistGate.swift */,
 				B900000005 /* Entitlement.swift */,
+				B900000011 /* LegalLinks.swift */,
 				B100000656 /* OrganizeCardState.swift */,
 			);
 			path = Entitlement;
@@ -1312,6 +1330,7 @@
 				A100000734 /* EntryQueryService.swift in Sources */,
 				A100000735 /* VoiceRecordingController.swift in Sources */,
 				A100000736 /* EntryAppendCoordinator.swift in Sources */,
+				A100000790 /* AddExistingClipsSheet.swift in Sources */,
 				A100000737 /* JournalErrorBanner.swift in Sources */,
 				A100000740 /* JournalCaptureCoordinator.swift in Sources */,
 				A100000741 /* InboxTranscriptionDispatcher.swift in Sources */,
@@ -1351,6 +1370,7 @@
 				A100000654 /* ProjectCapPolicy.swift in Sources */,
 				A100000655 /* ProjectAssistGate.swift in Sources */,
 				A900000005 /* Entitlement.swift in Sources */,
+				A900000011 /* LegalLinks.swift in Sources */,
 				A100000656 /* OrganizeCardState.swift in Sources */,
 				A100000660 /* SuggestionPrefilter.swift in Sources */,
 				A100000760 /* ProjectMembershipSuggester.swift in Sources */,
@@ -1414,6 +1434,8 @@
 				A100000013 /* ConnectivityMonitor.swift in Sources */,
 				A100000014 /* ProcessingEngine.swift in Sources */,
 				A900000001 /* Organizer.swift in Sources */,
+				A900000009 /* MentionReconciler.swift in Sources */,
+				A900000010 /* TruthReconciler.swift in Sources */,
 				A900000002 /* OnDeviceOrganizer.swift in Sources */,
 				A900000003 /* ServerOrganizer.swift in Sources */,
 				A900000050 /* TopicPalette.swift in Sources */,
@@ -1429,14 +1451,15 @@
 				A100000026 /* SettingsView.swift in Sources */,
 				A100000027 /* NewTopicSheet.swift in Sources */,
 				A100000950 /* TopicChip.swift in Sources */,
-				A100000952 /* ManagedChipEdit.swift in Sources */,
 				A100000991 /* TutorialsHubView.swift in Sources */,
 				A100000992 /* TutorialOrchestrator.swift in Sources */,
 				A200000025 /* CoachmarkOrchestrator.swift in Sources */,
 				A200000026 /* CoachmarkView.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,
+				A100000998 /* PhotoViewerSheet.swift in Sources */,
 				A100000994 /* BottomDeleteButton.swift in Sources */,
 				A100000951 /* ManageTopicsSheet.swift in Sources */,
+				A100000098 /* ManageMentionsSheet.swift in Sources */,
 				A100000980 /* VideoPlayerSheet.swift in Sources */,
 				A100000201 /* MediaTile.swift in Sources */,
 				A100000302 /* AppendFAB.swift in Sources */,
@@ -1452,6 +1475,7 @@
 				A100000057 /* EntryLifecycleService.swift in Sources */,
 				A100000056 /* EntryMapper.swift in Sources */,
 				A100000048 /* Project.swift in Sources */,
+				A100000097 /* Mention.swift in Sources */,
 				A100000049 /* ProjectViewModel.swift in Sources */,
 				A100000050 /* ProjectCardView.swift in Sources */,
 				A100000051 /* ProjectListView.swift in Sources */,

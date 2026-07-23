@@ -75,6 +75,18 @@ function App() {
           <ScrClipsStatusSheet />
         </DCArtboard>
       </DCSection>
+      <DCSection id="loose" title="Clips · Unconnected — the cleanup lens (All·New·Unconnected)"
+        subtitle="Unconnected = connectionCount==0 (never-used ∨ previously-attached-then-deleted ∨ detached). A UNIFIED list across backing types — unpromoted inbox clips (watch/phone, source glyph on each row) AND detached MediaReferences. New = reviewed==false (unseen), so a previously-shaped clip returned by a deletion is NOT re-badged New — it reads honestly ('was in a memory · now unconnected'). Multi-select → Delete / Add to a memory (Photos-style, reuses the Sort inclusion model). No cascade at deletion, no count/badge. 'Orphaned' is architecture-only; the UI says 'Unconnected' (consistent with the status sheet's 'Not yet connected').">
+        <DCArtboard id="clips-loose" label="Unconnected · resting · quiet Select (no count/badge)" width={340} height={735}>
+          <ScrClipsLoose />
+        </DCArtboard>
+        <DCArtboard id="clips-loose-selecting" label="Unconnected · selecting · bottom bar = Add to a memory (ochre) + Delete N (danger)" width={340} height={735}>
+          <ScrClipsLooseSelecting />
+        </DCArtboard>
+        <DCArtboard id="clips-new-selecting" label="New · selecting · session-card select (batch-selects its clips) + drag-to-select · same bottom bar" width={340} height={735}>
+          <ScrClipsNewSelecting />
+        </DCArtboard>
+      </DCSection>
     </DesignCanvas>
   );
 }

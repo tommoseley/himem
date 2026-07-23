@@ -1,6 +1,22 @@
 import Foundation
 import UserNotifications
 
+/// The one persisted user control for Captured-Clips arrival notifications
+/// (RH-1, July 20 2026). Defaults ON. Consulted by
+/// `WatchInboxNotificationCoordinator` before every passive push and bound
+/// to the single toggle in onboarding + Settings. Distinct from the OS
+/// permission: arrivals fire only when BOTH the OS grant AND this toggle
+/// are on. Before RH-1 the onboarding toggle was cosmetic (never consulted).
+enum NotificationPreference {
+    private static let key = "himem.notify.arrivalsEnabled"
+
+    static var arrivalsEnabled: Bool {
+        // Default ON — the onboarding toggle ships enabled and confirmed.
+        get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+}
+
 /// Local notifications for HiMem. One surface only:
 ///
 /// **Inbox arrival (Channel A)** — when a watch-recorded clip lands in

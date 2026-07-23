@@ -23,7 +23,6 @@ struct EntryExpandedView: View {
     /// mediaCaptures: staged photo/video/voice assets.
     var onCommit: ((UUID, String, [(localIdentifier: String, mediaType: MediaReference.MediaType)]) -> Void)? = nil
     var onRecycle: ((UUID) -> Void)? = nil
-    var onAddToProject: ((UUID, UUID) -> Void)? = nil  // entryId, projectId
     /// Set when this Memory Detail was opened from inside a project.
     /// When non-nil, the bottom destruction button swaps from
     /// `Delete memory` to `Remove from project` per `Memory Detail ·
@@ -31,7 +30,8 @@ struct EntryExpandedView: View {
     /// **Remove from project** (memory survives)". The callback
     /// receives the entry id; the host wires the project context.
     var onRemoveFromProject: ((UUID) -> Void)? = nil
-    var availableProjects: [ProjectDisplayModel] = []
+    /// Names the project for the "Remove from [project]" button (F2/F3).
+    var projectContextName: String? = nil
 
     @Environment(\.dismiss) private var dismiss
 
@@ -46,6 +46,28 @@ struct EntryExpandedView: View {
     // through `applyEditsImmediately`, and the per-sheet target ids).
     @State private var editedTitle = ""
     @State private var removedMediaIds: Set<UUID> = []
+    /// Memory Detail FAB · path 2: presents `AddExistingClipsSheet` to
+    /// attach loose bench clips to this memory
+    /// (`Memory Detail · unified editing model.md` §"Adding clips to a
+    /// memory").
+    @State private var showAddExistingClips = false
+    /// True while the bottom "Let Go of this Memory" button is on screen.
+    /// The append FAB hides so the full-width Delete owns the bottom-right
+    /// — the same suppression rule the Clips multi-select FAB follows.
+    /// Driven by the button's own `onAppear`/`onDisappear` (List calls
+    /// these as rows enter/leave the viewport) — reliable, unlike
+    /// `PreferenceKey`s emitted from inside a `List`, which don't
+    /// propagate to ancestor `onPreferenceChange`.
+    @State private var letGoOnScreen = false
+    /// True while the zero-height top anchor is on screen — i.e. the body
+    /// is at its resting top, not scrolled. Paired with `letGoOnScreen`
+    /// so the FAB only hides after a deliberate scroll: a short memory
+    /// shows both anchor and Delete at once (`letGoOnScreen && !scrolled`
+    /// → keep the FAB), so the only add affordance is never stranded.
+    @State private var topAnchorVisible = true
+    /// P8 Let Go split disclosure, computed once on appear (nil → the static
+    /// footnote shows until it's ready).
+    @State private var letGoSplitFootnote: String? = nil
     /// Non-nil while `PlaceClipSheet` is presented on top of this
     /// memory. Carries the clip id being relocated so the sheet can
     /// resolve the ref + wire "Remove from this memory" against this
@@ -60,7 +82,7 @@ struct EntryExpandedView: View {
     /// this container. Non-nil while the QuickLook is presented
     /// over a photo tap. Video keeps its own `videoPlayerForItem`
     /// full-screen cover.
-    @State private var photoViewerItem: QuickLookItem? = nil
+    @State private var photoViewerItem: MediaDisplayItem? = nil
     /// Non-nil while the full-screen video player is presented.
     /// Set when the user taps a video's play badge in the
     /// chronological capture stream. Pre-launch addition (Tom
@@ -154,6 +176,13 @@ struct EntryExpandedView: View {
     /// `.manageTopics` cases; the `.newTopic` case rode the dead
     /// `addTopicMenu` and went out with the cleanup.
     @State private var showManageTopics: Bool = false
+    /// Drives the ManageProjectsSheet — the projects sibling of the topic
+    /// manage sheet (unified associations, 2026-07-17), opened from the
+    /// dashed Edit in the Projects read section.
+    @State private var showManageProjects: Bool = false
+    /// Drives the ManageMentionsSheet — the mentions sibling (B4 Phase 2),
+    /// opened from the dashed Edit in the Mentions read section.
+    @State private var showManageMentions: Bool = false
     // Memory Detail → unified Clip Editor modal (2026-07-16 cycle). The ✎ Edit
     // control in an expanded clip row opens the modal for that clip; the
     // long-memory read accordion (transcriptOpenRowId) is untouched. Editing
@@ -169,12 +198,6 @@ struct EntryExpandedView: View {
     /// Topic changes now write straight through `ManageTopicsSheet`.
     private var currentTopics: [String] { entry.topicNames }
 
-    /// Mentions to render in the always-visible mentions row. Used to
-    /// filter out staged `removedTagIds`; deletion now writes directly
-    /// to Core Data through `ManagedChipEdit`'s ✕ → `lifecycle.removeMention`,
-    /// so the list is just the entry's tags.
-    private var visibleTags: [TagDisplayModel] { entry.tags }
-
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
         // Detail screen renders as a `List` (not a `ScrollView + VStack`)
@@ -184,6 +207,17 @@ struct EntryExpandedView: View {
         // over a custom swipe modifier traps vertical drags before the
         // parent `ScrollView` can claim them.
         List {
+            // Zero-height top anchor: its visibility is the "scrolled?"
+            // signal for the append FAB's Let-Go suppression. On screen ⇒
+            // body is at rest (short memory / top); off screen ⇒ scrolled
+            // down. Invisible, no row chrome — purely a measurement seam.
+            Color.clear
+                .frame(height: 1)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+                .onAppear { topAnchorVisible = true }
+                .onDisappear { topAnchorVisible = false }
             // Header rhythm per `AI Organize · spec.md §2c` and
             // `screens-topics.jsx` `ScrMemoryWithTopics`: title →
             // timestamp → summary → topic chip row. The topics row
@@ -199,6 +233,11 @@ struct EntryExpandedView: View {
             }
             headerRow { summarySection }
             headerRow(top: -3) { topicChipsRow }
+            // Project-context row (F2/F3): "In [project]" membership chips
+            // + a dashed "Edit" affordance. Always shown (like the topic
+            // row) so a memory can always be filed; unified associations
+            // read model (2026-07-17).
+            headerRow(top: -3) { projectSection }
             // Transcript Full ⇄ Compact toggle sits between the topic
             // chips row and the chronological body. Hidden for short
             // memories — the section header itself disappears, the
@@ -268,15 +307,26 @@ struct EntryExpandedView: View {
                 // Delete.
                 VStack(spacing: 10) {
                     if let onRemoveFromProject {
-                        BottomDeleteButton(kind: .removeFromProject) {
+                        BottomDeleteButton(kind: .removeFromProject(name: projectContextName)) {
                             onRemoveFromProject(entry.id)
                             dismiss()
                         }
                     }
-                    BottomDeleteButton(kind: .delete(noun: "memory")) {
+                    BottomDeleteButton(
+                        kind: .delete(noun: "memory"),
+                        footnoteOverride: letGoSplitFootnote
+                    ) {
                         onRecycle?(entry.id)
                         dismiss()
                     }
+                    .onAppear {
+                        letGoSplitFootnote = computeLetGoSplit()
+                        // The Delete footer scrolled into view — yield the
+                        // FAB's corner (gated by the scroll guard, so a
+                        // short memory that shows Delete at rest keeps it).
+                        letGoOnScreen = true
+                    }
+                    .onDisappear { letGoOnScreen = false }
                 }
                 .padding(.top, 24)
             }
@@ -340,6 +390,18 @@ struct EntryExpandedView: View {
             })
             .presentationDetents([.large])
         }
+        .sheet(isPresented: $showManageProjects) {
+            ManageProjectsSheet(entryID: entry.id, onDismiss: {
+                showManageProjects = false
+            })
+            .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showManageMentions) {
+            ManageMentionsSheet(entryID: entry.id, onDismiss: {
+                showManageMentions = false
+            })
+            .presentationDetents([.large])
+        }
         .sheet(isPresented: Binding(
             get: { relocatingClipId != nil },
             set: { presented in if !presented { relocatingClipId = nil } }
@@ -355,6 +417,21 @@ struct EntryExpandedView: View {
                         lifecycle.regenerateContent(forEntryId: entry.id)
                     }
                 )
+            }
+        }
+        // Memory Detail FAB · path 2 — add existing loose clips. The
+        // sheet is pure selection; the attach runs here (host owns
+        // `lifecycle`) via `attachExistingClips` — new edges in append
+        // order, content regenerated, memory marked stale (offers
+        // Reorganize), never auto-organized.
+        .sheet(isPresented: $showAddExistingClips) {
+            AddExistingClipsSheet { clipIds in
+                let added = lifecycle.attachExistingClips(entryId: entry.id, clipIds: clipIds)
+                if added > 0 {
+                    // The clip set changed — refresh the Let Go split
+                    // disclosure (some added clips may be used elsewhere).
+                    letGoSplitFootnote = computeLetGoSplit()
+                }
             }
         }
         // Capture-flow host attached to the List (NavigationStack-level
@@ -392,15 +469,36 @@ struct EntryExpandedView: View {
             // `editCoordinator` flips on any title/summary/transcript
             // edit; the FAB disappears until the edit commits or
             // cancels.
-            if !editCoordinator.isAnyEditing {
+            if !editCoordinator.isAnyEditing && !(letGoOnScreen && !topAnchorVisible) {
                 AppendFAB(
                     onSelect: { modality in
                         appendCoordinator.activeCaptureModality = modality
                     },
-                    accessibilityLabel: "Add to memory"
+                    accessibilityLabel: "Add to memory",
+                    // Path 2 (`Memory Detail · unified editing model.md`
+                    // §"Adding clips to a memory"): the leading pill adds
+                    // existing loose clips from the bench — the same
+                    // stack shape the in-project FAB uses ("make new here,
+                    // or add one you already have"). The capture modality
+                    // stack below is path 1 (capture new into this memory).
+                    leadingAction: AppendFABLeadingAction(
+                        label: "Add existing clips",
+                        systemImage: "tray.and.arrow.down",
+                        onTap: { showAddExistingClips = true }
+                    )
                 )
             }
         }
+        // Overlap fix (`Memory Detail · unified editing model.md` §"Adding
+        // clips to a memory"): the append FAB yields the bottom-right
+        // corner to the full-width "Let Go of this Memory" button once the
+        // user has scrolled to the destructive footer — the same
+        // suppression rule the Clips multi-select FAB follows. Driven by
+        // the Let Go button's and top anchor's `onAppear`/`onDisappear`
+        // (see `letGoOnScreen` / `topAnchorVisible`), which List fires
+        // reliably; the FAB `if` above drops it from the hierarchy.
+        .animation(.easeInOut(duration: 0.18), value: letGoOnScreen)
+        .animation(.easeInOut(duration: 0.18), value: topAnchorVisible)
     }
 
     // MARK: - Body sections (decomposed from var body)
@@ -432,19 +530,20 @@ struct EntryExpandedView: View {
             // a fixed column width and the chip text wrapped inside.
             FlowLayout(spacing: 10) {
                 ForEach(currentTopics, id: \.self) { topic in
-                    // Per the unified-editing model (Tom 2026-06-09),
-                    // tap any topic chip → ManageTopicsSheet. The
-                    // dedicated "+ Edit" pill is retired; the entry
-                    // gesture is now tap-on-chip itself, exactly the
-                    // same gesture that's now used everywhere else in
-                    // the app for metadata management.
+                    // Unified associations read model (locked 2026-07-17):
+                    // a read chip NAVIGATES to where the association lives
+                    // — a topic → the Memories-list filter for that topic.
+                    // Management moved to the one dashed **Edit** below (no
+                    // longer tap-the-chip). Routing goes through the tab
+                    // shell so it works from a member memory opened inside
+                    // a Project too.
                     Button {
-                        showManageTopics = true
+                        TopicFilterBus.shared.request(topic)
                     } label: {
                         TopicChip(label: topic, state: .set)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Manage topic: \(topic)")
+                    .accessibilityLabel("Filter memories by topic: \(topic)")
                 }
                 // "+ Add" affordance — dashed border = add/provisional
                 // per the affordance vocabulary lock. Same sheet as
@@ -475,13 +574,12 @@ struct EntryExpandedView: View {
         }
     }
 
-    /// Dashed-ochre **+ Add** affordance — opens the topic management
-    /// sheet for adding a new topic. Per the unified-editing model
-    /// (Tom 2026-06-09), the dashed border still means
-    /// "add / provisional" per the affordance vocabulary lock; what
-    /// changed is the label from "+ Edit" to "+ Add" — tapping any
-    /// existing chip handles editing now, so the dedicated pill no
-    /// longer needs to overload that role.
+    /// Dashed-ochre **Edit** affordance — the ONE way into topic
+    /// management (unified associations read model, 2026-07-17). Read
+    /// chips now navigate (tap a topic → its filter), so add/remove is
+    /// no longer tap-the-chip; this dashed Edit is the single entry to
+    /// the manage sheet. The dashed border keeps its "add / manage"
+    /// meaning per the affordance vocabulary lock.
     private var addTopicAffordance: some View {
         Button {
             showManageTopics = true
@@ -489,7 +587,7 @@ struct EntryExpandedView: View {
             HStack(spacing: 5) {
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .semibold))
-                Text("Add")
+                Text("Edit")
                     .font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(Crucible.Color.accent)
@@ -500,9 +598,89 @@ struct EntryExpandedView: View {
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Edit topics")
+    }
+
+    /// Projects read section (unified associations, 2026-07-17) — the
+    /// sibling of the topic row. Navigable folder chips (tap → open the
+    /// project) plus one dashed **Edit** that opens `ManageProjectsSheet`.
+    /// Replaces the F2/F3 "In [project]" static chips + add-menu. Always
+    /// shown so a memory can always be filed. The bottom "Remove from
+    /// [project]" fate button (member-through-project) is unchanged — the
+    /// one contextual exception to routing through the sheet.
+    private var projectSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("PROJECTS")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(1.6)
+                .foregroundStyle(Crucible.Color.ink3)
+
+            FlowLayout(spacing: 10) {
+                ForEach(entry.projectMemberships) { membership in
+                    Button {
+                        ProjectOpenBus.shared.request(membership.id)
+                    } label: {
+                        projectReadChip(membership.name)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open project: \(membership.name)")
+                }
+                editProjectsAffordance
+            }
+        }
+        .padding(.top, 12)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Crucible.Color.hairline)
+                .frame(height: 0.5)
+                .padding(.top, 4)
+        }
+    }
+
+    /// A navigable project chip — folder glyph + name (glyph rule: dot =
+    /// topic, folder = project). Tapping opens the project.
+    private func projectReadChip(_ name: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "folder")
+                .font(.system(size: 11, weight: .semibold))
+            Text(name)
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(Crucible.Color.ink2)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 38)
+        .background(Crucible.Color.wash1, in: Capsule())
+    }
+
+    /// Dashed **Edit** — the one way into project management, matching the
+    /// topic row's dashed Edit. Opens `ManageProjectsSheet` (on this
+    /// memory / new project / from your library).
+    private var editProjectsAffordance: some View {
+        Button {
+            showManageProjects = true
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Edit")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.accent)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 38)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit projects")
     }
 
     /// Title field swaps between an editable `TextField` and a read-mode
@@ -665,9 +843,22 @@ struct EntryExpandedView: View {
         editCoordinator.end(id: "summary")
     }
 
+    /// Toggles the title-edit layout WITHOUT the `List`'s implicit
+    /// cell-resize animation. The title row changes height (read `Text`
+    /// ⇄ `TextField` + commit bar); `List` animates that resize by
+    /// default, and the adjacent topic-chip row reflows *through* the
+    /// animation — its ochre dot renders at intermediate positions, the
+    /// "floating dot" bug (Tom, 2026-07-18). Making the swap instant
+    /// means no subview is ever caught in motion.
+    private func setTitleEditing(_ editing: Bool) {
+        var tx = Transaction()
+        tx.disablesAnimations = true
+        withTransaction(tx) { titleIsEditing = editing }
+    }
+
     private func beginEditingTitle() {
         editedTitle = entry.displayTitle
-        titleIsEditing = true
+        setTitleEditing(true)
         editCoordinator.begin(id: "title")
         DispatchQueue.main.async {
             titleFieldFocused = true
@@ -681,14 +872,14 @@ struct EntryExpandedView: View {
             onSave(entry.id, entry.content, titleToSave)
         }
         titleFieldFocused = false
-        titleIsEditing = false
+        setTitleEditing(false)
         editCoordinator.end(id: "title")
     }
 
     private func cancelTitleEdit() {
         editedTitle = entry.displayTitle
         titleFieldFocused = false
-        titleIsEditing = false
+        setTitleEditing(false)
         editCoordinator.end(id: "title")
     }
 
@@ -843,23 +1034,15 @@ struct EntryExpandedView: View {
                 },
                 onViewPhoto: { item in
                     // Slice 9 (Memory Detail Full stream
-                    // convergence): photo thumbnail tap opens
-                    // QuickLook over the memory. The description
-                    // edit path is now inline inside `MediaCard`
-                    // via `ClipEditor(field: .description)` — this
-                    // callback owns consume only, matching Q3's
-                    // edit-vs-consume separation.
-                    switch MediaResolver.resolve(osIdentifier: item.localIdentifier,
-                                                 mediaType: item.mediaType) {
-                    case .ubiquity(let url):
-                        photoViewerItem = QuickLookItem(url: url)
-                    case .photoKit:
-                        // Legacy PHAsset paths don't resolve to a
-                        // file URL; the miss is rare post-ubiquity
-                        // migration and silent (same behavior the
-                        // retired sheet had).
-                        break
-                    }
+                    // convergence): photo thumbnail tap opens the
+                    // full-screen photo viewer over the memory. The
+                    // description edit path is now inline inside
+                    // `MediaCard` via `ClipEditor(field: .description)`
+                    // — this callback owns consume only, matching Q3's
+                    // edit-vs-consume separation. `PhotoViewerSheet`
+                    // resolves the bytes itself (ubiquity or legacy
+                    // PhotoKit), so this just hands off the item.
+                    photoViewerItem = item
                 },
                 onCommitMediaDescription: { mediaId, newText in
                     updateMediaDescription(id: mediaId, text: newText)
@@ -947,15 +1130,12 @@ struct EntryExpandedView: View {
         }
     }
 
-    /// Mentions section — always-visible row of extracted entity
-    /// tags per Memory Detail v3. Now uses the **managed chip · edit
-    /// state** Crucible pattern: each chip is tap-to-edit in place
-    /// (rename or remove via ✕). A trailing dashed **+ Add** chip
-    /// matches the unified-editing model's "lightweight inline" rule
-    /// for mentions. The section sits between the chronological
-    /// capture stream and the Organized · review card; the section
-    /// stays mounted even when empty so the + Add affordance is always
-    /// reachable.
+    /// Mentions section — the unified associations read model (B4 Phase 2,
+    /// July 18 2026), the mentions sibling of the topic + project rows.
+    /// Per-type-glyph navigable chips (tap → filter Memories by that
+    /// mention) + one dashed **Edit** → `ManageMentionsSheet`. Replaces the
+    /// retired inline `ManagedChipEdit` (✕-pill + free-text add). Always
+    /// mounted so a memory can always gain mentions.
     @ViewBuilder
     private var mentionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -965,36 +1145,65 @@ struct EntryExpandedView: View {
                 .tracking(1.6)
                 .foregroundStyle(Crucible.Color.ink3)
 
-            FlowLayout(spacing: 6) {
-                ForEach(visibleTags) { tag in
-                    ManagedChipEdit(
-                        id: "mention-\(tag.id.uuidString)",
-                        value: tag.value,
-                        dotTint: tag.entityType.mentionTint,
-                        onCommitRename: { newValue in
-                            lifecycle.renameMention(
-                                entityId: tag.id,
-                                newValue: newValue,
-                                entryId: entry.id
-                            )
-                        },
-                        onRemove: {
-                            lifecycle.removeMention(entityId: tag.id, entryId: entry.id)
-                        }
-                    )
-                }
-                ManagedChipAddAffordance(
-                    id: "mention-add",
-                    onCommit: { newValue in
-                        lifecycle.addMention(value: newValue, entryId: entry.id)
+            FlowLayout(spacing: 10) {
+                ForEach(entry.mentions) { mention in
+                    Button {
+                        MentionFilterBus.shared.request(mention)
+                    } label: {
+                        mentionReadChip(mention)
                     }
-                )
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Filter memories by \(mention.type.label.lowercased()): \(mention.name)")
+                }
+                editMentionsAffordance
             }
         }
         .padding(.top, 8)
         .overlay(alignment: .top) {
             Rectangle().fill(Crucible.Color.hairline).frame(height: 0.5)
         }
+    }
+
+    /// A navigable mention chip — per-type line glyph + name (glyph rule:
+    /// dot = topic, folder = project, per-type glyph = mention).
+    private func mentionReadChip(_ mention: MentionChip) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: mention.type.sfSymbol)
+                .font(.system(size: 11, weight: .semibold))
+            Text(mention.name)
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(Crucible.Color.ink2)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 38)
+        .background(Crucible.Color.wash1, in: Capsule())
+    }
+
+    /// Dashed **Edit** — the one way into mention management, matching the
+    /// topic + project rows. Opens `ManageMentionsSheet`.
+    private var editMentionsAffordance: some View {
+        Button {
+            showManageMentions = true
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Edit")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(Crucible.Color.accent)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 38)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit mentions")
     }
 
     // MARK: - Toolbar items (decomposed from var body)
@@ -1021,22 +1230,10 @@ struct EntryExpandedView: View {
     @ViewBuilder
     private var trailingToolbar: some View {
         HStack(spacing: 16) {
-            if !availableProjects.isEmpty {
-                Menu {
-                    ForEach(availableProjects) { project in
-                        Button {
-                            onAddToProject?(entry.id, project.id)
-                        } label: {
-                            Label(project.name, systemImage: "folder")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.subheadline)
-                        .foregroundStyle(Crucible.Color.ink2)
-                }
-                .accessibilityLabel("Add to project")
-            }
+            // The toolbar folder-plus is retired (unified associations,
+            // 2026-07-17) — project add/remove now lives on the Projects
+            // read section's dashed Edit → ManageProjectsSheet, the one
+            // management path. Share only.
             Button { showShareSheet = true } label: {
                 Image(systemName: "square.and.arrow.up")
                     .font(.subheadline)
@@ -1109,6 +1306,27 @@ struct EntryExpandedView: View {
 
     // MARK: - Chronological capture stream helpers
 
+    /// P8 last-reference disclosure (July 19 2026) — computed at open time
+    /// (`onAppear`, into `letGoSplitFootnote`), splits this memory's *live*
+    /// clips into "used elsewhere → stay" vs "only here → move to Recently
+    /// Deleted." Fetches the managed entry (the view holds a value
+    /// `EntryDisplayModel`) and mirrors the rule `EntryLifecycleService.recycle`
+    /// applies (same `referencingMemoryCount`), so the footnote can't drift
+    /// from what Let Go actually does. Discloses, never asks.
+    private func computeLetGoSplit() -> String {
+        let ctx = StorageService.shared.viewContext
+        let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        req.predicate = NSPredicate(format: "id == %@", entry.id as CVarArg)
+        req.fetchLimit = 1
+        guard let managed = try? ctx.fetch(req).first else {
+            return BottomDeleteButton.letGoFootnote(stayCount: 0, moveCount: 0)
+        }
+        let clips = managed.mediaReferencesArray // excludes already-recycled
+        let move = clips.filter { $0.referencingMemoryCount == 1 }.count
+        let stay = clips.count - move
+        return BottomDeleteButton.letGoFootnote(stayCount: stay, moveCount: move)
+    }
+
     /// Removes a media reference immediately rather than batching it with
     /// title/content edits via the existing onSave path. Used by the
     /// chronological capture stream's per-panel delete.
@@ -1116,17 +1334,18 @@ struct EntryExpandedView: View {
         let ids = removedMediaIds
         guard !ids.isEmpty else { return }
         // Delete always destroys per `Memory Detail · unified editing
-        // model.md:66`. Remove-from-memory is a separate placement
-        // action reached via "Where does this belong?".
+        // model.md:66` — P8: soft to Recently Deleted (30-day net), not a
+        // hard destroy. Remove-from-memory is a separate placement action
+        // reached via "Where does this belong?".
         for id in ids {
-            lifecycle.deleteMediaReference(refId: id)
+            lifecycle.recycleClip(refId: id)
         }
         lifecycle.regenerateContent(forEntryId: entry.id)
         removedMediaIds = []
     }
 
     private func deleteNoteFragment(id: UUID) {
-        lifecycle.deleteMediaReference(refId: id)
+        lifecycle.recycleClip(refId: id)
         lifecycle.regenerateContent(forEntryId: entry.id)
     }
 
@@ -1409,20 +1628,20 @@ private struct CommitFooter: View {
 /// directly — CRAP audit 2026-06-07.
 private struct MediaFragmentEditorStack: ViewModifier {
     /// Slice 9 (Memory Detail Full stream convergence):
-    /// `PhotoDescriptionEditSheet` retired. The QuickLook viewer
-    /// it hosted moves up to this stack so a photo tap in
-    /// `MediaCard` can still consume the file directly. Video
-    /// keeps its own full-screen cover. (Voice playback + transcript edit
+    /// `PhotoDescriptionEditSheet` retired. Photo + video consume both
+    /// present a full-screen viewer on black with a standard dismiss
+    /// (tap · swipe-down · ✕) — `PhotoViewerSheet` replaces the bare
+    /// `QuickLookViewer`, which showed no dismiss chrome in a SwiftUI
+    /// sheet (device bug, 2026-07-21). (Voice playback + transcript edit
     /// moved to the unified modal / inline row play — AudioPlayerSheet
     /// retired 2026-07-17.)
-    @Binding var photoViewerItem: QuickLookItem?
+    @Binding var photoViewerItem: MediaDisplayItem?
     @Binding var videoPlayerForItem: MediaDisplayItem?
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $photoViewerItem) { item in
-                QuickLookViewer(url: item.url)
-                    .ignoresSafeArea()
+            .fullScreenCover(item: $photoViewerItem) { item in
+                PhotoViewerSheet(item: item)
             }
             .fullScreenCover(item: $videoPlayerForItem) { item in
                 VideoPlayerSheet(item: item)

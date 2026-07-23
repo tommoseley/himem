@@ -47,3 +47,78 @@ final class MemoryNavigationBus: ObservableObject {
 
     private init() {}
 }
+
+/// Session-scoped signal: "navigate to the Memories list filtered by
+/// this topic." Emitted when the user taps a topic **read chip** on an
+/// opened memory (the unified associations read model — read chips
+/// navigate to where each association lives; a topic lives in the
+/// Memories-list filter). Consumed by `HiMemTabView` (switch to the
+/// Memories tab) and the memories-instance `JournalView` (pop any pushed
+/// detail + set `selectedTopic`, driving the already-working filter).
+///
+/// Mirrors `pendingOpenMemoryId`'s two-observer shape. A topic chip can
+/// be tapped on a memory opened from *any* tab (Memories, or a member
+/// memory inside a Project), so the bus + tab switch is what makes the
+/// navigation uniform regardless of entry point.
+///
+/// Not persisted. Cleared by the consumer after routing.
+@MainActor
+final class TopicFilterBus: ObservableObject {
+    static let shared = TopicFilterBus()
+
+    /// Non-nil = route to Memories filtered by this topic name. The
+    /// memories `JournalView` clears it after applying the filter.
+    @Published var pendingTopicFilter: String? = nil
+
+    private init() {}
+
+    func request(_ topic: String) {
+        pendingTopicFilter = topic
+    }
+}
+
+/// Session-scoped signal: "open this project." Emitted when the user taps
+/// a project **read chip** on an opened memory (unified associations read
+/// model — a project chip navigates to the project it names). Consumed by
+/// `HiMemTabView` (switch to the Projects tab) and `ProjectListView`
+/// (push `ProjectDetailView` for the id). Mirrors `TopicFilterBus`; works
+/// from a memory opened in any tab, since the bus + tab switch is uniform.
+///
+/// Not persisted. Cleared by the consumer after routing.
+@MainActor
+final class ProjectOpenBus: ObservableObject {
+    static let shared = ProjectOpenBus()
+
+    /// Non-nil = open the project with this id on the Projects tab. The
+    /// projects `ProjectListView` clears it after pushing the detail.
+    @Published var pendingProjectId: UUID? = nil
+
+    private init() {}
+
+    func request(_ projectId: UUID) {
+        pendingProjectId = projectId
+    }
+}
+
+/// Session-scoped signal: "filter Memories by this mention" (B4 Phase 2).
+/// Emitted when a mention read-chip is tapped on an opened memory (unified
+/// associations read model — a mention navigates to where it lives; ruled
+/// 2026-07-18 to be the Memories-list filter, mirroring the topic filter).
+/// Consumed by `HiMemTabView` (switch to Memories) and the memories
+/// `JournalView` (set `selectedMention`, drives the filter + banner).
+///
+/// Not persisted. Cleared by the consumer after routing.
+@MainActor
+final class MentionFilterBus: ObservableObject {
+    static let shared = MentionFilterBus()
+
+    /// Non-nil = filter the Memories list to this mention. The memories
+    /// `JournalView` clears it after applying the filter.
+    @Published var pendingMention: MentionChip? = nil
+
+    private init() {}
+
+    func request(_ mention: MentionChip) {
+        pendingMention = mention
+    }
+}

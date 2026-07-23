@@ -55,11 +55,24 @@ struct HiMemTabView: View {
     /// §Clip triage (July 12 2026): "No FAB on an opened clip —
     /// it's an opened item, not a capture surface."
     @ObservedObject private var clipDetailPresence = ClipDetailPresentationContext.shared
+    /// True while Clips multi-select is active — the bottom action bar
+    /// (Add to a memory… / Delete N) owns the bottom of the screen, so the
+    /// capture FAB steps aside (it overlaps Delete otherwise). Scoped to
+    /// the Clips tab below so other tabs keep their FAB.
+    @ObservedObject private var clipsSelection = ClipsSelection.shared
     /// Signals "open Memory Detail for this id" — the Create-one-
     /// memory flow (`CreateMemoryFromClipsSheet`) sets it after a
     /// successful save so the user lands on the freshly-created
     /// memory instead of the calm Clips list.
     @ObservedObject private var memoryNavigation = MemoryNavigationBus.shared
+    /// Routes a topic read-chip tap (from any tab's Memory Detail) to the
+    /// Memories tab's topic filter (unified associations read model).
+    @ObservedObject private var topicFilter = TopicFilterBus.shared
+    /// Routes a project read-chip tap to the Projects tab (opens the
+    /// project detail there).
+    @ObservedObject private var projectOpen = ProjectOpenBus.shared
+    /// Routes a mention read-chip tap to the Memories tab's mention filter.
+    @ObservedObject private var mentionFilter = MentionFilterBus.shared
     /// Set true when `pendingReturnToClips` fires; consumed by the
     /// next Clips coachmark evaluation so guardrail #3 ("suppress the
     /// Clips coachmark when arriving from a capture") holds. Cleared
@@ -118,13 +131,30 @@ struct HiMemTabView: View {
             // Projects at the list level + opens the New Project
             // sheet (no modality picker), on every other case +
             // opens the ad-hoc modality stack.
-            if memoryDetailPresence.currentMemoryId == nil && clipDetailPresence.currentClipId == nil {
+            if memoryDetailPresence.currentMemoryId == nil && clipDetailPresence.currentClipId == nil
+                && !(clipsSelection.selecting && selection == .clips) {
                 switch currentIntent {
                 case .openNewProjectSheet:
                     NewProjectFAB(onTap: {
                         NewProjectRequestBus.shared.request()
                     })
-                case .dropOnBench, .createMemory, .createMemoryInProject:
+                case .createMemoryInProject:
+                    // In-project FAB offers TWO paths (Projects · MVP spec
+                    // §Surfaces): capture a new memory in this project (the
+                    // modality stack) + "Add existing memory" (the leading
+                    // pill → the search-to-add sheet, via the request bus).
+                    AppendFAB(
+                        onSelect: { modality in
+                            activeCaptureModality = modality
+                        },
+                        accessibilityLabel: currentFabAccessibilityLabel,
+                        leadingAction: AppendFABLeadingAction(
+                            label: "Add existing memory",
+                            systemImage: "folder.badge.plus",
+                            onTap: { AddExistingMemoryRequestBus.shared.request() }
+                        )
+                    )
+                case .dropOnBench, .createMemory:
                     AppendFAB(
                         onSelect: { modality in
                             activeCaptureModality = modality
@@ -193,6 +223,31 @@ struct HiMemTabView: View {
         // `JournalView` clears it after routing so the tab switch
         // and the push don't race on nil.
         .onChange(of: memoryNavigation.pendingOpenMemoryId) { _, pending in
+            if pending != nil {
+                selection = .memories
+            }
+        }
+        // Topic read-chip tapped on an opened memory → route to the
+        // Memories tab so its JournalView can apply the topic filter
+        // (unified associations read model). The id is NOT cleared here;
+        // the memories JournalView clears it after applying the filter.
+        .onChange(of: topicFilter.pendingTopicFilter) { _, pending in
+            if pending != nil {
+                selection = .memories
+            }
+        }
+        // Project read-chip tapped on an opened memory → route to the
+        // Projects tab so ProjectListView can push the project detail.
+        // Id NOT cleared here; ProjectListView clears it after pushing.
+        .onChange(of: projectOpen.pendingProjectId) { _, pending in
+            if pending != nil {
+                selection = .projects
+            }
+        }
+        // Mention read-chip tapped → route to Memories so its JournalView
+        // applies the mention filter. Not cleared here; the memories
+        // JournalView clears it after applying.
+        .onChange(of: mentionFilter.pendingMention) { _, pending in
             if pending != nil {
                 selection = .memories
             }

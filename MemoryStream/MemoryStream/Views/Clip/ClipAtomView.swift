@@ -177,7 +177,7 @@ struct ClipAtomView: View {
             // header's `leadingGlyph` doc). The old dense-only
             // outer glyph is retired; the header handles it inline.
             VStack(alignment: .leading, spacing: 4) {
-                ClipTimingHeader(timing: timing, register: .operational, media: model.media, isDense: isDenseContainer)
+                ClipTimingHeader(timing: timing, register: .operational, media: model.media, isDense: isDenseContainer, sourceDevice: model.sourceDevice)
                 ClipContentSlot(
                     content: content,
                     media: model.media,
@@ -369,6 +369,10 @@ struct ClipTimingHeader: View {
     /// reconstructing "the first clip was quiet, then this one
     /// 129s later") but stops being primary.
     var isDense: Bool = false
+    /// Capture source ("watch" / "phone") for the per-clip source glyph
+    /// on the operational/bench row (B4 — "a small Watch/phone glyph on
+    /// the card"). Nil = unknown → no glyph. Operational register only.
+    var sourceDevice: String? = nil
 
     var body: some View {
         switch register {
@@ -386,6 +390,15 @@ struct ClipTimingHeader: View {
                     Text(offset)
                         .monospacedDigit()
                         .frame(width: isDense ? 36 : 44, alignment: .leading)
+                }
+                // Per-clip source glyph (watch / phone). Reuses the
+                // single mapping in ClipEditorModal so bench + editor +
+                // detail agree.
+                if let sourceGlyph = ClipEditorModal.sourceGlyphName(for: sourceDevice) {
+                    Image(systemName: sourceGlyph)
+                        .font(.system(size: isDense ? 10 : 11))
+                        .foregroundStyle(Crucible.Color.ink4)
+                        .accessibilityLabel(sourceGlyph == "applewatch" ? "Captured on Apple Watch" : "Captured on iPhone")
                 }
             }
             .font(.system(size: isDense ? 10 : 11, weight: isDense ? .regular : .medium))

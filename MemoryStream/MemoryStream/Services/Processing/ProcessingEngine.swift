@@ -183,12 +183,29 @@ final class ProcessingEngine {
     private func processWithOnDevice(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async -> Bool {
         let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
         do {
-            let result = try await onDeviceOrganizer.organize(
+            // Palette-bleed fix #2 (2026-07-23): the mentions palette is NOT
+            // put in front of the 3B model — it fabricated library people
+            // (Darlene/Ben) into memories that never named them. Extract
+            // mentions from THIS memory's clips only; the library reuse
+            // (§2c dedup) is reapplied in code by `canonicalizeMentions`
+            // inside `applyAnalysisResult`. Topics palette stays (it did not
+            // exhibit the fabrication and already has code canonicalization).
+            let raw = try await onDeviceOrganizer.organize(
                 content: content,
                 existingTopics: existingTopics,
-                existingMentions: existingMentions
+                existingMentions: []
             )
-            return await applyAnalysisResult(result, existingTopics: existingTopics, to: objectID, in: context)
+            // TruthReconciler (2026-07-23) — one Honest-Label gate for all AI
+            // output. On-device gets `.strict` grounding: Apple's 3B model is
+            // a moving target (regressed on iOS 27) that fabricates proper
+            // names, so honesty is enforced in code, not the prompt. Verify →
+            // retry once → constrained extractive fallback.
+            let result = await reconcileResult(raw, clipText: content, strictness: .strict) {
+                try? await self.onDeviceOrganizer.organize(
+                    content: content, existingTopics: existingTopics, existingMentions: []
+                )
+            }
+            return await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
         } catch {
             // Detailed diagnostic logging — Apple's Foundation Models
             // errors are opaque ("Detected content likely to be unsafe"
@@ -206,6 +223,53 @@ final class ProcessingEngine {
             }
             return false
         }
+    }
+
+    /// **TruthReconciler gate — runs on BOTH tiers.** Models are advisory;
+    /// code is authoritative. If the summary names an entity absent from the
+    /// clips (per `strictness` — `.strict` on-device, `.relaxed` for the
+    /// frontier's legitimate paraphrase), retry the pass once via `retry`; if
+    /// it still fabricates, fall back to a constrained extractive summary drawn
+    /// from the clips (cannot introduce a new name — "say less before saying
+    /// false"). The guarantee is HiMem's, not any vendor's, so the cloud/Plus
+    /// path passes through too (relaxed) rather than trusting the model
+    /// unchecked. The ungrounded-mention drop is `.strict`/on-device only (the
+    /// palette-bleed guard); the summary/title gate is the both-tier guarantee.
+    private func reconcileResult(
+        _ result: ClaudeAPIService.AnalysisResult,
+        clipText: String,
+        strictness: TruthReconciler.Strictness,
+        retry: () async -> ClaudeAPIService.AnalysisResult?
+    ) async -> ClaudeAPIService.AnalysisResult {
+        var reconciled = result
+        if TruthReconciler.violates(summary: result.summary, sourceText: clipText, strictness: strictness) {
+            NSLog("[HiMem][TruthReconciler] summary named an entity absent from the clips (\(strictness)); retrying once")
+            if let retried = await retry(),
+               !TruthReconciler.violates(summary: retried.summary, sourceText: clipText, strictness: strictness) {
+                reconciled = retried
+            } else {
+                NSLog("[HiMem][TruthReconciler] retry still fabricated; falling back to extractive summary")
+                reconciled = ClaudeAPIService.AnalysisResult(
+                    entities: result.entities,
+                    topics: result.topics,
+                    summary: TruthReconciler.extractiveSummary(fromClipText: clipText),
+                    title: TruthReconciler.extractiveTitle(fromClipText: clipText)
+                )
+            }
+        }
+        // Ungrounded-mention drop is the on-device palette-bleed guard
+        // (`.strict` only): the 3B model fabricated library people into
+        // memories that never named them. On the relaxed/frontier tier the
+        // model extracts mentions FROM the clips and they pass through
+        // `canonicalizeMentions` reconciliation — we don't additionally drop
+        // there (dropping would be a no-op on well-behaved frontier output and
+        // only risks discarding a legitimately-grounded name). The both-tier
+        // honesty guarantee is the summary/title gate above.
+        guard strictness == .strict else { return reconciled }
+        let grounded = reconciled.entities.filter { TruthReconciler.isGrounded($0.value, in: clipText, strictness: .strict) }
+        return ClaudeAPIService.AnalysisResult(
+            entities: grounded, topics: reconciled.topics, summary: reconciled.summary, title: reconciled.title
+        )
     }
 
     // MARK: - Cloud Processing
@@ -240,7 +304,7 @@ final class ProcessingEngine {
             // tier they end up at.
             let tier = await MainActor.run { self.readTier() }
             let action = isFallback ? "memory_organize_fallback" : "memory_organize"
-            let result = try await analyzer.analyzeEntry(
+            let raw = try await analyzer.analyzeEntry(
                 content,
                 existingTopics: existingTopics,
                 existingMentions: existingMentions,
@@ -248,7 +312,16 @@ final class ProcessingEngine {
                 action: action
             )
 
-            return await applyAnalysisResult(result, existingTopics: existingTopics, to: objectID, in: context)
+            // TruthReconciler on the frontier/Plus path too — `.relaxed`
+            // grounding (a name that's a variant/paraphrase of one in the
+            // clips passes; a wholly-invented one still falls back). The
+            // guarantee is HiMem's, not Anthropic's.
+            let result = await reconcileResult(raw, clipText: content, strictness: .relaxed) {
+                try? await self.analyzer.analyzeEntry(
+                    content, existingTopics: existingTopics, existingMentions: existingMentions, tier: tier, action: action
+                )
+            }
+            return await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
         } catch {
             NSLog("[HiMem][Organize] cloud pass failed, falling through: \(error.localizedDescription)")
             return false
@@ -326,6 +399,7 @@ final class ProcessingEngine {
         let shouldTryAnthropic = connectivity.isConnected && (plus || !hasAI)
 
         var cloudAttempted = false
+        var producedByOnDevice = false
         var result: ClaudeAPIService.AnalysisResult?
         if shouldTryAnthropic {
             cloudAttempted = true
@@ -344,6 +418,7 @@ final class ProcessingEngine {
                 existingTopics: existingTopics,
                 existingMentions: existingMentions
             )
+            producedByOnDevice = result != nil
         }
 
         // Cloud as last-resort fallback — mirrors `processEntry`'s
@@ -368,10 +443,25 @@ final class ProcessingEngine {
 
         guard let result else { return }
 
+        // TruthReconciler on the reorganize draft — this is the exact path the
+        // "You, Ben…" fabrication surfaced on (a reorganize draft), so it must
+        // pass the same gate. Reorganize writes only title + summary, so there
+        // is nothing to reconcile but the prose. The multi-tier cascade above
+        // already served as the retry; the extractive fallback is the final
+        // guarantee. Strictness matches the backend that produced the draft.
+        let strictness: TruthReconciler.Strictness = producedByOnDevice ? .strict : .relaxed
+        var draftTitle = result.title
+        var draftSummary = result.summary
+        if TruthReconciler.violates(summary: result.summary, sourceText: content, strictness: strictness) {
+            NSLog("[HiMem][TruthReconciler] reorganize draft named an entity absent from the clips (\(strictness)); falling back to extractive")
+            draftSummary = TruthReconciler.extractiveSummary(fromClipText: content)
+            draftTitle = TruthReconciler.extractiveTitle(fromClipText: content)
+        }
+
         await context.perform { [self] in
             do {
                 let entry = try context.existingObject(with: objectID) as! JournalEntry
-                storeReorganizePass(title: result.title, summaryText: result.summary, for: entry, in: context)
+                storeReorganizePass(title: draftTitle, summaryText: draftSummary, for: entry, in: context)
                 try context.save()
             } catch {
                 // Swallow — spec §8: failed passes change nothing.
@@ -438,20 +528,16 @@ final class ProcessingEngine {
             let topics = (try? context.fetch(request)) ?? []
             return topics.map(\.name)
         }
+        // Library-wide mentions palette (B4 Phase 2) — all Mention names,
+        // mirroring the existingTopics gather. Now that mentions are
+        // library-backed, the organizer prefers reusing a recurring
+        // person/place over coining a near-duplicate (spec §2c). Replaces
+        // the old entry-scoped gather (which only saw this memory's own
+        // entities, so it couldn't prevent cross-memory fragmentation).
         let existingMentions: [String] = await context.perform {
-            guard let entry = try? context.existingObject(with: objectID) as? JournalEntry,
-                  let entities = entry.extractedEntities as? Set<ExtractedEntity> else { return [] }
-            var seen: Set<String> = []
-            var out: [String] = []
-            for e in entities {
-                let trimmed = e.value.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { continue }
-                let key = trimmed.lowercased()
-                if seen.insert(key).inserted {
-                    out.append(trimmed)
-                }
-            }
-            return out
+            let request = NSFetchRequest<Mention>(entityName: "Mention")
+            let mentions = (try? context.fetch(request)) ?? []
+            return mentions.map(\.name)
         }
         return (existingTopics, existingMentions)
     }
@@ -469,8 +555,16 @@ final class ProcessingEngine {
     /// casing, not the model's. Without this step the model's case
     /// variants could leak into `OrganizePass.suggestedTopics` and
     /// surface to the user as fake "different" topic suggestions.
-    private func applyAnalysisResult(_ result: ClaudeAPIService.AnalysisResult, existingTopics: [String], to objectID: NSManagedObjectID, in context: NSManagedObjectContext) async -> Bool {
-        let canonicalResult = Self.canonicalizeTopics(result: result, against: existingTopics)
+    private func applyAnalysisResult(_ result: ClaudeAPIService.AnalysisResult, existingTopics: [String], existingMentions: [String], to objectID: NSManagedObjectID, in context: NSManagedObjectContext) async -> Bool {
+        // Canonicalize topics (existing behavior) AND mentions (palette-bleed
+        // fix #2, 2026-07-23): the mentions palette is no longer in the
+        // prompt, so the model extracts mentions from this memory's clips
+        // only; this reconciles near-identical variants against the library
+        // in code to keep §2c dedup without fabricating/mis-merging a name.
+        let canonicalResult = Self.canonicalizeMentions(
+            result: Self.canonicalizeTopics(result: result, against: existingTopics),
+            against: existingMentions
+        )
         return await context.perform { [self] in
             do {
                 let entry = try context.existingObject(with: objectID) as! JournalEntry
@@ -501,23 +595,44 @@ final class ProcessingEngine {
     /// Returned topics that match an existing palette entry (case-
     /// insensitive, whitespace-trimmed) are rewritten to the palette's
     /// canonical casing; non-matches pass through unchanged. Other
-    /// fields on `AnalysisResult` (entities, summary, title,
-    /// nextSteps) are preserved bit-for-bit. The "matches first,
-    /// novelties next" ordering matches `TopicPalette.Partition`'s
-    /// own ordering — the review UI can derive the NEW vs existing
-    /// split by re-running the partition at render time.
+    /// fields on `AnalysisResult` (entities, summary, title) are
+    /// preserved bit-for-bit. The "matches first, novelties next"
+    /// ordering matches `TopicPalette.Partition`'s own ordering — the
+    /// review UI can derive the NEW vs existing split by re-running the
+    /// partition at render time.
     static func canonicalizeTopics(
         result: ClaudeAPIService.AnalysisResult,
         against existingTopics: [String]
     ) -> ClaudeAPIService.AnalysisResult {
-        let partition = TopicPalette.partition(returned: result.topics, existing: existingTopics)
-        let canonicalTopics = partition.existing + partition.new
+        let canonicalTopics = TruthReconciler.reconcileTopics(returned: result.topics, existing: existingTopics)
         return ClaudeAPIService.AnalysisResult(
             entities: result.entities,
             topics: canonicalTopics,
             summary: result.summary,
-            title: result.title,
-            nextSteps: result.nextSteps
+            title: result.title
+        )
+    }
+
+    /// Pure mention-reconciliation wrapper around `MentionReconciler` — the
+    /// mentions analog of `canonicalizeTopics`. Maps each extracted mention
+    /// to its canonical library form (near-identical variants only; never a
+    /// mis-merge), keeping §2c anti-fragmentation now that the library
+    /// palette is no longer fed to the model. Topics, summary, title are
+    /// preserved bit-for-bit.
+    static func canonicalizeMentions(
+        result: ClaudeAPIService.AnalysisResult,
+        against existingMentions: [String]
+    ) -> ClaudeAPIService.AnalysisResult {
+        let names = result.entities.map { $0.value }
+        let canonical = TruthReconciler.reconcileMentions(extracted: names, library: existingMentions)
+        let entities = zip(result.entities, canonical).map { entity, name in
+            ClaudeAPIService.EntityResult(type: entity.type, value: name, confidence: entity.confidence)
+        }
+        return ClaudeAPIService.AnalysisResult(
+            entities: entities,
+            topics: result.topics,
+            summary: result.summary,
+            title: result.title
         )
     }
 
@@ -535,6 +650,15 @@ final class ProcessingEngine {
 
         for entityResult in result.entities {
             guard let type = ExtractedEntity.EntityType(rawValue: entityResult.type) else { continue }
+            // Link a library-backed Mention (B4 Phase 2) so the mentions UI
+            // populates on every organize. Idempotent (findOrCreate dedups
+            // on name+type; addToMentions is a Set add), and runs even when
+            // the ExtractedEntity below is a dupe, so migrated / re-imported
+            // entries stay linked. `next_action` maps to nil → skipped.
+            if let mentionType = MentionMigration.mappedType(for: type),
+               let mention = try? StorageService.shared.findOrCreateMention(name: entityResult.value, type: mentionType, context: context) {
+                entry.addToMentions(mention)
+            }
             let key = Self.entityKey(type: type.rawValue, value: entityResult.value)
             if existingKeys.contains(key) { continue }
             let entity = ExtractedEntity(context: context)

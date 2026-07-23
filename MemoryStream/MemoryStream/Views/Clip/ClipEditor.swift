@@ -35,6 +35,19 @@ enum ClipEditorField: Equatable {
         case .description: return "Save description"
         }
     }
+
+    /// Whether committing an empty (trimmed) value is a legitimate change
+    /// rather than an accidental wipe. **Descriptions** are a derived,
+    /// optional layer — clearing one back to "no description" is a real,
+    /// reversible edit and MUST persist. **Transcripts** (spoken words /
+    /// note text) are the clip's substance: an inline edit never blanks
+    /// them (removal is "Delete this Clip"), so empty stays guarded.
+    var allowsEmptyCommit: Bool {
+        switch self {
+        case .description: return true
+        case .transcript:  return false
+        }
+    }
 }
 
 // MARK: - Pure commit decision
@@ -62,19 +75,17 @@ enum ClipEditorCommitDecision: Equatable {
     /// count as "no change" — matches the shipped behavior of
     /// `PhotoDescriptionEditSheet` and `VoiceClipPanel`'s inline
     /// commit path, consolidated here.
-    static func decide(initial: String, draft: String) -> ClipEditorCommitDecision {
+    static func decide(initial: String, draft: String, field: ClipEditorField) -> ClipEditorCommitDecision {
         let trimmedInitial = initial.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDraft = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInitial == trimmedDraft { return .skip }
-        // Wipe guard (P0 2026-07-16): an inline edit never blanks a
-        // non-empty field to empty. Reaching here means the draft differs
-        // from a non-empty initial; if the draft is empty, that's the
-        // transcript-wipe bug — a stale/empty draft reaching commit
-        // ([HiMem][TranscriptWipe] pinned it to CompactClipRow's ClipEditor
-        // onDone), NOT a real erase. Removing a clip's content is
-        // "Delete this Clip", not an edit-to-blank. One gate, so every
-        // clip-edit surface (transcript · description · sheet) is covered.
-        if trimmedDraft.isEmpty { return .skip }
+        // Wipe guard (P0 2026-07-16) — **field-scoped** (2026-07-22): an
+        // inline edit never blanks a non-empty *transcript* to empty
+        // (that's the transcript-wipe bug — removing a clip's substance is
+        // "Delete this Clip", not an edit-to-blank). A **description** is a
+        // derived, optional layer, so clearing it IS a real edit and must
+        // persist (`field.allowsEmptyCommit`). One gate, field-aware.
+        if trimmedDraft.isEmpty && !field.allowsEmptyCommit { return .skip }
         return .commit(trimmed: trimmedDraft)
     }
 }
@@ -108,10 +119,11 @@ enum ClipEditorSwitchOutcome: Equatable {
     static func decide(
         initial: String,
         draft: String,
+        field: ClipEditorField,
         switchedToOtherEditor: Bool
     ) -> ClipEditorSwitchOutcome {
         guard switchedToOtherEditor else { return .stayEditing }
-        switch ClipEditorCommitDecision.decide(initial: initial, draft: draft) {
+        switch ClipEditorCommitDecision.decide(initial: initial, draft: draft, field: field) {
         case .commit(let trimmed): return .commitAndClose(trimmed: trimmed)
         case .skip: return .cancelAndClose
         }
@@ -351,7 +363,7 @@ struct ClipEditor: View {
     // MARK: Actions
 
     private func handleDoneTap() {
-        switch ClipEditorCommitDecision.decide(initial: initialValue, draft: draft) {
+        switch ClipEditorCommitDecision.decide(initial: initialValue, draft: draft, field: field) {
         case .commit(let trimmed):
             onDone(trimmed)
         case .skip:
@@ -364,6 +376,7 @@ struct ClipEditor: View {
         switch ClipEditorSwitchOutcome.decide(
             initial: initialValue,
             draft: draft,
+            field: field,
             switchedToOtherEditor: switched
         ) {
         case .commitAndClose(let trimmed):

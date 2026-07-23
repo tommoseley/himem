@@ -42,7 +42,7 @@ struct InlineTranscriptEditDiagnosticTests {
     // (a) — the inline commit decision: a no-op Done skips (T survives).
     @Test func inlineDecision_noOp_skips() {
         let T = "Ben said the Basque cheesecake"
-        #expect(ClipEditorCommitDecision.decide(initial: T, draft: T) == .skip)
+        #expect(ClipEditorCommitDecision.decide(initial: T, draft: T, field: .transcript) == .skip)
     }
 
     // The wipe guard (P0 2026-07-16): an empty draft against a real initial
@@ -51,6 +51,6 @@ struct InlineTranscriptEditDiagnosticTests {
     // instrumentation pinned.
     @Test func inlineDecision_emptyDraftAgainstReal_skips() {
         let T = "Ben said the Basque cheesecake"
-        #expect(ClipEditorCommitDecision.decide(initial: T, draft: "") == .skip)
+        #expect(ClipEditorCommitDecision.decide(initial: T, draft: "", field: .transcript) == .skip)
     }
 }

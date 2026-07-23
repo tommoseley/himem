@@ -1,53 +1,7 @@
 {
   "identifier" : "HIMEM_STOREKIT_CONFIG",
   "nonRenewingSubscriptions" : [],
-  "products" : [
-    {
-      "displayPrice" : "4.99",
-      "familyShareable" : false,
-      "internalID" : "P_PACK20",
-      "localizations" : [
-        {
-          "description" : "20 AI assists. One-time purchase. Never expire.",
-          "displayName" : "20 AI Assists",
-          "locale" : "en_US"
-        }
-      ],
-      "productID" : "com.himem.assists.pack20",
-      "referenceName" : "20 AI Assists",
-      "type" : "Consumable"
-    },
-    {
-      "displayPrice" : "19.99",
-      "familyShareable" : false,
-      "internalID" : "P_PACK100",
-      "localizations" : [
-        {
-          "description" : "100 AI assists. One-time purchase. Never expire. 20% better per assist than the 20-pack.",
-          "displayName" : "100 AI Assists",
-          "locale" : "en_US"
-        }
-      ],
-      "productID" : "com.himem.assists.pack100",
-      "referenceName" : "100 AI Assists",
-      "type" : "Consumable"
-    },
-    {
-      "displayPrice" : "99.00",
-      "familyShareable" : false,
-      "internalID" : "P_FOUNDERS",
-      "localizations" : [
-        {
-          "description" : "Pay once, helped early. HiMem Plus for life, plus 100 bonus assists, TestFlight access, name credit, and selected early-access feature flags. Hard cap 250 customers.",
-          "displayName" : "HiMem Founders Lifetime",
-          "locale" : "en_US"
-        }
-      ],
-      "productID" : "com.himem.founders.lifetime",
-      "referenceName" : "Founders Lifetime",
-      "type" : "NonConsumable"
-    }
-  ],
+  "products" : [],
   "settings" : {
     "_compatibilityTimeRate" : 1,
     "_disableDialogs" : false,

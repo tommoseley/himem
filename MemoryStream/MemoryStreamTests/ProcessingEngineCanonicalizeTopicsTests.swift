@@ -10,9 +10,8 @@ import Foundation
 /// The contract: returned topics matching an existing palette entry
 /// (case-insensitive, whitespace-trimmed) are rewritten to the
 /// palette's canonical form. Non-matches pass through unchanged.
-/// Non-topic fields (entities, summary, title, nextSteps) are
-/// preserved bit-for-bit — canonicalization MUST NOT touch any other
-/// field.
+/// Non-topic fields (entities, summary, title) are preserved
+/// bit-for-bit — canonicalization MUST NOT touch any other field.
 ///
 /// Why this seam is worth a test on its own (TopicPalette has its own
 /// suite): a copy-construction bug here would silently drop a field
@@ -26,8 +25,7 @@ struct ProcessingEngineCanonicalizeTopicsTests {
             entities: [.init(type: "person", value: "Sarah", confidence: 0.9)],
             topics: topics,
             summary: "a sample summary",
-            title: "A Sample Title",
-            nextSteps: ["call Sarah"]
+            title: "A Sample Title"
         )
     }
 
@@ -66,11 +64,8 @@ struct ProcessingEngineCanonicalizeTopicsTests {
         #expect(canonical.title == "A Sample Title")
     }
 
-    @Test func canonicalizationPreservesNextSteps() {
-        let input = sampleResult(topics: ["garden"])
-        let canonical = ProcessingEngine.canonicalizeTopics(result: input, against: ["Garden"])
-        #expect(canonical.nextSteps == ["call Sarah"])
-    }
+    // (RH-6) `nextSteps` was cut from `AnalysisResult` — the field it
+    // preserved no longer exists, so the preservation test is retired.
 
     @Test func emptyPalette_topicsPassThrough() {
         let input = sampleResult(topics: ["Garden", "Work"])

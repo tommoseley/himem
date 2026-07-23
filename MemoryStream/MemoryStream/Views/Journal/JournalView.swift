@@ -44,6 +44,10 @@ struct JournalView: View {
     /// Sessions Create-one-memory flow. Only the memories-mode
     /// instance responds (guarded in the `.onChange` handler).
     @ObservedObject private var memoryNavigation = MemoryNavigationBus.shared
+    /// Consumes topic read-chip navigation (memories instance only).
+    @ObservedObject private var topicFilter = TopicFilterBus.shared
+    /// Consumes mention read-chip navigation (memories instance only).
+    @ObservedObject private var mentionFilter = MentionFilterBus.shared
     @State private var selectedEntryId: UUID? = nil
     @State private var speechErrorMessage: String? = nil
     @State private var activeCaptureModality: CaptureModality? = nil
@@ -76,10 +80,20 @@ struct JournalView: View {
             )
             .padding(.vertical, 4)
 
+            // Mention filter banner (B4) — the visible indicator + clear
+            // for a mention-chip-driven filter (there's no filter strip
+            // for mentions). Memories mode only.
+            if viewMode == .memories, let mention = viewModel.selectedMention {
+                mentionFilterBanner(mention)
+            }
+
             if viewMode == .projects {
                 ProjectListView(
                     projectVM: projectVM,
-                    selectedTopic: viewModel.selectedTopic
+                    selectedTopic: viewModel.selectedTopic,
+                    viewModel: viewModel,
+                    cameraService: cameraService,
+                    speechService: speechService
                 )
             } else {
                 memoriesList
@@ -215,7 +229,55 @@ struct JournalView: View {
             selectedEntryId = pending
             memoryNavigation.pendingOpenMemoryId = nil
         }
+        // Topic read-chip navigation (unified associations read model):
+        // a topic tapped on any opened memory routes here. Only the
+        // memories instance consumes it — pop any pushed detail back to
+        // the list, then set the filter (the same `selectedTopic` the
+        // top strip drives). HiMemTabView has already switched the tab.
+        .onChange(of: topicFilter.pendingTopicFilter) { _, pending in
+            guard let pending, viewMode == .memories else { return }
+            selectedEntryId = nil
+            viewModel.selectedTopic = pending
+            topicFilter.pendingTopicFilter = nil
+        }
+        // Mention read-chip navigation (B4). Memories instance only —
+        // pop any pushed detail, set the mention filter (shows the banner).
+        .onChange(of: mentionFilter.pendingMention) { _, pending in
+            guard let pending, viewMode == .memories else { return }
+            selectedEntryId = nil
+            viewModel.selectedMention = pending
+            mentionFilter.pendingMention = nil
+        }
         } // NavigationStack
+    }
+
+    /// The mention-filter banner — visible indicator + clear for a
+    /// mention-chip-driven Memories filter (B4). Per-type glyph + name.
+    private func mentionFilterBanner(_ mention: MentionChip) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: mention.type.sfSymbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Crucible.Color.ink2)
+            Text("Mentions of \(mention.name)")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Crucible.Color.ink)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button {
+                viewModel.selectedMention = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Crucible.Color.ink3)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Clear mention filter")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Crucible.Color.wash1, in: Capsule())
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
     }
 
     /// Routes a Siri / shortcut action to the right capture surface.
@@ -283,11 +345,7 @@ struct JournalView: View {
                 },
                 onRecycle: { entryId in
                     viewModel.recycleEntry(entryId: entryId)
-                },
-                onAddToProject: { entryId, projectId in
-                    projectVM.addMemory(entryId: entryId, toProjectId: projectId)
-                },
-                availableProjects: projectVM.projects
+                }
             )
             .onAppear { viewModel.markEntryViewed(entryId) }
         } else {

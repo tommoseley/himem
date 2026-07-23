@@ -4,6 +4,11 @@ import SwiftUI
 struct ProjectListView: View {
     @ObservedObject var projectVM: ProjectViewModel
     var selectedTopic: String?
+    /// Threaded to ProjectDetailView so a member card can open the canonical
+    /// Memory Detail (F2/F3, 2026-07-17).
+    @ObservedObject var viewModel: JournalViewModel
+    let cameraService: CameraService
+    @ObservedObject var speechService: SpeechService
     @State private var showNewProject = false
     @State private var showPricing = false
     @State private var newProjectName = ""
@@ -14,6 +19,9 @@ struct ProjectListView: View {
     /// The FAB lives at `HiMemTabView`; the sheet lives here. Wired
     /// via `NewProjectRequestBus` per the July 10 FAB lock.
     @ObservedObject private var newProjectBus = NewProjectRequestBus.shared
+    /// Consumes a project read-chip tap routed from a memory's Projects
+    /// read section (unified associations, 2026-07-17).
+    @ObservedObject private var projectOpenBus = ProjectOpenBus.shared
 
     private var filteredProjects: [ProjectDisplayModel] {
         guard let topic = selectedTopic else { return projectVM.projects }
@@ -112,12 +120,26 @@ struct ProjectListView: View {
                 newProjectBus.consume()
             }
         }
+        // A project read-chip was tapped on an opened memory (from any
+        // tab). HiMemTabView switched to Projects; push the detail here.
+        .onChange(of: projectOpenBus.pendingProjectId) { _, pid in
+            if let pid {
+                selectedProjectId = pid
+                projectOpenBus.pendingProjectId = nil
+            }
+        }
         .sheet(isPresented: $showPricing) {
             PricingView()
         }
         .navigationDestination(item: $selectedProjectId) { projectId in
             if let project = projectVM.projects.first(where: { $0.id == projectId }) {
-                ProjectDetailView(projectId: project.id, projectVM: projectVM)
+                ProjectDetailView(
+                    projectId: project.id,
+                    projectVM: projectVM,
+                    viewModel: viewModel,
+                    cameraService: cameraService,
+                    speechService: speechService
+                )
             }
         }
     }

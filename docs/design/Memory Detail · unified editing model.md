@@ -30,7 +30,7 @@ Audio landed at the **bottom** — not because it's unimportant, but because it'
 | **Media** | Photo, Video, Audio | **Tap to consume** (photo opens, video/audio play). **Every clip that has an original recording shows a quiet "Original recording · m:ss" play control beneath its transcript — always, in read state, not just on tap.** This is the load-bearing reason tapping transcript text can mean *edit* (Play is its own visible control). |
 | **Deletion** | Clip, memory, project | **Open the item, scroll past all content, full-width Delete button at the bottom.** No swipe, no confirm dialog — opening + scrolling *is* the deliberation; Recently Deleted (30 days) is the safety net. **The label tells the truth about what is destroyed (July 13 2026 lock — clips are the atoms, everything else is association):** a memory → **"Let Go of this Memory"** (the derived layer — title · summary · topics · annotations — dissolves, but **its clips survive** and return to availability to start other memories: *"The clips stay — they'll be available to start other memories"*); a clip → **"Delete this Clip"** (destroys the atom and removes it from **every** memory that references it, with a live-count warning: *"This clip is attached to N memories. Deleting it removes it from all of them"*); a member memory inside a project → **"Remove from Project"** (de-associates only; the memory survives everywhere else). |
 | **Relocation** | Clip | **"Where does this belong?"** from the clip's edit state — move to another memory, pull into a new memory, or **"Remove from this memory"** (= move to the Captured Clips bench; the clip survives). Same placement primitive and wording as the workbench (`Kingfisher Language.md`). *survives*). Parallel to a project's Remove-from-project. Distinct from Delete clip (which destroys). |
-| **The memory itself** | — | The same bottom Delete button — labeled **"Let Go of this Memory"** (derived layer dissolves, clips survive — see the Deletion row). No toolbar trash, no list-row swipe. |
+| **The memory itself** | — | The same bottom Delete button — labeled **"Let Go of this Memory"** (derived layer dissolves; clips used elsewhere survive, clips unique to this memory move to Recently Deleted — last-reference rule, see the Deletion row). No toolbar trash, no list-row swipe. |
 | **Metadata** | Topics | **Tap any chip → topic management sheet.** Dashed **+ Add** to add. |
 | | Mentions | **Lightweight inline** manage. Dashed **+ Add** to add. |
 
@@ -69,6 +69,18 @@ Dogfood surfaced the need: a clip lands in the wrong memory (mis-clustered by So
 - **Reuses the existing "add clips to a memory" path** (the Captured Clips bundle flow already targets new *or* existing memories). Move is that same reassignment, initiated from the clip instead of the bench.
 
 *Specimen: `Himem · Memory Detail.html` § "Moving clips between memories" → `clip-move-sheet` + `clip-empty-after-move`.*
+
+## Adding clips to a memory — the in-memory FAB (locked July 20 2026)
+
+Dogfood surfaced the gap: a memory could lose clips (detach, move) but had no way to *add* one. The context-aware FAB rule already covers it — **+ creates/adds the unit of whatever collection you're looking at; inside a memory you're looking at a collection of clips, so + adds a clip to *this* memory.**
+
+Two paths (mirrors the in-project FAB's new-vs-add-existing sheet):
+- **Capture a new clip** (voice/photo/video/note) directly into this memory — the composer opens in this memory's context; on save the clip attaches here (no bench detour).
+- **Add existing clips** — the placement/picker sheet over the loose/Unconnected bench (reuse the same picker the clip's "Add to a memory" and the Unconnected multi-select use); selected clips attach.
+
+Mechanics: each added clip attaches via a new `MemoryClipEdge` (append semantics); memory `content` regenerates (`joinedContent`); **no auto-reorganize** (append never re-runs the organize pass — the summary stays until manual Reorganize, per the no-auto-reprocess rule). New clips append in `orderInMemory`/`capturedAt` order.
+
+**FAB must not overlap the bottom Delete button (build bug, see screenshot 2026-07-20).** The full-width **"Let Go of this Memory"** button owns the bottom of the scroll; the circular **+** currently floats over its right edge. Same class as the Clips multi-select overlap: **the FAB hides when the bottom Delete button is on screen** (i.e. the user has scrolled to the destructive footer) — the two never co-occupy the bottom-right. The FAB also already hides during any active text edit (rule 3 above); this extends the same discipline to the Delete footer.
 
 ## Committing an edit (accept / cancel) — by weight
 

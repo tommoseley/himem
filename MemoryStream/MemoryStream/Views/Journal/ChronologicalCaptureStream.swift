@@ -405,14 +405,26 @@ struct MediaCard: View {
                         if onSaveDescription != nil { editingDescription = desc }
                     }
             }
+        } else if let onEdit {
+            // Empty state (converged card, 2026-07-22): the ochre "Add a
+            // description" invite is the prompt/label, and the standard ✎
+            // sits in the SAME trailing position as the filled state's ✎ —
+            // so the eye finds edit in one consistent spot on every clip.
+            // The invite itself is also an edit entry (tap → modal).
+            HStack(alignment: .top, spacing: 8) {
+                MediaDescriptionEmpty(showsLeadingGlyph: false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onEdit() }
+                ClipEditButton(action: onEdit)
+            }
         } else {
-            // Empty invite — a distinct "add a description" affordance (dashed,
-            // not content text), so tapping it to open the modal is honest.
+            // Legacy inline-edit host (no modal): the invite is the tap
+            // target, with its own leading pencil.
             MediaDescriptionEmpty()
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    if let onEdit { onEdit() }
-                    else if onSaveDescription != nil { editingDescription = "" }
+                    if onSaveDescription != nil { editingDescription = "" }
                 }
         }
     }
@@ -524,15 +536,22 @@ private struct MediaCardThumbnail: View {
 /// design's color discipline, descriptions are HUMAN-written so the
 /// affordance is the user-action color, never AI blue.
 struct MediaDescriptionEmpty: View {
+    /// When the standard card ✎ sits alongside (converged cards, 2026-07-22),
+    /// the invite drops its own leading pencil so there's exactly one edit
+    /// pen, in the standard trailing position. Default keeps the pencil for
+    /// any standalone use.
+    var showsLeadingGlyph: Bool = true
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(Crucible.Color.accent)
-                    .frame(width: 26, height: 26)
-                Image(systemName: "pencil")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.white)
+            if showsLeadingGlyph {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Crucible.Color.accent)
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "pencil")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                }
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text("Add a description")

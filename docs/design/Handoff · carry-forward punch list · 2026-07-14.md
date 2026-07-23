@@ -3,6 +3,17 @@
 **For:** Claude Code · **From:** design/spec side (read-only on the repo).
 **Supersedes:** `Handoff · code-anchored punch list.md` (2026-07-13) — **that list is COMPLETE and verified at pushed HEAD `077de8c`.** Do not re-execute it. This file is the fresh, current list.
 
+## ⛱ While Tom is away (~45 days, from ~July 29 2026) — autonomous work order
+
+Tom shipped v1 and is on a road trip. Run the open queue **without** him, in this order. The ordering is deliberate: everything that needs no ruling comes first; the one item with a decision gate is flagged. Do NOT change any *what* while he's away — if a genuine ambiguity appears that a spec doesn't cover, **stop and leave it for his return** rather than guess (an unbuilt item is cheap; a wrong-direction build is a round-trip he can't close). Keep every change on its own branch, four-part handoff per item, arbiter live on clip-writing/destroying paths.
+
+1. **P8 · last-reference deletion** — the biggest, and it has a **blocking precondition**: ship clip-level Recently Deleted (`MediaReference.recycledAt` + `RecycleBinView` clip support) FIRST; only then wire the edge-count retire + split-count Let Go sheet. `recycledAt` rides the next CloudKit deploy — **stage on Dev, do NOT deploy Production while Tom's away** (schema deploy is a one-way ceremony he should be present for). So: build + test against Dev, hold the Prod deploy + the on-device verify for his return.
+2. **P7 fast-follows** (all pure code, no deploy): add-to-**existing**-memory for Unconnected multi-select (this slice shipped add-to-new); the detach/reorg `everConnected`-recording edge; delete the stale "Loose" doc line at `CLAUDE.md:149`.
+3. **Associations cycle remainder** — the ManageProjectsSheet + project read-section rework were greenlit; finish any unshipped slice. Mentions-library UI is already on device.
+4. **Standing cleanups** (3/3b): retire the disabled inline-edit branches (`CompactClipRow.expandedTranscriptArea`, `MediaCard`) + migrate `EvidenceEdgeReadWriteTests` off `SortBatchCommit`. §4c ack-storm and §4d skip-if-AAC remain parked.
+
+**Anything requiring a Production CloudKit deploy, a new *what*, or a design ruling waits for his return.** Dogfood bugs he hits on the road go to the top of this list when reported.
+
 ## How to use this doc
 
 Same contract as always: read `HiMem · Locked Decisions.html` + `AGENTS.md` first. Latitude is *how*, never *what*. Coherence fixes apply freely; a changed *what* escalates to Tom. Four-part handoff per item (does-it-express-the-spec first, then files/behavior, tests, unresolved risk). Green tests are necessary, not sufficient — CC's diff review is the design-fidelity gate.
@@ -158,34 +169,39 @@ Watch, don't chase: the spreading test-flake (`DebouncedTriggerTests`, now `Jour
 
 ---
 
-## INVARIANT (locked 2026-07-16) · Every clip-edit surface seeds synchronously + commits via `ClipEditorCommitDecision`
+## P8 · Last-reference deletion rule (locked July 19 2026 — narrowly reverses the P6 "clips always survive Let Go" lock)
 
-**Any surface that edits a clip's text (transcript · note · description) MUST: (a) seed its edit buffer SYNCHRONOUSLY — the draft equals the current stored value *before the first render*, never via an async `.task` that leaves it empty in a window; and (b) route its Done/commit through the unified `ClipEditorCommitDecision.decide(initial:draft:)`, never a bespoke inline guard.**
+**Spec source:** `CLAUDE.md` § Phone (deletion sub-rule, Let Go) · `Memory Detail · unified editing model.md` (Deletion rows) · `HiMem · evidence and context.md` · `Captured Clips · session-first · spec.md` § Unconnected cleanup. Origin: dogfood — letting go of a memory left a pile of unexpected orphan clips ("untenable"). **This supersedes P6's blanket "its clips survive."**
 
-This is now the **second** data-loss bug caused by a *separate* edit path that didn't follow the unified pattern:
-- **Synthesized-note** (`077de8c`, P3) — a parallel path minted/blanked content.
-- **Transcript-wipe** (`ce4b191`, 2026-07-16) — `AudioPlayerSheet` seeded its draft async (`.task`); a Done in the pre-seed window committed `""` over a real transcript.
+**The rule (memory-deletion-only, decided from current edge counts at delete time — no `everConnected`/history field, no deploy for the decision itself):**
+- Deleting a memory: a clip with **edge count > 1** (used by another memory) **stays**; a clip whose **single remaining edge is this memory** **moves to Recently Deleted** with it.
+- **Detach-a-clip-from-its-last-memory does NOT auto-retire** — the clip stays Unconnected on the bench ("not *here*" ≠ "not wanted").
+- **AI reorganization never auto-retires** — structural change, not user rejection.
+- **Delete a clip** → Recently Deleted (explicit, unchanged).
+- The Let Go sheet **discloses the split, never asks**: "8 clips are also used elsewhere and will stay · 5 are only here and move to Recently Deleted for 30 days." No checkbox forest.
 
-Same class both times: a second editor path with its own seed/commit logic. Making it an invariant so a third path can't reintroduce it. Reference implementation is the inline `ClipEditor` (caller sets the draft = current value on the tap that enters edit; `handleDoneTap` runs `ClipEditorCommitDecision`). New edit surfaces **reuse `ClipEditor`** where possible; where bespoke chrome forces a separate view, they still seed in `init` and call `ClipEditorCommitDecision`. **A new clip-edit surface that does neither is a defect, not a style choice.**
+**Hard precondition (blocking, not fast-follow):** retired clips need clip-level **Recently Deleted** — `MediaReference.recycledAt` (rides the next CloudKit deploy) + `RecycleBinView` clip support. The auto-retire path must not ship before the net exists.
+
+**Consequence:** shrinks — does not remove — the Unconnected bucket (genuinely-free, never-attached clips still live there); P7's Unconnected cleanup surface stays.
+
+**CC action:** implement the edge-count decision inside the memory-delete transaction; wire the split-count Let Go sheet; ship `recycledAt` clip-level Recently Deleted alongside. Bug-First; four-part handoff.
+
+*Deferred post-v1 candidate (logged, not this cycle):* **AI suggests alternative summaries** — merged with the deferred voice-register picker (m1737); honest reframings (emphasis/length) only, never alternate tone; likely free (taste, not intelligence). Cheapest honest form is a *"Show another"* re-run on the reorganize review sheet, not a grid.
 
 ---
 
-## Follow-up · `AudioPlayerSheet` fully adopts `ClipEditor` (not urgent)
+## P7 · Clips filter cycle — New·All·Unconnected + top-ordering + source-glyph write-side (July 18 2026; label July 19 2026)
 
-The transcript-wipe P0 (`ce4b191`) unified the *commit rule* + the *seed*: `AudioPlayerSheet` now seeds synchronously and routes commit through `ClipEditorCommitDecision`, so the bug is closed. But it remains a **second editor path** with its own draft/seed logic — the fragmentation that let the wipe ship in the first place. **Retire it fully:** have the sheet's transcript field reuse `ClipEditor` itself (not just its decision), leaving only the player / retry / hero chrome bespoke. Blocked on the affordability of the player-chrome refactor — **not urgent**; the invariant above holds the line meanwhile.
+**Spec source:** `Captured Clips · session-first · spec.md` § "Clip lifecycle + the status lens" and § "Unconnected-clip cleanup" (locked July 18 2026); `CLAUDE.md` § Phone (status axis redefined). One coherent cycle — the dogfood Clips screen (9-screenshot set, July 18) exposed all of these together.
 
-**✅ RESOLVED (2026-07-17) — by deletion, not refactor.** `AudioPlayerSheet` is **gone**. The Memory Detail ✎-unification cycle moved voice playback to the inline row ▶ (`AudioPlayerService`) + the unified modal's progress timeline, and transcript editing to the boxed ✎ pencil → `ClipEditorModal`. The file, `AudioTranscriptEdit`, `decideRetryAction`, `AudioPlayerTarget`, and all three of its test files were deleted (`a065597`). The "second editor path" is structurally gone — the strongest possible close of this item.
+**(1) [P1 · new] New/unshaped clips must sort to the TOP.** Shipped build buries the "N new clips" session block *below* months of reverse-chron flat list (new arrivals appear after May 19). Whatever is surfaced as "to look at" goes first — the session/new block is the top of the screen, older/connected clips below. Distinct from the model change; it's an ordering bug.
 
----
+**(2) [pure code, no deploy] Redefine the status lens to `New · All · Unconnected`** (chip label "Unconnected," not "Loose"/"Available") per the lock: two orthogonal properties — **review state** (stored `reviewed` bool: New=`reviewed==false`, Reviewed=`reviewed==true`, "opened by you") and **connection count** (derived: Loose=`connectionCount==0`). Filters are one predicate each. New = unseen (aligns with the tab dot). **`reviewed` is per-device, NOT synced** — a local field on `InboxClip` (manifest) and bench `MediaReference`; the V7 batch already shipped, so this needs **no CloudKit deploy**. Cross-device review-sync is out of scope for v1 (rides the post-v1 bench→MediaReference unification). "Attached" is a relationship, not a state. "Orphaned" is architecture-only; UI says "Loose."
 
-## Carry-forward · Memory Detail inline-edit dead-code removal (3/3b — its own cycle, arbiter live, no rush)
+**(3) [pure code + per-device field] Unconnected-clip cleanup.** The Unconnected filter surfaces every `connectionCount==0` clip → **multi-select → Delete / Add to a memory** (Photos-style; reuse the Sort multi-select + its single ochre commit). Delete = "Delete this Clip" (destroys atom → Recently Deleted). **No cascade** at memory/project deletion (Let Go lock), **no branching** at deletion time — cleanup is the deliberate bench act. No Loose count/badge (workbench-not-queue). *This is the highest daily-value item — the dogfood bench is full of clearable throwaways.*
 
-The ✎-unification cycle (2026-07-16/17) routed **all** clip editing through `ClipEditorModal` via the boxed ✎ pencil (the one edit affordance on every clip row/card everywhere), disabling every inline-edit path under additive-then-delete. Deletion **3/3a** (`a065597`) removed `AudioPlayerSheet` + the cluster play props. **Two dead-but-unreachable items remain, deliberately deferred out of the long build session** — they sit in the wipe-sensitive transcript-edit code, and rushing their removal at low attention is exactly how a regression sneaks back into the area the whole cycle was protecting. Do this as its own focused cycle with the `[HiMem][TranscriptWipe]` arbiter live.
+**(4) [pending, already flagged — needs its own deploy] Source-glyph write-side coverage.** Photo/video + watch clips show no source glyph because `sourceDevice` isn't threaded through watch-promotion + composer/append paths (read-side + helper already in place). Thread `.watch`/`.phone` through the remaining capture paths. `sourceDevice` shipped in the V7 batch, so this is **write-side wiring only, no new deploy**.
 
-1. **Remove the disabled inline-edit branches.**
-   - `Views/Journal/CompactTranscriptViews.swift` → `CompactClipRow.expandedTranscriptArea`: the `if editingDraft != nil … ClipEditor(…)` branch, plus `editingDraft` state, `commitDraft()`, the `.onChange(of: isOpen)` auto-commit, and the read-mode `.simultaneousGesture` that sets `editingDraft`. Unreachable: the only caller (`ChronologicalCaptureStream.compactBody`) always passes `onEdit`, which gates the gesture off.
-   - `Views/Journal/ChronologicalCaptureStream.swift` → `MediaCard.descriptionSlot`: the `if editingDescription != nil … ClipEditor(field: .description)` branch, plus `editingDescription` state and the legacy `.onTapGesture` fallbacks. Same — `onEdit` is always wired.
-   - When both branches go, the inline commit chain (`onCommit`/`onCommitTranscript`/`onSaveDescription` → `onCommitVoiceTranscript`/`onCommitNoteText`/`onCommitMediaDescription` → `updateMediaTranscript`/`updateNoteFragment`/`updateMediaDescription`) is dead — remove it top-to-bottom, confirming the modal's atom-level writes (`updateClipTranscript`/`updateClipDescription`) remain the sole edit path. **Money check:** the `[HiMem][TranscriptWipe]` arbiter stays silent through a full Memory Detail edit pass on device.
-2. **Retire `SortBatchCommit` (orphaned batch commit).** No prod callers — the batch "Keep these · N" bar was retired 2026-07-17; per-cluster "Add to a memory…" routes through `ClusterTrim.keptForCommit`. But `SortBatchCommit` is a **test helper** in `MemoryStreamTests/EvidenceEdgeReadWriteTests.swift`: migrate that test's setup to another create path (e.g. `EntryLifecycleService.createMemoryFromVoiceClips`) **first**, then delete `SortBatchCommit.swift` + `SortBatchCommitCapturedAtTests.swift`. **`ClusterTrim` stays** — it's the live trim path for per-cluster placement.
+**(5) [deferred — YAGNI] Source as a filter facet.** A "Watch" chip in the *type* row is rejected (category error — a watch clip is a voice clip; source ≠ media type). If source-filtering proves useful in dogfood, it's a **third axis** ("From: any/watch/phone/Siri"), not a type chip. Deferred for v1; the glyph answers "where from?" without a filter. *Note: the Watch captures **audio only** (per `Watch · spec.md`), so a watch source is always a voice clip — reinforces that "Watch" is a source, never a media-type peer.*
 
-*Why deferred, not dropped:* both are unreachable/harmless as-is, but they're the last of the "second edit path in code" the cycle set out to eliminate structurally. Right frame is a fresh cycle, arbiter live, full attention — Tom's call, 2026-07-17.
+*Order:* (1) ships independently now (pure code, no schema). (2)+(3)+(4) are all pure code / per-device local fields / write-side wiring — **no CloudKit deploy** (V7 already shipped `Mention`/`recycledAt`/`sourceDevice`). One cycle, verified on device (arbiter live for the delete paths). **Cross-device review-sync is explicitly out of scope** — logged as a post-v1 property of bench→MediaReference unification.

@@ -59,10 +59,23 @@ public class MediaReference: NSManagedObject, Identifiable {
     /// described yet. Storage attribute is `mediaDescription` (not
     /// `description`) because `description` collides with `NSObject`.
     @NSManaged public var mediaDescription: String?
+    /// Where this clip was captured — "phone" / "watch" / "mac" (mirrors
+    /// `JournalEntry.SourceDevice`). Drives the per-clip source glyph on
+    /// the clip card (Finding-2, July 18 2026 schema batch). Nil = unknown
+    /// (legacy clips captured before this attribute) → no glyph shown; a
+    /// nil never falsely claims "phone."
+    @NSManaged public var sourceDevice: String?
     /// Edges linking this clip to any memory (0–N). Membership is
     /// exclusively encoded here per the v1 ontology (clip is evidence;
     /// interpretation lives on the edge).
     @NSManaged public var edges: NSSet?
+    /// Non-nil = this clip is in Recently Deleted (P8, July 19 2026).
+    /// Set by an explicit "Delete this Clip", a batch delete, OR the
+    /// last-reference auto-retire when its only memory is Let Go. A
+    /// recycled clip is excluded from every bench/memory query and purged
+    /// after 30 days. Rides the V8 CloudKit deploy. Mirrors
+    /// `JournalEntry.recycledAt` / `Project.recycledAt`.
+    @NSManaged public var recycledAt: Date?
 }
 
 extension MediaReference {

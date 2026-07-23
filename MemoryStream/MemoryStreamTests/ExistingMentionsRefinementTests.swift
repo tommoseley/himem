@@ -31,8 +31,7 @@ struct ExistingMentionsRefinementTests {
                 entities: [],
                 topics: [],
                 summary: "",
-                title: nil,
-                nextSteps: nil
+                title: nil
             )
         }
     }

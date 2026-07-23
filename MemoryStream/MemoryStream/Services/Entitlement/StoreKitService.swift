@@ -99,6 +99,28 @@ final class StoreKitService: ObservableObject {
         }
     }
 
+    enum RestoreResult {
+        case restored          // an active Plus entitlement is now present
+        case nothingToRestore  // sync succeeded but the account owns no Plus
+        case failed(String)
+    }
+
+    /// Restore Purchases (App Review Guideline 3.1.1). Forces a StoreKit
+    /// sync against the signed-in Apple Account, then rebuilds entitlement
+    /// from `currentEntitlements`. `AppStore.sync()` is the only call that
+    /// requires an explicit user tap — everything else reconciles
+    /// automatically via the transaction listener — so a fresh install or
+    /// a new device gets its "Restore" affordance here.
+    func restorePurchases() async -> RestoreResult {
+        do {
+            try await AppStore.sync()
+            await reconcileCurrentEntitlements()
+            return Entitlement.shared.isPlus ? .restored : .nothingToRestore
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
     // MARK: - Transaction routing
 
     /// Long-running task that delivers transactions arriving outside an

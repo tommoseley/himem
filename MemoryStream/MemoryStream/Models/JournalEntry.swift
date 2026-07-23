@@ -30,6 +30,9 @@ public class JournalEntry: NSManagedObject, Identifiable {
     @NSManaged public var textSegments: NSSet?
     @NSManaged public var topics: NSSet?
     @NSManaged public var projects: NSSet?
+    /// Library-backed mentions (B4, July 18 2026) — many-to-many, replaces
+    /// the per-memory `extractedEntities` mentions for display/management.
+    @NSManaged public var mentions: NSSet?
     /// Timestamp of the most recent successful AI Organize pass.
     /// `nil` means this memory has never been organized. Used by the
     /// memory detail view to decide whether to show the "N new clips
@@ -183,12 +186,32 @@ extension JournalEntry {
         return set.sorted { $0.name < $1.name }
     }
 
+    /// Active projects this memory belongs to (F2/F3). Excludes soft-deleted
+    /// (recycled) projects so a memory doesn't advertise membership in a
+    /// container that's in Recently Deleted. Sorted by name for stable chip
+    /// order. Many-to-many, so 0-N.
+    var projectsArray: [Project] {
+        let set = projects as? Set<Project> ?? []
+        return set.filter { $0.recycledAt == nil }.sorted { $0.name < $1.name }
+    }
+
+    /// Library-backed mentions on this memory (B4), sorted by name for
+    /// stable chip order. Many-to-many, so 0-N.
+    var mentionsArray: [Mention] {
+        let set = mentions as? Set<Mention> ?? []
+        return set.sorted { $0.name < $1.name }
+    }
+
     /// Clips referenced by this memory, sorted by their per-memory
     /// `orderInMemory` on the connecting `MemoryClipEdge` (falls back
     /// to `linkedAt`, then `ref.createdAt`). Walks edges — the legacy
     /// `mediaReferences` set is unused (v2 shim, retired in v3).
     var mediaReferencesArray: [MediaReference] {
-        edgesArray.compactMap { $0.clip }
+        // P8 (July 19 2026): a recycled clip (`recycledAt != nil`) is in
+        // Recently Deleted — excluded from every memory it's edged to, so a
+        // "Delete this Clip" (soft) vanishes from all its memories while the
+        // edge is preserved for restore. The edge stays; the clip hides.
+        edgesArray.compactMap { $0.clip }.filter { $0.recycledAt == nil }
     }
 
     /// Sorted list of `MemoryClipEdge`s linking this memory to its
@@ -249,8 +272,20 @@ extension JournalEntry {
     /// the prompt whenever even one new clip has been added.
     var clipsAddedSinceLastOrganize: Int {
         guard let lastOrganizedAt else { return 0 }
-        let clips = mediaReferencesArray.filter { ($0.createdAt ?? .distantPast) > lastOrganizedAt }
-        return clips.count
+        // "Added since organize" is a property of the EDGE (when the clip
+        // joined THIS memory), not the clip's capture time. A clip
+        // captured last week but attached to this memory today is new
+        // *here* — the Move/Add spec's "identical to new clips arriving"
+        // (`Memory Detail · unified editing model.md` §Moving clips).
+        // Keying off `ref.createdAt` silently dropped that case: an old
+        // clip added via the FAB never marked the memory stale, so it
+        // never offered Reorganize. Fall back to `ref.createdAt` for
+        // legacy edges with no `linkedAt`.
+        return edgesArray.filter { edge in
+            guard let ref = edge.clip, ref.recycledAt == nil else { return false }
+            let addedHere = edge.linkedAt ?? ref.createdAt ?? .distantPast
+            return addedHere > lastOrganizedAt
+        }.count
     }
 
     /// Count of pre-existing clips whose content was edited after the
@@ -260,9 +295,14 @@ extension JournalEntry {
     /// Zero when never organized.
     var clipsEditedSinceLastOrganize: Int {
         guard let lastOrganizedAt else { return 0 }
-        return mediaReferencesArray.filter { ref in
-            // Newly added → counted as "added", not "edited".
-            guard (ref.createdAt ?? .distantPast) <= lastOrganizedAt else { return false }
+        // Same edge-based "added to this memory" notion as
+        // `clipsAddedSinceLastOrganize` — so a clip attached after the
+        // organize is counted there (added), never double-counted here
+        // (edited).
+        return edgesArray.filter { edge in
+            guard let ref = edge.clip, ref.recycledAt == nil else { return false }
+            let addedHere = edge.linkedAt ?? ref.createdAt ?? .distantPast
+            guard addedHere <= lastOrganizedAt else { return false }
             guard let edited = ref.lastEditedAt else { return false }
             return edited > lastOrganizedAt
         }.count
@@ -305,6 +345,14 @@ extension JournalEntry {
 
     @objc(addOrganizePassesObject:)
     @NSManaged func addToOrganizePasses(_ value: OrganizePass)
+
+    // Library-backed mentions accessors (B4). Manual @NSManaged decls —
+    // this model uses no Core Data codegen, so the to-many add/remove
+    // helpers are declared explicitly (mirrors addToTopics/addToProjects).
+    @objc(addMentionsObject:)
+    @NSManaged func addToMentions(_ value: Mention)
+    @objc(removeMentionsObject:)
+    @NSManaged func removeFromMentions(_ value: Mention)
 }
 
 // MARK: - Fetch Requests

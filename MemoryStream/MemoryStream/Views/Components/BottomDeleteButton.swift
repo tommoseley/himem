@@ -21,7 +21,7 @@ struct BottomDeleteButton: View {
 
     enum Kind {
         case delete(noun: String) // "memory" / "clip" / "project" / "session"
-        case removeFromProject
+        case removeFromProject(name: String?) // names the project (F2/F3)
 
         var label: String {
             switch self {
@@ -31,11 +31,16 @@ struct BottomDeleteButton: View {
                 // a memory dissolves its derived layer but its clips SURVIVE;
                 // a clip destroys the atom across every memory.
                 switch noun {
-                case "memory": return "Let Go of this Memory"
-                case "clip":   return "Delete this Clip"
-                default:       return "Delete \(noun)"   // project · session
+                case "memory":  return "Let Go of this Memory"
+                case "clip":    return "Delete this Clip"
+                case "project": return "Delete Project"   // title-case, spec §Deleting
+                default:        return "Delete \(noun)"   // session
                 }
-            case .removeFromProject: return "Remove from Project"
+            case .removeFromProject(let name):
+                // F2/F3 (2026-07-17): name the project so it's unambiguous
+                // which container the memory leaves.
+                if let name, !name.isEmpty { return "Remove from \(name)" }
+                return "Remove from Project"
             }
         }
 
@@ -55,6 +60,11 @@ struct BottomDeleteButton: View {
                     // model). This is what makes "Let Go" honest vs "Delete".
                     return "The clips stay — they'll be available to start other memories. Moves to Recently Deleted · kept for 30 days."
                 }
+                if noun == "project" {
+                    // Projects · MVP spec §Deleting: deleting the container
+                    // never deletes the memories it connected — say so.
+                    return "The memories stay in your library. Moves to Recently Deleted · kept for 30 days."
+                }
                 return "Moves to Recently Deleted · kept for 30 days."
             case .removeFromProject: return "The memory stays in your library."
             }
@@ -62,6 +72,14 @@ struct BottomDeleteButton: View {
     }
 
     let kind: Kind
+    /// P8 (July 19 2026): the memory "Let Go" footnote **discloses the
+    /// last-reference split** ("N clips are also used elsewhere and will
+    /// stay · M are only here and move to Recently Deleted for 30 days"),
+    /// computed per-memory at open time. When set, it replaces the static
+    /// `kind.footnote`. This is informational disclosure, NOT a confirm
+    /// dialog — the deletion rule keeps the open-and-scroll-to-Delete model
+    /// (no dialog); the footnote just tells the truth about the clips.
+    var footnoteOverride: String? = nil
     let action: () -> Void
 
     var body: some View {
@@ -85,10 +103,33 @@ struct BottomDeleteButton: View {
             .buttonStyle(.plain)
             .accessibilityLabel(kind.label)
 
-            Text(kind.footnote)
+            Text(footnoteOverride ?? kind.footnote)
                 .font(.system(size: 11.5))
                 .foregroundStyle(Crucible.Color.ink3)
                 .multilineTextAlignment(.center)
+        }
+    }
+
+    /// Builds the Let Go split-disclosure footnote (P8). `stayCount` = clips
+    /// used elsewhere (edge count > 1); `moveCount` = clips only in this
+    /// memory (single edge → move to Recently Deleted). Discloses, never
+    /// asks. If nothing moves, it says only that the clips stay; if there
+    /// are no clips at all, it falls back to the memory's own 30-day net.
+    static func letGoFootnote(stayCount: Int, moveCount: Int) -> String {
+        switch (stayCount, moveCount) {
+        case (0, 0):
+            return "Moves to Recently Deleted · kept for 30 days."
+        case (let s, 0):
+            let n = s == 1 ? "clip is" : "clips are"
+            return "The \(n) also used elsewhere and will stay."
+        case (0, let m):
+            let subj = m == 1 ? "1 clip is" : "\(m) clips are"
+            let verb = m == 1 ? "moves" : "move"
+            return "\(subj) only here and \(verb) to Recently Deleted for 30 days."
+        case (let s, let m):
+            let stay = s == 1 ? "1 clip is" : "\(s) clips are"
+            let moveVerb = m == 1 ? "moves" : "move"
+            return "\(stay) also used elsewhere and will stay · \(m) \(m == 1 ? "is" : "are") only here and \(moveVerb) to Recently Deleted for 30 days."
         }
     }
 }
@@ -98,7 +139,7 @@ struct BottomDeleteButton: View {
         BottomDeleteButton(kind: .delete(noun: "memory"), action: {})
         BottomDeleteButton(kind: .delete(noun: "clip"), action: {})
         BottomDeleteButton(kind: .delete(noun: "project"), action: {})
-        BottomDeleteButton(kind: .removeFromProject, action: {})
+        BottomDeleteButton(kind: .removeFromProject(name: "Kingfisher"), action: {})
     }
     .padding()
     .background(Crucible.Color.paper)

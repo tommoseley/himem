@@ -353,7 +353,7 @@ struct CompactClipRow: View {
         // unchanged (the prior `trimmed != current` guard is exactly what
         // `decide` computes), so this is coherence hardening, not a
         // proven-culprit fix — it keeps a fourth path from diverging.
-        switch ClipEditorCommitDecision.decide(initial: currentText, draft: draft) {
+        switch ClipEditorCommitDecision.decide(initial: currentText, draft: draft, field: .transcript) {
         case .commit(let trimmed): onCommitTranscript(trimmed)
         case .skip:                break
         }

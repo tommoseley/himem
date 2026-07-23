@@ -3,9 +3,12 @@ import SwiftUI
 /// Signal-based card for the projects list. Per the v1 spec and
 /// `screens-projects-cards.jsx::ProjectCard`: title left, count
 /// badge + last-activity date stacked on the right, topic dot+label
-/// row beneath. **No purpose / goal line.** Goal lives on detail
-/// only (italic serif, below the title); putting it on the card
-/// crowded the row and mixed editorial type into a list surface.
+/// row beneath. The **goal line** sits beneath the title (2026-07-17,
+/// Tom — reverses the earlier "detail only" call): a project is
+/// *intent*, and the goal is the intent, so it earns a place on the
+/// card. Reuses the goal's app-wide identity — 13pt italic serif, ink2
+/// (matching `ProjectTitleBlock`) — via `.system(design: .serif)`
+/// (New York), never a bundled font.
 struct ProjectCardView: View {
     let project: ProjectDisplayModel
 
@@ -32,6 +35,19 @@ struct ProjectCardView: View {
                         .monospacedDigit()
                         .foregroundStyle(Crucible.Color.ink3)
                 }
+            }
+            // Goal — the project's intent, in its app-wide italic-serif
+            // identity. Hidden when unset (goal is optional). Two-line
+            // cap so a long goal doesn't dominate the card.
+            if let goal = project.purpose,
+               !goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(goal)
+                    .font(.system(size: 13, design: .serif))
+                    .italic()
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             // Topic row — pip + label inline, no chip background.
             // Matches `ProjectCard` topics map exactly: 6×6 dot in

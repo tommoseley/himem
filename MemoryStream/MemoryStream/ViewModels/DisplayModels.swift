@@ -24,6 +24,14 @@ struct EntryDisplayModel: Identifiable {
     /// summary row has been accepted. Used by the feed card to replace
     /// the raw-content snippet when present. Nil otherwise.
     let renderedSummary: String?
+    /// Active projects this memory belongs to (F2/F3). Renders as
+    /// "In [project]" chips in Memory Detail. Many-to-many, so 0-N;
+    /// empty when the memory is unfiled.
+    let projectMemberships: [ProjectChip]
+    /// Library-backed mentions on this memory (B4 Phase 2). Per-type-glyph
+    /// navigable chips in Memory Detail. Replaces the `tags`-as-mentions
+    /// (`ExtractedEntity`) rendering.
+    let mentions: [MentionChip]
 
     var timeString: String {
         let interval = Date().timeIntervalSince(createdAt)
@@ -112,6 +120,8 @@ extension EntryDisplayModel: Equatable {
             && lhs.longitude == rhs.longitude
             && lhs.locationName == rhs.locationName
             && lhs.renderedSummary == rhs.renderedSummary
+            && lhs.projectMemberships == rhs.projectMemberships
+            && lhs.mentions == rhs.mentions
     }
 }
 
@@ -138,7 +148,9 @@ extension EntryDisplayModel {
             latitude: latitude,
             longitude: longitude,
             locationName: locationName,
-            renderedSummary: renderedSummary
+            renderedSummary: renderedSummary,
+            projectMemberships: projectMemberships,
+            mentions: mentions
         )
     }
 }
@@ -192,4 +204,21 @@ struct TagDisplayModel: Identifiable, Equatable {
     let value: String
     let entityType: ExtractedEntity.EntityType
     let confidence: Double
+}
+
+/// A project a memory belongs to, reduced to what an "In [project]" chip
+/// needs (F2/F3). Tapping a chip could later navigate to the project; for
+/// now it just labels membership.
+struct ProjectChip: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+}
+
+/// A library-backed mention on a memory, reduced to what a read/manage
+/// chip needs (B4 Phase 2): name + type (the type drives the per-type
+/// glyph — person · place · idea · org; dot stays topics-only).
+struct MentionChip: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+    let type: Mention.MentionType
 }

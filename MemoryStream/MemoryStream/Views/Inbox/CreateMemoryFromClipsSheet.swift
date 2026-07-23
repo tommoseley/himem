@@ -75,16 +75,7 @@ struct CreateMemoryFromClipsSheet: View {
                     topicChips
                     projectChips
                 } else {
-                    ExistingMemoryPickerView(
-                        selectedEntryId: $selectedExistingEntryId,
-                        onSearchTapped: {
-                            // TODO: route to global search prefiltered to
-                            // memories per spec. For first cut, dismissing
-                            // the sheet returns the user to Captured Clips
-                            // where they can navigate to Search themselves.
-                            dismiss()
-                        }
-                    )
+                    ExistingMemoryPickerView(selectedEntryId: $selectedExistingEntryId)
                 }
                 Spacer(minLength: 0)
             }
@@ -475,6 +466,7 @@ struct CreateMemoryFromClipsSheet: View {
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
     }
@@ -573,7 +565,10 @@ struct CreateMemoryFromClipsSheet: View {
             .map { (audioFilename: $0.audioFilename, transcript: $0.transcript, capturedAt: $0.capturedAt) }
         let newId = lifecycle.createMemoryFromVoiceClips(
             voiceClips,
-            topicName: selectedTopic
+            topicName: selectedTopic,
+            // A session is effectively single-source; carry its origin onto
+            // the promoted clips (B4) so a watch session keeps its glyph.
+            sourceDevice: movedClips.first.flatMap { JournalEntry.SourceDevice(rawValue: $0.source) }
         )
         // No explicit `loadEntries` — `JournalViewModel.observeStorage
         // Changes` is subscribed to `NSManagedObjectContextObjectsDid
@@ -686,7 +681,11 @@ struct CreateMemoryFromClipsSheet: View {
             }
         }
 
-        let written = lifecycle.appendClips(entryId: entryId, clips: payload)
+        let written = lifecycle.appendClips(
+            entryId: entryId,
+            clips: payload,
+            sourceDevice: clips.first.flatMap { JournalEntry.SourceDevice(rawValue: $0.source) }
+        )
         guard written > 0 else { return }
 
         // Stamp per-clip lat/lon onto the freshly-created MediaReferences

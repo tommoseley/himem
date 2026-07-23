@@ -53,47 +53,59 @@ struct ClipEditorTests {
     // switch context, which needs the same underlying decision logic.)
 
     @Test func decide_identical_returns_skip() {
-        let d = ClipEditorCommitDecision.decide(initial: "hi", draft: "hi")
+        let d = ClipEditorCommitDecision.decide(initial: "hi", draft: "hi", field: .transcript)
         #expect(d == .skip)
     }
 
     @Test func decide_whitespace_only_diff_returns_skip() {
-        let d = ClipEditorCommitDecision.decide(initial: "hi", draft: "   hi   ")
+        let d = ClipEditorCommitDecision.decide(initial: "hi", draft: "   hi   ", field: .transcript)
         #expect(d == .skip, "trailing/leading whitespace does not constitute a change")
     }
 
     @Test func decide_line_breaks_only_diff_returns_skip() {
-        let d = ClipEditorCommitDecision.decide(initial: "hi", draft: "hi\n\n")
+        let d = ClipEditorCommitDecision.decide(initial: "hi", draft: "hi\n\n", field: .transcript)
         #expect(d == .skip)
     }
 
     @Test func decide_real_change_returns_commit_with_trimmed_value() {
-        let d = ClipEditorCommitDecision.decide(initial: "hi", draft: "  hello world  ")
+        let d = ClipEditorCommitDecision.decide(initial: "hi", draft: "  hello world  ", field: .transcript)
         #expect(d == .commit(trimmed: "hello world"))
     }
 
     @Test func decide_empty_to_text_returns_commit() {
-        let d = ClipEditorCommitDecision.decide(initial: "", draft: "new")
+        let d = ClipEditorCommitDecision.decide(initial: "", draft: "new", field: .transcript)
         #expect(d == .commit(trimmed: "new"))
     }
 
-    /// Text-to-empty is a **skip** (wipe guard, P0 2026-07-16, supersedes
-    /// the prior "erase commits empty" rule). An inline edit never blanks a
-    /// non-empty field to empty — a stale/empty draft reaching commit was the
-    /// transcript-wipe bug, not a real erase. Removing a clip's content is
-    /// "Delete this Clip", not an edit-to-blank.
-    @Test func decide_text_to_empty_skips_wipeGuard() {
-        let d = ClipEditorCommitDecision.decide(initial: "was here", draft: "")
+    /// Transcript-to-empty is a **skip** (wipe guard, P0 2026-07-16). An
+    /// inline transcript edit never blanks a non-empty field to empty — a
+    /// stale/empty draft reaching commit was the transcript-wipe bug, not a
+    /// real erase. Removing a clip's substance is "Delete this Clip".
+    @Test func decide_transcript_to_empty_skips_wipeGuard() {
+        let d = ClipEditorCommitDecision.decide(initial: "was here", draft: "", field: .transcript)
         #expect(d == .skip)
     }
 
-    /// Both-empty (initial = "", draft = "") is a skip — nothing
-    /// meaningful to commit. Guards against a bench voice clip's
-    /// empty transcript flipping into an edit and then firing a
-    /// spurious commit on cancel.
+    /// **The money test (Issue 2, 2026-07-22).** Description-to-empty is a
+    /// real, reversible edit — clearing a description back to "none" MUST
+    /// commit (empty), not silently revert to the old value. The wipe guard
+    /// is transcript-only; a description is a derived, optional layer.
+    @Test func decide_description_to_empty_commits() {
+        let d = ClipEditorCommitDecision.decide(initial: "old description", draft: "", field: .description)
+        #expect(d == .commit(trimmed: ""), "Clearing a description must persist as empty, not discard")
+    }
+
+    /// Whitespace-only description clears too — trimmed empty is empty.
+    @Test func decide_description_to_whitespace_commits_empty() {
+        let d = ClipEditorCommitDecision.decide(initial: "old", draft: "   \n ", field: .description)
+        #expect(d == .commit(trimmed: ""))
+    }
+
+    /// Both-empty (initial = "", draft = "") is a skip for either field —
+    /// nothing changed, nothing to commit.
     @Test func decide_both_empty_returns_skip() {
-        let d = ClipEditorCommitDecision.decide(initial: "", draft: "")
-        #expect(d == .skip)
+        #expect(ClipEditorCommitDecision.decide(initial: "", draft: "", field: .transcript) == .skip)
+        #expect(ClipEditorCommitDecision.decide(initial: "", draft: "", field: .description) == .skip)
     }
 
     // MARK: - (2) competingEditorCommits (auto-commit-on-switch)
@@ -107,6 +119,7 @@ struct ClipEditorTests {
         let outcome = ClipEditorSwitchOutcome.decide(
             initial: "hi",
             draft: "  hello world ",
+            field: .transcript,
             switchedToOtherEditor: true
         )
         #expect(outcome == .commitAndClose(trimmed: "hello world"))
@@ -116,6 +129,7 @@ struct ClipEditorTests {
         let outcome = ClipEditorSwitchOutcome.decide(
             initial: "hi",
             draft: "hi",
+            field: .transcript,
             switchedToOtherEditor: true
         )
         #expect(outcome == .cancelAndClose,
@@ -126,6 +140,7 @@ struct ClipEditorTests {
         let outcome = ClipEditorSwitchOutcome.decide(
             initial: "hi",
             draft: "hi world",
+            field: .transcript,
             switchedToOtherEditor: false
         )
         #expect(outcome == .stayEditing,
@@ -170,5 +185,14 @@ struct ClipEditorModalSourceTests {
     @Test func unknownOrAbsentSource_noGlyph() {
         #expect(ClipEditorModal.sourceGlyphName(for: "mac") == nil)
         #expect(ClipEditorModal.sourceGlyphName(for: nil) == nil)
+    }
+
+    /// The edit surface titles itself "Edit Clip" (device fix 2026-07-21;
+    /// was the ambiguous "CLIP"), and stays distinct from the read-only
+    /// `ClipDetailView` ("Clip") so a user can tell "opened" from
+    /// "editing" at a glance. Guards against a silent revert of the rename.
+    @Test func editorTitle_isEditClip_andDistinctFromReadOnly() {
+        #expect(ClipEditorModal.editorTitle == "Edit Clip")
+        #expect(ClipEditorModal.editorTitle != "Clip")
     }
 }

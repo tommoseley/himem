@@ -49,11 +49,30 @@ struct ClipDetailView: View {
     }
 
     var body: some View {
+        clipBody
+            // "New = unseen, opened by you" (P7-2). Editing via the ✎
+            // modal already marks a clip reviewed; *viewing* it here is
+            // equally "opened by you", so the New lens must drop it too.
+            // reviewed only feeds the New-bench filter — marking a ref
+            // that lives in a memory is harmless (it's never on the bench).
+            .onAppear(perform: markReviewed)
+    }
+
+    @ViewBuilder private var clipBody: some View {
         switch source {
         case .managed(let ref):
             MediaReferenceClipDetail(ref: ref)
         case .inbox(let clip):
             InboxClipDetail(clipId: clip.clipId)
+        }
+    }
+
+    private func markReviewed() {
+        switch source {
+        case .managed(let ref):
+            BenchClipReviewStore.markReviewed(ref.id)
+        case .inbox(let clip):
+            InboxManifest.shared.markReviewed(clipId: clip.clipId)
         }
     }
 }
@@ -227,6 +246,7 @@ private struct MediaReferenceClipDetail: View {
                         style: StrokeStyle(lineWidth: 1, dash: [5, 4])
                     )
             )
+            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add a description")
@@ -369,6 +389,7 @@ private struct MediaReferenceClipDetail: View {
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Crucible.Color.danger, lineWidth: 1)
                     )
+                    .contentShape(Rectangle()) // edge-to-edge tap (stroke pill interior is transparent)
             }
             if attachedCount > 0 {
                 Text("This is attached to \(attachedCount) \(attachedCount == 1 ? "memory" : "memories").")
@@ -386,7 +407,9 @@ private struct MediaReferenceClipDetail: View {
 
     private func performDelete() {
         let service = EntryLifecycleService(storage: storage, processingEngine: ProcessingEngine.shared)
-        service.deleteMediaReference(refId: ref.id)
+        // P8: "Delete this Clip" soft-deletes to Recently Deleted (30 days),
+        // honoring the button's footnote — restorable, not destroyed.
+        service.recycleClip(refId: ref.id)
         dismiss()
     }
 }
@@ -640,11 +663,14 @@ private struct InboxClipDetail: View {
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(Crucible.Color.danger, lineWidth: 1)
                 )
+                .contentShape(Rectangle()) // edge-to-edge tap (stroke pill interior is transparent)
         }
     }
 
     private func performDelete() {
-        InboxManifest.shared.remove(clipId: clipId)
+        // P8b: soft-delete the bench clip to Recently Deleted (per-device
+        // manifest recycledAt), not a permanent tombstone.
+        InboxManifest.shared.recycleClip(clipId: clipId)
         dismiss()
     }
 }

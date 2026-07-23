@@ -9,12 +9,39 @@ import UIKit
 struct ProjectDetailView: View {
     let projectId: UUID
     @ObservedObject var projectVM: ProjectViewModel
+    /// F2/F3 (2026-07-17): a member card opens the canonical Memory Detail
+    /// (EntryExpandedView), so the project stack needs the same services the
+    /// Memories list feeds it. Threaded from JournalView via ProjectListView.
+    @ObservedObject var viewModel: JournalViewModel
+    let cameraService: CameraService
+    @ObservedObject var speechService: SpeechService
     @Environment(\.dismiss) private var dismiss
     @State private var project: Project?
+    /// Drives the push to the member memory's Memory Detail.
+    @State private var selectedEntryId: UUID? = nil
+    /// "Removed from [project] · Undo" toast (F2/F3) — the safety net that
+    /// lets the remove skip a confirm dialog. 5-second timeout; Undo re-adds.
+    @State private var removalToast: RemovalToast? = nil
+    /// Projects-only delete confirm (ruled 2026-07-17 — a scoped carve-out
+    /// to the deletion lock). A project dissolves a container spanning many
+    /// memories, and unlike a memory/clip the loss is abstract (no clips
+    /// visibly survive in front of you), so it earns one light confirm on
+    /// top of the soft-delete net. Memory/clip deletion stays no-confirm.
+    @State private var showDeleteConfirm = false
+
+    private struct RemovalToast: Identifiable {
+        let id = UUID()
+        let entryId: UUID
+        let projectName: String
+    }
     @State private var entries: [EntryDisplayModel] = []
     @State private var topicFilter: String? = nil
     @State private var showShareSheet = false
     @State private var showAddMemorySheet = false
+    /// Consumes the in-project FAB's "Add existing memory" signal (F7).
+    /// The FAB lives at `HiMemTabView`; the search-to-add sheet lives
+    /// here — this bus is the seam, mirroring `NewProjectRequestBus`.
+    @ObservedObject private var addExistingBus = AddExistingMemoryRequestBus.shared
     @State private var shareItems: [Any] = []
     @State private var isPreparingShare = false
     @State private var showSuggestionsSheet = false
@@ -160,15 +187,13 @@ struct ProjectDetailView: View {
                     .padding(.top, 24)
                 } else {
                     let filtered = topicFilter == nil ? entries : entries.filter { $0.topicNames.contains(topicFilter!) }
-                    // Read-only member rows for ship-today. Tap-to-open
-                    // Memory Detail from inside a project (which would
-                    // swap the bottom Delete for `Remove from project`
-                    // per spec line 109) needs JournalViewModel +
-                    // CameraService + SpeechService plumbed through
-                    // ProjectListView → ProjectDetailView. v1.1 work;
-                    // tracked as a post-launch follow-up.
+                    // F2/F3 (2026-07-17): tapping a member card opens the
+                    // canonical Memory Detail (below), with the project-context
+                    // fate buttons ("Remove from [project]" → "Let Go").
                     ForEach(filtered) { entry in
                         EntryCardView(entry: entry)
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedEntryId = entry.id }
                     }
                 }
 
@@ -179,14 +204,34 @@ struct ProjectDetailView: View {
                 // the toolbar Trash; opening a member memory carries
                 // its own bottom button.
                 BottomDeleteButton(kind: .delete(noun: "project")) {
-                    projectVM.deleteProject(id: projectId)
-                    dismiss()
+                    showDeleteConfirm = true
                 }
                 .padding(.top, 24)
             }
             .padding(16)
         }
         .background(Crucible.Color.paper)
+        .overlay(alignment: .bottom) {
+            if let toast = removalToast {
+                removalToastView(toast)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.9), value: removalToast?.id)
+        .alert("Delete Project?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                projectVM.deleteProject(id: projectId)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The memories stay in your library.")
+        }
+        .navigationDestination(item: $selectedEntryId) { entryId in
+            memberDetailDestination(for: entryId)
+        }
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -202,18 +247,15 @@ struct ProjectDetailView: View {
                     .foregroundStyle(Crucible.Color.accent)
                 }
             }
-            // Trailing toolbar per unified editing model spec —
-            // add-memory · share. No pen, no Trash (title and goal are
-            // tap-to-edit via EditProjectSheet; project destruction is
-            // the bottom Delete project button at the end of the body).
+            // Trailing toolbar: share only. The add-memory `+` is retired
+            // (F7, 2026-07-17) — adding memories now lives on the context-
+            // aware FAB's two paths (new-in-project + "Add existing
+            // memory"), per Projects · MVP spec §Surfaces ("no toolbar
+            // trash, no +"). No pen, no Trash (title/goal edit via
+            // EditProjectSheet; destruction is the bottom Delete Project
+            // button).
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
-                    Button { showAddMemorySheet = true } label: {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 16))
-                            .foregroundStyle(Crucible.Color.accent)
-                    }
-                    .accessibilityLabel("Add memory to project")
                     Button {
                         Task { await prepareAndShowShareSheet() }
                     } label: {
@@ -296,6 +338,15 @@ struct ProjectDetailView: View {
         }
         .onDisappear {
             ProjectsNavigationContext.shared.exit(projectId: projectId)
+        }
+        .onChange(of: addExistingBus.pendingToken) { _, token in
+            // The in-project FAB's "Add existing memory" path fired —
+            // present the same search-to-add sheet the retired toolbar +
+            // used to open, then clear the one-shot token.
+            if token != nil {
+                showAddMemorySheet = true
+                addExistingBus.consume()
+            }
         }
     }
 
@@ -601,6 +652,60 @@ struct ProjectDetailView: View {
         return lines.joined(separator: "\n")
     }
 
+    /// The canonical Memory Detail for a member memory, opened from its card
+    /// (F2/F3). Same EntryExpandedView + callbacks the Memories list uses — no
+    /// fork — plus the project-context `onRemoveFromProject` (de-associate
+    /// only; the memory survives) which renders the "Remove from [project]"
+    /// button above the memory's red "Let Go of this Memory".
+    @ViewBuilder
+    private func memberDetailDestination(for entryId: UUID) -> some View {
+        if let entry = viewModel.currentEntry(id: entryId) {
+            EntryExpandedView(
+                entry: entry,
+                backLabel: project?.name ?? "Project",
+                allTopics: viewModel.topics,
+                cameraService: cameraService,
+                speechService: speechService,
+                onSave: { entryId, newContent, newTitle in
+                    viewModel.editEntry(
+                        entryId: entryId,
+                        newContent: newContent,
+                        newTitle: newTitle,
+                        removedTagIds: [],
+                        removedMediaIds: [],
+                        addedTopicNames: [],
+                        removedTopicNames: []
+                    )
+                },
+                onFeedback: { entryId, state in
+                    viewModel.submitFeedback(entryId: entryId, state: state)
+                },
+                onAdjust: { entryId, correction in
+                    viewModel.submitFeedback(entryId: entryId, state: .edited, correction: correction)
+                },
+                onCommit: { entryId, additionalContent, mediaCaptures in
+                    viewModel.appendToEntry(
+                        entryId: entryId,
+                        additionalContent: additionalContent,
+                        mediaCaptures: mediaCaptures
+                    )
+                },
+                onRecycle: { entryId in
+                    viewModel.recycleEntry(entryId: entryId)
+                },
+                onRemoveFromProject: { entryId in
+                    projectVM.removeMemory(entryId: entryId, fromProjectId: projectId)
+                    loadProjectEntries()
+                    showRemovalToast(entryId: entryId)
+                },
+                projectContextName: project?.name
+            )
+            .onAppear { viewModel.markEntryViewed(entryId) }
+        } else {
+            Color(Crucible.Color.paper).ignoresSafeArea()
+        }
+    }
+
     private func loadProject() {
         let request = NSFetchRequest<Project>(entityName: "Project")
         request.predicate = NSPredicate(format: "id == %@", projectId as CVarArg)
@@ -612,6 +717,49 @@ struct ProjectDetailView: View {
         guard let project else { return }
         let journalEntries = project.entriesArray.filter { !$0.isRecycled }
         entries = journalEntries.map(EntryMapper.mapToDisplayModel)
+    }
+
+    // MARK: - Remove-from-project toast (F2/F3)
+
+    /// The "Removed from [project]" confirmation + Undo. This is the safety
+    /// net that lets the remove skip a confirm dialog (per the deletion-lock
+    /// model): a de-association is cheap to reverse, so we surface an
+    /// immediate Undo instead of a modal.
+    private func showRemovalToast(entryId: UUID) {
+        let toast = RemovalToast(entryId: entryId, projectName: project?.name ?? "this project")
+        removalToast = toast
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            if removalToast?.id == toast.id { removalToast = nil }
+        }
+    }
+
+    private func undoRemoval(_ toast: RemovalToast) {
+        projectVM.addMemory(entryId: toast.entryId, toProjectId: projectId)
+        loadProjectEntries()
+        removalToast = nil
+    }
+
+    @ViewBuilder
+    private func removalToastView(_ toast: RemovalToast) -> some View {
+        HStack(spacing: 12) {
+            Text("Removed from \(toast.projectName)")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button {
+                undoRemoval(toast)
+            } label: {
+                Text("Undo")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.accentBright)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 13)
+        .background(Crucible.Color.ink, in: Capsule())
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
     }
 
     // MARK: - Share preparation

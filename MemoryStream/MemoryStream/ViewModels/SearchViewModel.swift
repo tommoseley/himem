@@ -17,7 +17,14 @@ final class SearchViewModel: ObservableObject {
     @Published var queryText: String = ""
     @Published private(set) var state: State = .preSearch
     @Published private(set) var hits: [SearchEngine.Hit] = []
+    @Published private(set) var clipHits: [SearchEngine.ClipHit] = []
     @Published private(set) var recycledHits: [SearchEngine.Hit] = []
+    /// Object scope facet — Memories · Clips · All (default Memories).
+    @Published private(set) var objectScope: ObjectScope = .memories
+    /// Active "When" date range (from the When popover). Overrides any
+    /// `date:` token while set; `nil` = Any time.
+    @Published private(set) var whenRange: DateInterval? = nil
+    @Published private(set) var whenLabel: String? = nil
     @Published private(set) var topicCounts: [String: Int] = [:]
     @Published private(set) var typeCounts: [TypeScope: Int] = [:]
     @Published private(set) var recentSearches: [String] = []
@@ -95,6 +102,7 @@ final class SearchViewModel: ObservableObject {
         if newValue.isEmpty {
             cancelDebounce()
             hits = []
+            clipHits = []
             recycledHits = []
             state = .preSearch
             loadPreSearchData()
@@ -117,6 +125,7 @@ final class SearchViewModel: ObservableObject {
         queryText = ""
         committed = false
         hits = []
+        clipHits = []
         recycledHits = []
         state = .preSearch
         loadPreSearchData()
@@ -147,6 +156,27 @@ final class SearchViewModel: ObservableObject {
         committed = true
         executeSearch()
     }
+
+    // MARK: - Object scope + When facets
+
+    func setObjectScope(_ scope: ObjectScope) {
+        guard scope != objectScope else { return }
+        objectScope = scope
+        executeSearch()
+    }
+
+    /// Apply a When range (nil = Any time / clear). `label` is the chip
+    /// text ("This year", "2023", "Jan 1 – Mar 31 2024").
+    func setWhen(range: DateInterval?, label: String?) {
+        whenRange = range
+        whenLabel = range == nil ? nil : label
+        executeSearch()
+    }
+
+    func clearWhen() { setWhen(range: nil, label: nil) }
+
+    /// The years the Memory Box actually spans, for the When presets.
+    var whenYearPresets: [Int] { engine.memoryBoxYears() }
 
     func applyScopeFromSuggestion(_ scope: String) {
         queryText = appendScope(scope, to: queryText)
@@ -206,32 +236,44 @@ final class SearchViewModel: ObservableObject {
     }
 
     private func executeSearch() {
-        let parsed = ScopeParser.parse(queryText)
+        var parsed = ScopeParser.parse(queryText)
+        // The When facet is the effective date filter when set (it wins
+        // over a `date:` token — two paths, one slot). Composes with
+        // text/topic/type unchanged.
+        if let whenRange { parsed.dateRange = whenRange }
         let trimmed = queryText.trimmingCharacters(in: .whitespaces)
         let hasFilters = parsed.topicSlug != nil || parsed.typeScope != nil || parsed.dateRange != nil
         guard !trimmed.isEmpty || hasFilters else {
             hits = []
+            clipHits = []
             recycledHits = []
             state = .preSearch
             return
         }
 
         do {
-            let foundHits = try engine.search(parsed: parsed)
-            let foundRecycled = (try? engine.searchRecycled(parsed: parsed)) ?? []
+            // Memories scope covers spoken words already (a memory's text
+            // includes its clips' transcripts); Clips scope surfaces clips
+            // directly; All runs both.
+            let foundHits = objectScope == .clips ? [] : try engine.search(parsed: parsed)
+            let foundClips = objectScope == .memories ? [] : try engine.searchClips(parsed: parsed)
+            let foundRecycled = objectScope == .clips ? [] : ((try? engine.searchRecycled(parsed: parsed)) ?? [])
             hits = foundHits
+            clipHits = foundClips
             recycledHits = foundRecycled
             topicCounts = (try? engine.topicFacetCounts(for: parsed)) ?? [:]
             typeCounts = (try? engine.typeFacetCounts(for: parsed)) ?? [:]
 
             if committed {
-                state = (foundHits.isEmpty && foundRecycled.isEmpty) ? .noResults : .results
+                let empty = foundHits.isEmpty && foundClips.isEmpty && foundRecycled.isEmpty
+                state = empty ? .noResults : .results
             } else {
                 state = .typing
             }
         } catch {
             ErrorState.shared.report(.searchFailed(error.localizedDescription))
             hits = []
+            clipHits = []
             recycledHits = []
             state = .noResults
         }
@@ -312,6 +354,47 @@ final class SearchViewModel: ObservableObject {
     var fallbackTopicSuggestion: TopicBrowseItem? {
         let lower = queryText.lowercased()
         return topicsForBrowse.first { lower.contains($0.slug) || lower.contains($0.name.lowercased()) }
+    }
+}
+
+// MARK: - Flat results (Clips / All object scopes)
+
+extension SearchViewModel {
+    /// A row in the flat result list used by the Clips and All scopes.
+    enum ResultItem: Identifiable {
+        case memory(SearchEngine.Hit)
+        case clip(SearchEngine.ClipHit)
+        var id: String {
+            switch self {
+            case .memory(let h): return "m-\(h.id.uuidString)"
+            case .clip(let c):   return "c-\(c.id.uuidString)"
+            }
+        }
+        var relevance: Double {
+            switch self {
+            case .memory(let h): return h.relevance
+            case .clip(let c):   return c.relevance
+            }
+        }
+        var date: Date {
+            switch self {
+            case .memory(let h): return h.entry.createdAt
+            case .clip(let c):   return c.ref.createdAt ?? .distantPast
+            }
+        }
+    }
+
+    /// Flat, interleaved results for Clips (clips only) and All (both),
+    /// ordered relevance-first then recency (`Himem · Search.html`
+    /// §"Ordering within a bucket").
+    var flatResults: [ResultItem] {
+        var items: [ResultItem] = []
+        if objectScope != .memories { items += clipHits.map { .clip($0) } }
+        if objectScope == .all { items += hits.map { .memory($0) } }
+        return items.sorted {
+            if $0.relevance != $1.relevance { return $0.relevance > $1.relevance }
+            return $0.date > $1.date
+        }
     }
 }
 

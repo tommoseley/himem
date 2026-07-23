@@ -10,17 +10,55 @@ import FoundationModels
 /// drifts from the spike, the spike's QA panel is no longer a valid
 /// reference for output quality.
 ///
-/// **Not authoritative.** Per `AI Organize · spec.md` §2b/§9 and the
-/// spike findings, on-device output is presented as an *editable
-/// first draft*. The Memory Detail chip reads "Draft organized"
-/// until the user reviews. Three documented failure classes (purposive
-/// drift, visible-photo claims, occasional voice slip) are
-/// hand-editable and the UI does not promise authority.
+/// **Not authoritative — and the model quality is Apple's to move, not ours
+/// (2026-07-23).** Per `AI Organize · spec.md` §2b/§9, on-device output is an
+/// *editable first draft* ("Draft organized" until the user reviews). The
+/// on-device model is a **platform-controlled moving target**: it regressed
+/// under **iOS 27** ("much colder," and it began fabricating proper names).
+/// So HiMem's Honest-Label guarantee is **NOT staked on this model's prompt
+/// behavior** — prompt tuning against a model Apple changes every OS release
+/// is permanently unstable. Honesty is enforced in **deterministic code**
+/// (`TruthReconciler`, applied on BOTH tiers via
+/// `ProcessingEngine.reconcileResult` — on-device gets `.strict` grounding):
+/// a proper name in the summary that the clips don't contain is rejected →
+/// retry once → constrained extractive fallback ("say less before saying
+/// false"). Models are advisory; code is authoritative. Documented 3B QUALITY ceilings
+/// that remain (hand-editable, frontier/Plus clears them, not open bugs):
+/// purposive drift · visible-photo claims · occasional voice slip ·
+/// subject-out POV slip · invent-a-speaker — the last is now caught by the
+/// gate before it ships, even though the model still produces it.
 ///
-/// **No `nextSteps`.** Per `AI Organize · spec.md` §6, `nextSteps` is
-/// a Plus-only field. The on-device schema omits it entirely — the
-/// 3B model fabricates forward actions when given the field, even
-/// when the clips don't state them.
+/// Cross-memory contamination was a real bug, fixed at the source: the
+/// library topics/mentions palette is no longer fed to the model (it
+/// fabricated other memories' people into unrelated ones), and name reuse is
+/// reconciled in code (`MentionReconciler`, now TruthReconciler's first
+/// module, via `ProcessingEngine.canonicalizeMentions`). The reconciler is the
+/// durable architecture; the prompt is not load-bearing for honesty.
+///
+/// **No `nextSteps`.** Cut from v1 entirely (RH-6, July 20 2026) — it's
+/// no longer on `AnalysisResult` and no UI consumes it. The on-device
+/// schema never had it: the 3B model fabricates forward actions when given
+/// the field, even when the clips don't state them.
+///
+/// **The Cadence rule has NO positive example — do not add one (2026-07-23).**
+/// The rule is prose only ("write as ONE connected thought … never clipped
+/// declaratives, never a comma-list of fragments"). Every concrete Cadence
+/// EXAMPLE we tried bled into the output, because a 3B model treats a
+/// few-shot example as content to emit regardless of how abstract it is:
+///   1. Concrete nouns ("peppers, tomatoes, and eggplants … South Carolina
+///      garden … retirement") bled verbatim into an unrelated Lincoln-quote
+///      memory — an Honest-Label data-integrity failure (asserting clips the
+///      memory doesn't contain).
+///   2. Abstracting the nouns to placeholders but keeping verbs ("You're
+///      noting A…") → the model parroted "noting" into 4 of 6 calibration
+///      summaries; the "You're" pushed a subject-out memory to second person.
+///   3. Verb-free, POV-neutral shapes ("A, while B, and C") → the model
+///      latched onto the comma-list and produced "You, X, and Y" fragments.
+/// The example itself is the payload. So the positive example is GONE; the
+/// prose rule (plus a NEGATIVE characterization of the anti-patterns, using
+/// obvious X/Y placeholders) carries the pedagogy. A future edit must NOT
+/// "helpfully" add a warm/cold example sentence back — re-run the FM-spike
+/// QA panel after ANY prompt edit, since the prompt is the validated artifact.
 ///
 /// **Mention typing.** The on-device prompt returns mentions as
 /// untyped strings (the model lacks reliable typing at the 3B scale).
@@ -32,7 +70,7 @@ final class OnDeviceOrganizer: Organizer {
 
     /// Structured output schema for FoundationModels. Mirrors the
     /// spike's `OrganizeOutput` — title, summary, topics, mentions.
-    /// No `nextSteps` (Plus-only).
+    /// No `nextSteps` (cut from v1, RH-6).
     @Generable
     struct OrganizeOutput: Equatable {
         @Guide(description: "A concrete noun phrase, 3–8 words.")
@@ -62,9 +100,13 @@ final class OnDeviceOrganizer: Organizer {
 
     - Honest Label: describe what the clips contain. Never what they mean or what the user feels. Do not add details the clips don't have.
     - Every sentence about the owner must begin with "You" or "You're." Never "the user", "the author", "the clip", or "the memory" as a subject. Use names for everyone else.
+    - If the memory has NO first-person voice — only a photo or a bare observation, nobody speaking as "I" — leave the owner out entirely. Do NOT write "You're capturing…" or "You…". Name only what is there. Example: for a sunset photo, "A deep-orange sunset over the ridge," not "You captured a sunset."
     - Do not add reasons, purposes, or causes the clips don't state. No "to ___," no "because ___."
+    - Cadence: write the summary as ONE connected thought, the way a thoughtful friend would recap — flowing, subordinated sentences that string the facts together, connected with subordinating words (while, and, since, as). Never a run of short, clipped "You're X. You're Y. The Z is …" declaratives; that reads as a cold status log about the person. And never a comma list of fragments ("You, X, and Y, three things"). Keep the memory's own specific nouns; change only how they connect.
     - Photo and video clips are not visible. Do not describe their visual content. Reference them by count only.
     - Topic selection: when the input lists the user's existing topics, prefer one of those exact labels if any fits this memory. Coin a new topic only when none of the existing topics reasonably fit.
+    - Mention selection: when the input lists people, places, and projects the user has mentioned before, prefer one of those exact names if the memory refers to the same one. Coin a new mention only when none of the existing ones match.
+    - Only ever name a topic or mention that THIS memory's clips actually refer to. The existing-topics and existing-mentions lists are for spelling and avoiding near-duplicates — they are NOT things to add. Never insert a name or topic from those lists that this memory does not mention. If the clips name no people, places, or projects, return no mentions. If nothing fits, return none.
 
     Generate: title, summary, topics, mentions.
     """
@@ -128,7 +170,11 @@ final class OnDeviceOrganizer: Organizer {
         }
 
         let session = LanguageModelSession(instructions: Self.promptInstructions)
-        let promptInput = Self.formatPrompt(content: content, existingTopics: existingTopics)
+        let promptInput = Self.formatPrompt(
+            content: content,
+            existingTopics: existingTopics,
+            existingMentions: existingMentions
+        )
         do {
             let response = try await session.respond(
                 to: promptInput,
@@ -186,30 +232,51 @@ final class OnDeviceOrganizer: Organizer {
     /// Internal (not `private`) so the prompt-shape money tests in
     /// `OnDeviceOrganizerPromptTests` can exercise every cell of the
     /// palette / no-palette / whitespace-padding matrix.
-    static func formatPrompt(content: String, existingTopics: [String]) -> String {
-        let trimmedTopics = existingTopics
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let paletteSection: String
-        if trimmedTopics.isEmpty {
-            paletteSection = ""
-        } else {
-            let bulleted = trimmedTopics.map { "- \($0)" }.joined(separator: "\n")
-            paletteSection = """
-
-
-            Existing topics in this user's library (prefer one of these if any fits):
-            \(bulleted)
-            """
-        }
+    static func formatPrompt(
+        content: String,
+        existingTopics: [String],
+        existingMentions: [String] = []
+    ) -> String {
+        let topicsSection = paletteSection(
+            entries: existingTopics,
+            header: "Existing topics in this user's library (prefer one of these if any fits):"
+        )
+        // Mentions get their own palette section, mirroring topics
+        // (AI Organize spec §2c "Mentions follow the same palette
+        // discipline"). Without it the on-device model coins a fresh
+        // name every pass — Darlene / Darlene G. / Darlene Graham —
+        // fragmenting recurring people. The static directive tells the
+        // model what to do with the list; this renders the list.
+        let mentionsSection = paletteSection(
+            entries: existingMentions,
+            header: "People, places, and projects this user has mentioned before (prefer one of these if any fits):"
+        )
         return """
         MEMORY
 
         Text clip 1:
         "\(content)"
-        \(paletteSection)
+        \(topicsSection)\(mentionsSection)
 
         Organize this memory.
+        """
+    }
+
+    /// Renders a bulleted "prefer one of these" palette block, or an
+    /// empty string when the palette is empty (first-pass memory or a
+    /// wiped library) so the prompt stays clean. Shared by the topics
+    /// and mentions sections — one shape, two vocabularies.
+    private static func paletteSection(entries: [String], header: String) -> String {
+        let trimmed = entries
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !trimmed.isEmpty else { return "" }
+        let bulleted = trimmed.map { "- \($0)" }.joined(separator: "\n")
+        return """
+
+
+        \(header)
+        \(bulleted)
         """
     }
 
@@ -220,7 +287,7 @@ final class OnDeviceOrganizer: Organizer {
     /// - Mentions → entities with type `idea` (untyped mentions, full
     ///   confidence). The Memory Detail UI groups them under a single
     ///   "Mentions" section.
-    /// - `nextSteps` is nil (Plus-only field, not produced on-device).
+    /// - `nextSteps` no longer exists on `AnalysisResult` (cut from v1, RH-6).
     static func mapToAnalysisResult(_ output: OrganizeOutput) -> ClaudeAPIService.AnalysisResult {
         let entities = output.mentions.map { mention in
             ClaudeAPIService.EntityResult(
@@ -233,8 +300,7 @@ final class OnDeviceOrganizer: Organizer {
             entities: entities,
             topics: output.topics,
             summary: output.summary,
-            title: output.title,
-            nextSteps: nil
+            title: output.title
         )
     }
 }

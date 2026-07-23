@@ -44,7 +44,7 @@ final class EntryLifecycleService {
         guard let entry = try fetchEntry(id: entryId) else {
             throw NSError(domain: "EntryLifecycleService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry \(entryId) not found"])
         }
-        let ref = try storage.createMediaReference(for: entry, localIdentifier: localIdentifier, mediaType: mediaType)
+        let ref = try storage.createMediaReference(for: entry, localIdentifier: localIdentifier, mediaType: mediaType, sourceDevice: .phone)
         if let transcript, !transcript.isEmpty {
             ref.transcript = transcript
             try storage.save(context: storage.viewContext)
@@ -91,7 +91,7 @@ final class EntryLifecycleService {
         guard let entry = try fetchEntry(id: entryId) else {
             throw NSError(domain: "EntryLifecycleService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry \(entryId) not found"])
         }
-        return try storage.createNoteFragment(for: entry, text: text, createdAt: createdAt)
+        return try storage.createNoteFragment(for: entry, text: text, createdAt: createdAt, sourceDevice: .phone)
     }
 
     /// Regenerates `entry.content` from the entry's TextSegments + voice
@@ -267,70 +267,10 @@ final class EntryLifecycleService {
         }
     }
 
-    /// Removes a single ExtractedEntity by id. Used by the inline
-    /// mention chip's edit state — tap ✕ removes one chip from the
-    /// entry's mention row without going through the legacy global
-    /// edit-mode flush.
-    func removeMention(entityId: UUID, entryId: UUID) {
-        do {
-            let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
-            request.predicate = NSPredicate(format: "id == %@", entityId as CVarArg)
-            request.fetchLimit = 1
-            if let entity = try storage.viewContext.fetch(request).first {
-                storage.viewContext.delete(entity)
-                try storage.save(context: storage.viewContext)
-            }
-        } catch {
-            ErrorState.shared.report(.saveFailed(error.localizedDescription))
-        }
-    }
-
-    /// Renames an ExtractedEntity in place. Used by the inline
-    /// mention chip's edit state — typing a new label and tapping away
-    /// (or hitting Return) commits via this path. Empty `newValue` is
-    /// treated as a removal (matches the ✕ semantic per the spec's
-    /// empty-commit rule).
-    func renameMention(entityId: UUID, newValue: String, entryId: UUID) {
-        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            removeMention(entityId: entityId, entryId: entryId)
-            return
-        }
-        do {
-            let request = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
-            request.predicate = NSPredicate(format: "id == %@", entityId as CVarArg)
-            request.fetchLimit = 1
-            guard let entity = try storage.viewContext.fetch(request).first else { return }
-            entity.value = trimmed
-            try storage.save(context: storage.viewContext)
-        } catch {
-            ErrorState.shared.report(.saveFailed(error.localizedDescription))
-        }
-    }
-
-    /// Creates a new ExtractedEntity under the entry. Used by the
-    /// dashed "+ Add" affordance next to the mention chips — the user
-    /// types a label, taps away, and the entity is persisted with the
-    /// default `.idea` type (the catch-all dot color for user-typed
-    /// mentions; the AI-extracted entities own person/project/issue).
-    func addMention(value: String, entryId: UUID) {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        do {
-            guard let entry = try fetchEntry(id: entryId) else { return }
-            _ = try storage.createEntity(
-                entryId: entryId,
-                type: .idea,
-                value: trimmed,
-                confidence: 1.0,
-                method: "user",
-                entry: entry
-            )
-            try storage.save(context: storage.viewContext)
-        } catch {
-            ErrorState.shared.report(.saveFailed(error.localizedDescription))
-        }
-    }
+    // The inline-mention lifecycle methods (removeMention / renameMention /
+    // addMention over ExtractedEntity) were retired with the B4 mentions
+    // library — mention management now lives in ManageMentionsSheet over
+    // the library-backed `Mention` entity. Removed 2026-07-18.
 
     /// Updates a photo/video MediaReference's `mediaDescription` and
     /// regenerates the parent entry's joined content so the new text
@@ -434,7 +374,7 @@ final class EntryLifecycleService {
     /// being written, which must not count as its own sibling.
     private static func siblingClipTexts(in entry: JournalEntry, excluding refId: UUID?) -> [String] {
         entry.edgesArray.compactMap { edge in
-            guard let ref = edge.clip, ref.id != refId else { return nil }
+            guard let ref = edge.clip, ref.id != refId, ref.recycledAt == nil else { return nil }
             switch ref.mediaTypeEnum {
             case .voice: return ref.transcript
             case .note:  return ref.text
@@ -514,7 +454,9 @@ final class EntryLifecycleService {
     static func joinedContent(from entry: JournalEntry) -> String {
         var parts: [String] = []
         for edge in entry.edgesArray {
-            guard let ref = edge.clip else { continue }
+            // P8: a recycled clip (Recently Deleted) contributes nothing to
+            // its memory's composed content while it's in the bin.
+            guard let ref = edge.clip, ref.recycledAt == nil else { continue }
             let text: String
             switch ref.mediaTypeEnum {
             case .voice:
@@ -551,13 +493,13 @@ final class EntryLifecycleService {
                 if let cacheFile = ref.thumbnailCacheFilename {
                     ThumbnailService.shared.evictThumbnail(filename: cacheFile)
                 }
-                // For voice refs, osIdentifier is the audio file path — delete
-                // it from disk so X-discard doesn't leave orphan audio files.
-                // (Photos and videos live in PhotoKit, not our sandbox; we
-                // intentionally leave those in place.)
-                if ref.mediaTypeEnum == .voice {
-                    AudioPlayerService.deleteAudio(filename: ref.osIdentifier)
-                }
+                // RH-8: permanent hard-delete removes the backing blob for
+                // EVERY owned media type (voice/photo/video) — the old
+                // voice-only guard orphaned photos/videos in iCloud Files. The
+                // "photos/videos live in PhotoKit" premise was stale (media
+                // moved to the ubiquity container). PhotoKit-referenced media
+                // and notes have no owned file → skipped.
+                Self.deleteOwnedBlob(for: ref)
                 storage.viewContext.delete(ref)
             }
             try storage.save(context: storage.viewContext)
@@ -594,7 +536,8 @@ final class EntryLifecycleService {
                     for: entry,
                     audioFilename: voiceFilename,
                     transcript: content,
-                    createdAt: voiceCapturedAt ?? Date()
+                    createdAt: voiceCapturedAt ?? Date(),
+                    sourceDevice: .phone
                 )
                 // Re-derive `entry.content` from the just-created
                 // voice fragment so it matches the cleaned text. The
@@ -769,7 +712,8 @@ final class EntryLifecycleService {
                 _ = try storage.createNoteFragment(
                     for: entry,
                     text: entry.content,
-                    createdAt: entry.createdAt
+                    createdAt: entry.createdAt,
+                    sourceDevice: .phone
                 )
             }
 
@@ -778,10 +722,11 @@ final class EntryLifecycleService {
                     for: entry,
                     audioFilename: voiceFilename,
                     transcript: trimmed,
-                    createdAt: voiceCapturedAt ?? Date()
+                    createdAt: voiceCapturedAt ?? Date(),
+                    sourceDevice: .phone
                 )
             } else if !trimmed.isEmpty {
-                _ = try storage.createNoteFragment(for: entry, text: trimmed)
+                _ = try storage.createNoteFragment(for: entry, text: trimmed, sourceDevice: .phone)
             }
 
             let savedRefs = try createMediaReferences(for: entry, mediaCaptures: mediaCaptures)
@@ -815,7 +760,8 @@ final class EntryLifecycleService {
     @discardableResult
     func appendClips(
         entryId: UUID,
-        clips: [(audioFilename: String, transcript: String, capturedAt: Date)]
+        clips: [(audioFilename: String, transcript: String, capturedAt: Date)],
+        sourceDevice: JournalEntry.SourceDevice? = nil
     ) -> Int {
         guard !clips.isEmpty else { return 0 }
         do {
@@ -826,12 +772,69 @@ final class EntryLifecycleService {
                     for: entry,
                     audioFilename: clip.audioFilename,
                     transcript: clip.transcript,
-                    createdAt: clip.capturedAt
+                    createdAt: clip.capturedAt,
+                    sourceDevice: sourceDevice
                 )
             }
             entry.content = Self.joinedContent(from: entry)
             try storage.save(context: storage.viewContext)
             return ordered.count
+        } catch {
+            ErrorState.shared.report(.editFailed(error.localizedDescription))
+            return 0
+        }
+    }
+
+    /// Attaches N existing bench clips (loose `MediaReference`s, already
+    /// captured and transcribed) to an existing memory as new
+    /// `MemoryClipEdge`s in append order, then reconciles `entry.content`.
+    /// Backs the Memory Detail FAB's "Add existing clips" path
+    /// (`Memory Detail · unified editing model.md` §"Adding clips to a
+    /// memory").
+    ///
+    /// **No re-organization**, exactly like `appendClips`. Each new edge
+    /// is stamped `linkedAt = now`, which pushes the memory past its
+    /// last-organize watermark (`JournalEntry.clipsAddedSinceLastOrganize`
+    /// reads the edge, not the clip's capture time) — so Memory Detail
+    /// shows the stale "N new clips · Reorganize" callout and the user
+    /// spends the pass on tap, never automatically (AI Organize §8; the
+    /// Move/Add spec's "identical to new clips arriving"). This is why
+    /// the path must NOT ride `append()` — that queues a ProcessingTask
+    /// and (on Plus) auto-organizes.
+    ///
+    /// Idempotent per (memory, clip) via `createEdge` — re-adding an
+    /// already-attached clip is a no-op. Recycled clips are skipped.
+    /// `clipIds` order is honored: they attach in the order given, after
+    /// the memory's existing clips. Returns the count newly attached.
+    @discardableResult
+    func attachExistingClips(entryId: UUID, clipIds: [UUID]) -> Int {
+        guard !clipIds.isEmpty else { return 0 }
+        do {
+            guard let entry = try fetchEntry(id: entryId) else { return 0 }
+            let ctx = storage.viewContext
+            let now = Date()
+            // Resolve the selected clips, drop missing/recycled, and
+            // append in capturedAt order — spec: "New clips append in
+            // orderInMemory/capturedAt order" (`Memory Detail · unified
+            // editing model.md` §"Adding clips to a memory"), the same
+            // chronological bulk-append `appendClips` does. The order the
+            // user tapped clips in the picker does not determine placement.
+            let refs: [MediaReference] = clipIds.compactMap { clipId in
+                let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+                req.predicate = NSPredicate(format: "id == %@", clipId as CVarArg)
+                req.fetchLimit = 1
+                guard let ref = try? ctx.fetch(req).first, ref.recycledAt == nil else { return nil }
+                return ref
+            }.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
+            var attached = 0
+            for ref in refs {
+                let before = entry.edgesArray.count
+                try StorageService.createEdge(from: entry, to: ref, linkedAt: now, in: ctx)
+                if entry.edgesArray.count > before { attached += 1 }
+            }
+            entry.content = Self.joinedContent(from: entry)
+            try storage.save(context: ctx)
+            return attached
         } catch {
             ErrorState.shared.report(.editFailed(error.localizedDescription))
             return 0
@@ -862,7 +865,8 @@ final class EntryLifecycleService {
     @discardableResult
     func createMemoryFromVoiceClips(
         _ clips: [(audioFilename: String, transcript: String, capturedAt: Date)],
-        topicName: String?
+        topicName: String?,
+        sourceDevice: JournalEntry.SourceDevice? = nil
     ) -> UUID? {
         guard !clips.isEmpty else { return nil }
         do {
@@ -880,7 +884,8 @@ final class EntryLifecycleService {
                     for: entry,
                     audioFilename: clip.audioFilename,
                     transcript: clip.transcript,
-                    createdAt: clip.capturedAt
+                    createdAt: clip.capturedAt,
+                    sourceDevice: sourceDevice
                 )
             }
 
@@ -948,8 +953,12 @@ final class EntryLifecycleService {
             req.predicate = NSPredicate(format: "id == %@", edgeId as CVarArg)
             req.fetchLimit = 1
             guard let edge = try storage.viewContext.fetch(req).first else { return }
+            let detachedRefId = edge.clipId
             storage.viewContext.delete(edge)
             try storage.save(context: storage.viewContext)
+            // Mark the clip "was in a memory" (P7-3) — a user detach; the
+            // Unconnected row's line only shows once it's at 0 edges.
+            PreviouslyConnectedStore.record(detachedRefId)
         } catch {
             ErrorState.shared.report(.deleteFailed(error.localizedDescription))
         }
@@ -978,6 +987,7 @@ final class EntryLifecycleService {
             guard let edge = try storage.viewContext.fetch(edgeReq).first else { return }
             storage.viewContext.delete(edge)
             try storage.save(context: storage.viewContext)
+            PreviouslyConnectedStore.record(refId)
         } catch {
             ErrorState.shared.report(.deleteFailed(error.localizedDescription))
         }
@@ -1057,23 +1067,71 @@ final class EntryLifecycleService {
         }
     }
 
-    /// Delete a clip outright — destroys the underlying evidence. All
-    /// edges to any memory this clip was attached to cascade. Audio
-    /// file (for `.voice` clips) is removed from disk. This is the
-    /// heaviest deletion in the ontology — the clip is irreversibly
-    /// gone.
-    func deleteMediaReference(refId: UUID) {
+    /// **Soft-delete a clip to Recently Deleted (P8, July 19 2026).** The
+    /// atom survives 30 days and is restorable — `recycledAt` hides it from
+    /// every bench + memory query (via the `recycledAt == nil` predicate and
+    /// `mediaReferencesArray`'s filter), so "Delete this Clip" removes it
+    /// from *every* referencing memory without touching the edges; restore
+    /// returns it to those memories. Audio/thumbnail are left on disk until
+    /// purge. Supersedes the old hard-delete body, which lied about the
+    /// footnote's "Moves to Recently Deleted · kept for 30 days" promise.
+    func recycleClip(refId: UUID) {
+        do {
+            guard let ref = try fetchRef(refId) else { return }
+            ref.recycledAt = Date()
+            try storage.save(context: storage.viewContext)
+            // Regenerate any live memory that referenced it — the exclusion
+            // filter drops the recycled clip from the composed content.
+            for edge in ref.edgesArray { regenerateContent(forEntryId: edge.memoryId) }
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    /// Batch soft-delete (P8b) — the Unconnected "Delete N" MediaReference
+    /// portion. One save for the whole set; each ref's referencing memories
+    /// regenerate (the exclusion filter drops the recycled clip).
+    func recycleClips(refIds: Set<UUID>) {
+        guard !refIds.isEmpty else { return }
         do {
             let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-            req.predicate = NSPredicate(format: "id == %@", refId as CVarArg)
-            req.fetchLimit = 1
-            guard let ref = try storage.viewContext.fetch(req).first else { return }
+            req.predicate = NSPredicate(format: "id IN %@", refIds)
+            let refs = try storage.viewContext.fetch(req)
+            let now = Date()
+            for ref in refs { ref.recycledAt = now }
+            try storage.save(context: storage.viewContext)
+            for ref in refs {
+                for edge in ref.edgesArray { regenerateContent(forEntryId: edge.memoryId) }
+            }
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    /// Restore a clip from Recently Deleted — clears `recycledAt`; kept
+    /// edges bring it back to the memories it was in.
+    func restoreClip(refId: UUID) {
+        do {
+            guard let ref = try fetchRef(refId) else { return }
+            ref.recycledAt = nil
+            try storage.save(context: storage.viewContext)
+            for edge in ref.edgesArray { regenerateContent(forEntryId: edge.memoryId) }
+        } catch {
+            ErrorState.shared.report(.deleteFailed(error.localizedDescription))
+        }
+    }
+
+    /// **Permanent destruction** — the old hard-delete body. Used by
+    /// Recently Deleted's Delete Forever and the 30-day purge. Removes the
+    /// cached thumbnail, the audio file (`.voice`), and the row (edges
+    /// cascade). Irreversible.
+    func purgeClip(refId: UUID) {
+        do {
+            guard let ref = try fetchRef(refId) else { return }
             if let cacheFile = ref.thumbnailCacheFilename {
                 ThumbnailService.shared.evictThumbnail(filename: cacheFile)
             }
-            if ref.mediaTypeEnum == .voice {
-                AudioPlayerService.deleteAudio(filename: ref.osIdentifier)
-            }
+            Self.deleteOwnedBlob(for: ref) // RH-8: coordinated blob delete, all media types
             storage.viewContext.delete(ref)
             try storage.save(context: storage.viewContext)
         } catch {
@@ -1081,11 +1139,85 @@ final class EntryLifecycleService {
         }
     }
 
+    /// The OWNED iCloud Files URL for a clip's backing blob, or nil when
+    /// HiMem owns no deletable file: a **note** (text lives in Core Data) or
+    /// a **PhotoKit-referenced** asset (the user's Photos library, never
+    /// ours). Voice/photo/video resolve to their ubiquity subdirectory.
+    static func ownedBlobURL(for ref: MediaReference) -> URL? {
+        guard ref.mediaTypeEnum != .note else { return nil }
+        switch MediaResolver.resolve(osIdentifier: ref.osIdentifier, mediaType: ref.mediaTypeEnum) {
+        case .ubiquity(let url): return url
+        case .photoKit:          return nil
+        }
+    }
+
+    /// Permanently removes a clip's backing blob from iCloud Files
+    /// (NSFileCoordinator-wrapped, no-op if already gone). ONLY the
+    /// permanent-purge paths call this; soft-recycle/restore never do.
+    static func deleteOwnedBlob(for ref: MediaReference) {
+        guard let url = ownedBlobURL(for: ref) else { return }
+        UbiquityStore.shared.removeFromStore(at: url)
+    }
+
+    /// Recently-Deleted clips (recycledAt != nil), newest-deleted first,
+    /// as value snapshots for `RecycleBinView` (no managed-object lifetimes
+    /// leak into the list).
+    func loadRecycledClips() -> [RecycledClipDisplay] {
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(format: "recycledAt != nil")
+        req.sortDescriptors = [NSSortDescriptor(key: "recycledAt", ascending: false)]
+        let refs = (try? storage.viewContext.fetch(req)) ?? []
+        return refs.map { RecycledClipDisplay(ref: $0) }
+    }
+
+    /// Purges recycled clips past the 30-day window — the clip-level sibling
+    /// of `ProjectViewModel.purgeExpiredRecycledProjects`. Called on
+    /// RecycleBin open.
+    func purgeExpiredRecycledClips(now: Date = Date()) {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? now
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(format: "recycledAt != nil AND recycledAt < %@", cutoff as CVarArg)
+        let expired = (try? storage.viewContext.fetch(req)) ?? []
+        guard !expired.isEmpty else { return }
+        for ref in expired {
+            if let cacheFile = ref.thumbnailCacheFilename {
+                ThumbnailService.shared.evictThumbnail(filename: cacheFile)
+            }
+            Self.deleteOwnedBlob(for: ref) // RH-8: coordinated blob delete, all media types
+            storage.viewContext.delete(ref)
+        }
+        try? storage.save(context: storage.viewContext)
+    }
+
+    private func fetchRef(_ id: UUID) throws -> MediaReference? {
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        return try storage.viewContext.fetch(req).first
+    }
+
     func recycle(entryId: UUID) {
         do {
             guard let entry = try fetchEntry(id: entryId) else { return }
+            let now = Date()
+            // P8 last-reference rule (July 19 2026, narrowly reverses the P6
+            // "clips always survive Let Go" lock): a clip whose single
+            // remaining edge is THIS memory moves to Recently Deleted with
+            // it; a clip used elsewhere (edge count > 1) stays. Pure
+            // edge-count at delete time — no `everConnected`/history field.
+            // Memory-deletion-ONLY: detach-from-last-memory and AI
+            // reorganization never route here, so they never auto-retire.
+            // recycledAt is a soft flag with edges preserved, so nothing is
+            // destroyed here (no transcript write → the aggregate-write
+            // arbiter has nothing to guard on this path).
+            for edge in entry.edgesArray {
+                guard let clip = edge.clip else { continue }
+                if clip.referencingMemoryCount == 1 { // this memory is its only edge
+                    clip.recycledAt = now
+                }
+            }
             entry.isRecycled = true
-            entry.recycledAt = Date()
+            entry.recycledAt = now
             try storage.save(context: storage.viewContext)
         } catch {
             ErrorState.shared.report(.deleteFailed(error.localizedDescription))
@@ -1097,6 +1229,19 @@ final class EntryLifecycleService {
             guard let entry = try fetchEntry(id: entryId) else { return }
             entry.isRecycled = false
             entry.recycledAt = nil
+            // Symmetric with `recycle` (P8): bring back the clips that came
+            // down WITH this memory — a recycled clip whose only edge is this
+            // (now-restored) memory was auto-retired by the last-reference
+            // rule. Derived from the same edge-count, no history field. A clip
+            // still used elsewhere was never auto-retired, and a clip the user
+            // explicitly deleted stays deleted unless it, too, is only-here —
+            // an accepted corner of the no-history design.
+            for edge in entry.edgesArray {
+                guard let clip = edge.clip, clip.recycledAt != nil else { continue }
+                if clip.referencingMemoryCount == 1 {
+                    clip.recycledAt = nil
+                }
+            }
             try storage.save(context: storage.viewContext)
         } catch {
             ErrorState.shared.report(.deleteFailed(error.localizedDescription))
@@ -1147,7 +1292,8 @@ final class EntryLifecycleService {
             let ref = try storage.createMediaReference(
                 for: entry,
                 localIdentifier: capture.localIdentifier,
-                mediaType: capture.mediaType
+                mediaType: capture.mediaType,
+                sourceDevice: .phone
             )
             refs.append(ref)
         }

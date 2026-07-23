@@ -20,6 +20,15 @@ struct SessionListView: View {
     @ObservedObject var inbox: InboxManifest = .shared
     @ObservedObject var arrivals: InboxArrivalTracker = .shared
     @ObservedObject var viewModel: JournalViewModel
+    /// New = unseen (P7-2): when true, reviewed clips are filtered out of
+    /// the sessions so the New lens shows only fresh, un-eyeballed intake.
+    /// Default false (All shows everything).
+    var hideReviewed: Bool = false
+    /// P7-4 multi-select (shared Clips-tab selection). Selecting a session
+    /// card batch-selects every clip in it (matches the "opening a session
+    /// marks all its clips" orthogonality); Sort cluster proposals are NOT
+    /// part of multi-select (they keep their own Add / Not-together).
+    @ObservedObject var selection: ClipsSelection
     @Environment(\.managedObjectContext) private var context
 
     @State private var sessions: [ClipGroup] = []
@@ -139,6 +148,7 @@ struct SessionListView: View {
         .onAppear {
             sessions = computeSessions()
             recomputeAbsorbedMedia()
+            registerSessionIds()
             // Tutorial #4 (Captured Clips · the Watch story). Spec
             // gate: opened **non-empty** — clips have actually
             // arrived. Empty-state is intentionally NOT a trigger
@@ -151,6 +161,7 @@ struct SessionListView: View {
         .onChange(of: inbox.clips) { _, _ in
             sessions = computeSessions()
             recomputeAbsorbedMedia()
+            registerSessionIds()
         }
         .onChange(of: arrivals.clipsInFlight) { _, _ in
             // In-flight clips are rendered as IncomingCard, NOT as
@@ -160,6 +171,7 @@ struct SessionListView: View {
             // those clipIds to avoid double-rendering.
             sessions = computeSessions()
             recomputeAbsorbedMedia()
+            registerSessionIds()
         }
         .onChange(of: inbox.soloClipIds) { _, _ in
             // The user *Removed a clip from session* on Clip Detail
@@ -168,6 +180,7 @@ struct SessionListView: View {
             // re-group so the removed clip snaps into its own
             // single-clip card without waiting for another mutation.
             sessions = computeSessions()
+            registerSessionIds()
         }
         .onReceive(NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
@@ -177,6 +190,7 @@ struct SessionListView: View {
             // Re-absorb so a photo captured now appears inside its
             // sitting's session card.
             recomputeAbsorbedMedia()
+            registerSessionIds()
         }
         .onDisappear {
             stopPlayback()
@@ -185,6 +199,14 @@ struct SessionListView: View {
             // while unplaced refs are still queued.
             BenchAbsorbedMediaBus.shared.setAbsorbed([])
         }
+    }
+
+    /// Publishes the New view's session-side selectable ids for Select-all
+    /// (P7-4) — only loose sessions, since Sort clusters are excluded from
+    /// multi-select. The unplaced stack registers its own ids under
+    /// "unplaced" from `ClipsTabView`.
+    private func registerSessionIds() {
+        selection.registerVisible(looseSessions.flatMap { sessionSelectableIds($0) }, source: "sessions")
     }
 
     /// Runs `SessionMediaAbsorber` against the current sessions and
@@ -204,8 +226,9 @@ struct SessionListView: View {
     /// for absorption into a voice session's time window.
     private func fetchUnplacedNonVoiceRefs() -> [MediaReference] {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        // P8: exclude recycled clips from session absorption candidates.
         req.predicate = NSPredicate(
-            format: "edges.@count == 0 AND mediaType != %@",
+            format: "edges.@count == 0 AND recycledAt == nil AND mediaType != %@",
             MediaReference.MediaType.voice.rawValue
         )
         req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
@@ -220,15 +243,24 @@ struct SessionListView: View {
     /// double-render: once as a transcribing IncomingCard and once
     /// as a session-list row with the legitimate-but-confusing
     /// "Transcribing…" body variant.
-    private func computeSessions() -> [ClipGroup] {
+    /// `applyFilter: false` derives sessions from the *unfiltered* inbox
+    /// even under the New lens. The opened session detail uses it: once
+    /// you're inside a session, marking its clips reviewed (P7-2) must
+    /// not make the session vanish out from under you (the New-filtered
+    /// derivation would drop every just-marked clip → AutoDismiss).
+    private func computeSessions(applyFilter: Bool = true) -> [ClipGroup] {
         let inFlight = arrivals.clipsInFlight.keys
         let solo = inbox.soloClipIds
+        // New = unseen: drop reviewed clips so a session the user has
+        // already eyeballed leaves the New lens (P7-2). All shows
+        // everything (hideReviewed == false).
+        let base = (applyFilter && hideReviewed) ? inbox.clips.filter { !$0.reviewed } : inbox.clips
         guard !inFlight.isEmpty else {
-            return ClipSessionGrouper.group(inbox.clips, soloClipIds: solo)
+            return ClipSessionGrouper.group(base, soloClipIds: solo)
         }
         let inFlightSet = Set(inFlight)
         return ClipSessionGrouper.group(
-            inbox.clips.filter { !inFlightSet.contains($0.clipId) },
+            base.filter { !inFlightSet.contains($0.clipId) },
             soloClipIds: solo
         )
     }
@@ -446,6 +478,10 @@ struct SessionListView: View {
     }
 
     private var header: some View {
+        // The Select entry for New lives at the ClipsTabView level (a
+        // consistent position across all three filters) — SessionListView's
+        // header renders only when the inbox is non-empty, so hosting Select
+        // here would hide it whenever New is all returned-refs / all-clustered.
         VStack(alignment: .leading, spacing: 4) {
             Text(headerTitle)
                 .font(.system(size: 24, weight: .semibold))
@@ -549,25 +585,39 @@ struct SessionListView: View {
     /// > shouting buttons. Tapping opens the session, and *that* is
     /// > where Start a Memory (the ochre primary, at the action
     /// > position) and Delete session (red, bottom-most) live."
+    /// The selectable clip ids a session card batch-selects: its voice
+    /// clips + any absorbed media refs shown inside the card. Partitioned
+    /// by backing downstream (clipIds → inbox, refIds → media).
+    private func sessionSelectableIds(_ session: ClipGroup) -> [UUID] {
+        session.clips.map(\.clipId) + (absorbedMediaBySessionId[session.id] ?? []).map(\.id)
+    }
+
     @ViewBuilder
     private func sessionCard(_ session: ClipGroup) -> some View {
-        NavigationLink(value: session) {
-            VStack(alignment: .leading, spacing: 0) {
-                sessionMetaRow(session)
-                collapsedBody(session)
-                tapToReviewFooter
+        if selection.selecting {
+            // Selecting mode (P7-4): the card is one toggle target that
+            // batch-selects every clip in the session; navigation stands
+            // down. A leading select circle + the "selects all N" note.
+            let ids = sessionSelectableIds(session)
+            Button { selection.toggleAll(ids) } label: {
+                HStack(alignment: .top, spacing: 11) {
+                    DragSelectCircle(checked: selection.isChecked(all: ids), selection: selection)
+                        .padding(.top, 16)
+                    sessionCardFace(session, selecting: true)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Crucible.Color.card)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(Crucible.Color.hairline, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .reportsClipRowFrame(ids, enabled: true)
+        } else {
+            sessionCardNavLink(session)
+        }
+    }
+
+    @ViewBuilder
+    private func sessionCardNavLink(_ session: ClipGroup) -> some View {
+        NavigationLink(value: session) {
+            sessionCardFace(session, selecting: false)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         // Swipe-to-discard and long-press Trash both retired per
@@ -597,6 +647,36 @@ struct SessionListView: View {
                 Label("Start a Memory", systemImage: "plus.circle")
             }
         }
+    }
+
+    /// The card's visual face — shared by the resting (nav-link) and
+    /// selecting (toggle) paths. In selecting mode the footer swaps to the
+    /// "selects all N clips" note and the border goes accent when checked.
+    @ViewBuilder
+    private func sessionCardFace(_ session: ClipGroup, selecting: Bool) -> some View {
+        let ids = sessionSelectableIds(session)
+        let checked = selecting && selection.isChecked(all: ids)
+        VStack(alignment: .leading, spacing: 0) {
+            sessionMetaRow(session)
+            collapsedBody(session)
+            if selecting {
+                let n = ids.count
+                Text("Selecting the session selects all \(n) \(n == 1 ? "clip" : "clips")")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Crucible.Color.ink4)
+                    .padding(.top, 10)
+            } else {
+                tapToReviewFooter
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Crucible.Color.card))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(checked ? Crucible.Color.accent : Crucible.Color.hairline, lineWidth: 1)
+        )
     }
 
     /// The quiet "Tap to review" affordance at the bottom of a
@@ -635,7 +715,7 @@ struct SessionListView: View {
         // arrives inside it — the snapshot could lag behind a mutation
         // made two navigation levels deep. Cheap: one grouping pass over
         // a small inbox per render of a single opened session.
-        if let session = computeSessions().first(where: { $0.id == sessionId }) {
+        if let session = computeSessions(applyFilter: false).first(where: { $0.id == sessionId }) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     sessionMetaRow(session)
@@ -647,8 +727,25 @@ struct SessionListView: View {
             .background(Crucible.Color.paper.ignoresSafeArea())
             .navigationTitle("Session")
             .navigationBarTitleDisplayMode(.inline)
+            // Open the container → its contents are seen (Tom, July 19):
+            // opening a session card marks every clip in it reviewed in
+            // one act, so the session leaves New as a batch rather than
+            // demanding one open per clip. Derived unfiltered above so
+            // this doesn't dismiss the screen it just cleared.
+            .onAppear { markSessionReviewed(session) }
         } else {
             AutoDismissView()
+        }
+    }
+
+    /// Marks every clip in an opened session reviewed (P7-2 per-session
+    /// rule). Voice clips ride the manifest (one batched persist);
+    /// absorbed media refs use the per-device bench store. Idempotent —
+    /// re-opening a fully-seen session is a no-op (no write).
+    private func markSessionReviewed(_ session: ClipGroup) {
+        inbox.markReviewed(clipIds: session.clips.map(\.clipId))
+        for ref in absorbedMediaBySessionId[session.id] ?? [] {
+            BenchClipReviewStore.markReviewed(ref.id)
         }
     }
 

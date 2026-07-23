@@ -147,7 +147,11 @@ struct DeletionSemanticsTests {
 
     // MARK: - Delete-clip (destroys evidence, cascades edges)
 
-    @Test func deleteClipCascadesEdgesAndDestroysEvidence() throws {
+    /// P8 (July 19 2026): "Delete this Clip" now **soft-deletes** to
+    /// Recently Deleted (recycledAt) — the atom survives, edges preserved,
+    /// but it's excluded from every memory that referenced it. `purgeClip`
+    /// is the permanent destroy (bin's Delete Forever / 30-day purge).
+    @Test func deleteClipSoftDeletesThenPurgeDestroys() throws {
         let (storage, service) = makeStore()
         let memA = try seedMemory(in: storage, title: "Memory A")
         let memB = try seedMemory(in: storage, title: "Memory B")
@@ -160,17 +164,21 @@ struct DeletionSemanticsTests {
         try StorageService.createEdge(from: memB, to: ref, linkedAt: Date(), in: storage.viewContext)
         try storage.save(context: storage.viewContext)
 
-        service.deleteMediaReference(refId: ref.id)
+        service.recycleClip(refId: ref.id)
 
-        // Ref is gone.
-        let refs = try fetchRefs(in: storage)
-        #expect(refs.isEmpty)
-        // Both edges cascaded.
-        let edges = try fetchEdges(in: storage)
-        #expect(edges.isEmpty)
-        // Both memories survive as narratives.
-        let memories = try fetchMemories(in: storage)
-        #expect(memories.count == 2)
+        // Soft: ref survives, recycled, edges preserved.
+        #expect(try fetchRefs(in: storage).count == 1)
+        #expect(try fetchRefs(in: storage).first?.recycledAt != nil)
+        #expect(try fetchEdges(in: storage).count == 2)
+        // Excluded from BOTH memories (removed from every referencing memory).
+        #expect(memA.mediaReferencesArray.isEmpty)
+        #expect(memB.mediaReferencesArray.isEmpty)
+
+        // Purge: permanent — ref + edges gone, memories survive.
+        service.purgeClip(refId: ref.id)
+        #expect(try fetchRefs(in: storage).isEmpty)
+        #expect(try fetchEdges(in: storage).isEmpty)
+        #expect(try fetchMemories(in: storage).count == 2)
     }
 }
 

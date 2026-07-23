@@ -25,6 +25,7 @@
         <relationship name="textSegments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="TextSegment" inverseName="entry" inverseEntity="TextSegment"/>
         <relationship name="topics" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Topic" inverseName="entries" inverseEntity="Topic"/>
         <relationship name="projects" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Project" inverseName="entries" inverseEntity="Project"/>
+        <relationship name="mentions" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Mention" inverseName="entries" inverseEntity="Mention"/>
     </entity>
     <entity name="ExtractedEntity" representedClassName="ExtractedEntity" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
@@ -80,6 +81,14 @@
         <attribute name="recycledAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="entries" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="projects" inverseEntity="JournalEntry"/>
     </entity>
+    <entity name="Mention" representedClassName="Mention" syncable="YES">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="type" optional="YES" attributeType="String" defaultValueString="idea"/>
+        <attribute name="normalizedName" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="entries" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="JournalEntry" inverseName="mentions" inverseEntity="JournalEntry"/>
+    </entity>
     <entity name="MediaReference" representedClassName="MediaReference" syncable="YES">
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="mediaType" optional="YES" attributeType="String" defaultValueString="image"/>
@@ -95,6 +104,8 @@
         <attribute name="transcript" optional="YES" attributeType="String"/>
         <attribute name="text" optional="YES" attributeType="String"/>
         <attribute name="mediaDescription" optional="YES" attributeType="String"/>
+        <attribute name="sourceDevice" optional="YES" attributeType="String"/>
+        <attribute name="recycledAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="edges" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MemoryClipEdge" inverseName="clip" inverseEntity="MemoryClipEdge"/>
     </entity>
     <entity name="MemoryClipEdge" representedClassName="MemoryClipEdge" syncable="YES">
@@ -134,6 +145,7 @@
         <memberEntity name="InferenceSummary"/>
         <memberEntity name="Topic"/>
         <memberEntity name="Project"/>
+        <memberEntity name="Mention"/>
         <memberEntity name="MediaReference"/>
         <memberEntity name="MemoryClipEdge"/>
         <memberEntity name="TextSegment"/>

@@ -22,6 +22,8 @@ struct SettingsView: View {
     }
     // Channel B (daily nudge) storage retired 2026-07-07.
     @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
+    /// RH-1: the one persisted Captured-Clips arrivals control (was cosmetic).
+    @State private var arrivalsEnabled: Bool = NotificationPreference.arrivalsEnabled
     // autoSaveDelay removed — Composer uses explicit commit
 
     private let storage = StorageService.shared
@@ -30,6 +32,9 @@ struct SettingsView: View {
     @ObservedObject private var inbox = InboxManifest.shared
     @ObservedObject private var entitlement = Entitlement.shared
     @State private var showPricing = false
+    @State private var isRestoring = false
+    @State private var restoreNotice: String?
+    @State private var showManageSubscriptions = false
     /// Live project count for the C3 "AI & Organizing" row. Backed
     /// by a Core Data fetch so the displayed "N of 3" stays honest
     /// when the user creates or deletes a project from elsewhere
@@ -43,6 +48,9 @@ struct SettingsView: View {
     @State private var showResetTutorialAlert = false
     @State private var showAggregateScanAlert = false
     @State private var aggregateScanResult = ""
+    // RH-8 orphaned-blob sweep (destructive; deliberate trigger only).
+    @State private var showSweepAlert = false
+    @State private var sweepPlan: [URL] = []
     @State private var showSeedClusterAlert = false
     @State private var seedClusterMessage = ""
     @AppStorage("himem.debug.useLeanOrganizerPrompt") private var useLeanOrganizerPrompt = false
@@ -190,6 +198,10 @@ struct SettingsView: View {
                     plusCard
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 4, trailing: 14))
+                        .listRowSeparator(.hidden)
+                    subscriptionLinksRow
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 6, trailing: 14))
                         .listRowSeparator(.hidden)
                 }
 
@@ -380,6 +392,25 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
 
+                    // RH-8: sweep the backlog of orphaned media blobs left in
+                    // iCloud Files by the old purge paths. Runs the dry-run
+                    // plan first and shows the count; deletion happens only on
+                    // the destructive confirm. Keep-set = live + recycled
+                    // clips; age-guarded so in-flight arrivals aren't swept.
+                    Button {
+                        sweepPlan = MediaBlobOrphanSweep.plan(context: storage.viewContext)
+                        showSweepAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash.slash.fill")
+                                .foregroundStyle(Crucible.Color.danger)
+                            Text("Sweep orphaned media blobs")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
                     // Seeds a real multi-clip Sort cluster through the actual
                     // grouping path so the cluster editor (and the aggregate
                     // arbiter check that needs a multi-clip context) is
@@ -432,6 +463,21 @@ struct SettingsView: View {
                     Button("OK", role: .cancel) { }
                 } message: {
                     Text(aggregateScanResult)
+                }
+                .alert("Orphaned media sweep", isPresented: $showSweepAlert) {
+                    if sweepPlan.isEmpty {
+                        Button("OK", role: .cancel) { }
+                    } else {
+                        Button("Delete \(sweepPlan.count) forever", role: .destructive) {
+                            MediaBlobOrphanSweep.execute(plan: sweepPlan)
+                            sweepPlan = []
+                        }
+                        Button("Cancel", role: .cancel) { }
+                    }
+                } message: {
+                    Text(sweepPlan.isEmpty
+                         ? "No orphaned media blobs found — the container matches the live + recycled clips."
+                         : "\(sweepPlan.count) orphaned blob(s) in iCloud Files aren't referenced by any live or recycled clip (older than the 1-hour age guard). Delete permanently? This can't be undone.")
                 }
                 .alert("Test cluster", isPresented: $showSeedClusterAlert) {
                     Button("OK", role: .cancel) { }
@@ -486,6 +532,12 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showPricing) {
                 PricingView()
+            }
+            .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
+            .alert("Restore Purchases", isPresented: restoreNoticeBinding) {
+                Button("OK", role: .cancel) { restoreNotice = nil }
+            } message: {
+                Text(restoreNotice ?? "")
             }
             .onAppear {
                 loadTopics()
@@ -649,16 +701,62 @@ struct SettingsView: View {
         .buttonStyle(.plain)
     }
 
+    /// Restore + (for Plus) Manage-subscription — the App Review-required
+    /// affordances, always reachable from Settings regardless of tier.
+    /// Restore matters most for a fresh install / new device where no
+    /// transaction has arrived yet.
+    @ViewBuilder
+    private var subscriptionLinksRow: some View {
+        HStack(spacing: 8) {
+            Button(action: handleRestore) {
+                if isRestoring {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Text("Restore Purchases")
+                }
+            }
+            .disabled(isRestoring)
+            if entitlement.isPlus {
+                Text("·").foregroundStyle(Crucible.Color.ink4)
+                Button("Manage subscription") { showManageSubscriptions = true }
+            }
+            Spacer()
+        }
+        .font(.system(size: 12.5))
+        .foregroundStyle(Crucible.Color.aiBlue)
+    }
+
+    private var restoreNoticeBinding: Binding<Bool> {
+        Binding(get: { restoreNotice != nil }, set: { if !$0 { restoreNotice = nil } })
+    }
+
+    private func handleRestore() {
+        Task {
+            isRestoring = true
+            defer { isRestoring = false }
+            switch await StoreKitService.shared.restorePurchases() {
+            case .restored:
+                restoreNotice = "Your HiMem Plus subscription has been restored."
+            case .nothingToRestore:
+                restoreNotice = "No active HiMem Plus subscription was found on this Apple Account."
+            case .failed(let msg):
+                restoreNotice = msg
+            }
+        }
+    }
+
     /// Trailing label on the Plus card header. For Plus users this
     /// shows their state instead of a price.
     private var plusCardPriceLine: String {
         entitlement.isPlus ? "Subscribed" : "from \(monthlyPriceFallback)/mo"
     }
 
+    /// Live monthly price, or an em-dash while StoreKit loads — never a
+    /// hardcoded number that could flash a wrong price.
     private var monthlyPriceFallback: String {
         StoreKitService.shared
             .product(for: StoreKitService.ProductID.plusMonthly)?
-            .displayPrice ?? "$6.99"
+            .displayPrice ?? "—"
     }
 
     /// One AI & Organizing list row. Free users see a tappable row
@@ -759,12 +857,16 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
         case .authorized, .provisional, .ephemeral:
-            HStack {
-                Text("Notifications")
-                Spacer()
-                Text("On")
-                    .foregroundStyle(Crucible.Color.ink3)
+            // RH-1: a real toggle (the persisted app preference the
+            // coordinator consults), not just a permission-state row. Ochre
+            // on-state per Crucible (never iOS green — green is semantic-only).
+            Toggle(isOn: Binding(
+                get: { arrivalsEnabled },
+                set: { arrivalsEnabled = $0; NotificationPreference.arrivalsEnabled = $0 }
+            )) {
+                Text("Clip arrivals")
             }
+            .tint(Crucible.Color.accent)
         @unknown default:
             EmptyView()
         }

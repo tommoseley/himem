@@ -49,7 +49,7 @@ function TabBar({ active = 'clips', dot = null }) {
 // primary lens); type is a neutral chip row (secondary refinement). Never a
 // single control mixing the two — that hid Video and made the axes collide. ──
 function ClipsHeader({ status = 'new', type = 'all' }) {
-  const statuses = [['new', 'New'], ['all', 'All']];
+  const statuses = [['all', 'All'], ['new', 'New'], ['loose', 'Unconnected']];
   const types = [['all', 'All'], ['voice', 'Voice'], ['photos', 'Photos'], ['video', 'Video'], ['notes', 'Notes']];
   return (
     <div style={{ flexShrink: 0, padding: '4px 0 8px' }}>
@@ -60,7 +60,8 @@ function ClipsHeader({ status = 'new', type = 'all' }) {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
         </span>
       </div>
-      {/* STATUS axis — a two-state toggle (New ⟷ All), iOS segmented control. */}
+      {/* STATUS axis — New · All · Loose. New = reviewed==false (unseen);
+          Loose = connectionCount==0 (the cleanup lens). Segmented control. */}
       <div style={{ padding: '0 14px', marginBottom: 9 }}>
         <div style={{ display: 'inline-flex', background: PX.wash1, borderRadius: 10, padding: 3, gap: 2 }}>
           {statuses.map(([id, label]) => {
@@ -70,7 +71,7 @@ function ClipsHeader({ status = 'new', type = 'all' }) {
                 fontSize: 13.5, fontWeight: on ? 700 : 500, letterSpacing: -0.1,
                 color: on ? PX.accentInk : PX.ink2,
                 background: on ? PX.accent : 'transparent',
-                borderRadius: 8, padding: '6px 20px', minHeight: 32, boxSizing: 'border-box',
+                borderRadius: 8, padding: '6px 18px', minHeight: 32, boxSizing: 'border-box',
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               }}>{label}</span>
             );
@@ -563,23 +564,40 @@ function SessionCounts({ media = {} }) {
 // concatenation) + a quiet "tap to review". NO Create/Delete here — those
 // live inside the opened session (fate actions at the bottom of the opened
 // item). A list of N sessions must not be N pairs of shouting buttons. ──
-function SessionCard({ time, day, media, dur, preview }) {
+function SessionCard({ time, day, media, dur, preview, selecting, checked }) {
   return (
-    <div style={{ background: PX.card, border: '1px solid ' + PX.hairline, borderRadius: 18, padding: '15px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: PX.ink, fontVariantNumeric: 'tabular-nums' }}>{time}</span>
-        <span style={{ color: PX.ink4 }}>·</span>
-        <SessionCounts media={media} />
-        <span style={{ color: PX.ink4 }}>·</span>
-        <span style={{ fontSize: 13.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums' }}>{dur}</span>
-      </div>
-      <div style={{ fontSize: 12.5, color: PX.ink3, marginBottom: 12 }}>{day}</div>
-      <div style={{ fontSize: 15, color: PX.ink2, lineHeight: 1.45, letterSpacing: -0.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-        “{preview}”
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 12, fontSize: 12.5, fontWeight: 600, color: PX.ink3 }}>
-        Tap to review
-        <svg width="6" height="11" viewBox="0 0 8 14" fill="none" stroke={PX.ink3} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
+    <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+      {selecting && (
+        <span style={{
+          width: 22, height: 22, borderRadius: 11, flexShrink: 0, marginTop: 16,
+          border: '2px solid ' + (checked ? PX.accent : PX.ink4),
+          background: checked ? PX.accent : 'transparent',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {checked && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>}
+        </span>
+      )}
+      <div style={{ flex: 1, minWidth: 0, background: PX.card, border: '1px solid ' + (checked ? PX.accent : PX.hairline), borderRadius: 18, padding: '15px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: PX.ink, fontVariantNumeric: 'tabular-nums' }}>{time}</span>
+          <span style={{ color: PX.ink4 }}>·</span>
+          <SessionCounts media={media} />
+          <span style={{ color: PX.ink4 }}>·</span>
+          <span style={{ fontSize: 13.5, color: PX.ink3, fontVariantNumeric: 'tabular-nums' }}>{dur}</span>
+        </div>
+        <div style={{ fontSize: 12.5, color: PX.ink3, marginBottom: 12 }}>{day}</div>
+        <div style={{ fontSize: 15, color: PX.ink2, lineHeight: 1.45, letterSpacing: -0.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          “{preview}”
+        </div>
+        {!selecting && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 12, fontSize: 12.5, fontWeight: 600, color: PX.ink3 }}>
+            Tap to review
+            <svg width="6" height="11" viewBox="0 0 8 14" fill="none" stroke={PX.ink3} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l6 6-6 6"/></svg>
+          </div>
+        )}
+        {selecting && (() => { const n = (media.audio||0)+(media.photo||0)+(media.video||0)+(media.note||0); return (
+          <div style={{ fontSize: 11.5, color: PX.ink4, marginTop: 10 }}>Selecting the session selects all {n} {n === 1 ? 'clip' : 'clips'}</div>
+        ); })()}
       </div>
     </div>
   );
@@ -837,6 +855,148 @@ function ScrSingleClipSession() {
 // screen exists anymore; see ScrClipDetail.
 // ═══════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════
+// Clips · UNCONNECTED — the cleanup lens (connectionCount==0). Surfaces every
+// zero-connection clip: never-used ∨ previously-attached-then-deleted ∨
+// manually-detached. "Orphaned" is architecture-only; the UI says
+// "Unconnected" (consistent with the status sheet's "Not yet connected" and
+// "Capture once, connect many"). A quiet "Select" enters multi-select.
+// A clip that was PREVIOUSLY shaped reads honestly ("was in a memory · now
+// unconnected") — it is NOT re-badged New (New = unseen).
+// ═══════════════════════════════════════════════════════════════
+function LooseRow({ mediaIcon, time, day, preview, wasShaped, source, selecting, checked }) {
+  const srcGlyph = source === 'watch'
+    ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 6l1-3h4l1 3M9 18l1 3h4l1-3"/></svg>
+    : source === 'phone'
+    ? <svg width="9" height="11" viewBox="0 0 24 24" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>
+    : null;
+  return (
+    <div style={{
+      background: PX.card, border: '1px solid ' + (checked ? PX.accent : PX.hairline), borderRadius: 13,
+      padding: '11px 13px', display: 'flex', gap: 11, alignItems: 'flex-start',
+    }}>
+      {selecting && (
+        <span style={{
+          width: 22, height: 22, borderRadius: 11, flexShrink: 0, marginTop: 3,
+          border: '2px solid ' + (checked ? PX.accent : PX.ink4),
+          background: checked ? PX.accent : 'transparent',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {checked && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>}
+        </span>
+      )}
+      <span style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, marginTop: 1, background: PX.wash1, color: PX.ink3, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{mediaIcon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: PX.ink3, marginBottom: 3 }}>
+          <span style={{ fontWeight: 600, color: PX.ink2, fontVariantNumeric: 'tabular-nums' }}>{time}</span>
+          <span style={{ color: PX.ink4 }}>·</span><span>{day}</span>
+          {srcGlyph && <span style={{ display: 'inline-flex', alignItems: 'center' }}>{srcGlyph}</span>}
+          {wasShaped && <><span style={{ flex: 1 }} /><span style={{ fontSize: 10.5, color: PX.ink4, fontStyle: 'italic' }}>was in a memory · now unconnected</span></>}
+        </div>
+        <div style={{ fontSize: 13.5, color: PX.ink2, lineHeight: 1.42, letterSpacing: -0.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>“{preview}”</div>
+      </div>
+    </div>
+  );
+}
+
+// Resting Loose view — a quiet "Select" enters multi-select. NO count/badge
+// (workbench-not-queue); Loose is a filter you choose, not a pile that nags.
+function ScrClipsLoose() {
+  return (
+    <PhoneScreen>
+      <ClipsHeader status="loose" type="all" />      <div style={{ flex: 1, overflow: 'hidden', padding: '2px 14px 10px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 4px 2px' }}>
+          <span style={{ fontSize: 12.5, color: PX.ink3, letterSpacing: -0.1 }}>Clips not connected to any memory.</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: PX.accent }}>Select</span>
+        </div>
+        {/* unified list: unpromoted inbox clips (watch/phone) AND detached
+            MediaReferences — anything with 0 connections, regardless of backing type. */}
+        <LooseRow mediaIcon={MIC} time="2:34 PM" day="May 21" source="watch" preview="…" />
+        <LooseRow mediaIcon={NOTE} time="8:45 PM" day="Jun 12" source="phone" preview="Test this for me" />
+        <LooseRow mediaIcon={MIC} time="10:07 AM" day="May 27" source="watch" preview="456-7-8, 910." />
+        <LooseRow mediaIcon={MIC} time="4:44 PM" day="Jun 12" wasShaped preview="I was raised very, very Catholic. Still a little scared, honestly." />
+        <LooseRow mediaIcon={MIC} time="12:45 PM" day="Jun 9" source="phone" preview="Voice clip" />
+      </div>
+      <TabBar active="clips" />
+    </PhoneScreen>
+  );
+}
+
+// Loose · SELECTING — multi-select active (reuses the Sort inclusion model).
+// A bottom action bar: "Delete N" (danger) + "Add to a memory" (ochre). Delete
+// here = "Delete this Clip" (destroys the atom → Recently Deleted). This is the
+// one-pass clear for the pile a deletion leaves behind.
+function ScrClipsLooseSelecting() {
+  return (
+    <PhoneScreen>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '10px 18px 10px' }}>
+        <span style={{ fontSize: 15, color: PX.ink2 }}>Cancel</span>
+        <span style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: 700, color: PX.ink }}>3 selected</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: PX.accent }}>Select all</span>
+      </div>
+      <div style={{ flex: 1, overflow: 'hidden', padding: '2px 14px 10px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <LooseRow mediaIcon={MIC} time="2:34 PM" day="May 21" source="watch" preview="…" selecting checked />
+        <LooseRow mediaIcon={NOTE} time="8:45 PM" day="Jun 12" source="phone" preview="Test this for me" selecting checked />
+        <LooseRow mediaIcon={MIC} time="10:07 AM" day="May 27" source="watch" preview="456-7-8, 910." selecting checked />
+        <LooseRow mediaIcon={MIC} time="4:44 PM" day="Jun 12" wasShaped preview="I was raised very, very Catholic. Still a little scared, honestly." selecting />
+        <LooseRow mediaIcon={MIC} time="12:45 PM" day="Jun 9" preview="Voice clip" selecting />
+      </div>
+      {/* bottom action bar — Add to a memory (ochre, user commit) + Delete (danger) */}
+      <div style={{ flexShrink: 0, display: 'flex', gap: 10, padding: '10px 16px 14px', borderTop: '1px solid ' + PX.hairline, background: PX.card }}>
+        <span style={{ flex: 1, minHeight: 48, borderRadius: 13, background: PX.accent, color: PX.accentInk, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 15, fontWeight: 600, letterSpacing: -0.1 }}>
+          Add to a memory…
+        </span>
+        <span style={{ minHeight: 48, padding: '0 18px', borderRadius: 13, border: '1px solid ' + PX.danger, color: PX.danger, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 15, fontWeight: 600, letterSpacing: -0.1 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={PX.danger} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/></svg>
+          Delete 3
+        </span>
+      </div>
+    </PhoneScreen>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Clips · New · SELECTING — multi-select is a GENERAL clips-list
+// capability, not Unconnected-only. On New (which holds session cards
+// + Sort clusters, not just flat clips):
+//   • selecting a session card batch-selects all its clips;
+//   • individual clips (in an expanded session / flat rows) select too;
+//   • Sort cluster proposals keep their OWN Add/Not-together actions —
+//     they are NOT folded into this bar.
+// Drag-to-select (iOS Photos/Mail): touch-drag down the checkbox column
+// bulk-toggles the rows you pass. Same bottom bar as Unconnected.
+// ═══════════════════════════════════════════════════════════════
+function ScrClipsNewSelecting() {
+  return (
+    <PhoneScreen>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '10px 18px 10px' }}>
+        <span style={{ fontSize: 15, color: PX.ink2 }}>Cancel</span>
+        <span style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: 700, color: PX.ink }}>3 selected</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: PX.accent }}>Select all</span>
+      </div>
+      <div style={{ flex: 1, overflow: 'hidden', padding: '2px 16px 10px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 11.5, color: PX.ink4, letterSpacing: 0.2, display: 'flex', alignItems: 'center', gap: 6, padding: '0 2px 2px' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={PX.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 11l5 5 5-5M12 4v12"/></svg>
+          Drag down the circles to select a run
+        </div>
+        <SessionCard time="5:29 PM" day="Yesterday" media={{ audio: 1 }} dur="0:05" preview="And here is another voice clip coming from my watch." selecting checked />
+        <SessionCard time="10:32 AM" day="Yesterday" media={{ audio: 2, photo: 1 }} dur="0:06" preview="This is a test voice clip" selecting checked />
+        <SessionCard time="9:04 AM" day="Yesterday" media={{ note: 1 }} dur="0:00" preview="Look up St. Genevieve, Missouri for the trip." selecting />
+      </div>
+      <div style={{ flexShrink: 0, display: 'flex', gap: 10, padding: '10px 16px 14px', borderTop: '1px solid ' + PX.hairline, background: PX.card }}>
+        <span style={{ flex: 1, minHeight: 48, borderRadius: 13, background: PX.accent, color: PX.accentInk, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 15, fontWeight: 600, letterSpacing: -0.1 }}>
+          Add to a memory…
+        </span>
+        <span style={{ minHeight: 48, padding: '0 18px', borderRadius: 13, border: '1px solid ' + PX.danger, color: PX.danger, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 15, fontWeight: 600, letterSpacing: -0.1 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={PX.danger} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/></svg>
+          Delete 3
+        </span>
+      </div>
+    </PhoneScreen>
+  );
+}
+
 Object.assign(window, {
   TabBar, ClipsHeader, LooseClipRow, PlacedClipRow, Thumb, BurstRow, MediaClipRow,
   AddDescHint, SessionMediaRow, ScrMediaClipDetail, ClipFateStack,
@@ -844,4 +1004,5 @@ Object.assign(window, {
   CreatedToast, ScrClipsAfterCreate, ScrClipsEmpty,
   ScrClipsDefault, ScrClipsAll, ScrClipDetail, ScrMixedSession,
   ScrSessionExcluded, ScrSingleClipSession,
+  LooseRow, ScrClipsLoose, ScrClipsLooseSelecting, ScrClipsNewSelecting,
 });

@@ -17,17 +17,13 @@ final class ClaudeAPIService {
         let topics: [String]
         let summary: String
         let title: String?
-        /// Server-returned next-step bullets — short, verb-first,
-        /// concrete actions / commitments / reminders / follow-ups.
-        /// Optional so responses from servers that haven't yet been
-        /// updated to emit this field decode cleanly (treated the same
-        /// as an empty array — Next steps row hides in the UI).
-        ///
-        /// Server contract (see `docs/design/next-steps-server-prompt.md`):
-        /// only populated when the memory contains a concrete action.
-        /// No invented "consider reflecting on…" filler. Strings
-        /// suitable as Reminders/Calendar titles down the line.
-        let nextSteps: [String]?
+        // `nextSteps` is CUT from v1 (RH-6, July 20 2026). It was decoded
+        // here but never persisted (no `OrganizePass.nextStepsMarkdown` since
+        // schema V2) and no UI consumed it — decoding output the model can't
+        // retain is dead weight. Codable ignores the server's `next_steps`
+        // key if present, so nothing breaks. Re-add post-v1 *with* a durable
+        // editable home (the dormant `OrganizePass.AcceptedRowKey.nextSteps`
+        // case is kept for that). See `AI Organize · spec.md` §2.
     }
 
     struct EntityResult: Codable {

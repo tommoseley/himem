@@ -141,6 +141,98 @@ final class SearchEngine {
         return makeHits(from: entries, term: parsed.text.trimmingCharacters(in: .whitespaces))
     }
 
+    // MARK: - Clip search (Object scope · Clips / All)
+
+    /// A matching clip, for the Clips / All object scopes. Carries the
+    /// `MediaReference` (tap-through opens the clip) and its connection
+    /// status ("in N memories" / "Unconnected" — the load-bearing signal
+    /// that makes a loose clip findable).
+    struct ClipHit: Identifiable {
+        let id: UUID
+        let ref: MediaReference
+        let snippet: Snippet?
+        let relevance: Double
+        let status: String
+    }
+
+    /// Clips whose transcript / note text / photo-video description matches,
+    /// composing with the same type + date + topic filters as the memory
+    /// search. Ordered relevance-first, then recency (`Himem · Search.html`
+    /// §"Ordering within a bucket"). A topic filter reaches clips through
+    /// their memories' topics; a genuinely loose clip has no topic, so a
+    /// topic-scoped clip search naturally excludes the unconnected bench —
+    /// as intended (topic implies membership).
+    func searchClips(parsed: ParsedQuery, limit: Int = 200, context: NSManagedObjectContext? = nil) throws -> [ClipHit] {
+        let ctx = context ?? storage.viewContext
+        var predicates: [NSPredicate] = [NSPredicate(format: "recycledAt == nil")]
+
+        let term = parsed.text.trimmingCharacters(in: .whitespaces)
+        if !term.isEmpty {
+            predicates.append(NSPredicate(
+                format: "transcript CONTAINS[cd] %@ OR text CONTAINS[cd] %@ OR mediaDescription CONTAINS[cd] %@",
+                term, term, term
+            ))
+        }
+        if let typeScope = parsed.typeScope, let media = Self.mediaType(for: typeScope) {
+            predicates.append(NSPredicate(format: "mediaType == %@", media))
+        }
+        if let interval = parsed.dateRange {
+            predicates.append(NSPredicate(
+                format: "createdAt >= %@ AND createdAt < %@",
+                interval.start as NSDate, interval.end as NSDate
+            ))
+        }
+        if let slug = parsed.topicSlug {
+            predicates.append(NSPredicate(format: "ANY edges.memory.topics.slug == %@", slug))
+        }
+
+        let request = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        request.fetchLimit = limit
+        let refs = try ctx.fetch(request)
+
+        let hits = refs.map { ref -> ClipHit in
+            let haystack = [ref.transcript, ref.text, ref.mediaDescription]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            let snippet = term.isEmpty ? nil : extractSnippet(matching: term, in: haystack)
+            let relevance = term.isEmpty ? 0.5 : computeTextRelevance(query: term, content: haystack)
+            return ClipHit(id: ref.id, ref: ref, snippet: snippet, relevance: relevance, status: Self.clipStatusLabel(ref))
+        }
+        return hits.sorted {
+            if $0.relevance != $1.relevance { return $0.relevance > $1.relevance }
+            return ($0.ref.createdAt ?? .distantPast) > ($1.ref.createdAt ?? .distantPast)
+        }
+    }
+
+    /// "in N memories" / "Unconnected" — the clip's connection status,
+    /// excluding recycled memories (via `referencingMemoryCount`).
+    static func clipStatusLabel(_ ref: MediaReference) -> String {
+        let n = ref.referencingMemoryCount
+        return n == 0 ? "Unconnected" : "in \(n) \(n == 1 ? "memory" : "memories")"
+    }
+
+    static func mediaType(for scope: TypeScope) -> String? {
+        switch scope {
+        case .voice: return "voice"
+        case .photo: return "image"
+        case .video: return "video"
+        case .text:  return "note"
+        }
+    }
+
+    /// Distinct years that have at least one non-recycled memory, most
+    /// recent first — the "individual years (2024, 2023…) built from the
+    /// actual span of the Memory Box" for the When-range presets.
+    func memoryBoxYears(calendar: Calendar = .current, context: NSManagedObjectContext? = nil) -> [Int] {
+        let ctx = context ?? storage.viewContext
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        request.predicate = NSPredicate(format: "isRecycled == NO OR isRecycled == nil")
+        let entries = (try? ctx.fetch(request)) ?? []
+        let years = Set(entries.map { calendar.component(.year, from: $0.createdAt) })
+        return years.sorted(by: >)
+    }
+
     /// Mirrors `search(parsed:)` against the recycle bin so the search field
     /// can surface entries the user deleted but might still want to find or restore.
     func searchRecycled(parsed: ParsedQuery, limit: Int = 200, context: NSManagedObjectContext? = nil) throws -> [Hit] {
