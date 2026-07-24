@@ -193,6 +193,7 @@ class ProjectViewModel: ObservableObject {
             id: project.id,
             name: project.name,
             purpose: project.purpose,
+            shortSummary: project.projectSummaryShort,
             memoryCount: project.entryCount,
             topicNames: project.topicNames,
             updatedAt: project.updatedAt,
@@ -207,10 +208,26 @@ struct ProjectDisplayModel: Identifiable, Hashable {
     let id: UUID
     let name: String
     let purpose: String?
+    /// One-line thread summary (compressed from the long, gated). Drives the
+    /// card subtitle once Find-the-thread has run; nil/empty → the card falls
+    /// back to `purpose` (the goal).
+    let shortSummary: String?
     let memoryCount: Int
     let topicNames: [String]
     let updatedAt: Date
     let previewText: String?
+
+    /// The card's one subtitle line: the short thread summary once it exists,
+    /// otherwise the goal (no thread yet — 0 memories / never run).
+    var cardSubtitle: String? {
+        if let s = shortSummary?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty {
+            return s
+        }
+        if let g = purpose?.trimmingCharacters(in: .whitespacesAndNewlines), !g.isEmpty {
+            return g
+        }
+        return nil
+    }
 
     // Equatable/Hashable are SYNTHESIZED (all stored properties), not
     // id-only. An id-only `==` made SwiftUI treat a card whose goal (or

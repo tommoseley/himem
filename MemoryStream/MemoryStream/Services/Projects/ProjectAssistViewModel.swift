@@ -19,6 +19,12 @@ final class ProjectAssistViewModel: ObservableObject {
     private let api: ProjectAssistAPI
     private let readTier: @MainActor () -> String
     private let reportError: @MainActor (AppError) -> Void
+    /// On-device compression of the long summary → a raw one-liner. Returns
+    /// nil when Foundation Models are unavailable (older device) or the call
+    /// throws; `deriveShortSummary` then falls back to a deterministic
+    /// extractive one-liner. Injectable so tests drive the gate/fallback
+    /// branches without a device model.
+    private let compressLongSummary: @MainActor (String) async -> String?
 
     /// Protocol for the network call — same `EntryAnalyzer`-style
     /// injection so tests can drive the success / failure branches
@@ -28,13 +34,17 @@ final class ProjectAssistViewModel: ObservableObject {
         isPlus: @escaping @MainActor () -> Bool = { Entitlement.shared.isPlus },
         api: ProjectAssistAPI = ClaudeAPIService.shared,
         readTier: @escaping @MainActor () -> String = { Entitlement.shared.tierLabel },
-        reportError: @escaping @MainActor (AppError) -> Void = { ErrorState.shared.report($0) }
+        reportError: @escaping @MainActor (AppError) -> Void = { ErrorState.shared.report($0) },
+        compressLongSummary: @escaping @MainActor (String) async -> String? = {
+            try? await OnDeviceOrganizer().compressToShort(longSummary: $0)
+        }
     ) {
         self.storage = storage
         self.isPlus = isPlus
         self.api = api
         self.readTier = readTier
         self.reportError = reportError
+        self.compressLongSummary = compressLongSummary
     }
 
     /// Runs the synthesis. No-op if already running (the UI
@@ -72,6 +82,11 @@ final class ProjectAssistViewModel: ObservableObject {
             )
 
             project.lastThreadSummary = result.summary
+            // Same Find-the-thread pass writes the short: compress the LONG
+            // summary on-device (derived from its text alone), gated against
+            // the long by TruthReconciler. Both summaries share the
+            // Draft→Keep lifecycle (per-device, keyed on this generated-at).
+            project.projectSummaryShort = await deriveShortSummary(fromLong: result.summary)
             project.lastThreadGeneratedAt = Date()
             project.updatedAt = Date()
             try ctx.save()
@@ -86,9 +101,34 @@ final class ProjectAssistViewModel: ObservableObject {
         let ctx = storage.viewContext
         guard let project = fetchProject(id: projectId, in: ctx) else { return }
         project.lastThreadSummary = nil
+        project.projectSummaryShort = nil
         project.lastThreadGeneratedAt = nil
         project.updatedAt = Date()
         try? ctx.save()
+    }
+
+    /// Derives the one-line short summary from the LONG summary's text.
+    /// Compresses on-device (Apple Intelligence) and gates the result against
+    /// the long via `TruthReconciler` (strict): an entity in the short not
+    /// present in the long is a fabrication → retry once → then a
+    /// deterministic extractive one-liner drawn from the long (which cannot
+    /// introduce anything the long lacks). Also the path when Foundation
+    /// Models are unavailable. Never re-reads the memories — the long summary
+    /// is the sole source, so the short can add nothing the long doesn't say.
+    func deriveShortSummary(fromLong long: String) async -> String {
+        let source = long.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !source.isEmpty else { return "" }
+
+        for _ in 0..<2 {  // initial attempt + one retry
+            guard let raw = await compressLongSummary(source) else { break }
+            let candidate = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !candidate.isEmpty,
+               !TruthReconciler.violates(summary: candidate, sourceText: source, strictness: .strict) {
+                return candidate
+            }
+        }
+        // Fabricated/empty both attempts, or model unavailable → extractive.
+        return TruthReconciler.extractiveSummary(fromClipText: source, wordCeiling: 18)
     }
 
     // MARK: - Helpers
