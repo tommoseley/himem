@@ -66,6 +66,31 @@ enum RecycleBinFilter: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+/// The recycled-item tallies, by type. Single source of truth for BOTH the
+/// per-tab count pills on the bin selector AND the Settings → Recently Deleted
+/// row badge, so the two can never disagree (the badge bug was the row showing
+/// memories-only — `1` against a bin of 3 clips + 1 memory). "Clips" is the
+/// union of bench (`MediaReference`) and inbox (manifest) recycled clips.
+struct RecycleBinCounts: Equatable {
+    var memories: Int = 0
+    var benchClips: Int = 0
+    var inboxClips: Int = 0
+    var projects: Int = 0
+
+    var clips: Int { benchClips + inboxClips }
+    /// The all-types union — what the Settings badge and the "All" pill show.
+    var all: Int { memories + clips + projects }
+
+    func count(for filter: RecycleBinFilter) -> Int {
+        switch filter {
+        case .all:      return all
+        case .clips:    return clips
+        case .memories: return memories
+        case .projects: return projects
+        }
+    }
+}
+
 struct RecycleBinView: View {
     @ObservedObject var viewModel: JournalViewModel
     /// F1 (2026-07-17): Recently Deleted now also holds soft-deleted projects.
@@ -92,6 +117,16 @@ struct RecycleBinView: View {
     private var isEmpty: Bool {
         recycledEntries.isEmpty && recycledProjects.isEmpty
             && recycledClips.isEmpty && recycledInboxClips.isEmpty
+    }
+
+    /// Per-type tallies from the loaded arrays — drives the selector pills.
+    private var counts: RecycleBinCounts {
+        RecycleBinCounts(
+            memories: recycledEntries.count,
+            benchClips: recycledClips.count,
+            inboxClips: recycledInboxClips.count,
+            projects: recycledProjects.count
+        )
     }
 
     private var showClips: Bool { filter == .all || filter == .clips }
@@ -136,8 +171,14 @@ struct RecycleBinView: View {
                 } else {
                     VStack(spacing: 0) {
                         // Reuses the Clips-header segmented control (not a
-                        // lookalike). Pure filter — no per-type counts.
-                        HiMemSegmentedControl(options: RecycleBinFilter.allCases, selection: $filter, label: \.label)
+                        // lookalike). Per-tab count pills (2026-07-24): "All"
+                        // shows the union, each type its own tally.
+                        HiMemSegmentedControl(
+                            options: RecycleBinFilter.allCases,
+                            selection: $filter,
+                            label: \.label,
+                            count: { counts.count(for: $0) }
+                        )
                             .padding(.top, 10)
                             .padding(.bottom, 6)
                         if activeFilterEmpty {
