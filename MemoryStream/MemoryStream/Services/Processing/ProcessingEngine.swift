@@ -242,10 +242,17 @@ final class ProcessingEngine {
         retry: () async -> ClaudeAPIService.AnalysisResult?
     ) async -> ClaudeAPIService.AnalysisResult {
         var reconciled = result
-        if TruthReconciler.violates(summary: result.summary, sourceText: clipText, strictness: strictness) {
-            NSLog("[HiMem][TruthReconciler] summary named an entity absent from the clips (\(strictness)); retrying once")
+        // Summary grounding is RELAXED on both tiers (2026-07-24). Strict
+        // exact-substring falsely flagged legitimate name expansions — the
+        // model wrote "Abraham Lincoln" when the clips say "Lincoln", so the
+        // whole summary got discarded for the bare-quote extractive. Relaxed
+        // grounds a name that shares a distinctive token with the clips while
+        // still catching true fabrications (no shared token: "Ben", "Albert
+        // Einstein"). The `strictness` param now governs only the mention-drop.
+        if TruthReconciler.violates(summary: result.summary, sourceText: clipText, strictness: .relaxed) {
+            NSLog("[HiMem][TruthReconciler] summary named an entity absent from the clips; retrying once")
             if let retried = await retry(),
-               !TruthReconciler.violates(summary: retried.summary, sourceText: clipText, strictness: strictness) {
+               !TruthReconciler.violates(summary: retried.summary, sourceText: clipText, strictness: .relaxed) {
                 reconciled = retried
             } else {
                 NSLog("[HiMem][TruthReconciler] retry still fabricated; falling back to extractive summary")
@@ -409,7 +416,6 @@ final class ProcessingEngine {
         let shouldTryAnthropic = connectivity.isConnected && (plus || !hasAI)
 
         var cloudAttempted = false
-        var producedByOnDevice = false
         var result: ClaudeAPIService.AnalysisResult?
         if shouldTryAnthropic {
             cloudAttempted = true
@@ -428,7 +434,6 @@ final class ProcessingEngine {
                 existingTopics: existingTopics,
                 existingMentions: existingMentions
             )
-            producedByOnDevice = result != nil
         }
 
         // Cloud as last-resort fallback — mirrors `processEntry`'s
@@ -458,12 +463,13 @@ final class ProcessingEngine {
         // pass the same gate. Reorganize writes only title + summary, so there
         // is nothing to reconcile but the prose. The multi-tier cascade above
         // already served as the retry; the extractive fallback is the final
-        // guarantee. Strictness matches the backend that produced the draft.
-        let strictness: TruthReconciler.Strictness = producedByOnDevice ? .strict : .relaxed
+        // guarantee. Grounding is RELAXED on both tiers (2026-07-24): strict
+        // exact-substring falsely flagged "Abraham Lincoln" when the clips say
+        // "Lincoln", discarding the whole draft for the bare-quote extractive.
         var draftTitle = result.title
         var draftSummary = result.summary
-        if TruthReconciler.violates(summary: result.summary, sourceText: content, strictness: strictness) {
-            NSLog("[HiMem][TruthReconciler] reorganize draft named an entity absent from the clips (\(strictness)); falling back to extractive")
+        if TruthReconciler.violates(summary: result.summary, sourceText: content, strictness: .relaxed) {
+            NSLog("[HiMem][TruthReconciler] reorganize draft named an entity absent from the clips; falling back to extractive")
             draftSummary = TruthReconciler.extractiveSummary(fromClipText: content)
             draftTitle = TruthReconciler.extractiveTitle(fromClipText: content)
         }

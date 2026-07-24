@@ -154,16 +154,16 @@ struct OnDeviceOrganizerCalibrationTests {
             let raw = try await OnDeviceOrganizer().organize(
                 content: f.clips, existingTopics: f.existingTopics, existingMentions: []
             )
-            let rawFabricated = TruthReconciler.fabricatedEntities(in: raw.summary, sourceText: f.clips, strictness: .strict)
+            let rawFabricated = TruthReconciler.fabricatedEntities(in: raw.summary, sourceText: f.clips, strictness: .relaxed)
 
             var summary = raw.summary
             var title = raw.title ?? ""
             var usedFallback = false
-            if TruthReconciler.violates(summary: summary, sourceText: f.clips, strictness: .strict) {
+            if TruthReconciler.violates(summary: summary, sourceText: f.clips, strictness: .relaxed) {
                 let retry = try await OnDeviceOrganizer().organize(
                     content: f.clips, existingTopics: f.existingTopics, existingMentions: []
                 )
-                if !TruthReconciler.violates(summary: retry.summary, sourceText: f.clips, strictness: .strict) {
+                if !TruthReconciler.violates(summary: retry.summary, sourceText: f.clips, strictness: .relaxed) {
                     summary = retry.summary; title = retry.title ?? ""
                 } else {
                     summary = TruthReconciler.extractiveSummary(fromClipText: f.clips)
@@ -181,7 +181,7 @@ struct OnDeviceOrganizerCalibrationTests {
             // absent from the clips — the gate's contract, catching ANY
             // invented name, not a banned list (the check the old fixed-
             // string antiTarget missed on "Albert").
-            let gatedFabricated = TruthReconciler.fabricatedEntities(in: summary, sourceText: f.clips, strictness: .strict)
+            let gatedFabricated = TruthReconciler.fabricatedEntities(in: summary, sourceText: f.clips, strictness: .relaxed)
             let fabricationOK = gatedFabricated.isEmpty
             // STRUCTURAL (hard): the shipped summary must narrate no container
             // structure — clip counts, media types, "clip N" — that the clips
