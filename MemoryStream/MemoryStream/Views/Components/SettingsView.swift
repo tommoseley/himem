@@ -154,7 +154,10 @@ struct SettingsView: View {
                 }
 
                 // MARK: - Data Management
-                if let viewModel {
+                // Gated on having a viewModel (the bin needs one); the row's
+                // badge reads `recycledCount` and the sheet uses the outer
+                // property, so the binding itself isn't needed here.
+                if viewModel != nil {
                     Section {
                         Button {
                             showRecycleBin = true
@@ -203,22 +206,13 @@ struct SettingsView: View {
                         .listRowSeparator(.hidden)
                 }
 
-                // MARK: - AI & Organizing
-                // Reads as ambient state for Plus users; for Free users the
-                // row is a tappable upgrade-route — the field is tier-gated so
-                // reaching for it is a "yes, this is how to change it" signal.
-                // (The "Projects" row was removed 2026-07-24: it was a vestigial
-                // pre-Plus display/upsell row that gated nothing — project-AI
-                // enablement flows through the Plus entitlement flag, not here.)
-                Section {
-                    aiOrganizingRow(
-                        icon: "sparkles",
-                        title: "Organizing",
-                        value: entitlement.isPlus ? "Automatic" : "Manual"
-                    )
-                } header: {
-                    Text("AI & Organizing")
-                }
+                // AI & Organizing section removed entirely 2026-07-24. It held
+                // "Organizing (Manual/Automatic)" and "Projects" — both vestigial
+                // display/upsell rows that gated nothing. Organize behavior is
+                // tier-inherent, never a setting: Free = the per-memory Organize
+                // button (on-device, no cost); Plus = the same button PLUS
+                // automatic background organization. There is no Manual/Automatic
+                // preference and no paywall wired to one ("people never manage AI").
 
                 // MARK: - Voice
                 // Note (2026-07-09): the "Captured Clips" Settings row was
@@ -662,7 +656,7 @@ struct SettingsView: View {
     /// The C3 hero card per `docs/design/pricing-screens-upgrade.jsx`.
     /// Sits inside a Section row but renders its own card chrome
     /// (cream paper, accent stroke, 16pt corner) so it reads as a
-    /// hero element above the AI & Organizing list rows.
+    /// hero element at the top of the settings list.
     @ViewBuilder
     private var plusCard: some View {
         Button {
@@ -768,47 +762,6 @@ struct SettingsView: View {
         StoreKitService.shared
             .product(for: StoreKitService.ProductID.plusMonthly)?
             .displayPrice ?? "—"
-    }
-
-    /// One AI & Organizing list row. Free users see a tappable row
-    /// (chevron + label "See plans" → opens PricingView) so the
-    /// natural reach for "change this" lands on the upgrade flow.
-    /// Plus users see a read-only ambient state row.
-    @ViewBuilder
-    private func aiOrganizingRow(icon: String, title: String, value: String) -> some View {
-        if entitlement.isPlus {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .foregroundStyle(Crucible.Color.accent)
-                    .frame(width: 22)
-                Text(title)
-                    .foregroundStyle(Crucible.Color.ink)
-                Spacer()
-                Text(value)
-                    .font(.subheadline)
-                    .foregroundStyle(Crucible.Color.ink2)
-            }
-        } else {
-            Button {
-                showPricing = true
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: icon)
-                        .foregroundStyle(Crucible.Color.accent)
-                        .frame(width: 22)
-                    Text(title)
-                        .foregroundStyle(Crucible.Color.ink)
-                    Spacer()
-                    Text(value)
-                        .font(.subheadline)
-                        .foregroundStyle(Crucible.Color.ink2)
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(Crucible.Color.ink4)
-                }
-            }
-            .buttonStyle(.plain)
-        }
     }
 
     private var notificationsFooter: String {
