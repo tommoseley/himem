@@ -184,7 +184,7 @@ struct OrganizeMemorySection: View {
         var hostRef: UIHostingController<AnyView>?
         let dismissHost: () -> Void = { hostRef?.dismiss(animated: true) }
         let host = UIHostingController(rootView: AnyView(
-            DraftReviewSheet(pass: pass, entry: entry, onDismiss: dismissHost)
+            DraftReviewSheet(pass: pass, entry: entry, onDismiss: { handleDismissDraft(dismissHost: dismissHost) })
         ))
         hostRef = host
         host.modalPresentationStyle = .pageSheet
@@ -225,7 +225,9 @@ struct OrganizeMemorySection: View {
                 // Approach B: no dismiss — the sheet stays up, shows a working
                 // state, and swaps the fresh pass into `model` in place.
                 onReorganizeAgain: { handleReorganizeAgain() },
-                onDismiss: dismissHost
+                // X discards the reorganize draft → the prior committed pass
+                // resurfaces (Case 1). Never leaves a Draft-organized strand.
+                onDismiss: { handleDismissDraft(dismissHost: dismissHost) }
             )
         ))
         hostRef = host
@@ -426,6 +428,36 @@ struct OrganizeMemorySection: View {
                 try? ctx.save()
             }
         }
+    }
+
+    /// X on the review / reorganize sheet **discards the uncommitted draft** and
+    /// returns the memory to its last committed state — never the old
+    /// "Draft organized / Review draft" strand (spec §8, reversed 2026-07-24;
+    /// the June 12 "dismiss = decide later, never discard" pin is superseded).
+    /// Both cases fall out of deleting the current draft `OrganizePass`:
+    ///   • **Case 1** — a prior committed pass exists (Reorganize on an already-
+    ///     Organized memory, then X): the draft is deleted, so `latestOrganizePass`
+    ///     resurfaces the prior committed pass → memory reads Organized, the
+    ///     action is a Reorganize CTA. X here == "Keep this version."
+    ///   • **Case 2** — first draft, never committed, X'd: the only pass is
+    ///     deleted → memory reads unorganized, the action is an Organize CTA.
+    /// Topics/mentions (library-backed associations) are NEVER destroyed here;
+    /// re-organize reconciles them. Dismiss first, then delete, so the sheet's
+    /// content isn't mutated under it.
+    ///
+    /// Caveat resolution (Tom's ruling a + "hide the lingering summary"): the
+    /// initial draft's own `InferenceSummary` would otherwise un-suppress the
+    /// legacy `InferenceCard` once the pass is gone (`LegacyInferenceCardSlot`
+    /// renders when `latestOrganizePass == nil`) → "unorganized card but a
+    /// summary shows." So on a Case-2 discard (no committed pass remains) the
+    /// orphaned draft summary goes too — it's the draft's artifact, not an
+    /// association. Case 1 keeps it (it belongs to the restored committed pass).
+    private func handleDismissDraft(dismissHost: () -> Void) {
+        let draftPass = pass
+        dismissHost()
+        guard let draftPass else { return }
+        let ctx = StorageService.shared.viewContext
+        ctx.perform { EntryLifecycleService.discardDraftPass(draftPass, in: ctx) }
     }
 
     private func handleSeePlus() {
