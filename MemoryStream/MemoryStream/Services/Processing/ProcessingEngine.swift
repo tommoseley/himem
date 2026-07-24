@@ -390,7 +390,17 @@ final class ProcessingEngine {
     /// handles per-field accept-or-keep.
     func processReorganize(_ entry: JournalEntry) async {
         let objectID = entry.objectID
-        let content = entry.content
+        // Rebuild the payload from the memory's LIVE clips at run time — the
+        // cached `entry.content` can lag (a clip added, or a voice transcript
+        // that landed, after the last cache write), which made reorganize
+        // organize a stale snapshot that ignored newly-added clips (2026-07-24,
+        // money-tested by `ReorganizePayloadFreshnessTests`). Fall back to the
+        // cached content only when the memory has no clip edges (legacy
+        // typed-only entries) so we never hand the model an empty payload.
+        let (liveContent, cachedContent) = await MainActor.run {
+            (EntryLifecycleService.joinedContent(from: entry), entry.content)
+        }
+        let content = liveContent.isEmpty ? cachedContent : liveContent
         let context = storage.backgroundContext()
         let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
 
