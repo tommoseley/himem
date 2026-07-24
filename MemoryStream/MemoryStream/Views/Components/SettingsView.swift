@@ -39,14 +39,6 @@ struct SettingsView: View {
     /// on appear and when the bin sheet closes (deletes/restores there change
     /// it), so we don't re-fetch every render.
     @State private var recycledCount = 0
-    /// Live project count for the C3 "AI & Organizing" row. Backed
-    /// by a Core Data fetch so the displayed "N of 3" stays honest
-    /// when the user creates or deletes a project from elsewhere
-    /// while Settings is open.
-    @FetchRequest(
-        entity: Project.entity(),
-        sortDescriptors: []
-    ) private var allProjects: FetchedResults<Project>
     #if DEBUG
     @State private var showResetOnboardingAlert = false
     @State private var showResetTutorialAlert = false
@@ -212,20 +204,17 @@ struct SettingsView: View {
                 }
 
                 // MARK: - AI & Organizing
-                // Reads as ambient state for Plus users; for Free users
-                // the rows are tappable upgrade-routes — both fields are
-                // tier-gated so reaching for either is a "yes, this is
-                // how to change it" signal.
+                // Reads as ambient state for Plus users; for Free users the
+                // row is a tappable upgrade-route — the field is tier-gated so
+                // reaching for it is a "yes, this is how to change it" signal.
+                // (The "Projects" row was removed 2026-07-24: it was a vestigial
+                // pre-Plus display/upsell row that gated nothing — project-AI
+                // enablement flows through the Plus entitlement flag, not here.)
                 Section {
                     aiOrganizingRow(
                         icon: "sparkles",
                         title: "Organizing",
                         value: entitlement.isPlus ? "Automatic" : "Manual"
-                    )
-                    aiOrganizingRow(
-                        icon: "folder",
-                        title: "Projects",
-                        value: projectsRowValue
                     )
                 } header: {
                     Text("AI & Organizing")
@@ -820,13 +809,6 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
         }
-    }
-
-    /// "N of 3" for Free, "N" for Plus (unlimited).
-    private var projectsRowValue: String {
-        let count = allProjects.count
-        if entitlement.isPlus { return "\(count)" }
-        return "\(count) of \(ProjectCapPolicy.freeProjectCap)"
     }
 
     private var notificationsFooter: String {
