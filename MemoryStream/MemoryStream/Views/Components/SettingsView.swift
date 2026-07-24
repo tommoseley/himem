@@ -35,6 +35,10 @@ struct SettingsView: View {
     @State private var isRestoring = false
     @State private var restoreNotice: String?
     @State private var showManageSubscriptions = false
+    /// All-types recycled tally for the "Recently Deleted" row badge. Refreshed
+    /// on appear and when the bin sheet closes (deletes/restores there change
+    /// it), so we don't re-fetch every render.
+    @State private var recycledCount = 0
     #if DEBUG
     @State private var showResetOnboardingAlert = false
     @State private var showResetTutorialAlert = false
@@ -162,9 +166,11 @@ struct SettingsView: View {
                                 Text("Recently Deleted")
                                     .foregroundStyle(Crucible.Color.ink)
                                 Spacer()
-                                let count = viewModel.loadRecycledEntries().count
-                                if count > 0 {
-                                    Text("\(count)")
+                                // All-types union (memories + clips + projects),
+                                // not memories-only — the badge previously read
+                                // `1` against a bin of 3 clips + 1 memory.
+                                if recycledCount > 0 {
+                                    Text("\(recycledCount)")
                                         .font(.caption)
                                         .foregroundStyle(Crucible.Color.ink3)
                                         .padding(.horizontal, 8)
@@ -530,12 +536,13 @@ struct SettingsView: View {
             }
             .onAppear {
                 loadTopics()
+                refreshRecycledCount()
                 Task {
                     notificationAuthStatus = await NotificationService.shared.authorizationStatus()
                 }
             }
             // Channel B onChange handlers retired 2026-07-07.
-            .sheet(isPresented: $showRecycleBin) {
+            .sheet(isPresented: $showRecycleBin, onDismiss: refreshRecycledCount) {
                 if let viewModel {
                     RecycleBinView(viewModel: viewModel)
                 }
@@ -587,6 +594,21 @@ struct SettingsView: View {
         } catch {
             ErrorState.shared.report(.topicError(error.localizedDescription))
         }
+    }
+
+    /// Recompute the "Recently Deleted" badge — the ALL-TYPES union, from the
+    /// same four sources the bin lists (memories + bench clips + inbox clips +
+    /// projects), via the shared `RecycleBinCounts`. Fixes the badge that read
+    /// memories-only.
+    private func refreshRecycledCount() {
+        guard let viewModel else { recycledCount = 0; return }
+        let lifecycle = EntryLifecycleService(storage: .shared, processingEngine: .shared)
+        recycledCount = RecycleBinCounts(
+            memories: viewModel.loadRecycledEntries().count,
+            benchClips: lifecycle.loadRecycledClips().count,
+            inboxClips: InboxManifest.shared.loadRecycledClips().count,
+            projects: ProjectViewModel().loadRecycledProjects().count
+        ).all
     }
 
     private func updateTopic(_ topic: Topic, name: String, paletteKey: String) {
