@@ -26,11 +26,40 @@ import CoreData
 /// `OrganizePass`) and the regenerate (firing another
 /// `ProcessingEngine.processReorganize`) are delegated to the parent
 /// via callbacks.
+/// Observable backing for the reorganize review sheet so "Reorganize again"
+/// can swap a freshly-generated pass into the SAME presented sheet — the sheet
+/// stays up, shows a working state, then re-renders the new comparison in
+/// place. This replaces the old dismiss-then-re-present dance, which raced the
+/// dismiss animation against the present and left the sheet closed (2026-07-24).
+@MainActor
+final class ReorganizeReviewModel: ObservableObject {
+    @Published var currentTitle: String
+    @Published var newTitle: String
+    @Published var currentSummary: String
+    @Published var newSummary: String
+    /// True while a re-run is in flight. The sheet dims the comparison and
+    /// shows "Working…"; the buttons disable. Flips false when the fresh pass
+    /// lands via `applyFreshPass`.
+    @Published var isWorking: Bool = false
+
+    init(currentTitle: String, newTitle: String, currentSummary: String, newSummary: String) {
+        self.currentTitle = currentTitle
+        self.newTitle = newTitle
+        self.currentSummary = currentSummary
+        self.newSummary = newSummary
+    }
+
+    /// Swap the new AI suggestion in place after a "Reorganize again" pass.
+    /// The Current column is untouched — the user hasn't kept anything yet.
+    func applyFreshPass(newTitle: String, newSummary: String) {
+        self.newTitle = newTitle
+        self.newSummary = newSummary
+        self.isWorking = false
+    }
+}
+
 struct ReorganizeReviewSheet: View {
-    let currentTitle: String
-    let newTitle: String
-    let currentSummary: String
-    let newSummary: String
+    @ObservedObject var model: ReorganizeReviewModel
     var onKeep: (_ titleChoice: ReorgFieldChoice, _ summaryChoice: ReorgFieldChoice) -> Void
     var onReorganizeAgain: () -> Void
     var onDismiss: () -> Void
@@ -57,8 +86,8 @@ struct ReorganizeReviewSheet: View {
                     VStack(spacing: 0) {
                         ReorgFieldRow(
                             label: "TITLE",
-                            current: currentTitle,
-                            newSuggestion: newTitle,
+                            current: model.currentTitle,
+                            newSuggestion: model.newTitle,
                             valueIsSerif: true,
                             isFirst: true,
                             choice: $titleChoice
@@ -67,8 +96,8 @@ struct ReorganizeReviewSheet: View {
                             .background(Crucible.Color.divider)
                         ReorgFieldRow(
                             label: "SUMMARY",
-                            current: currentSummary,
-                            newSuggestion: newSummary,
+                            current: model.currentSummary,
+                            newSuggestion: model.newSummary,
                             valueIsSerif: false,
                             isFirst: false,
                             choice: $summaryChoice
@@ -80,6 +109,20 @@ struct ReorganizeReviewSheet: View {
                             .stroke(Crucible.Color.hairline, lineWidth: 1)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 14))
+                    // While a re-run is in flight the stale comparison dims and
+                    // a working indicator sits over it — the sheet never leaves.
+                    .opacity(model.isWorking ? 0.35 : 1)
+                    .overlay {
+                        if model.isWorking {
+                            HStack(spacing: 8) {
+                                ProgressView().tint(Crucible.Color.aiBlue)
+                                Text("Reorganizing…")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Crucible.Color.aiBlue)
+                            }
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: model.isWorking)
                     .padding(.top, 16)
                 }
                 .padding(.horizontal, 20)
@@ -88,6 +131,12 @@ struct ReorganizeReviewSheet: View {
             footer
         }
         .background(Crucible.Color.paper)
+        // A fresh pass landed → reset the per-field choices ("try again means
+        // try again, not a hybrid") so the new suggestion starts unselected.
+        .onChange(of: model.newSummary) { _, _ in
+            titleChoice = .current
+            summaryChoice = .current
+        }
     }
 
     // MARK: - Header (chip + close)
@@ -130,25 +179,29 @@ struct ReorganizeReviewSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
+            .disabled(model.isWorking)
+            .opacity(model.isWorking ? 0.5 : 1)
 
             Button {
-                // Reset per-field state so the next sheet open starts
-                // fresh — per spec, "try again means try again, not
-                // give me a hybrid."
-                titleChoice = .current
-                summaryChoice = .current
                 onReorganizeAgain()
             } label: {
                 // Rank-2 secondary per Buttons & Actions: hairline
                 // bordered, no fill, full-width, same height as
                 // primary (≥50pt). Trailing sparkle marks this as an
                 // AI-invoking action; the verb "Reorganize again"
-                // carries the meaning.
+                // carries the meaning. While working it shows a spinner
+                // and the sheet keeps its place — no dismiss.
                 HStack(spacing: 7) {
-                    Text("Reorganize again")
-                        .font(.system(size: 15.5, weight: .semibold))
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .semibold))
+                    if model.isWorking {
+                        ProgressView().tint(Crucible.Color.ink2)
+                        Text("Reorganizing…")
+                            .font(.system(size: 15.5, weight: .semibold))
+                    } else {
+                        Text("Reorganize again")
+                            .font(.system(size: 15.5, weight: .semibold))
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
                 }
                 .foregroundStyle(Crucible.Color.ink2)
                 .frame(maxWidth: .infinity)
@@ -160,6 +213,7 @@ struct ReorganizeReviewSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
+            .disabled(model.isWorking)
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
@@ -298,10 +352,12 @@ private struct DraftChipBadge: View {
 
 #Preview {
     ReorganizeReviewSheet(
-        currentTitle: "On integrity and moral courage",
-        newTitle: "Integrity, and standing by what's right",
-        currentSummary: "A reminder to myself: do the right thing even when it costs me. Stand with people only while they stand right.",
-        newSummary: "You return to a standard you hold yourself to — staying true to what is right over what merely succeeds.",
+        model: ReorganizeReviewModel(
+            currentTitle: "On integrity and moral courage",
+            newTitle: "Integrity, and standing by what's right",
+            currentSummary: "A reminder to myself: do the right thing even when it costs me. Stand with people only while they stand right.",
+            newSummary: "You return to a standard you hold yourself to — staying true to what is right over what merely succeeds."
+        ),
         onKeep: { _, _ in },
         onReorganizeAgain: { },
         onDismiss: { }

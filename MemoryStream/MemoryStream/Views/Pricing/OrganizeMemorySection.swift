@@ -51,6 +51,11 @@ struct OrganizeMemorySection: View {
     /// spinner alongside the chip.
     @State private var isReorganizing = false
 
+    /// Backs the presented `ReorganizeReviewSheet` so "Reorganize again" can
+    /// swap the fresh pass in place (Approach B, 2026-07-24) instead of the
+    /// old dismiss-then-re-present race.
+    @State private var reorganizeModel: ReorganizeReviewModel?
+
     init(
         entryID: UUID,
         onOrganize: @escaping () -> Void
@@ -200,12 +205,16 @@ struct OrganizeMemorySection: View {
         guard let entry, let pass else { return }
         var hostRef: UIHostingController<AnyView>?
         let dismissHost: () -> Void = { hostRef?.dismiss(animated: true) }
+        let model = ReorganizeReviewModel(
+            currentTitle: entry.title ?? "",
+            newTitle: pass.suggestedTitle ?? "",
+            currentSummary: acceptedSummary,
+            newSummary: pass.summaryText ?? ""
+        )
+        reorganizeModel = model
         let host = UIHostingController(rootView: AnyView(
             ReorganizeReviewSheet(
-                currentTitle: entry.title ?? "",
-                newTitle: pass.suggestedTitle ?? "",
-                currentSummary: acceptedSummary,
-                newSummary: pass.summaryText ?? "",
+                model: model,
                 onKeep: { titleChoice, summaryChoice in
                     handleReorganizeKeep(
                         titleChoice: titleChoice,
@@ -213,7 +222,9 @@ struct OrganizeMemorySection: View {
                     )
                     dismissHost()
                 },
-                onReorganizeAgain: { handleReorganizeAgain(dismissCurrentHost: dismissHost) },
+                // Approach B: no dismiss — the sheet stays up, shows a working
+                // state, and swaps the fresh pass into `model` in place.
+                onReorganizeAgain: { handleReorganizeAgain() },
                 onDismiss: dismissHost
             )
         ))
@@ -376,33 +387,30 @@ struct OrganizeMemorySection: View {
         // (see `presentReorganizeReview`), not here.
     }
 
-    /// "Reorganize again" from inside the sheet. The current sheet
-    /// renders frozen at construction time (manual UIKit presentation
-    /// doesn't reactively update its `rootView` like SwiftUI's
-    /// `.sheet(item:)` would), so we explicitly dismiss + re-present
-    /// after the new pass lands so the user sees the fresh
-    /// before/after instead of stale snapshot.
+    /// "Reorganize again" from inside the sheet (Approach B, 2026-07-24).
+    /// The sheet observes `reorganizeModel`, so it **stays presented**: we flip
+    /// it to a working state, run the pass, then swap the fresh title/summary
+    /// into the model in place. No dismiss, no re-present — this kills the
+    /// present-while-dismissing race that used to leave the sheet closed.
     ///
-    /// Discard order matters: we let the new pass write *first*, then
-    /// delete the superseded one, so `latestOrganizePass` never falls
-    /// back to a stale pass during the transition.
-    private func handleReorganizeAgain(dismissCurrentHost: @escaping () -> Void) {
-        guard let entry, let pass else { return }
+    /// Discard order matters: we let the new pass write *first*, then delete
+    /// the superseded one, so `latestOrganizePass` never falls back to a stale
+    /// pass during the transition.
+    private func handleReorganizeAgain() {
+        guard let entry, let pass, let model = reorganizeModel else { return }
         let supersededID = pass.objectID
+        model.isWorking = true
         isReorganizing = true
         Task { @MainActor in
             await ProcessingEngine.shared.processReorganize(entry)
             await discardPass(objectID: supersededID)
             isReorganizing = false
-            // Tear down the stale-content host, then re-present with
-            // the fresh values. The brief dismiss-then-present
-            // animation is acceptable for the deliberate
-            // "Reorganize again" path.
-            dismissCurrentHost()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                guard self.entry != nil, self.pass != nil else { return }
-                presentReorganizeReview()
-            }
+            guard let freshPass = self.pass else { model.isWorking = false; return }
+            // Swap the fresh suggestion into the same sheet, in place.
+            model.applyFreshPass(
+                newTitle: freshPass.suggestedTitle ?? "",
+                newSummary: freshPass.summaryText ?? ""
+            )
         }
     }
 

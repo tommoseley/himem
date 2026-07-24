@@ -75,8 +75,12 @@ struct OnDeviceOrganizerCalibrationTests {
             summaryWordCeiling: 14, pov: .secondPerson
         ),
         Fixture(
+            // Clean payload (2026-07-24): production `joinedContent` joins
+            // transcript/description text only — no "[audio]"/"[photo]"
+            // markers. Those markers were structural metadata in the payload
+            // (the very thing that leaked); fixtures must mirror production.
             n: 3, name: "Multi-person mixed media — POV/pronouns",
-            clips: "[audio] Walked the market with Darlene. She wanted to find the Basque cheesecake place Ben kept talking about — we did, finally, and it lived up to it.\n[photo] (no description)",
+            clips: "Walked the market with Darlene. She wanted to find the Basque cheesecake place Ben kept talking about — we did, finally, and it lived up to it.",
             existingTopics: library, existingMentions: people,
             bannedPhrases: ["bonding", "joy of the hunt", "explored the market"],
             expectReuseTopics: [], expectReuseMentions: ["Darlene", "Ben"],
@@ -91,8 +95,10 @@ struct OnDeviceOrganizerCalibrationTests {
             summaryWordCeiling: 60, pov: .secondPerson
         ),
         Fixture(
+            // Clean payload — the photo's description IS the content (the
+            // human stand-in for visual analysis), joined verbatim; no marker.
             n: 5, name: "Pure-observation — subject-out",
-            clips: "[photo] description: Sunset over the ridge behind the house, sky went deep orange.\n[no audio]",
+            clips: "Sunset over the ridge behind the house, sky went deep orange.",
             existingTopics: library, existingMentions: people,
             bannedPhrases: ["breathtaking", "peaceful", "appreciate", "beauty of the evening", "Darlene", "Ben"],
             expectReuseTopics: [], expectReuseMentions: [],
@@ -106,9 +112,23 @@ struct OnDeviceOrganizerCalibrationTests {
         // cadence example de-lexicalized, none of those nouns may appear.
         Fixture(
             n: 6, name: "Quote + photo — example-bleed guard (Lincoln)",
-            clips: "[audio] \"I am not bound to win, but I am bound to be true. I am not bound to succeed, but I'm bound to live up to what light I have.\"\n[photo] (no description)",
+            clips: "\"I am not bound to win, but I am bound to be true. I am not bound to succeed, but I'm bound to live up to what light I have.\"",
             existingTopics: library, existingMentions: people,
             bannedPhrases: ["pepper", "tomato", "eggplant", "garden", "retire", "south carolina", "Darlene"],
+            expectReuseTopics: [], expectReuseMentions: [],
+            summaryWordCeiling: 45, pov: .secondPerson
+        ),
+        // Structural-metadata leak guard (2026-07-24): a true mixed voice+photo
+        // memory whose content mentions NO container words. The summary must
+        // describe what was said/shown, never "clip N" / a clip count / a media
+        // type. Both the transcript and the photo description contribute real
+        // content; neither says "clip"/"photo"/"video". The STRUCTURAL hard
+        // check (below) fails if any of those leak.
+        Fixture(
+            n: 7, name: "Voice + photo — structural-metadata leak guard",
+            clips: "Reading Lincoln tonight — the second inaugural still lands after all these years.\n\nThe worn hardback open on the desk, its spine cracked from years of use.",
+            existingTopics: library, existingMentions: people,
+            bannedPhrases: ["Darlene", "Ben"],
             expectReuseTopics: [], expectReuseMentions: [],
             summaryWordCeiling: 45, pov: .secondPerson
         ),
@@ -163,6 +183,13 @@ struct OnDeviceOrganizerCalibrationTests {
             // string antiTarget missed on "Albert").
             let gatedFabricated = TruthReconciler.fabricatedEntities(in: summary, sourceText: f.clips, strictness: .strict)
             let fabricationOK = gatedFabricated.isEmpty
+            // STRUCTURAL (hard): the shipped summary must narrate no container
+            // structure — clip counts, media types, "clip N" — that the clips
+            // never used (the 2026-07-24 "text clip 1 / two video clips" leak).
+            // The gate strips it (violates → retry → extractive), so this reads
+            // the GATED summary: the leak must not survive.
+            let gatedStructural = TruthReconciler.fabricatedStructuralClaims(in: summary, sourceText: f.clips)
+            let structuralOK = gatedStructural.isEmpty
             let bannedHit = f.bannedPhrases.first { summary.lowercased().contains($0.lowercased()) || title.lowercased().contains($0.lowercased()) }
             let antiTargetOK = bannedHit == nil
             // QUALITY (soft — logged 3B ceilings; the extractive fallback
@@ -178,11 +205,12 @@ struct OnDeviceOrganizerCalibrationTests {
             [CALIB]   title:   \(title)
             [CALIB]   summary: \(summary)
             [CALIB]   topics:  \(topics)   mentions: \(mentions)
-            [GRID]  F\(f.n) | FABRICATION:\(mark(fabricationOK)) antiTarget:\(mark(antiTargetOK))\(bannedHit.map { " (hit: \($0))" } ?? "") | soft POV:\(mark(povOK)) length(\(Self.wordCount(summary))≤\(f.summaryWordCeiling)):\(mark(lengthOK)) cadence:\(mark(cadenceOK)) reuse:\(mark(reuseOK))
+            [GRID]  F\(f.n) | FABRICATION:\(mark(fabricationOK)) STRUCTURAL:\(mark(structuralOK))\(gatedStructural.isEmpty ? "" : " (leak: \(gatedStructural))") antiTarget:\(mark(antiTargetOK))\(bannedHit.map { " (hit: \($0))" } ?? "") | soft POV:\(mark(povOK)) length(\(Self.wordCount(summary))≤\(f.summaryWordCeiling)):\(mark(lengthOK)) cadence:\(mark(cadenceOK)) reuse:\(mark(reuseOK))
             """)
 
             // HARD-fail on honesty only. Quality items are reported above.
             if !fabricationOK { hardFailures.append("F\(f.n): fabricated proper noun(s) after gate: \(gatedFabricated)") }
+            if !structuralOK { hardFailures.append("F\(f.n): structural leak after gate: \(gatedStructural)") }
             if !antiTargetOK { hardFailures.append("F\(f.n): banned phrase '\(bannedHit ?? "")'") }
         }
 
