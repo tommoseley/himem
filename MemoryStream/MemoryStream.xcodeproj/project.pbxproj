@@ -73,7 +73,6 @@
 		A100000206 /* AddMemoryToProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000206 /* AddMemoryToProjectSheet.swift */; };
 		A100000301 /* CaptureModality.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000301 /* CaptureModality.swift */; };
 		A100000302 /* AppendFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000302 /* AppendFAB.swift */; };
-		A1000003FA /* FABHandedness.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000003FA /* FABHandedness.swift */; };
 		A100000303 /* VoiceCaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000303 /* VoiceCaptureScreen.swift */; };
 		A100000304 /* NoteCaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000304 /* NoteCaptureScreen.swift */; };
 		A100000305 /* CaptureFlowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000305 /* CaptureFlowHost.swift */; };
@@ -86,6 +85,7 @@
 		A100000320 /* WatchSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000320 /* WatchSharedState.swift */; };
 		A100000321 /* WatchSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000320 /* WatchSharedState.swift */; };
 		A100000323 /* Linkify.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000323 /* Linkify.swift */; };
+		A1000003FA /* FABHandedness.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000003FA /* FABHandedness.swift */; };
 		A100000500 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000500 /* NotificationService.swift */; };
 		A100000502 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000502 /* TranscriptionService.swift */; };
 		A100000503 /* FragmentMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000503 /* FragmentMigration.swift */; };
@@ -196,6 +196,7 @@
 		A200000046 /* BurstThumbnailPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000046 /* BurstThumbnailPrefetcher.swift */; };
 		A200000047 /* TranscriptClipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000047 /* TranscriptClipController.swift */; };
 		A200000091 /* ClipEditorModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000091 /* ClipEditorModal.swift */; };
+		A2000000FB /* FABHandednessSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000FB /* FABHandednessSync.swift */; };
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
@@ -349,7 +350,6 @@
 		B100000206 /* AddMemoryToProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddMemoryToProjectSheet.swift; sourceTree = "<group>"; };
 		B100000301 /* CaptureModality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureModality.swift; sourceTree = "<group>"; };
 		B100000302 /* AppendFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppendFAB.swift; sourceTree = "<group>"; };
-		B1000003FA /* FABHandedness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FABHandedness.swift; sourceTree = "<group>"; };
 		B100000303 /* VoiceCaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCaptureScreen.swift; sourceTree = "<group>"; };
 		B100000304 /* NoteCaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCaptureScreen.swift; sourceTree = "<group>"; };
 		B100000305 /* CaptureFlowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFlowHost.swift; sourceTree = "<group>"; };
@@ -360,6 +360,7 @@
 		B100000316 /* ExistingMemoryPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingMemoryPickerView.swift; sourceTree = "<group>"; };
 		B100000320 /* WatchSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchSharedState.swift; path = Shared/WatchSharedState.swift; sourceTree = "<group>"; };
 		B100000323 /* Linkify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Linkify.swift; sourceTree = "<group>"; };
+		B1000003FA /* FABHandedness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FABHandedness.swift; sourceTree = "<group>"; };
 		B100000500 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		B100000502 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		B100000503 /* FragmentMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FragmentMigration.swift; sourceTree = "<group>"; };
@@ -465,6 +466,7 @@
 		B200000046 /* BurstThumbnailPrefetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BurstThumbnailPrefetcher.swift; path = MemoryStream/Views/Clip/BurstThumbnailPrefetcher.swift; sourceTree = SOURCE_ROOT; };
 		B200000047 /* TranscriptClipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TranscriptClipController.swift; path = MemoryStream/Views/Clip/TranscriptClipController.swift; sourceTree = SOURCE_ROOT; };
 		B200000091 /* ClipEditorModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipEditorModal.swift; path = MemoryStream/Views/Clip/ClipEditorModal.swift; sourceTree = SOURCE_ROOT; };
+		B2000000FB /* FABHandednessSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FABHandednessSync.swift; path = MemoryStream/Services/FABHandednessSync.swift; sourceTree = SOURCE_ROOT; };
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
@@ -681,6 +683,7 @@
 				B100000631 /* WakeLock.swift */,
 				B200000028 /* DebouncedTrigger.swift */,
 				B200000032 /* CaptureLandingRouter.swift */,
+				B2000000FB /* FABHandednessSync.swift */,
 				B200000038 /* MemoryDetailPresentationContext.swift */,
 				B200000D00 /* ClipDetailPresentationContext.swift */,
 				B200000D01 /* MemoryNavigationBus.swift */,
@@ -1407,6 +1410,7 @@
 				A200000030 /* ProjectsNavigationContext.swift in Sources */,
 				A200000031 /* PhoneCaptureBenchDispatcher.swift in Sources */,
 				A200000032 /* CaptureLandingRouter.swift in Sources */,
+				A2000000FB /* FABHandednessSync.swift in Sources */,
 				A200000033 /* NewProjectRequestBus.swift in Sources */,
 				A200000034 /* NewProjectFAB.swift in Sources */,
 				A200000035 /* UnifiedBenchGrouper.swift in Sources */,
