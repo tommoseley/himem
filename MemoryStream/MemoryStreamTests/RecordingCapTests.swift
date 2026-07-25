@@ -31,4 +31,13 @@ struct RecordingCapTests {
         // limitMinutes == 0 → "No limit" — even a hands-free recording runs on.
         #expect(!VoiceCaptureScreen.shouldAutoSaveAtLimit(source: .handsFree, elapsed: 100_000, limitMinutes: 0))
     }
+
+    /// The confirmation is one string for both a Siri stop and a cap-triggered
+    /// save (so the cap never reads as an error), with the real duration and
+    /// correct pluralization; a sub-minute clip still reads "1 minute".
+    @Test func savedConfirmation_realDuration_uniform() {
+        #expect(VoiceCaptureScreen.savedConfirmation(minutes: 10) == "Saved — 10 minutes.")
+        #expect(VoiceCaptureScreen.savedConfirmation(minutes: 1) == "Saved — 1 minute.")
+        #expect(VoiceCaptureScreen.savedConfirmation(minutes: 0) == "Saved — 1 minute.")
+    }
 }

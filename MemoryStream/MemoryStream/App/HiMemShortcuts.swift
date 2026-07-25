@@ -31,6 +31,10 @@ final class CaptureRequestBus: ObservableObject {
     /// voice composer observes this and stops-and-saves (never discards). No-op
     /// when no recording is in flight.
     @Published var stopRequested: Bool = false
+    /// Stamped by the composer the moment it stops-and-saves a hands-free
+    /// recording (Siri stop or cap), so `StopVoiceRecordingIntent` can speak the
+    /// real duration. Rounded minutes (min 1). Nil = nothing saved yet.
+    var lastSavedMinutes: Int? = nil
     private init() {}
 }
 
@@ -62,8 +66,20 @@ struct StopVoiceRecordingIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        CaptureRequestBus.shared.stopRequested = true
-        return .result(dialog: "Saved.")
+        let bus = CaptureRequestBus.shared
+        bus.lastSavedMinutes = nil
+        bus.stopRequested = true
+        // Wait briefly for the live composer to stop-and-stamp the duration, so
+        // the spoken confirmation carries the real length (same string a
+        // cap-triggered save uses — the limit never reads as an error).
+        for _ in 0..<30 {
+            if let minutes = bus.lastSavedMinutes {
+                return .result(dialog: "\(VoiceCaptureScreen.savedConfirmation(minutes: minutes))")
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000) // 50 ms × 30 = 1.5 s
+        }
+        // Nothing was recording — don't claim a save.
+        return .result(dialog: "Nothing was recording.")
     }
 }
 

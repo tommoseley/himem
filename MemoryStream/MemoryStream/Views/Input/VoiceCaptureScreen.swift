@@ -231,6 +231,7 @@ struct VoiceCaptureScreen: View {
             guard requested else { return }
             captureRequests.stopRequested = false
             if speechService.isRecording && !isFinalizing {
+                stampSavedDuration()
                 Task { await finishOrAbandon(saveResult: true) }
             }
         }
@@ -743,6 +744,20 @@ struct VoiceCaptureScreen: View {
         return elapsed >= TimeInterval(limitMinutes) * 60
     }
 
+    /// The uniform save confirmation — the SAME string for a Siri "stop
+    /// recording" and a cap-triggered auto-save, so the limit never reads as an
+    /// error. Real duration, rounded to whole minutes (min 1 — a sub-minute
+    /// clip still saved).
+    static func savedConfirmation(minutes: Int) -> String {
+        let m = max(1, minutes)
+        return "Saved — \(m) \(m == 1 ? "minute" : "minutes")."
+    }
+
+    /// Stamp the just-recorded duration so a Siri "stop recording" can speak it.
+    private func stampSavedDuration() {
+        captureRequests.lastSavedMinutes = max(1, Int((recording.elapsed / 60).rounded()))
+    }
+
     /// Auto-save when a hands-free recording hits its cap — mirrors the watch
     /// wrist-off rule (`stop(save: true)`, never discards). Fires once.
     private func checkRecordingCap() {
@@ -751,6 +766,7 @@ struct VoiceCaptureScreen: View {
                                          elapsed: recording.elapsed,
                                          limitMinutes: handsFreeLimitMinutes) else { return }
         didHitCap = true
+        stampSavedDuration()
         Task { await finishOrAbandon(saveResult: true) }
     }
 

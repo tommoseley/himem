@@ -239,9 +239,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Voice & recording")
                 } footer: {
-                    Text(saveVoiceEntries
-                        ? "Voice recordings are saved on device — play them back from entry cards. The recording limit stops and saves a hands-free or Siri recording when it reaches the limit, so one you walk away from is never lost; a recording you're holding on screen isn't limited. Voice search pace only controls how long HiMem waits if you stop talking."
-                        : "Voice recordings are discarded after transcription — only the text is kept. The recording limit stops and saves a hands-free or Siri recording when it reaches the limit, so one you walk away from is never lost; a recording you're holding on screen isn't limited. Voice search pace only controls how long HiMem waits if you stop talking.")
+                    Text("Recordings you start hands-free stop and save at this limit. Nothing is lost.")
                 }
 
                 // MARK: - Privacy
