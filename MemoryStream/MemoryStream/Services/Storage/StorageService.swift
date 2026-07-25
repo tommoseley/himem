@@ -279,6 +279,31 @@ final class StorageService {
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
 
+    #if DEBUG
+    /// Test-only: an on-disk **SQLite** store using the shared cached model.
+    /// The in-memory store (`init(inMemory:)`) evaluates fetch predicates via
+    /// Foundation, which masks SQL three-valued-logic behavior — notably a
+    /// NULL optional `Bool` under `!= YES`. Tests that must exercise real SQL
+    /// predicate semantics (or `NSBatchUpdateRequest`, unsupported in-memory)
+    /// use this. Reuses `cachedModel` so no second model claims the entity
+    /// classes. Caller deletes `url` (and -wal/-shm) when done.
+    static func makeSQLiteTestContainer() -> (container: NSPersistentContainer, url: URL) {
+        let container = NSPersistentContainer(name: "MemoryStream", managedObjectModel: cachedModel)
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("himem-sqlite-test-\(UUID().uuidString).sqlite")
+        let description = NSPersistentStoreDescription(url: url)
+        description.type = NSSQLiteStoreType
+        container.persistentStoreDescriptions = [description]
+        container.loadPersistentStores { _, error in
+            if let error {
+                fatalError("SQLite test store failed to load: \(error.localizedDescription)")
+            }
+        }
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        return (container, url)
+    }
+    #endif
+
     func backgroundContext() -> NSManagedObjectContext {
         let context = container.newBackgroundContext()
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
