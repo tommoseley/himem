@@ -206,26 +206,33 @@ final class StorageService {
         //         (soft-delete → Recently Deleted). Without this bump the
         //         field never publishes to Development, so the recycledAt
         //         write doesn't round-trip and deleted projects never reach
-        //         the bin (device repro 2026-07-17). Folds into the same
-        //         batched pre-TestFlight Production deploy as the staged
-        //         purpose→goal / MediaReference.sourceDevice fields.
+        //         the bin (device repro 2026-07-17).
         //   V7 — B4 mentions-library schema batch (July 18 2026): new
         //         `Mention` entity (many-to-many → JournalEntry), the
         //         `JournalEntry.mentions` relationship, and
         //         `MediaReference.sourceDevice`. Bumped so all three
-        //         publish to Development; they ride ONE batched Production
-        //         deploy with the still-pending V6 `recycledAt`. The
-        //         ExtractedEntity→Mention DATA migration is separate
-        //         (`MentionMigration`, run via LaunchScreenView), not a
-        //         schema concern.
+        //         publish to Development. The ExtractedEntity→Mention DATA
+        //         migration is separate (`MentionMigration`, run via
+        //         LaunchScreenView), not a schema concern.
         //   V8 — `MediaReference.recycledAt` added for the P8 last-reference
         //         deletion rule + clip-level Recently Deleted (July 19 2026).
         //         Without this bump the field never publishes to Development,
         //         so a recycled clip's recycledAt doesn't round-trip and the
-        //         clip never reaches the bin (same class of bug as V6). Rides
-        //         the batched pre-TestFlight Production deploy with the still-
-        //         pending V6/V7 fields. THE DECISION LOGIC (edge-count) needs
-        //         no schema — only recycledAt does.
+        //         clip never reaches the bin (same class of bug as V6). THE
+        //         DECISION LOGIC (edge-count) needs no schema — only
+        //         recycledAt does.
+        //
+        //   DEPLOY STATUS (2026-07-25): the V2–V8 field batch — including
+        //   `Project.recycledAt` (V6), the V7 Mention/sourceDevice fields,
+        //   and `MediaReference.recycledAt` (V8) — has been DEPLOYED to the
+        //   Production CloudKit environment (dashboard shows no pending diff).
+        //   Earlier revisions of this log described these as "still-pending
+        //   pre-TestFlight" — that is no longer true. Note the deploy
+        //   implication for soft-delete sync: because both `isRecycled` and
+        //   the clip-side `recycledAt` are now deployed, a recycle syncs
+        //   symmetrically (memory + its sole-edge clips), so "memory recycled
+        //   but its clips still live" across devices is NOT a deploy-asymmetry
+        //   artifact — see TestFlight #4a provenance.
         let schemaInitKey = "com.himem.cloudkit.schemaInitializedV8"
         if !UserDefaults.standard.bool(forKey: schemaInitKey) {
             // Only mark the version flag set on actual success. If we
