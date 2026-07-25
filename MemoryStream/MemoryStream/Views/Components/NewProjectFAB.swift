@@ -19,10 +19,10 @@ struct NewProjectFAB: View {
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
 
     private var alignment: Alignment {
-        fabHandednessLeft ? .bottomLeading : .bottomTrailing
+        FABHandedness.containerAlignment(leftHanded: fabHandednessLeft)
     }
     private var anchorPaddingEdge: Edge.Set {
-        fabHandednessLeft ? .leading : .trailing
+        FABHandedness.paddingEdge(leftHanded: fabHandednessLeft)
     }
 
     var body: some View {

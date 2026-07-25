@@ -29,6 +29,7 @@ struct HiMemTabView: View {
     }
 
     @State private var selection: Tab = .memories
+    @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
     @State private var activeCaptureModality: CaptureModality? = nil
     /// Non-nil while the Clips status sheet is presented (Active
     /// Navigation Tap → sheet per `CLAUDE.md` §Phone, locked July 10
@@ -100,7 +101,10 @@ struct HiMemTabView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        // FAB anchor edge follows the Left-Handed FAB preference. The presence
+        // dot self-positions (GeometryReader + `.position`) so it's unaffected;
+        // the TabView fills. Only the FAB moves. See `FABHandedness`.
+        ZStack(alignment: FABHandedness.containerAlignment(leftHanded: fabHandednessLeft)) {
             TabView(selection: selectionBinding) {
                 ClipsTabView()
                     .tabItem { Label("Clips", systemImage: "waveform") }
