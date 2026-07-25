@@ -4,71 +4,74 @@ import CoreData
 import FoundationModels
 
 /// Device-only spike harness for **Memory Polish §3 (auto-correct)**. NOT a
-/// shipped feature — `#if DEBUG`, triggered from Settings → Debug. Runs the
-/// *constrained* on-device ASR-repair pass over a natural sample of real
-/// library clips and logs, per `docs/design/Memory Polish · spec.md`:
-///   - before → after (only for clips it changed),
-///   - a word-level diff, and
-///   - a consolidated **proper-noun ledger** (every proper noun the pass
-///     touched, before→after) — the over-correction / Lincoln-in-miniature risk.
+/// shipped feature — `#if DEBUG`, triggered from Settings → Debug.
 ///
-/// v2 (2026-07-25), fixing three harness bugs the first run exposed:
-///  1. **Format** — uses `@Generable` guided generation so the runtime shapes
-///     the response; v1's plain-text prompt made the model hand-format a JSON
-///     string and leak `{"corrected_transcript": …}` / ```` ```json ```` fences
-///     INTO the transcript. That would have written braces into a user's words.
-///  2. **Scope** — the prompt now forbids ALL punctuation / sentence-boundary /
-///     grammar changes (v1 did "alcohol."→"alcohol?", "trip. And"→"trip, and").
-///     Word-level substitutions and obviously-dropped words only.
-///  3. **Honest categorization** — v1 counted a clean clip's *decline to change*
-///     as a failure ("Session ended…"). Outcomes are now split into
-///     **changed / unchanged (nothing to fix) / errored**, and char length is
-///     logged so the "short + already-clean → no-op" hypothesis is checkable.
+/// **v3 (2026-07-25) — substitution-pairs, not free text.** Runs 1 and 2 both
+/// showed the on-device 3B ignores a punctuation prohibition and (v2) edits
+/// punctuation/whitespace of already-correct text — including a quotation —
+/// while making zero real word repairs. You can't prompt a 3B out of an
+/// ingrained behavior. So v3 applies our own principle — *models are advisory,
+/// code is authoritative*:
+///   - the model returns ONLY a list of `{wrong, right}` word-substitution
+///     pairs, never the transcript;
+///   - **code** performs the swaps, so the model structurally cannot reformat,
+///     strip punctuation, collapse whitespace, or change sentence boundaries;
+///   - a pair is REJECTED if its two sides differ only in punctuation /
+///     whitespace / case, or if `wrong` is not found verbatim in the source.
 ///
-/// Governance note (spec §2): `TruthReconciler` cannot gate this — the clip text
-/// itself is what changes — so this output is a human quality read that gates
-/// the tier. No UI, no tier lock: the spike reports first.
+/// This also yields the §3 diff UI for free: a list of proposed corrections the
+/// user could accept individually. `TruthReconciler` still can't gate the text,
+/// but the swap-only + verbatim-source constraints are the code-authoritative
+/// guard the spec §2 calls for. No UI, no tier lock — the spike reports first.
+///
+/// Bar (Tom): re-catch the compost clip's craps→scraps / diary→dairy /
+/// compos→compost, leave the Lincoln quote and the lemons byte-identical, and
+/// produce zero punctuation-only edits. If v3 fails, auto-correct is
+/// frontier/Plus and the on-device attempt is logged as a documented ceiling.
 enum MemoryPolishSpike {
 
-    /// Word-level, repair-only instructions (spec §2 governing line; scope
-    /// tightened after run 1). Punctuation/sentence structure is off-limits.
     static let instructions = """
-    You correct clear speech-to-text errors in a voice-clip transcript so the words match what the person actually said. Work at the WORD level only.
+    You are given the raw speech-to-text transcript of one voice clip. Your job is to find words the transcriber clearly got WRONG — misheard words, wrong homophones, or a word split/joined incorrectly — and list the corrections.
+
+    For each correction, output a pair: `wrong` = the incorrect text exactly as it appears in the transcript, and `right` = the word(s) the person actually said.
 
     Rules:
-    - Replace only words the transcriber clearly got wrong — misheard words, wrong homophones — with the word actually spoken. You may also restore a word the transcriber obviously dropped (a missing "it", "the", etc.) when the intended phrase is unambiguous.
-    - Do NOT change punctuation, capitalization, spacing, or sentence boundaries — leave them exactly as given. Never turn a statement into a question, never merge or split sentences, never "clean up" grammar or wording.
-    - Correct a name or proper noun only when the intended word is obvious from context; never invent one. When unsure about any word, leave it exactly as written — say less before saying false.
-    - If nothing is clearly wrong, return the transcript unchanged.
+    - List ONLY clear word errors. Do NOT list punctuation, capitalization, spacing, or grammar changes — those are not your job.
+    - `wrong` must be copied verbatim from the transcript.
+    - Only correct a name or proper noun when the intended word is obvious from context; never invent one.
+    - When unsure about a word, do not list it. Say less before saying false.
+    - If nothing is clearly wrong, return an empty list.
     """
 
-    /// Guided-generation schema. The runtime fills `transcript` — the model
-    /// never hand-formats a wrapper, so no envelope can leak into the text.
     @Generable
-    struct Corrected {
-        @Guide(description: "The transcript with only clear word-level transcription errors fixed, and punctuation, capitalization, and sentence boundaries left exactly as in the input. Identical to the input when nothing is clearly wrong.")
-        var transcript: String
+    struct Substitution: Equatable {
+        @Guide(description: "The incorrect word or short phrase, copied verbatim from the transcript.")
+        var wrong: String
+        @Guide(description: "The word or short phrase the person actually said, to replace it with.")
+        var right: String
     }
 
-    enum Outcome {
-        case changed(String)
-        case unchanged
-        case errored(String)
+    @Generable
+    struct Corrections {
+        @Guide(description: "Only clear speech-to-text word errors as {wrong, right} pairs. Empty if nothing is clearly wrong.")
+        var substitutions: [Substitution]
     }
+
+    enum RejectReason: String { case punctuationOrCaseOnly, notInSource }
 
     struct ClipResult {
         let id: UUID
-        let createdAt: Date
         let chars: Int
         let before: String
-        let outcome: Outcome
+        let accepted: [Substitution]
+        let rejected: [(Substitution, RejectReason)]
+        let after: String
+        let errored: String?
     }
 
-    /// Fetch a NATURAL sample of ~count real voice transcripts spread across the
-    /// whole library (recent + older), run the repair, log everything.
     @MainActor
     static func run(count: Int = 8) async {
-        NSLog("[PolishSpike] ===== Memory Polish §3 auto-correct spike (v2 · @Generable) =====")
+        NSLog("[PolishSpike] ===== Memory Polish §3 auto-correct spike (v3 · substitution pairs, code-applied) =====")
         if let err = OnDeviceOrganizer.availabilityError() {
             NSLog("[PolishSpike] Foundation Models unavailable: \(err). Run on a device with Apple Intelligence enabled.")
             return
@@ -88,10 +91,8 @@ enum MemoryPolishSpike {
         var results: [ClipResult] = []
         for (i, ref) in sample.enumerated() {
             let before = (ref.transcript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            NSLog("[PolishSpike] repairing \(i + 1)/\(sample.count) (\(before.count) chars)…")
-            let outcome = await repair(before)
-            results.append(ClipResult(id: ref.id, createdAt: ref.createdAt ?? .distantPast,
-                                      chars: before.count, before: before, outcome: outcome))
+            NSLog("[PolishSpike] proposing \(i + 1)/\(sample.count) (\(before.count) chars)…")
+            results.append(await process(id: ref.id, before: before))
         }
         report(results)
     }
@@ -102,45 +103,73 @@ enum MemoryPolishSpike {
         return (0..<count).map { all[min(all.count - 1, Int(Double($0) * step))] }
     }
 
-    private static func repair(_ input: String) async -> Outcome {
+    /// Ask the model for pairs, validate them in code, apply the survivors.
+    private static func process(id: UUID, before: String) async -> ClipResult {
         let session = LanguageModelSession(instructions: instructions)
-        let prompt = "Transcript:\n\(input)\n\nReturn the corrected transcript, or the same transcript unchanged if nothing is clearly wrong."
+        let prompt = "Transcript:\n\(before)\n\nList the clear word errors as {wrong, right} pairs, or an empty list if there are none."
+        let proposed: [Substitution]
         do {
-            let response = try await session.respond(to: prompt, generating: Corrected.self, options: GenerationOptions())
-            let out = response.content.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            return out == input ? .unchanged : .changed(out)
+            let response = try await session.respond(to: prompt, generating: Corrections.self, options: GenerationOptions())
+            proposed = response.content.substitutions
         } catch {
-            return .errored(String(describing: error))
+            return ClipResult(id: id, chars: before.count, before: before, accepted: [], rejected: [],
+                              after: before, errored: String(describing: error))
         }
+        var accepted: [Substitution] = []
+        var rejected: [(Substitution, RejectReason)] = []
+        var text = before
+        for sub in proposed {
+            if core(sub.wrong) == core(sub.right) {
+                rejected.append((sub, .punctuationOrCaseOnly)); continue   // differ only in punct/case/space
+            }
+            guard text.contains(sub.wrong) || before.contains(sub.wrong) else {
+                rejected.append((sub, .notInSource)); continue            // model didn't copy verbatim
+            }
+            accepted.append(sub)
+            text = text.replacingOccurrences(of: sub.wrong, with: sub.right)  // CODE performs the swap
+        }
+        return ClipResult(id: id, chars: before.count, before: before, accepted: accepted,
+                          rejected: rejected, after: text, errored: nil)
+    }
+
+    /// Letters+digits, lowercased — two sides that match here differ only in
+    /// punctuation / whitespace / case, which is NOT a word repair.
+    private static func core(_ s: String) -> String {
+        s.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(String.init).joined()
     }
 
     // MARK: - Report
 
     private static func report(_ results: [ClipResult]) {
-        var properNounLedger: [(before: String, after: String, clip: UUID)] = []
-        var changed = 0, unchanged = 0, errored = 0
+        var properNounLedger: [(String, String, UUID)] = []
+        var changedClips = 0, cleanClips = 0, erroredClips = 0
+        var acceptedTotal = 0, rejPunct = 0, rejNotFound = 0
 
         for r in results {
-            switch r.outcome {
-            case .unchanged:
-                unchanged += 1
-                NSLog("[PolishSpike] ---- clip \(r.id) · \(r.chars) chars · UNCHANGED (nothing to fix) ----")
-            case .errored(let msg):
-                errored += 1
-                NSLog("[PolishSpike] ---- clip \(r.id) · \(r.chars) chars · ERRORED: \(msg) ----")
-            case .changed(let after):
-                changed += 1
-                NSLog("[PolishSpike] ---- clip \(r.id) · \(r.chars)→\(after.count) chars · CHANGED ----")
-                NSLog("[PolishSpike] BEFORE: \(r.before)")
-                NSLog("[PolishSpike] AFTER : \(after)")
-                let blocks = wordChangeBlocks(before: r.before, after: after)
-                if blocks.isEmpty { NSLog("[PolishSpike] DIFF: (whitespace/punctuation only — no word blocks)") }
-                for (rem, add) in blocks {
-                    NSLog("[PolishSpike] DIFF: \"\(rem)\" → \"\(add)\"")
-                    if isProperNounish(rem) || isProperNounish(add) {
-                        properNounLedger.append((rem, add, r.id))
-                    }
+            if let err = r.errored {
+                erroredClips += 1
+                NSLog("[PolishSpike] ---- clip \(r.id) · \(r.chars) chars · ERRORED: \(err) ----")
+                continue
+            }
+            let changed = r.after != r.before
+            if changed { changedClips += 1 } else { cleanClips += 1 }
+            acceptedTotal += r.accepted.count
+            rejPunct += r.rejected.filter { $0.1 == .punctuationOrCaseOnly }.count
+            rejNotFound += r.rejected.filter { $0.1 == .notInSource }.count
+
+            NSLog("[PolishSpike] ---- clip \(r.id) · \(r.chars) chars · \(changed ? "CHANGED" : "UNCHANGED") · \(r.accepted.count) applied, \(r.rejected.count) rejected ----")
+            for s in r.accepted {
+                NSLog("[PolishSpike] APPLY:  \"\(s.wrong)\" → \"\(s.right)\"")
+                if isProperNounish(s.wrong) || isProperNounish(s.right) {
+                    properNounLedger.append((s.wrong, s.right, r.id))
                 }
+            }
+            for (s, reason) in r.rejected {
+                NSLog("[PolishSpike] REJECT[\(reason.rawValue)]: \"\(s.wrong)\" → \"\(s.right)\"")
+            }
+            if changed {
+                NSLog("[PolishSpike] BEFORE: \(r.before)")
+                NSLog("[PolishSpike] AFTER : \(r.after)")
             }
         }
 
@@ -148,53 +177,13 @@ enum MemoryPolishSpike {
         if properNounLedger.isEmpty {
             NSLog("[PolishSpike] (no proper nouns were changed)")
         } else {
-            for e in properNounLedger { NSLog("[PolishSpike] PN: \"\(e.before)\" → \"\(e.after)\"  (clip \(e.clip))") }
+            for e in properNounLedger { NSLog("[PolishSpike] PN: \"\(e.0)\" → \"\(e.1)\"  (clip \(e.2))") }
         }
-
-        // Throw-vs-length investigation (run-1 hypothesis: errors were clean
-        // short clips the model declined on — should now read UNCHANGED).
-        let erroredChars = results.compactMap { if case .errored = $0.outcome { return $0.chars } else { return nil } }
-        NSLog("[PolishSpike] ===== SUMMARY: \(changed) changed · \(unchanged) unchanged (clean) · \(errored) errored · \(properNounLedger.count) proper-noun edits =====")
-        if !erroredChars.isEmpty {
-            NSLog("[PolishSpike] errored clip lengths (chars): \(erroredChars.sorted())")
-        }
+        NSLog("[PolishSpike] ===== SUMMARY: \(changedClips) changed · \(cleanClips) clean · \(erroredClips) errored · \(acceptedTotal) swaps applied · rejected \(rejPunct) punct-only + \(rejNotFound) not-in-source · \(properNounLedger.count) proper-noun edits =====")
     }
 
-    /// Word-level change blocks via LCS — each block is (removed-run →
-    /// added-run). Compact, deterministic; good enough for a spike diff.
-    static func wordChangeBlocks(before: String, after: String) -> [(String, String)] {
-        let a = before.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        let b = after.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        let n = a.count, m = b.count
-        var dp = Array(repeating: Array(repeating: 0, count: m + 1), count: n + 1)
-        for i in stride(from: n - 1, through: 0, by: -1) {
-            for j in stride(from: m - 1, through: 0, by: -1) {
-                dp[i][j] = a[i] == b[j] ? dp[i + 1][j + 1] + 1 : max(dp[i + 1][j], dp[i][j + 1])
-            }
-        }
-        var i = 0, j = 0
-        var blocks: [(String, String)] = []
-        var rem: [String] = [], add: [String] = []
-        func flush() {
-            if !rem.isEmpty || !add.isEmpty {
-                blocks.append((rem.joined(separator: " "), add.joined(separator: " ")))
-                rem = []; add = []
-            }
-        }
-        while i < n && j < m {
-            if a[i] == b[j] { flush(); i += 1; j += 1 }
-            else if dp[i + 1][j] >= dp[i][j + 1] { rem.append(a[i]); i += 1 }
-            else { add.append(b[j]); j += 1 }
-        }
-        while i < n { rem.append(a[i]); i += 1 }
-        while j < m { add.append(b[j]); j += 1 }
-        flush()
-        return blocks
-    }
-
-    /// A change touches a proper noun if either side has a capitalized
-    /// multi-letter word other than "I" — over-inclusive on purpose so a name
-    /// change is never missed on the ledger.
+    /// Over-inclusive proper-noun flag: any capitalized multi-letter word other
+    /// than "I", so a name change can't slip past the ledger.
     static func isProperNounish(_ s: String) -> Bool {
         s.split(whereSeparator: { $0.isWhitespace }).contains { w in
             guard let f = w.first else { return false }
