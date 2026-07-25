@@ -191,6 +191,7 @@ struct EntryExpandedView: View {
     /// Drives in-place voice playback + the row's play/stop glyph (cycle 2/3).
     @ObservedObject private var audioPlayer = AudioPlayerService.shared
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
+    @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
 
     /// Topic names assigned to this memory. Was previously composed
     /// from `entry.topicNames` minus `removedTopics` plus `addedTopics` —
@@ -199,7 +200,10 @@ struct EntryExpandedView: View {
     private var currentTopics: [String] { entry.topicNames }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        // Append-FAB anchor edge follows the Left-Handed FAB preference. The
+        // `List` fills; the FAB is the only bottom-anchored child, so only it
+        // moves. See `FABHandedness`.
+        ZStack(alignment: FABHandedness.containerAlignment(leftHanded: fabHandednessLeft)) {
         // Detail screen renders as a `List` (not a `ScrollView + VStack`)
         // so the chronological capture stream rows can use Apple's native
         // `.swipeActions`. List + native swipe is the only configuration

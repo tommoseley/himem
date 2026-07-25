@@ -37,13 +37,13 @@ struct AppendFAB: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var alignment: Alignment {
-        fabHandednessLeft ? .bottomLeading : .bottomTrailing
+        FABHandedness.containerAlignment(leftHanded: fabHandednessLeft)
     }
     private var horizontalEdge: HorizontalAlignment {
-        fabHandednessLeft ? .leading : .trailing
+        FABHandedness.horizontalEdge(leftHanded: fabHandednessLeft)
     }
     private var anchorPaddingEdge: Edge.Set {
-        fabHandednessLeft ? .leading : .trailing
+        FABHandedness.paddingEdge(leftHanded: fabHandednessLeft)
     }
 
     var body: some View {

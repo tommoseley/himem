@@ -73,6 +73,7 @@
 		A100000206 /* AddMemoryToProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000206 /* AddMemoryToProjectSheet.swift */; };
 		A100000301 /* CaptureModality.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000301 /* CaptureModality.swift */; };
 		A100000302 /* AppendFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000302 /* AppendFAB.swift */; };
+		A1000003FA /* FABHandedness.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000003FA /* FABHandedness.swift */; };
 		A100000303 /* VoiceCaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000303 /* VoiceCaptureScreen.swift */; };
 		A100000304 /* NoteCaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000304 /* NoteCaptureScreen.swift */; };
 		A100000305 /* CaptureFlowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000305 /* CaptureFlowHost.swift */; };
@@ -348,6 +349,7 @@
 		B100000206 /* AddMemoryToProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddMemoryToProjectSheet.swift; sourceTree = "<group>"; };
 		B100000301 /* CaptureModality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureModality.swift; sourceTree = "<group>"; };
 		B100000302 /* AppendFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppendFAB.swift; sourceTree = "<group>"; };
+		B1000003FA /* FABHandedness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FABHandedness.swift; sourceTree = "<group>"; };
 		B100000303 /* VoiceCaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCaptureScreen.swift; sourceTree = "<group>"; };
 		B100000304 /* NoteCaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCaptureScreen.swift; sourceTree = "<group>"; };
 		B100000305 /* CaptureFlowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFlowHost.swift; sourceTree = "<group>"; };
@@ -753,6 +755,7 @@
 				B100000910 /* EditTextSheet.swift */,
 				B100000323 /* Linkify.swift */,
 				B100000302 /* AppendFAB.swift */,
+				B1000003FA /* FABHandedness.swift */,
 				B100000305 /* CaptureFlowHost.swift */,
 			);
 			path = Components;
@@ -1463,6 +1466,7 @@
 				A100000980 /* VideoPlayerSheet.swift in Sources */,
 				A100000201 /* MediaTile.swift in Sources */,
 				A100000302 /* AppendFAB.swift in Sources */,
+				A1000003FA /* FABHandedness.swift in Sources */,
 				A100000305 /* CaptureFlowHost.swift in Sources */,
 				A100000910 /* EditTextSheet.swift in Sources */,
 				A100000323 /* Linkify.swift in Sources */,
