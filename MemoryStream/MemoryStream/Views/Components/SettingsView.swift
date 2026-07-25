@@ -316,6 +316,25 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
 
+                    // Memory Polish §3 auto-correct spike (device-only tooling,
+                    // not a shipped feature). Runs the constrained on-device
+                    // ASR-repair pass over a natural sample of real clips and
+                    // logs before→after + diff + a proper-noun ledger to the
+                    // console (filter `[PolishSpike]`). See
+                    // `docs/design/Memory Polish · spec.md` §3.
+                    Button {
+                        Task { await MemoryPolishSpike.run() }
+                    } label: {
+                        HStack {
+                            Image(systemName: "wand.and.stars")
+                                .foregroundStyle(Crucible.Color.aiBlue)
+                            Text("Run Memory-Polish spike (§3)")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
                     Button {
                         AuthService.shared.debugResetOnboardingState()
                         showResetOnboardingAlert = true
