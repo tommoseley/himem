@@ -41,6 +41,17 @@ struct VoiceCaptureScreen: View {
     /// "VOICE" eyebrow. Tells the user the clips will append to that
     /// Memory rather than start a fresh one.
     let appendingTo: String?
+    /// How this capture was initiated. `.handsFree` (Siri) gets the recording
+    /// cap below; `.manual` (a composer the user is actively holding) never
+    /// does — a held recording is unbounded. See `CaptureSource`.
+    let captureSource: CaptureSource
+
+    /// Hands-free recording cap in minutes; `0` = No limit. Voice Settings.
+    @AppStorage("handsFreeRecordingLimitMinutes") private var handsFreeLimitMinutes = 10
+    /// Fires the auto-save exactly once when the cap is reached (the elapsed
+    /// tick is 10 Hz; without this the save would re-enter every 100 ms).
+    @State private var didHitCap = false
+    @ObservedObject private var captureRequests = CaptureRequestBus.shared
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var nextController: NextClipController
@@ -103,12 +114,14 @@ struct VoiceCaptureScreen: View {
         onFinish: @escaping (_ clips: [VoiceClipFragment], _ rollGroupId: UUID) -> Void,
         onCancel: @escaping () -> Void,
         speechService: SpeechService,
-        appendingTo: String? = nil
+        appendingTo: String? = nil,
+        captureSource: CaptureSource = .manual
     ) {
         self.onFinish = onFinish
         self.onCancel = onCancel
         self.speechService = speechService
         self.appendingTo = appendingTo
+        self.captureSource = captureSource
         self._nextController = StateObject(wrappedValue: NextClipController(handoff: speechService))
         // Initial phase is always `.breathing`. The Capture tutorial
         // surfaces (if it's going to) via the root-level orchestrator
@@ -207,6 +220,19 @@ struct VoiceCaptureScreen: View {
         }
         .onReceive(speechService.$audioLevel) { sample in
             ingest(sample: sample)
+        }
+        // Hands-free recording cap — auto-save at the limit (never discard).
+        // Held (manual) recordings are unbounded; see `shouldAutoSaveAtLimit`.
+        .onChange(of: recording.elapsed) { _, _ in
+            checkRecordingCap()
+        }
+        // "Hey Siri, stop recording" — stop-and-save any in-flight recording.
+        .onChange(of: captureRequests.stopRequested) { _, requested in
+            guard requested else { return }
+            captureRequests.stopRequested = false
+            if speechService.isRecording && !isFinalizing {
+                Task { await finishOrAbandon(saveResult: true) }
+            }
         }
     }
 
@@ -707,6 +733,25 @@ struct VoiceCaptureScreen: View {
     private var timerString: String {
         let total = Int(recording.elapsed)
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    /// Whether a hands-free recording has reached its cap and should auto-save.
+    /// Pure so the cap policy is unit-testable. `.manual` (held) is never
+    /// capped; `limitMinutes == 0` means No limit.
+    static func shouldAutoSaveAtLimit(source: CaptureSource, elapsed: TimeInterval, limitMinutes: Int) -> Bool {
+        guard source == .handsFree, limitMinutes > 0 else { return false }
+        return elapsed >= TimeInterval(limitMinutes) * 60
+    }
+
+    /// Auto-save when a hands-free recording hits its cap — mirrors the watch
+    /// wrist-off rule (`stop(save: true)`, never discards). Fires once.
+    private func checkRecordingCap() {
+        guard !didHitCap, speechService.isRecording, !isFinalizing else { return }
+        guard Self.shouldAutoSaveAtLimit(source: captureSource,
+                                         elapsed: recording.elapsed,
+                                         limitMinutes: handsFreeLimitMinutes) else { return }
+        didHitCap = true
+        Task { await finishOrAbandon(saveResult: true) }
     }
 
     private func startRecording() {

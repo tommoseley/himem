@@ -26,6 +26,11 @@ final class CaptureRequestBus: ObservableObject {
     /// `HiMem · evidence and context.md:143`, capture floats on
     /// every tab and returns to Clips on commit.
     @Published var pendingModality: CaptureModality? = nil
+    /// Set by `StopVoiceRecordingIntent` ("Hey Siri, stop recording in HiMem")
+    /// so the phone isn't the only way to stop a hands-free recording. The live
+    /// voice composer observes this and stops-and-saves (never discards). No-op
+    /// when no recording is in flight.
+    @Published var stopRequested: Bool = false
     private init() {}
 }
 
@@ -40,6 +45,25 @@ struct StartVoiceRecordingIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         CaptureRequestBus.shared.pendingVoiceRecord = true
         return .result(dialog: "Recording.")
+    }
+}
+
+// MARK: - Stop Voice Recording Intent
+
+/// "Hey Siri, stop recording in HiMem" — stops and saves the in-flight voice
+/// recording (never discards, same rule as watch wrist-off). `openAppWhenRun`
+/// so the intent runs in the app process and the in-memory `CaptureRequestBus`
+/// reaches the live composer; the app is already foreground while recording, so
+/// this doesn't yank the user anywhere.
+struct StopVoiceRecordingIntent: AppIntent {
+    static var title: LocalizedStringResource = "Stop recording in HiMem"
+    static var description: IntentDescription = "Stop and save the voice recording HiMem is capturing."
+    static var openAppWhenRun: Bool = true
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        CaptureRequestBus.shared.stopRequested = true
+        return .result(dialog: "Saved.")
     }
 }
 
@@ -95,6 +119,16 @@ struct HiMemShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Record a memory",
             systemImageName: "mic.fill"
+        )
+        AppShortcut(
+            intent: StopVoiceRecordingIntent(),
+            phrases: [
+                "Stop recording in \(.applicationName)",
+                "Stop the recording in \(.applicationName)",
+                "Finish recording in \(.applicationName)",
+            ],
+            shortTitle: "Stop recording",
+            systemImageName: "stop.fill"
         )
         AppShortcut(
             intent: CreateEntryIntent(),

@@ -192,6 +192,7 @@ struct HiMemTabView: View {
         .captureFlowHost(
             activeModality: $activeCaptureModality,
             speechService: speechService,
+            captureSource: captureSource,
             onCaptured: handleCapturedItem
         )
         .fullScreenCover(item: Binding(
