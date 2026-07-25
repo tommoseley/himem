@@ -79,11 +79,19 @@ public class MediaReference: NSManagedObject, Identifiable {
 }
 
 extension MediaReference {
-    /// Memories this clip is attached to, sorted by `linkedAt`
+    /// LIVE memories this clip is attached to, sorted by `linkedAt`
     /// descending — most-recently-attached first (matches the
     /// "Referenced in" list ordering on Clip Detail).
+    ///
+    /// A **recycled** memory is NOT a live connection: its edge is preserved
+    /// (so restoring the memory reunites them) but it must not surface here,
+    /// or a clip whose only memory is in the trash strands in Clips/All
+    /// advertising an invisible "Untitled memory" (TestFlight #4a, 2026-07-25).
+    /// `isRecycled` is a scalar `Bool` (nil reads `false` → live), so this is
+    /// nil-safe for CloudKit-synced records. Mirrors
+    /// `JournalEntry.projectsArray`, which already filters recycled.
     var memoriesArray: [JournalEntry] {
-        edgesArray.compactMap { $0.memory }
+        edgesArray.compactMap { $0.memory }.filter { !$0.isRecycled }
     }
 
     /// Edges attaching this clip to memories, sorted by `linkedAt`
@@ -102,10 +110,31 @@ extension MediaReference {
         memoriesArray
     }
 
-    /// Number of memories currently referencing this clip. Drives the
-    /// Clip Detail delete-warning copy ("This is attached to N memories").
+    /// Number of **live** memories referencing this clip — the connection
+    /// count. Drives "Evidence in N memories", delete-warning copy, and the
+    /// clip's connected/Unconnected read. Recycled memories don't count (see
+    /// `memoriesArray`), so a clip whose only memory is trashed reads as
+    /// Unconnected rather than advertising it.
     var referencingMemoryCount: Int {
+        memoriesArray.count
+    }
+
+    /// RAW edge count — every edge regardless of the memory's recycled state.
+    /// The P8 last-reference recycle/restore rule is defined on *pure edge
+    /// count at delete time* (`EntryLifecycleService.recycle`/`restore`), a
+    /// deliberate no-history design; it uses this, NOT the recycled-aware
+    /// `referencingMemoryCount`, so that lock is preserved unchanged.
+    var edgeCount: Int {
         (edges as? Set<MemoryClipEdge>)?.count ?? 0
+    }
+
+    /// Fetch predicate for "no live-memory connection" — the Unconnected lens.
+    /// An edge to a recycled memory (or a dangling edge with no memory) is not
+    /// a connection, so a clip whose only memory is trashed matches here and
+    /// surfaces on the Unconnected bench. Nil-safe on the optional `isRecycled`
+    /// (a NULL-flagged synced memory is live, so its clip is NOT unconnected).
+    static var noLiveMemoryConnectionPredicate: NSPredicate {
+        NSPredicate(format: "SUBQUERY(edges, $e, $e.memory != nil AND ($e.memory.isRecycled == NO OR $e.memory.isRecycled == nil)).@count == 0")
     }
 }
 

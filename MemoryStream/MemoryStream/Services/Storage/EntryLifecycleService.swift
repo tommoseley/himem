@@ -1212,7 +1212,7 @@ final class EntryLifecycleService {
             // arbiter has nothing to guard on this path).
             for edge in entry.edgesArray {
                 guard let clip = edge.clip else { continue }
-                if clip.referencingMemoryCount == 1 { // this memory is its only edge
+                if clip.edgeCount == 1 { // this memory is its only edge (raw P8 count)
                     clip.recycledAt = now
                 }
             }
@@ -1238,7 +1238,7 @@ final class EntryLifecycleService {
             // an accepted corner of the no-history design.
             for edge in entry.edgesArray {
                 guard let clip = edge.clip, clip.recycledAt != nil else { continue }
-                if clip.referencingMemoryCount == 1 {
+                if clip.edgeCount == 1 { // raw P8 count — symmetric with recycle
                     clip.recycledAt = nil
                 }
             }
