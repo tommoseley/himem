@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import UIKit
 
 struct EntryExpandedView: View {
     let entry: EntryDisplayModel
@@ -192,6 +193,16 @@ struct EntryExpandedView: View {
     @ObservedObject private var audioPlayer = AudioPlayerService.shared
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
+    /// The tab bar's contribution to this pushed page's bottom safe area.
+    /// The tab-shell FABs (Clips/Memories/Projects) are `TabView` siblings, so
+    /// SwiftUI never insets them for the tab bar — they anchor to the window's
+    /// safe area and float over the bar. This page is `List` content inside the
+    /// nav stack, so it DOES inherit the tab-bar inset and its append FAB sits
+    /// one tab-bar-height too high. We subtract that inset from the FAB's anchor
+    /// so it lands on the same edge as the tab-shell FABs. Measured (window
+    /// bottom subtracted from this page's bottom inset) so it holds across
+    /// devices/orientations rather than hardcoding a tab-bar height.
+    @State private var tabBarInset: CGFloat = 0
 
     /// Topic names assigned to this memory. Was previously composed
     /// from `entry.topicNames` minus `removedTopics` plus `addedTopics` —
@@ -199,11 +210,36 @@ struct EntryExpandedView: View {
     /// Topic changes now write straight through `ManageTopicsSheet`.
     private var currentTopics: [String] { entry.topicNames }
 
+    /// Tab-bar height = this page's bottom inset minus the window's (home
+    /// indicator). Zero if the window can't be read or there's no tab bar.
+    private static func tabBarInset(pageBottom: CGFloat) -> CGFloat {
+        let windowBottom = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets.bottom ?? 0
+        return max(0, pageBottom - windowBottom)
+    }
+
     var body: some View {
         // Append-FAB anchor edge follows the Left-Handed FAB preference. The
         // `List` fills; the FAB is the only bottom-anchored child, so only it
         // moves. See `FABHandedness`.
         ZStack(alignment: FABHandedness.containerAlignment(leftHanded: fabHandednessLeft)) {
+        // Measure this page's bottom safe-area inset (includes the tab bar) and
+        // subtract the window's (home-indicator only) to recover the tab-bar
+        // height, so the append FAB can drop to the tab-shell FABs' edge. Read
+        // off a stable full-bleed layer (not the FAB, which the offset moves)
+        // to avoid a measure→offset feedback loop.
+        Color.clear
+            .allowsHitTesting(false)
+            .background(GeometryReader { proxy in
+                Color.clear
+                    .onAppear { tabBarInset = Self.tabBarInset(pageBottom: proxy.safeAreaInsets.bottom) }
+                    .onChange(of: proxy.safeAreaInsets.bottom) { _, v in
+                        tabBarInset = Self.tabBarInset(pageBottom: v)
+                    }
+            })
         // Detail screen renders as a `List` (not a `ScrollView + VStack`)
         // so the chronological capture stream rows can use Apple's native
         // `.swipeActions`. List + native swipe is the only configuration
@@ -491,6 +527,9 @@ struct EntryExpandedView: View {
                         onTap: { showAddExistingClips = true }
                     )
                 )
+                // Drop the FAB by the tab-bar inset so it lands on the same
+                // edge as the tab-shell FABs (see `tabBarInset`).
+                .padding(.bottom, -tabBarInset)
             }
         }
         // Overlap fix (`Memory Detail · unified editing model.md` §"Adding
