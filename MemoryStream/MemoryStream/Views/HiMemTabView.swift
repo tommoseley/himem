@@ -31,6 +31,11 @@ struct HiMemTabView: View {
     @State private var selection: Tab = .memories
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
     @State private var activeCaptureModality: CaptureModality? = nil
+    /// How the in-flight capture was initiated. `.handsFree` (Siri) forces the
+    /// completed capture onto the bench regardless of the visible tab — ad-hoc
+    /// capture is never forced into a memory (locked invariant). Set at each
+    /// capture-initiation point; reset after the capture is handled.
+    @State private var captureSource: CaptureSource = .manual
     /// Non-nil while the Clips status sheet is presented (Active
     /// Navigation Tap → sheet per `CLAUDE.md` §Phone, locked July 10
     /// 2026). Snapshot fields carried by the enum so the sheet reads
@@ -151,6 +156,7 @@ struct HiMemTabView: View {
                     // pill → the search-to-add sheet, via the request bus).
                     AppendFAB(
                         onSelect: { modality in
+                            captureSource = .manual // FAB = user-initiated
                             activeCaptureModality = modality
                         },
                         accessibilityLabel: currentFabAccessibilityLabel,
@@ -163,6 +169,7 @@ struct HiMemTabView: View {
                 case .dropOnBench, .createMemory:
                     AppendFAB(
                         onSelect: { modality in
+                            captureSource = .manual // FAB = user-initiated
                             activeCaptureModality = modality
                         },
                         accessibilityLabel: currentFabAccessibilityLabel
@@ -288,6 +295,7 @@ struct HiMemTabView: View {
         .onChange(of: captureRequests.pendingVoiceRecord) { _, pending in
             if pending {
                 captureRequests.pendingVoiceRecord = false
+                captureSource = .handsFree // Siri → ad-hoc, lands on bench
                 activeCaptureModality = .voice
             }
         }
@@ -307,10 +315,12 @@ struct HiMemTabView: View {
             coachmarks.armSession()
             if captureRequests.pendingVoiceRecord {
                 captureRequests.pendingVoiceRecord = false
+                captureSource = .handsFree // Siri cold-launch → ad-hoc, lands on bench
                 DispatchQueue.main.async { activeCaptureModality = .voice }
             }
             if let modality = captureRequests.pendingModality {
                 captureRequests.pendingModality = nil
+                captureSource = .manual
                 DispatchQueue.main.async { activeCaptureModality = modality }
             }
             // Evaluate the coachmark for the cold-launch landing tab
@@ -323,6 +333,7 @@ struct HiMemTabView: View {
         .onChange(of: captureRequests.pendingModality) { _, modality in
             if let modality {
                 captureRequests.pendingModality = nil
+                captureSource = .manual
                 activeCaptureModality = modality
             }
         }
@@ -413,7 +424,16 @@ struct HiMemTabView: View {
     /// output turns into a `JournalEntry`. On Projects (inside a
     /// project), same but with a project association.
     private func handleCapturedItem(_ item: CapturedItem) {
-        switch currentIntent {
+        // Route by the *source-aware* intent, not the tab-only `currentIntent`
+        // (which drives the FAB affordance): a hands-free/Siri capture always
+        // lands on the bench, never a forced memory, regardless of the tab.
+        let landing = CaptureLandingRouter.route(
+            tab: routerTab(for: selection),
+            projectContext: projectsNav.currentProjectId,
+            source: captureSource
+        )
+        defer { captureSource = .manual } // reset for the next capture
+        switch landing {
         case .dropOnBench:
             PhoneCaptureBenchDispatcher.dispatch(item)
             // "The new clip drops into the list already in view
