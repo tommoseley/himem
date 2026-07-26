@@ -196,6 +196,40 @@ struct ArrivedClipMaterializerTests {
         }
     }
 
+    // MARK: - Migration = materializeAll runs on every bench appear (idempotent)
+
+    /// The launch-migration contract: `materializeAll` runs on EVERY bench
+    /// appear, so it must converge. A first pass migrates the pre-existing
+    /// transcribed clips; a second pass (next appear) materializes nothing new
+    /// and mints no duplicates — the "runs every appear" safety.
+    @Test func materializeAll_isIdempotentAcrossAppears() throws {
+        let manifest = InboxManifest.shared
+        let snapshot = manifest.clips
+        let storage = StorageService(inMemory: true)
+        let ctx = storage.viewContext
+        defer {
+            for c in manifest.clips where !snapshot.contains(where: { $0.clipId == c.clipId }) {
+                manifest.remove(clipId: c.clipId)
+            }
+        }
+        let ids = (0..<3).map { _ in UUID() }
+        for id in ids {
+            manifest.acceptClip(InboxClip(
+                clipId: id, capturedAt: Date(), duration: 2, transcript: "t",
+                latitude: nil, longitude: nil, source: "watch",
+                audioFilename: "m-\(id.uuidString).m4a",
+                transcriptionAttempted: true, rollGroupId: nil, status: .transcribed))
+        }
+
+        let first = ArrivedClipMaterializer.materializeAll(in: ctx, moveAudio: { _ in true })
+        #expect(first == 3, "first appear migrates all pre-existing transcribed clips")
+        let second = ArrivedClipMaterializer.materializeAll(in: ctx, moveAudio: { _ in true })
+        #expect(second == 0, "second appear is a no-op — nothing left to migrate")
+
+        let total = try ctx.count(for: NSFetchRequest<MediaReference>(entityName: "MediaReference"))
+        #expect(total == 3, "exactly 3 refs — no duplicates across two passes")
+    }
+
     /// The accidental-clip derivation: a transcribed clip with an EMPTY
     /// transcript still materializes — the empty-transcript ref IS the
     /// accidental signal (design decision #1, derived-from-store).

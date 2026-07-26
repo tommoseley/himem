@@ -28,8 +28,12 @@ This *derives* the state from position rather than storing a flag that can disag
 2. **`reviewed` per-device** → stays per-device (already is); flag carried in migration; cross-device New-dot inconsistency logged as known. **No scope expansion to sync it.**
 3. **Watch redelivery** → the manifest **tombstone gate survives**. A materialized ref can be deleted (recycled → purged), so it cannot be the redelivery dedup marker; the manifest is **retained purely as a tombstone ledger** (acceptable residue — never a metadata source of truth).
 
-## Sequence
-- **A** · materialize-on-arrival (zero-edge ref when transcription completes; manifest active row → removed; in-flight + tombstones stay).
-- **B** · bench reads refs (synth-adapter; reactivity swap).
-- **C** · placement → `createEdge` on the existing ref; **delete** `placeInboxClip` / `createMemoryFromInboxClip` + the audio-move blocks.
-- **migration** · one-shot launch migration of clips in existing manifests → refs, `id == clipId` idempotency key, carry `reviewed`.
+## Sequence (all landed 2026-07-25, branch `clip-sync-single-source`)
+- **A** ✅ `ArrivedClipMaterializer` — materialize-on-arrival (zero-edge ref `id == clipId` when transcription completes; manifest active row → `removeBatch` tombstone; in-flight + tombstones stay). Audio move injectable at the boundary. Commit `f938dbc`, 9 money tests.
+- **B** ✅ bench reads refs — `SessionListView.composeBenchClips` unions in-flight manifest rows with synth-mapped zero-edge refs (`syntheticClip`), deduped by clipId (ref wins). Reactivity: recompute on manifest change, arrivals change, AND `NSManagedObjectContextObjectsDidChange`. `materializeAll` runs in `onAppear` before first render. `WatchSessionDelegate` materializes on transcription-complete (bench-open-independent). Commit `8b1f703`.
+- **C** ✅ placement edges the existing ref — `createMemory` / `appendToExistingMemory` / `PlaceClipSheet.commit` now materialize-then-`attachExistingClips` (or `createMemoryFromExistingClips`). Deleted `placeInboxClip` / `createMemoryFromInboxClip` / `moveInboxAudioIfNeeded` + the sheet move-loops + `dumpPathDiagnostic`. Commit `20ca598`, 4 money tests. **The double-ref bug (B-without-C) is the thing C exists to prevent.**
+- **migration** ✅ **`materializeAll` IS the migration** — it runs on every bench `onAppear`, so the first post-upgrade Clips-tab open sweeps every pre-existing `.transcribed` manifest clip into a ref (`id == clipId`, `reviewed` carried), idempotent thereafter (`materializeAll_isIdempotentAcrossAppears`). Kept OFF the cold-launch path (per the 400ms target) — pre-existing clips still render on the bench from the manifest union until that first sweep, so no data is lost in the interim; new clips sync immediately via the arrival-materialize wiring.
+
+## Follow-ups (flagged, not done in this PR)
+- `createMemoryFromVoiceClips` + `appendClips` are now **production-dead** (only test-covered) after C rewired their callers. Recommend removing them with `CreateMemoryFromClipsAssemblyTests` / `EntryLifecycleServiceAppendClipsTests` in a follow-up.
+- Pre-existing red on the branch (NOT from this work, reproduced on the A-only state which touches no `ProcessingEngine` code): `ExistingMentionsRefinementTests.processEntry_sendsExistingMentionValuesToAnalyzer` + `…_dedupedCaseInsensitively` — `processEntry` sends an empty existing-mentions list. Worth its own bug-first cycle.
