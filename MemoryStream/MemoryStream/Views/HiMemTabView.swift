@@ -208,6 +208,19 @@ struct HiMemTabView: View {
             }
             .presentationBackground(.clear)
         }
+        .onChange(of: coachmarks.restorePending) { _, pending in
+            // F2b: "Show me around" was tapped in the Learn hub — it reset the
+            // seen flags and set this flag. Wait for the hub's navigation pop
+            // to settle before presenting the coachmark's fullScreenCover (a
+            // same-frame present races the dismiss and drops the coachmark),
+            // then re-fire the CURRENT tab's coachmark. Other tabs re-coach on
+            // their next first visit via the ordinary `tryFire` gate.
+            guard pending else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                guard coachmarks.restorePending else { return }
+                coachmarks.consumeRestore(currentTab: coachmarkKind(for: selection))
+            }
+        }
         .sheet(isPresented: Binding(
             get: { clipsStatusSheet != nil },
             set: { presented in if !presented { clipsStatusSheet = nil } }
@@ -343,13 +356,19 @@ struct HiMemTabView: View {
     /// Coachmark trigger dispatch per `Tutorials · triggers spec.md`
     /// §"Per-tab coachmark on first arrival." Applies the four
     /// guardrails via `CoachmarkOrchestrator.tryFire`.
-    private func evaluateCoachmark(for tab: Tab) {
-        let kind: CoachmarkOrchestrator.Kind
+    /// The coachmark `Kind` for a tab — the wiring symmetry the orchestrator's
+    /// `Kind` order mirrors. Shared by first-arrival firing and the "Show me
+    /// around" restore re-fire (F2b).
+    private func coachmarkKind(for tab: Tab) -> CoachmarkOrchestrator.Kind {
         switch tab {
-        case .clips:    kind = .clips
-        case .memories: kind = .memories
-        case .projects: kind = .projects
+        case .clips:    return .clips
+        case .memories: return .memories
+        case .projects: return .projects
         }
+    }
+
+    private func evaluateCoachmark(for tab: Tab) {
+        let kind = coachmarkKind(for: tab)
         let suppressed = (tab == .clips) && justArrivedFromCapture
         coachmarks.tryFire(
             kind,
