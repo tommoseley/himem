@@ -232,9 +232,13 @@ struct ExistingMemoryPickerView: View {
         return parts.joined(separator: " ").lowercased()
     }
 
+    /// The memory's name for the "Add to a memory" picker. Routes through the
+    /// single canonical resolver `displayTitle` (2026-07-26) — the same one the
+    /// Memories list uses — so an un-organized memory reads with its real
+    /// derived name, never the bogus "Untitled memory" placeholder. This was a
+    /// second, independent title resolution that drifted from the list's.
     static func rowTitle(_ entry: JournalEntry) -> String {
-        let t = entry.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return t.isEmpty ? "Untitled memory" : t
+        entry.displayTitle
     }
 
     static func shortDateString(_ date: Date) -> String {

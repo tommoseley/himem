@@ -1462,8 +1462,9 @@ struct ReferencedInLine: View {
     }
 
     private var memoryTitles: [String] {
-        ref.referencingMemoriesSortedByLinkedAtDesc
-            .map { $0.title?.isEmpty == false ? $0.title! : "Untitled memory" }
+        // Single canonical resolver (2026-07-26) — see ExistingMemoryPickerView
+        // .rowTitle. Never the "Untitled memory" placeholder.
+        ref.referencingMemoriesSortedByLinkedAtDesc.map(\.displayTitle)
     }
 }
 

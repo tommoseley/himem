@@ -33,13 +33,18 @@ struct JournalEntryTitleTests {
         #expect(entry.displayTitle == "AI generated title")
     }
 
-    @Test func displayTitle_usesPlaceholder_whenContentEmpty() throws {
+    @Test func displayTitle_emptyMemory_fallsBackToDate_notPlaceholderNoun() throws {
         let storage = StorageService(inMemory: true)
         let entry = try storage.createEntry(content: "", inputType: .voiceInApp)
         try storage.viewContext.save()
 
-        // No content, no title → placeholder fallback per input type.
-        #expect(entry.displayTitle == "Hands-free capture")
+        // 2026-07-26 ruling (Tom): an un-organized, empty memory falls back to
+        // its creation DATE — the one honest, distinguishing thing we know —
+        // never a placeholder noun ("Hands-free capture" told the user nothing
+        // and didn't distinguish one memory from the next). One chain, no
+        // branch for emptiness.
+        #expect(entry.displayTitle == JournalEntry.dateFallbackTitle(from: entry.createdAt))
+        #expect(entry.displayTitle != "Hands-free capture")
     }
 
     @Test func displayTitle_prefersInferenceSummary_overContent() throws {

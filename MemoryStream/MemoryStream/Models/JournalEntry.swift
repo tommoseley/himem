@@ -107,12 +107,21 @@ extension JournalEntry {
         if let derived = Self.derivedTitle(from: content), !derived.isEmpty {
             return derived
         }
-        switch inputTypeEnum {
-        case .siri, .voiceInApp: return "Hands-free capture"
-        case .typed: return "Journal entry"
-        case .camera: return "Photo / Video capture"
-        case .composed: return "Memory"
-        }
+        // Nothing to derive → the memory's creation date. It's the only thing
+        // we honestly know about an un-organized, empty memory, and the one
+        // thing that makes it findable among its siblings. One chain, no branch
+        // for emptiness, no placeholder noun — a type-noun ("Voice memory")
+        // tells the user nothing they can't already see and doesn't
+        // distinguish one memory from the next (Tom, 2026-07-26).
+        return Self.dateFallbackTitle(from: createdAt)
+    }
+
+    /// The date-only fallback label for a memory with no derivable title —
+    /// the single terminal step of `displayTitle`. Locale-aware, no time (a
+    /// same-day collision is disambiguated with a clip count if it ever proves
+    /// ambiguous in the picker — not pre-solved with a noun).
+    static func dateFallbackTitle(from date: Date?) -> String {
+        (date ?? Date()).formatted(date: .abbreviated, time: .omitted)
     }
 
     /// Characters that ASR sometimes emits at the start of a transcript
