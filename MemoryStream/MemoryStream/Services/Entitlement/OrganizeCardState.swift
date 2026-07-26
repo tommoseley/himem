@@ -19,4 +19,9 @@ import Foundation
 enum OrganizeCardState: Equatable {
     case idle
     case reorganize(newClipCount: Int)
+    /// A previous organize attempt failed and produced no pass (Ruling 2,
+    /// 2026-07-25). An honest, retryable card — never a silent reset to idle.
+    /// `offline` picks the copy ("Tap to try again." vs "try again when you're
+    /// back online"). Tapping re-runs organize; no auto-retry.
+    case failed(offline: Bool)
 }

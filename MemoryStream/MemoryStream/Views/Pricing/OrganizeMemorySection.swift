@@ -28,6 +28,10 @@ struct OrganizeMemorySection: View {
     var onOrganize: () -> Void
 
     @ObservedObject private var entitlement = Entitlement.shared
+    /// Drives the failed-state copy variant ("try again" vs "try again when
+    /// you're back online") from the CURRENT connection, so the honest failure
+    /// tells the user whether a retry can succeed right now.
+    @ObservedObject private var connectivity = ConnectivityMonitor.shared
     @FetchRequest private var entries: FetchedResults<JournalEntry>
 
     /// Reference to the currently-presented review sheet host, if
@@ -84,11 +88,26 @@ struct OrganizeMemorySection: View {
         entry?.summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
+    /// Whether the no-pass state is a FAILURE (retryable) rather than idle:
+    /// true iff the latest processing task ended `.failed`. Pure + `static` so
+    /// the Ruling-2 money test can exercise it without a View. Callers guard
+    /// `pass == nil` first (a committed pass always wins).
+    static func failedStateApplies(latestTaskStatus: ProcessingTask.Status?) -> Bool {
+        latestTaskStatus == .failed
+    }
+
     /// Single source of truth for what to render. Every branch in the
     /// body reads `aiState`; nothing else mirrors the model.
     private var aiState: AIState {
         guard let entry else { return .missing }
-        guard let pass else { return .idle }
+        guard let pass else {
+            // No committed pass. If the last organize attempt FAILED, show the
+            // honest retryable failure — never silent idle (Ruling 2).
+            if Self.failedStateApplies(latestTaskStatus: entry.latestProcessingTask()?.statusEnum) {
+                return .failed(offline: !connectivity.isConnected)
+            }
+            return .idle
+        }
         if pass.isReviewed {
             return .organized(pass: pass, entry: entry, stale: isStale)
         }
@@ -105,6 +124,8 @@ struct OrganizeMemorySection: View {
                 EmptyView()
             case .idle:
                 OrganizeMemoryCard(state: .idle, onOrganize: onOrganize, isProcessing: isProcessing)
+            case .failed(let offline):
+                OrganizeMemoryCard(state: .failed(offline: offline), onOrganize: onOrganize, isProcessing: isProcessing)
             case .draftReviewing(let pass, _, _):
                 organizedRow(pass: pass)
             case .organized(let pass, let entry, let stale):
@@ -467,6 +488,11 @@ struct OrganizeMemorySection: View {
 private enum AIState {
     case missing
     case idle
+    /// A previous organize attempt failed and produced no `OrganizePass`
+    /// (on-device refusal, timeout, or offline with no cloud). Ruling 2
+    /// (2026-07-25): show an honest, retryable state — never reset to idle,
+    /// which reads as "the tap did nothing." `offline` picks the copy variant.
+    case failed(offline: Bool)
     case draftReviewing(pass: OrganizePass, entry: JournalEntry, kind: DraftKind)
     case organized(pass: OrganizePass, entry: JournalEntry, stale: Bool)
 }

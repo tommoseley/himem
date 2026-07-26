@@ -30,7 +30,59 @@ struct OrganizeMemoryCard: View {
             idleCard
         case .reorganize(let count):
             reorganizeCallout(newClipCount: count)
+        case .failed(let offline):
+            failedCard(offline: offline)
         }
+    }
+
+    // MARK: - Failed (retryable)
+
+    /// Ruling 2 (2026-07-25): an organize that produced no pass shows this
+    /// honest, retryable card instead of resetting to idle. Copy carries NO
+    /// blame and never surfaces "unsafe"/"flagged"/"sensitive" — a refusal is
+    /// Apple's judgment, not ours, and naming it in a memory-keeper is a
+    /// betrayal. Tapping re-runs organize.
+    private func failedCard(offline: Bool) -> some View {
+        Button(action: onOrganize) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Crucible.Color.aiBlue)
+                        .frame(width: 36, height: 36)
+                    if isProcessing {
+                        ProgressView().controlSize(.regular).tint(.white)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(isProcessing ? "Working…" : "Couldn't organize this one")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Crucible.Color.ink)
+                    Text(isProcessing
+                         ? "Drafting a title, summary, and topics on your device."
+                         : (offline ? "Try again when you're back online."
+                                    : "Tap to try again."))
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Crucible.Color.ink3)
+                        .lineSpacing(2)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Crucible.Color.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Crucible.Color.hairline, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .disabled(isProcessing)
     }
 
     // MARK: - Idle

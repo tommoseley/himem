@@ -67,12 +67,14 @@ struct ProcessingEngineFallbackTests {
         }
     }
 
-    /// Money test for the "stuck on Queued / Processing" report. When the
-    /// cloud call fails (weak connection, server unreachable), the engine
-    /// MUST fall back to local extraction so the entry isn't left in a
-    /// half-state. Task ends `.completed`; entities exist with
-    /// `processingMethod == "local"`.
-    @Test func processEntry_cloudFailure_fallsBackToLocal() async throws {
+    /// Money test — Ruling 2 (2026-07-25): when the cloud call fails and no
+    /// OrganizePass can be produced, the organize must leave an HONEST,
+    /// RETRYABLE failure (`.failed`), NOT a silent `.completed` that resets the
+    /// Memory Detail card to idle (a tap that looks like a no-op). Best-effort
+    /// local mentions are still extracted (`processingMethod == "local"`), but
+    /// there is no OrganizePass and the task reads `.failed`.
+    /// (Supersedes the old "falls back to local, ends .completed" expectation.)
+    @Test func processEntry_cloudFailure_leavesRetryableFailure() async throws {
         let storage = StorageService(inMemory: true)
         let engine = ProcessingEngine(
             storage: storage,
@@ -96,12 +98,13 @@ struct ProcessingEngineFallbackTests {
         let request = NSFetchRequest<ProcessingTask>(entityName: "ProcessingTask")
         request.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
         let refreshedTask = try storage.viewContext.fetch(request).first
-        #expect(refreshedTask?.statusEnum == .completed)
+        #expect(refreshedTask?.statusEnum == .failed, "no OrganizePass produced → honest retryable failure, not silent .completed")
+        #expect(entry.latestOrganizePass == nil)
 
         let entityRequest = NSFetchRequest<ExtractedEntity>(entityName: "ExtractedEntity")
         entityRequest.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
         let entities = try storage.viewContext.fetch(entityRequest)
-        #expect(!entities.isEmpty)
+        #expect(!entities.isEmpty, "best-effort local mentions are still extracted")
         #expect(entities.allSatisfy { $0.processingMethod == "local" })
     }
 
@@ -668,5 +671,96 @@ struct ProcessingEngineFallbackTests {
         }()
         #expect(postPassCount == 1)
         #expect(entry.latestOrganizePass?.suggestedTitle == priorTitle)
+    }
+
+    // MARK: - Guardrail rulings (2026-07-25)
+
+    /// On-device organizer that always trips Apple's safety guardrail.
+    private struct RefusingOrganizer: Organizer {
+        func organize(content: String, existingTopics: [String], existingMentions: [String]) async throws -> ClaudeAPIService.AnalysisResult {
+            throw OnDeviceOrganizer.OrganizerError.safetyRefusal
+        }
+    }
+
+    /// Records whether the cloud analyzer was invoked — lets a test prove a
+    /// refusal never sends content off-device.
+    private final class SpyAnalyzer: EntryAnalyzer, @unchecked Sendable {
+        var calls = 0
+        func analyzeEntry(_ text: String, existingTopics: [String], existingMentions: [String], tier: String, action: String) async throws -> ClaudeAPIService.AnalysisResult {
+            calls += 1
+            throw ThrowingAnalyzer.StubError()
+        }
+    }
+
+    private func latestTask(_ storage: StorageService, _ entry: JournalEntry) throws -> ProcessingTask? {
+        let req = NSFetchRequest<ProcessingTask>(entityName: "ProcessingTask")
+        req.predicate = NSPredicate(format: "entryId == %@", entry.id as CVarArg)
+        req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+        return try storage.viewContext.fetch(req).first
+    }
+
+    /// Ruling 1: an on-device safety refusal must NEVER trigger a cloud send —
+    /// the most private content must not get the least private handling. Free +
+    /// online + on-device refusal → cloud analyzer untouched, honest retryable
+    /// failure, no OrganizePass.
+    @Test func safetyRefusal_neverInvokesCloud() async throws {
+        let storage = StorageService(inMemory: true)
+        let spy = SpyAnalyzer()
+        let engine = ProcessingEngine(
+            storage: storage,
+            analyzer: spy,
+            onDeviceOrganizer: RefusingOrganizer(),
+            localExtractor: StubEntityExtractor.person("Dad"),
+            useOnDevice: true,
+            hasAvailableAI: { true },
+            isPlus: { false }
+        )
+        let entry = try storage.createEntry(content: "A private reflection about my father's passing.", inputType: .typed)
+        _ = try storage.createProcessingTask(for: entry)
+
+        await engine.processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+
+        #expect(spy.calls == 0, "a safety refusal must never send content to the cloud")
+        let task = try latestTask(storage, entry)
+        #expect(task?.statusEnum == .failed, "refusal leaves an honest, retryable failure")
+        #expect(entry.latestOrganizePass == nil, "no OrganizePass on a refusal")
+    }
+
+    /// Ruling 2: a failed organize is retryable — re-running produces a real
+    /// organize (pass + completed), not a permanent dead end.
+    @Test func failedOrganize_retrySucceeds() async throws {
+        let storage = StorageService(inMemory: true)
+        let entry = try storage.createEntry(content: "Met with Sarah about the garden.", inputType: .typed)
+
+        // 1. A failed organize (cloud throws, no on-device).
+        _ = try storage.createProcessingTask(for: entry)
+        await ProcessingEngine(storage: storage, analyzer: ThrowingAnalyzer(),
+                               localExtractor: StubEntityExtractor.person("Sarah"),
+                               useOnDevice: false).processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+        let failed = try latestTask(storage, entry)
+        #expect(failed?.statusEnum == .failed)
+        #expect(entry.latestOrganizePass == nil)
+
+        // 2. Retry (as the card's tap would): fresh task + a succeeding pass.
+        _ = try storage.createProcessingTask(for: entry)
+        await ProcessingEngine(storage: storage,
+                               analyzer: SuccessfulAnalyzer(title: "Garden meeting", entityValue: "Sarah", topic: "Garden"),
+                               localExtractor: LocalEntityExtractor(), useOnDevice: false).processEntry(entry)
+        storage.viewContext.refreshAllObjects()
+        let retried = try latestTask(storage, entry)
+        #expect(retried?.statusEnum == .completed, "retry runs to completion")
+        #expect(entry.latestOrganizePass != nil, "retry produced a real organize")
+    }
+
+    /// Ruling 2 state derivation: no-pass + a `.failed` task → the honest
+    /// failure state, never idle. Only `.failed` qualifies.
+    @Test func failedStateApplies_onlyForFailedTask() {
+        #expect(OrganizeMemorySection.failedStateApplies(latestTaskStatus: .failed))
+        #expect(!OrganizeMemorySection.failedStateApplies(latestTaskStatus: .completed))
+        #expect(!OrganizeMemorySection.failedStateApplies(latestTaskStatus: .pending))
+        #expect(!OrganizeMemorySection.failedStateApplies(latestTaskStatus: .processing))
+        #expect(!OrganizeMemorySection.failedStateApplies(latestTaskStatus: nil))
     }
 }
