@@ -30,6 +30,9 @@ struct SessionListView: View {
     /// part of multi-select (they keep their own Add / Not-together).
     @ObservedObject var selection: ClipsSelection
     @Environment(\.managedObjectContext) private var context
+    /// Backing-aware transcript writes for bench clips (P0-3): a materialized
+    /// clip is a ref, so `Transcribe again` must land on the ref, never no-op.
+    private let lifecycle = EntryLifecycleService()
 
     @State private var sessions: [ClipGroup] = []
     /// The unified bench clip list (P0-3): in-flight manifest rows UNION the
@@ -1196,7 +1199,10 @@ struct SessionListView: View {
         retryingClipIds.remove(clipId)
         switch outcome {
         case .transcribed(let result) where !result.text.isEmpty:
-            InboxManifest.shared.recordTranscriptionAttempt(clipId: clipId, transcript: result.text)
+            // P0-3: land the re-transcription on whichever store backs the
+            // clip — a materialized clip is a ref, so the manifest path alone
+            // would silently drop the retry result.
+            lifecycle.writeBenchClipTranscript(clipId: clipId, transcript: result.text)
             clipRetryStatus[clipId] = nil
             return
         case .transcribed(let result):

@@ -81,6 +81,45 @@ struct ClipPlacementEdgesExistingRefTests {
         #expect(ref.referencingMemoryCount == 1, "the ref belongs to the target memory")
     }
 
+    // MARK: - Backing-aware transcript write (non-negotiable #2 — no silent no-op)
+
+    /// Retry / edit on a MATERIALIZED bench clip must land on the ref — the
+    /// manifest path (`recordTranscriptionAttempt`) would silently no-op since
+    /// the clip is no longer a manifest row.
+    @Test func writeBenchTranscript_materializedClip_landsOnRef() throws {
+        let (storage, service) = makeService()
+        let ctx = storage.viewContext
+        let clipId = UUID()
+        let ref = try seedRef(id: clipId, in: ctx)
+        #expect(ref.transcript == "hello there")
+
+        service.writeBenchClipTranscript(clipId: clipId, transcript: "corrected words")
+        #expect(ref.transcript == "corrected words", "the edit landed on the ref, not a no-op")
+    }
+
+    /// A clip with NO backing ref (still an in-flight manifest row) routes to the
+    /// manifest — the writer never drops the write on either backing.
+    @Test func writeBenchTranscript_unmaterializedClip_routesToManifest() throws {
+        let (_, service) = makeService()
+        let manifest = InboxManifest.shared
+        let snapshot = manifest.clips
+        let clipId = UUID()
+        defer {
+            for c in manifest.clips where !snapshot.contains(where: { $0.clipId == c.clipId }) {
+                manifest.remove(clipId: c.clipId)
+            }
+        }
+        manifest.acceptClip(InboxClip(
+            clipId: clipId, capturedAt: Date(), duration: 2, transcript: "",
+            latitude: nil, longitude: nil, source: "watch", audioFilename: "x.m4a",
+            transcriptionAttempted: false, rollGroupId: nil, status: .transcribing))
+
+        service.writeBenchClipTranscript(clipId: clipId, transcript: "from retry")
+        let row = try #require(manifest.clips.first { $0.clipId == clipId })
+        #expect(row.transcript == "from retry", "routed to the manifest row (no ref exists)")
+        #expect(row.transcriptionAttempted, "manifest attempt recorded")
+    }
+
     /// The multi-clip session case: N bench refs → one new memory, exactly N
     /// edges, zero new refs (the whole-session Start-a-Memory path).
     @Test func newMemory_fromSession_attachesAllRefs_mintsNone() throws {

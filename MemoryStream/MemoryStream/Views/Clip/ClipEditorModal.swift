@@ -656,7 +656,9 @@ struct ClipEditorModal: View {
     private func commitContent(_ newValue: String) {
         switch source {
         case .inbox(let clip):
-            InboxManifest.shared.recordTranscriptionAttempt(clipId: clip.clipId, transcript: newValue)
+            // P0-3: a materialized bench clip is a ref — route through the
+            // backing-aware writer so the edit lands (never a silent no-op).
+            lifecycle.writeBenchClipTranscript(clipId: clip.clipId, transcript: newValue)
         case .managed(let ref):
             if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
                 lifecycle.updateClipDescription(refId: ref.id, description: newValue)

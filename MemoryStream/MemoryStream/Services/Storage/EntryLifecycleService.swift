@@ -1111,6 +1111,25 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Persist a BENCH clip's transcript regardless of backing (P0-3). A
+    /// materialized clip is a zero-edge `MediaReference` → `updateClipTranscript`
+    /// (which for an edge-less ref just sets `transcript` + `lastEditedAt`); an
+    /// in-flight clip is still a manifest row → `recordTranscriptionAttempt`.
+    /// Never a silent no-op — the bench write paths (✎ Edit, Transcribe again)
+    /// must land after materialize (non-negotiable #2). Cleaning matches the
+    /// manifest path so both backings normalize leading ASR noise identically.
+    @MainActor
+    func writeBenchClipTranscript(clipId: UUID, transcript: String) {
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(format: "id == %@", clipId as CVarArg)
+        req.fetchLimit = 1
+        if (try? storage.viewContext.fetch(req).first) != nil {
+            updateClipTranscript(refId: clipId, transcript: JournalEntry.cleanedTranscript(transcript))
+        } else {
+            InboxManifest.shared.recordTranscriptionAttempt(clipId: clipId, transcript: transcript)
+        }
+    }
+
     /// **Atom-level** description edit (photo/video) for the unified Clip
     /// Editor (Zone 1). Same atom-once semantics as `updateClipTranscript`.
     func updateClipDescription(refId: UUID, description: String) {
