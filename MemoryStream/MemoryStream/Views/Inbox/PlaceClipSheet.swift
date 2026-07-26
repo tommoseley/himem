@@ -263,3 +263,81 @@ struct PlaceClipSheet: View {
         }
     }
 }
+
+/// Placement sheet for a bench **`InboxClip`** (manifest-backed) — the
+/// promote-then-place flow (Tom, July 16; wired 2026-07-25). Mirrors
+/// `PlaceClipSheet` but MATERIALIZES the clip into a `MediaReference` only ON
+/// COMMIT, so a cancel leaves the bench clip untouched (no orphan refs). This
+/// replaces the `InboxPromotePlacePlaceholder` dev-text stub — the "Add to a
+/// memory" bug on manifest-backed (e.g. Siri/watch voice) clips.
+struct PlaceInboxClipSheet: View {
+    let clip: InboxClip
+    var onPlaced: (() -> Void)? = nil
+
+    enum Destination: Hashable { case existingMemory, newMemory }
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var destination: Destination = .existingMemory
+    @State private var selectedEntryId: UUID? = nil
+    private let lifecycle = EntryLifecycleService()
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Picker("Destination", selection: $destination) {
+                    Text("Existing memory").tag(Destination.existingMemory)
+                    Text("New memory").tag(Destination.newMemory)
+                }
+                .pickerStyle(.segmented)
+                Group {
+                    switch destination {
+                    case .existingMemory:
+                        ExistingMemoryPickerView(selectedEntryId: $selectedEntryId)
+                    case .newMemory:
+                        Text("Creates a new memory with this clip. You can add more, and title it, once it opens.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Crucible.Color.ink2)
+                            .lineSpacing(3)
+                            .padding(.top, 4)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if destination != .existingMemory { Spacer(minLength: 0) }
+            }
+            .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 16)
+            .background(Crucible.Color.paper)
+            .navigationTitle("Where does this belong?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }.foregroundStyle(Crucible.Color.ink2)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(destination == .existingMemory ? "Add" : "Create") { commit() }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Crucible.Color.accent)
+                        .disabled(destination == .existingMemory && selectedEntryId == nil)
+                }
+            }
+        }
+        .presentationDetents([.large, .fraction(0.68)])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func commit() {
+        let ok: Bool
+        switch destination {
+        case .existingMemory:
+            guard let entryId = selectedEntryId else { return }
+            ok = lifecycle.placeInboxClip(clip, intoExisting: entryId)
+        case .newMemory:
+            ok = lifecycle.createMemoryFromInboxClip(clip) != nil
+        }
+        if ok {
+            onPlaced?()
+            dismiss()
+        } else {
+            ErrorState.shared.report(.saveFailed("Couldn't add this clip. Try again."))
+        }
+    }
+}

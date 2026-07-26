@@ -483,13 +483,14 @@ struct ClipEditorModal: View {
         switch source {
         case .managed(let ref):
             PlaceClipSheet(ref: ref)
-        case .inbox:
-            // Promote-then-place (Tom, July 16): materialize the InboxClip →
-            // MediaReference + edge ON CONFIRM, not on open — cancel leaves the
-            // bench clip untouched (no orphan refs). Wired in the follow-up
-            // cycle (needs the promotion path); for the additive review build
-            // the affordance is present and this is its seam.
-            InboxPromotePlacePlaceholder()
+        case .inbox(let clip):
+            // Promote-then-place (Tom, July 16; wired 2026-07-25): materialize
+            // the InboxClip → MediaReference + edge ON CONFIRM (see
+            // `PlaceInboxClipSheet` / `EntryLifecycleService.placeInboxClip`).
+            // Cancel leaves the bench clip untouched. On success the clip is
+            // promoted off the bench, so this editor (which was editing the
+            // now-gone inbox clip) dismisses.
+            PlaceInboxClipSheet(clip: clip, onPlaced: { dismiss() })
         }
     }
 
@@ -701,16 +702,26 @@ struct ClipEditorModal: View {
         dismiss()
     }
 
+    /// The on-disk audio URL to re-transcribe, resolved per backing. Managed
+    /// refs live in the memory store; inbox clips live in the inbox store —
+    /// EXCEPT a phone-captured inbox clip whose audio already sits in the memory
+    /// store (same dual-store logic as `appendToExistingMemory`). Static + pure
+    /// (injectable `fileExists`) so the both-backing behavior is money-tested
+    /// and can't silently diverge again. Wiring the inbox branch closes the
+    /// "Transcribe again does nothing on bench clips" bug.
+    static func retranscribeAudioURL(isInbox: Bool, filename: String,
+                                     fileExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }) -> URL {
+        let voiceURL = SpeechService.audioURL(for: filename)
+        guard isInbox else { return voiceURL }
+        return fileExists(voiceURL) ? voiceURL : InboxManifest.audioURL(for: filename)
+    }
+
     private func retranscribe() {
         guard #available(iOS 26.0, *), let filename = audioFilename else { return }
-        guard case .managed = source else {
-            // Inbox re-transcribe uses the inbox store URL — finished in the
-            // wiring cycle (audio-store gap).
-            return
-        }
+        let isInbox: Bool = { if case .inbox = source { return true }; return false }()
+        let url = Self.retranscribeAudioURL(isInbox: isInbox, filename: filename)
         isRetranscribing = true
         retryStatus = nil
-        let url = SpeechService.audioURL(for: filename)
         Task {
             let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
             await MainActor.run {
@@ -783,19 +794,3 @@ struct ClipEditorModal: View {
 /// Seam for the bench-clip promote-then-place flow (wiring cycle). Shows the
 /// intended affordance so the additive build reviews end-to-end without
 /// materializing a MediaReference on open.
-private struct InboxPromotePlacePlaceholder: View {
-    @Environment(\.dismiss) private var dismiss
-    var body: some View {
-        VStack(spacing: 14) {
-            Text("Add to a memory")
-                .font(.system(size: 17, weight: .semibold))
-            Text("Promote-then-place for a bench clip is wired in the follow-up cycle (materialize on confirm; existing memory → placement, new memory → Start a Memory).")
-                .font(.footnote)
-                .foregroundStyle(Crucible.Color.ink3)
-                .multilineTextAlignment(.center)
-            Button("Done") { dismiss() }.padding(.top, 6)
-        }
-        .padding(24)
-        .presentationDetents([.medium])
-    }
-}
