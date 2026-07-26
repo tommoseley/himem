@@ -14,6 +14,19 @@ Tom shipped v1 and is on a road trip. Run the open queue **without** him, in thi
 
 **Anything requiring a Production CloudKit deploy, a new *what*, or a design ruling waits for his return.** Dogfood bugs he hits on the road go to the top of this list when reported.
 
+## ⚑ TestFlight dogfood findings — 2026-07-25 (CC-triaged, root-caused, in review)
+
+Five findings, root-caused (five parallel read-only traces) and fixed under Tom's rulings. Each on its own branch/PR; Tom batch-reviews.
+
+- **#4a · phantom "Untitled memory" holding clips (P0).** A clip whose only memory is recycled stranded in Clips/All, advertising an invisible "Untitled memory". Fix (**PR #10** · `recycled-memory-not-a-connection`): a recycled memory is no longer a live connection — `MediaReference.memoriesArray`/`referencingMemoryCount` filter it, edge preserved (restore reunites), Unconnected lens recycled-aware; P8 last-reference rule preserved byte-identical via a raw `edgeCount`.
+  - **Provenance verdict — explained-by-inference, NOT a confirmed trace.** Exhaustive audit: the ONLY writer of `isRecycled = YES` is `EntryLifecycleService.recycle()`, gated behind user-delete — there is no auto-recycle path. So on brand-new content the flag rode in on an **inbound CloudKit sync of a recycle from a second install/device** (iPad + debug reinstall replays). Defended by PR #10, which makes the clip honest regardless of how the flag arrived. **Reopen if the Production-schema check contradicts** (see the CloudKit note below).
+- **#4a-Siri · ad-hoc Siri capture was forced into a memory (P0, locked-invariant violation).** The landing router keyed off the visible tab, so a Siri recording on the cold-launch Memories tab built a hidden `JournalEntry`. Fix (**PR pending** · `siri-capture-lands-on-bench`): a `CaptureSource.handsFree` always routes `.dropOnBench`, never a forced memory, regardless of tab. Also produces the source flag #4b needs.
+- **#3 · "Add to a memory" dropped a NULL-`isRecycled` memory (P1).** Fix (**PR #9** · `picker-nil-predicate-fix`): nil-safe `isRecycled == NO OR isRecycled == nil`; SQLite money test (in-memory store masks it).
+- **#2 · watch clip on phone not iPad (P1).** Confirmed **by-design** — unpromoted bench clips are phone-local (not CloudKit) until promoted. No unification build (Tom's ruling); logged as the known post-v1 bench→MediaReference gap.
+- **#1 · handedness doesn't sync (P2)** and **#4b · hands-free recording limit + "Hey Siri, stop recording" (P2)** — ruled, queued next (`#1` iCloud KVS mirror; `#4b` Voice-section limit + auto-save).
+
+**CloudKit deploy status (2026-07-25):** dashboard shows **nothing pending** → the V2–V8 batch (incl. `MediaReference.recycledAt`) is deployed to Production. **PR #11** corrects the stale `StorageService` "pending deploy" comment. Tom to confirm the definitive Production schema for `MediaReference.recycledAt`; CC verifies + finalizes the comment when it lands (and reopens #4a provenance if it contradicts).
+
 ## How to use this doc
 
 Same contract as always: read `HiMem · Locked Decisions.html` + `AGENTS.md` first. Latitude is *how*, never *what*. Coherence fixes apply freely; a changed *what* escalates to Tom. Four-part handoff per item (does-it-express-the-spec first, then files/behavior, tests, unresolved risk). Green tests are necessary, not sufficient — CC's diff review is the design-fidelity gate.

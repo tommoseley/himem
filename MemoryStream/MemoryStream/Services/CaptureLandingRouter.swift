@@ -32,6 +32,24 @@ enum CaptureLandingIntent: Equatable {
     case openNewProjectSheet
 }
 
+/// How a capture session was initiated. A property of *intent*, not
+/// platform — it decides whether the completed capture is routed by the
+/// visible tab (manual) or forced onto the bench (ad-hoc/hands-free).
+enum CaptureSource: Equatable {
+    /// User-initiated in-app capture — the tab-level FAB or a composer the
+    /// user is actively holding. Routes by the visible tab per the July 10
+    /// context-aware-FAB lock.
+    case manual
+
+    /// Hands-free capture (Siri / "Hey Siri" App Intent). Ad-hoc by
+    /// definition: it always lands on the Clips bench as a loose clip and is
+    /// NEVER forced into a memory, regardless of the visible tab — the locked
+    /// invariant "capture never forced into a memory"
+    /// (`HiMem · evidence and context.md:143`). Also gates the hands-free
+    /// recording cap (Voice Settings).
+    case handsFree
+}
+
 enum CaptureLandingRouter {
 
     /// The tab identifiers the shell defines. Kept as a local enum
@@ -44,8 +62,16 @@ enum CaptureLandingRouter {
     }
 
     /// Return the intent for `tab` given the current project context
-    /// (`nil` unless the user has a project detail on screen).
-    static func route(tab: Tab, projectContext: UUID?) -> CaptureLandingIntent {
+    /// (`nil` unless the user has a project detail on screen) and how the
+    /// capture was initiated.
+    static func route(tab: Tab, projectContext: UUID?, source: CaptureSource = .manual) -> CaptureLandingIntent {
+        // Ad-hoc / hands-free capture is never forced into a memory — it always
+        // lands on the bench as a loose clip, regardless of the visible tab
+        // (locked invariant). Structured intent (a real memory) requires the
+        // user to be inside a container on purpose, which Siri capture isn't.
+        if source == .handsFree {
+            return .dropOnBench
+        }
         switch tab {
         case .clips:
             return .dropOnBench

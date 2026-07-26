@@ -44,4 +44,38 @@ struct CaptureLandingRouterTests {
         let intent = CaptureLandingRouter.route(tab: .projects, projectContext: projectId)
         #expect(intent == .createMemoryInProject(projectId))
     }
+
+    // MARK: - Hands-free (Siri) source — TestFlight #4a-Siri (2026-07-25)
+    // Ad-hoc capture is never forced into a memory (locked invariant). A Siri
+    // recording lands on the Clips bench regardless of the visible tab — the
+    // bug: on the cold-launch default Memories tab it was building a hidden
+    // "Untitled memory."
+
+    @Test func handsFree_on_memories_lands_on_bench_not_a_memory() {
+        // The money test: this returned `.createMemory` before the fix.
+        let intent = CaptureLandingRouter.route(tab: .memories, projectContext: nil, source: .handsFree)
+        #expect(intent == .dropOnBench)
+    }
+
+    @Test func handsFree_inside_project_lands_on_bench_not_in_project() {
+        let intent = CaptureLandingRouter.route(tab: .projects, projectContext: UUID(), source: .handsFree)
+        #expect(intent == .dropOnBench)
+    }
+
+    @Test func handsFree_on_projects_list_lands_on_bench_not_new_project_sheet() {
+        let intent = CaptureLandingRouter.route(tab: .projects, projectContext: nil, source: .handsFree)
+        #expect(intent == .dropOnBench)
+    }
+
+    @Test func handsFree_on_clips_still_bench() {
+        let intent = CaptureLandingRouter.route(tab: .clips, projectContext: nil, source: .handsFree)
+        #expect(intent == .dropOnBench)
+    }
+
+    @Test func manual_source_is_the_default_and_unchanged() {
+        // Explicit `.manual` matches the default-param behavior the existing
+        // tests exercise — the tab still decides.
+        #expect(CaptureLandingRouter.route(tab: .memories, projectContext: nil, source: .manual) == .createMemory)
+        #expect(CaptureLandingRouter.route(tab: .memories, projectContext: nil) == .createMemory)
+    }
 }
