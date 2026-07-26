@@ -120,6 +120,19 @@ struct ClipPlacementEdgesExistingRefTests {
         #expect(row.transcriptionAttempted, "manifest attempt recorded")
     }
 
+    /// Delete on a MATERIALIZED bench clip must recycle the ref — the manifest
+    /// path would no-op, leaving the clip on the bench (a silent no-op delete).
+    @Test func recycleBenchClip_materializedClip_recyclesRef() throws {
+        let (storage, service) = makeService()
+        let ctx = storage.viewContext
+        let clipId = UUID()
+        let ref = try seedRef(id: clipId, in: ctx)
+        #expect(ref.recycledAt == nil, "starts un-recycled")
+
+        service.recycleBenchClip(clipId: clipId)
+        #expect(ref.recycledAt != nil, "the ref was soft-deleted, not a no-op")
+    }
+
     /// The multi-clip session case: N bench refs → one new memory, exactly N
     /// edges, zero new refs (the whole-session Start-a-Memory path).
     @Test func newMemory_fromSession_attachesAllRefs_mintsNone() throws {

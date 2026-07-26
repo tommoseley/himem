@@ -1130,6 +1130,22 @@ final class EntryLifecycleService {
         }
     }
 
+    /// Recycle a BENCH clip regardless of backing (P0-3). A materialized clip
+    /// is a ref → `recycleClip(refId:)`; an in-flight clip is a manifest row →
+    /// `InboxManifest.recycleClip(clipId:)`. Never a silent no-op — deleting a
+    /// materialized clip via a `.inbox`-opened editor must still land.
+    @MainActor
+    func recycleBenchClip(clipId: UUID) {
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(format: "id == %@", clipId as CVarArg)
+        req.fetchLimit = 1
+        if (try? storage.viewContext.fetch(req).first) != nil {
+            recycleClip(refId: clipId)
+        } else {
+            InboxManifest.shared.recycleClip(clipId: clipId)
+        }
+    }
+
     /// **Atom-level** description edit (photo/video) for the unified Clip
     /// Editor (Zone 1). Same atom-once semantics as `updateClipTranscript`.
     func updateClipDescription(refId: UUID, description: String) {
