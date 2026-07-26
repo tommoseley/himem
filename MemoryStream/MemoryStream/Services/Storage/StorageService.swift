@@ -225,8 +225,12 @@ final class StorageService {
         //   DEPLOY STATUS (2026-07-25): the V2–V8 field batch — including
         //   `Project.recycledAt` (V6), the V7 Mention/sourceDevice fields,
         //   and `MediaReference.recycledAt` (V8) — has been DEPLOYED to the
-        //   Production CloudKit environment (dashboard shows no pending diff).
-        //   Earlier revisions of this log described these as "still-pending
+        //   Production CloudKit environment. VERIFIED against the live
+        //   Production schema via `xcrun cktool export-schema --environment
+        //   production` (2026-07-25), not just a dashboard read: record type
+        //   `CD_MediaReference` carries `CD_recycledAt` + `CD_sourceDevice`,
+        //   `CD_Mention` exists, and `CD_recycledAt` is present on Project +
+        //   JournalEntry. Earlier revisions described these as "still-pending
         //   pre-TestFlight" — that is no longer true. Note the deploy
         //   implication for soft-delete sync: because both `isRecycled` and
         //   the clip-side `recycledAt` are now deployed, a recycle syncs
