@@ -175,6 +175,11 @@ struct MemoryStreamApp: App {
         // wakeable in the background to receive transfers even when HiMem
         // isn't foregrounded. Doesn't touch Core Data.
         WatchSessionDelegate.shared.start()
+        // Mirror the Left-Handed FAB preference through iCloud KVS so it
+        // follows the person across devices. No CloudKit schema — KVS is the
+        // separate iCloud key-value bag; entitlement already present. Cheap,
+        // non-blocking (a synchronize() just schedules). See FABHandednessSync.
+        FABHandednessSync.shared.start()
         // Seed UserDefaults with notification setting defaults (toggles off,
         // 8pm nudge time) before any @AppStorage in SettingsView reads them.
         // NotificationService.registerDefaults() retired 2026-07-07 with
