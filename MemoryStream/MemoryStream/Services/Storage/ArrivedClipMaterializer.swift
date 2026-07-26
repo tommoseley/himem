@@ -80,6 +80,49 @@ enum ArrivedClipMaterializer {
         return count
     }
 
+    /// Compose the unified bench list from the two stores, deduped by clipId —
+    /// a materialized **ref WINS** over a stale manifest row. This is the
+    /// compose-layer double-render guard (risk-1, P0): during the migration
+    /// window a clip can transiently exist as both a manifest row and its ref;
+    /// keying by id collapses them to one, and the ref (the source of truth)
+    /// is the survivor. Pure + order-independent so it's directly testable.
+    @MainActor
+    static func composeBenchClips(manifestClips: [InboxClip], refs: [MediaReference]) -> [InboxClip] {
+        var byId: [UUID: InboxClip] = [:]
+        for clip in manifestClips { byId[clip.clipId] = clip }
+        for ref in refs { let synth = syntheticClip(from: ref); byId[synth.clipId] = synth }
+        return Array(byId.values)
+    }
+
+    /// Read-side bridge (piece B): map a materialized zero-edge voice ref back
+    /// to a synthetic `InboxClip` so the existing bench grouper / proposer /
+    /// absorber / render path runs UNCHANGED against the ref store. The inverse
+    /// of `materialize` — same `id`, so the compose-layer dedup stays id-keyed.
+    ///
+    /// - `transcriptionAttempted: true` — a materialized ref is post-attempt by
+    ///   construction (design decision #1: state derived from store position).
+    /// - `status: .transcribed` — likewise.
+    /// - `duration: 0` — `MediaReference` carries none; the session-duration
+    ///   line resolves async (`AVURLAsset.load(.duration)`) and degrades until
+    ///   it lands, exactly as the All lens already does (ruling a).
+    /// - `reviewed` — read from the per-device `BenchClipReviewStore` (risk-2).
+    static func syntheticClip(from ref: MediaReference) -> InboxClip {
+        InboxClip(
+            clipId: ref.id,
+            capturedAt: ref.createdAt ?? Date(timeIntervalSince1970: 0),
+            duration: 0,
+            transcript: ref.transcript ?? "",
+            latitude: ref.latitude?.doubleValue,
+            longitude: ref.longitude?.doubleValue,
+            source: ref.sourceDevice ?? "",
+            audioFilename: ref.osIdentifier,
+            transcriptionAttempted: true,
+            rollGroupId: ref.rollGroupId,
+            status: .transcribed,
+            reviewed: BenchClipReviewStore.isReviewed(ref.id)
+        )
+    }
+
     /// True when a `MediaReference` with this id already exists — the
     /// idempotency guard (also the belt against a double-materialize).
     static func refExists(id: UUID, in context: NSManagedObjectContext) -> Bool {

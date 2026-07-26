@@ -167,6 +167,35 @@ struct ArrivedClipMaterializerTests {
         #expect(manifest.clips.contains { $0.clipId == inFlight.clipId }, "in-flight stays in the manifest")
     }
 
+    // MARK: - Compose-layer dedup (risk-1, P0) — the bench-read guard
+
+    /// The migration-window double-render: a clip present as BOTH a stale
+    /// manifest row AND its materialized ref must compose to EXACTLY ONE bench
+    /// entry, and the survivor is the ref (source of truth — transcribed).
+    @Test func composeBenchClips_dedupsManifestAndRef_refWins() throws {
+        try withSeededClip(status: .transcribed, transcript: "from-ref") { clip, ctx in
+            // Materialize → a ref exists. Then re-seed the manifest row (the
+            // stale duplicate the migration window can leave behind).
+            ArrivedClipMaterializer.materialize(clip, in: ctx, moveAudio: { _ in true })
+            InboxManifest.shared.acceptClip(clip)
+            #expect(InboxManifest.shared.clips.contains { $0.clipId == clip.clipId },
+                    "stale manifest row present — the double-render setup")
+
+            let refs = try #require(try? ctx.fetch({
+                let r = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+                r.predicate = NSPredicate(format: "edges.@count == 0 AND recycledAt == nil AND mediaType == %@",
+                                          MediaReference.MediaType.voice.rawValue)
+                return r
+            }()))
+            let composed = ArrivedClipMaterializer.composeBenchClips(
+                manifestClips: InboxManifest.shared.clips, refs: refs)
+
+            let matches = composed.filter { $0.clipId == clip.clipId }
+            #expect(matches.count == 1, "exactly one bench entry — no double-render")
+            #expect(matches.first?.transcriptionAttempted == true, "the survivor is the ref (post-attempt)")
+        }
+    }
+
     /// The accidental-clip derivation: a transcribed clip with an EMPTY
     /// transcript still materializes — the empty-transcript ref IS the
     /// accidental signal (design decision #1, derived-from-store).
