@@ -143,11 +143,19 @@ final class OnDeviceOrganizer: Organizer {
 
     enum OrganizerError: Error, LocalizedError {
         case modelUnavailable(String)
+        /// Apple's on-device safety guardrail refused the content ("Detected
+        /// content likely to be unsafe"). A distinct case so the caller can
+        /// STOP rather than fall back — a refusal is a sensitivity signal, and
+        /// we never answer it by shipping the content off-device
+        /// (`ProcessingEngine`, Memory Polish spec §3a guardrail note).
+        case safetyRefusal
 
         var errorDescription: String? {
             switch self {
             case .modelUnavailable(let reason):
                 return "On-device organize unavailable: \(reason)"
+            case .safetyRefusal:
+                return "On-device organize declined this content."
             }
         }
     }
@@ -222,6 +230,13 @@ final class OnDeviceOrganizer: Organizer {
                 category = "other"
             }
             NSLog("[HiMem][OnDeviceOrganizer]   category=\(category)")
+            // A safety refusal is thrown as a typed case so the engine can stop
+            // instead of falling back to the cloud (never send refused =
+            // sensitive content off-device). Every other error re-throws
+            // unchanged, keeping the existing timeout/context/other fallback.
+            if category == "guardrail-violation" {
+                throw OrganizerError.safetyRefusal
+            }
             throw error
         }
     }

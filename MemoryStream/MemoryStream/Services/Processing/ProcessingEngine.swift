@@ -149,25 +149,33 @@ final class ProcessingEngine {
             if succeeded { return }
         }
 
+        var refusedOnDevice = false
         if hasAI {
-            let succeeded = await processWithOnDevice(objectID: objectID, content: content, context: context)
-            if succeeded { return }
+            switch await processWithOnDevice(objectID: objectID, content: content, context: context) {
+            case .success: return
+            case .refused: refusedOnDevice = true // Ruling 1: do NOT go to cloud
+            case .failed: break                   // other failure → cloud fallback below
+            }
         }
 
-        // Cloud as last-resort fallback when we're online and haven't
-        // already tried it. Covers the Free + hasAI case where the
-        // on-device safety classifier rejects content ("Detected
-        // content likely to be unsafe") — Anthropic's policy differs
-        // from Apple's, so content the local model refuses often
-        // organizes cleanly via cloud. Costs us COGS on Free users
-        // but produces honest output instead of mentions-only via
-        // NLTagger. Per Tom 2026-06-08.
-        if !cloudAttempted && connectivity.isConnected {
+        // Cloud as last-resort fallback when we're online, haven't already
+        // tried it, AND the on-device pass did not REFUSE. A refusal
+        // (Ruling 1, 2026-07-25) must never trigger a cloud send: Apple
+        // refuses because it judges the content sensitive, so answering by
+        // routing that exact content to a third-party model gives the most
+        // private material the least private handling. Timeout/context/other
+        // failures still fall back to cloud as before. (Memory Polish §3a.)
+        if !refusedOnDevice && !cloudAttempted && connectivity.isConnected {
             NSLog("[HiMem][Organize] on-device failed; retrying via cloud as last-resort fallback")
             let succeeded = await processWithCloud(objectID: objectID, content: content, context: context, isFallback: true)
             if succeeded { return }
         }
 
+        // Ruling 2: organize must never silently no-op. Nothing produced a real
+        // OrganizePass, so leave an honest, RETRYABLE failure state (the Memory
+        // Detail card reads "Couldn't organize this one. Tap to try again.")
+        // rather than resetting to idle. Best-effort on-device mentions are
+        // still extracted; no auto-retry (respects no-auto-reprocess).
         await processLocally(objectID: objectID, content: content, context: context)
     }
 
@@ -180,7 +188,12 @@ final class ProcessingEngine {
     /// through to the existing connectivity-based routing.
     ///
     /// Skips the assist debit — on-device organize is unmetered.
-    private func processWithOnDevice(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async -> Bool {
+    /// Outcome of the on-device organize pass. `.refused` (Apple's safety
+    /// guardrail) is distinct from `.failed` (timeout / context / save error)
+    /// so the caller can STOP instead of falling back to the cloud.
+    enum OnDeviceOutcome { case success, refused, failed }
+
+    private func processWithOnDevice(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async -> OnDeviceOutcome {
         let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
         do {
             // Palette-bleed fix #2 (2026-07-23): the mentions palette is NOT
@@ -205,12 +218,19 @@ final class ProcessingEngine {
                     content: content, existingTopics: existingTopics, existingMentions: []
                 )
             }
-            return await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
+            let committed = await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
+            return committed ? .success : .failed
+        } catch OnDeviceOrganizer.OrganizerError.safetyRefusal {
+            // Apple's guardrail refused the content. STOP — do not fall back to
+            // the cloud: a refusal is a signal the content is sensitive, and
+            // routing that same content to a third-party model means the most
+            // private material gets the least private handling. The caller
+            // surfaces an honest, retryable failure. (Memory Polish spec §3a.)
+            NSLog("[HiMem][Organize] on-device pass REFUSED by safety guardrail — staying on-device, not falling back to cloud")
+            return .refused
         } catch {
             // Detailed diagnostic logging — Apple's Foundation Models
-            // errors are opaque ("Detected content likely to be unsafe"
-            // tells us a filter tripped but not which kind, on which
-            // content). We dump every signal available so failures
+            // errors are opaque. We dump every signal available so failures
             // can be correlated against content patterns.
             let typeStr = String(describing: type(of: error))
             let desc = error.localizedDescription
@@ -221,7 +241,7 @@ final class ProcessingEngine {
             if !nsErr.userInfo.isEmpty {
                 NSLog("[HiMem][Organize]   userInfo=\(nsErr.userInfo)")
             }
-            return false
+            return .failed
         }
     }
 
@@ -361,10 +381,19 @@ final class ProcessingEngine {
                     }
                 }
 
-                // Mark completed
+                // Ruling 2 (2026-07-25): no OrganizePass was produced, so this
+                // is a FAILED organize, not a silent success. Mark the task
+                // `.failed` (retryable) — the Memory Detail card then reads
+                // "Couldn't organize this one. Tap to try again." instead of
+                // resetting to idle (a tap that looks like a no-op is the worst
+                // outcome). NEVER store Apple's guardrail/"unsafe" text: that's
+                // Apple's judgment, not ours, and telling someone their memory
+                // about a death was flagged is unacceptable in a memory-keeper.
+                // Mentions extracted above are kept as a best-effort bonus.
                 if let task = entryInContext.latestProcessingTask() {
-                    task.status = ProcessingTask.Status.completed.rawValue
-                    task.progressDescription = "Processed locally. Connect to the internet for richer analysis."
+                    task.status = ProcessingTask.Status.failed.rawValue
+                    task.errorMessage = "organize_incomplete" // neutral marker; never user-facing
+                    task.progressDescription = nil
                     task.processedAt = Date()
                 }
 
