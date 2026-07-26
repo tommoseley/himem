@@ -338,7 +338,7 @@ struct ClipEditorModal: View {
             } label: {
                 HStack(alignment: .top, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(edge.memory?.title ?? "Untitled memory")
+                        Text(edge.memory?.displayTitle ?? "")
                             .font(.system(size: 16, weight: .medium, design: .serif))
                             .foregroundStyle(Crucible.Color.ink)
                         Text(edgeDateText(edge))

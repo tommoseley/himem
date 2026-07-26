@@ -311,7 +311,7 @@ private struct MediaReferenceClipDetail: View {
                 .frame(width: 5, height: 5)
                 .offset(y: -3)
             VStack(alignment: .leading, spacing: 2) {
-                Text(memory.title ?? "Untitled memory")
+                Text(memory.displayTitle)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Crucible.Color.ink)
                 Text(memoryDateLine(memory))
