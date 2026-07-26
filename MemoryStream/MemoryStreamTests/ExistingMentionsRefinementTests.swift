@@ -3,12 +3,20 @@ import Foundation
 import CoreData
 @testable import HiMem
 
-/// Money test for 2026-05-18 Problem 1 (server-prompt half): on a
-/// re-organize pass, the existing mentions attached to the entry get
-/// sent up to the analyzer so the model refines them instead of
-/// inventing new paraphrases. Client packaging is half the work; the
-/// server prompt (`docs/design/mentions-server-prompt.md`) handles
-/// the reuse-vs-paraphrase decision.
+/// Money test for 2026-05-18 Problem 1 (server-prompt half): the existing
+/// mentions get sent up to the analyzer so the model refines them instead of
+/// inventing new paraphrases. The server prompt
+/// (`docs/design/mentions-server-prompt.md`) handles the reuse-vs-paraphrase
+/// decision.
+///
+/// **Updated 2026-07-26 for B4 Phase 2 (library-backed mentions).** The gather
+/// is now **library-wide** — `readExistingOrganizeContext` reads the `Mention`
+/// entity (all mentions, populated by organize via `findOrCreateMention`), not
+/// the old entry-scoped `ExtractedEntity` set, so a recurring person/place is
+/// reused across memories instead of re-paraphrased. These tests previously
+/// seeded `ExtractedEntity` (invisible to the new gather) and so read red on
+/// `main`; they now seed `Mention`, matching the shipped code. Not a code bug —
+/// a stale test caught up to the current design.
 @MainActor
 @Suite(.serialized)
 struct ExistingMentionsRefinementTests {
@@ -36,7 +44,7 @@ struct ExistingMentionsRefinementTests {
         }
     }
 
-    @Test func processEntry_sendsExistingMentionValuesToAnalyzer() async throws {
+    @Test func processEntry_forwardsLibraryMentionsToAnalyzer() async throws {
         let storage = StorageService(inMemory: true)
         let analyzer = RecordingAnalyzer()
         let engine = ProcessingEngine(
@@ -44,19 +52,22 @@ struct ExistingMentionsRefinementTests {
             analyzer: analyzer, useOnDevice: false
         )
         let entry = try storage.createEntry(content: "We discussed sausage with Bob.", inputType: .typed)
-        _ = try storage.createEntity(entryId: entry.id, type: .person, value: "Bob", confidence: 0.9, method: "cloud", entry: entry)
-        _ = try storage.createEntity(entryId: entry.id, type: .person, value: "John", confidence: 0.9, method: "cloud", entry: entry)
-        _ = try storage.createEntity(entryId: entry.id, type: .project, value: "Sausage making process", confidence: 0.9, method: "cloud", entry: entry)
+        // Library-backed mentions (what a prior organize would have created via
+        // findOrCreateMention). `Mention.MentionType` is person/place/idea.
+        _ = try storage.findOrCreateMention(name: "Bob", type: .person)
+        _ = try storage.findOrCreateMention(name: "John", type: .person)
+        _ = try storage.findOrCreateMention(name: "Sausage making process", type: .idea)
         _ = try storage.createProcessingTask(for: entry)
         try storage.viewContext.save()
 
         await engine.processEntry(entry)
 
         let sent = Set(analyzer.capturedExistingMentions)
-        #expect(sent == ["Bob", "John", "Sausage making process"])
+        #expect(sent == ["Bob", "John", "Sausage making process"],
+                "the library's mentions are forwarded to the analyzer for reuse")
     }
 
-    @Test func processEntry_firstOrganize_sendsEmptyExistingMentions() async throws {
+    @Test func processEntry_emptyMentionLibrary_forwardsEmpty() async throws {
         let storage = StorageService(inMemory: true)
         let analyzer = RecordingAnalyzer()
         let engine = ProcessingEngine(
@@ -69,14 +80,14 @@ struct ExistingMentionsRefinementTests {
 
         await engine.processEntry(entry)
 
-        #expect(analyzer.capturedExistingMentions.isEmpty)
+        #expect(analyzer.capturedExistingMentions.isEmpty,
+                "no mentions in the library → nothing to refine against")
     }
 
-    /// Same case-folded value attached multiple times (different
-    /// types pre-fix, or any other historical accumulation) collapses
-    /// to one entry in the payload — no point shipping noise to the
-    /// model.
-    @Test func processEntry_existingMentions_dedupedCaseInsensitively() async throws {
+    /// Case/whitespace variants of the same name collapse to one library
+    /// `Mention` (findOrCreateMention normalizes + dedups on
+    /// `normalizedName`), so the analyzer payload carries no duplicate noise.
+    @Test func processEntry_libraryMentions_dedupedByNormalization() async throws {
         let storage = StorageService(inMemory: true)
         let analyzer = RecordingAnalyzer()
         let engine = ProcessingEngine(
@@ -84,9 +95,9 @@ struct ExistingMentionsRefinementTests {
             analyzer: analyzer, useOnDevice: false
         )
         let entry = try storage.createEntry(content: "x", inputType: .typed)
-        _ = try storage.createEntity(entryId: entry.id, type: .person, value: "Bob", confidence: 0.9, method: "cloud", entry: entry)
-        _ = try storage.createEntity(entryId: entry.id, type: .project, value: "bob", confidence: 0.9, method: "cloud", entry: entry)
-        _ = try storage.createEntity(entryId: entry.id, type: .idea, value: "  Bob  ", confidence: 0.9, method: "cloud", entry: entry)
+        _ = try storage.findOrCreateMention(name: "Bob", type: .person)
+        _ = try storage.findOrCreateMention(name: "bob", type: .person)
+        _ = try storage.findOrCreateMention(name: "  Bob  ", type: .person)
         _ = try storage.createProcessingTask(for: entry)
         try storage.viewContext.save()
 
