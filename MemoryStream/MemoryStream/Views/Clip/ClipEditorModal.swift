@@ -96,7 +96,13 @@ struct ClipEditorModal: View {
         // Detail) since they all present this modal. Per-device, idempotent.
         .onAppear {
             switch source {
-            case .inbox(let clip):  InboxManifest.shared.markReviewed(clipId: clip.clipId)
+            case .inbox(let clip):
+                // P0-3: a bench clip may already be materialized (a ref). Mark
+                // BOTH stores — the manifest flag for the still-in-flight case,
+                // the ref-keyed store (clipId == ref.id) for the materialized
+                // case — so "seen" sticks regardless of backing. Both idempotent.
+                InboxManifest.shared.markReviewed(clipId: clip.clipId)
+                BenchClipReviewStore.markReviewed(clip.clipId)
             case .managed(let ref): BenchClipReviewStore.markReviewed(ref.id)
             }
         }
@@ -656,7 +662,9 @@ struct ClipEditorModal: View {
     private func commitContent(_ newValue: String) {
         switch source {
         case .inbox(let clip):
-            InboxManifest.shared.recordTranscriptionAttempt(clipId: clip.clipId, transcript: newValue)
+            // P0-3: a materialized bench clip is a ref — route through the
+            // backing-aware writer so the edit lands (never a silent no-op).
+            lifecycle.writeBenchClipTranscript(clipId: clip.clipId, transcript: newValue)
         case .managed(let ref):
             if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
                 lifecycle.updateClipDescription(refId: ref.id, description: newValue)
@@ -696,7 +704,9 @@ struct ClipEditorModal: View {
         // promoted clip via MediaReference.recycledAt, an unpromoted bench
         // clip via the per-device manifest recycledAt (uniform bin).
         case .managed(let ref): lifecycle.recycleClip(refId: ref.id)
-        case .inbox(let clip):  InboxManifest.shared.recycleClip(clipId: clip.clipId)
+        // P0-3: a materialized bench clip is a ref — route through the
+        // backing-aware recycle so the delete lands (never a silent no-op).
+        case .inbox(let clip):  lifecycle.recycleBenchClip(clipId: clip.clipId)
         }
         player.stop()
         dismiss()

@@ -30,8 +30,20 @@ struct SessionListView: View {
     /// part of multi-select (they keep their own Add / Not-together).
     @ObservedObject var selection: ClipsSelection
     @Environment(\.managedObjectContext) private var context
+    /// Backing-aware transcript writes for bench clips (P0-3): a materialized
+    /// clip is a ref, so `Transcribe again` must land on the ref, never no-op.
+    private let lifecycle = EntryLifecycleService()
 
     @State private var sessions: [ClipGroup] = []
+    /// The unified bench clip list (P0-3): in-flight manifest rows UNION the
+    /// materialized zero-edge voice refs (`MediaReference`), deduped by clipId.
+    /// A transcribed clip lives ONLY as a synced ref (it follows the person,
+    /// not the device); in-flight clips live ONLY in the per-device manifest —
+    /// so the union is disjoint in practice and the dedup is the id-keyed belt
+    /// for the migration window (risk-1). Recomputed alongside `sessions` (and
+    /// on Core Data change) so a materialized ref re-groups the bench. Source of
+    /// truth: `docs/architecture/2026-07-25-clip-sync-single-source-of-truth.md`.
+    @State private var benchClips: [InboxClip] = []
     /// Unplaced photo/video refs pulled into each voice session by
     /// `SessionMediaAbsorber` (July 11 2026 media-agnostic lock).
     /// Keyed by `ClipGroup.id`. Recomputed on inbox change or Core
@@ -146,6 +158,13 @@ struct SessionListView: View {
             openedSessionContent(sessionId: session.id)
         }
         .onAppear {
+            // P0-3: promote any transcribed manifest clip to a synced
+            // zero-edge ref BEFORE the first render — the one-shot launch
+            // migration + catch-up. Running it here (before benchClips is
+            // read) is the structural guarantee against double-render: a
+            // clip is only ever in ONE store at read time (risk-1).
+            ArrivedClipMaterializer.materializeAll(in: context)
+            recomputeBenchClips()
             sessions = computeSessions()
             recomputeAbsorbedMedia()
             registerSessionIds()
@@ -159,6 +178,7 @@ struct SessionListView: View {
             }
         }
         .onChange(of: inbox.clips) { _, _ in
+            recomputeBenchClips()
             sessions = computeSessions()
             recomputeAbsorbedMedia()
             registerSessionIds()
@@ -169,6 +189,7 @@ struct SessionListView: View {
             // tracker changes (clip enters/leaves any in-flight
             // phase) the sessions need to be re-grouped without
             // those clipIds to avoid double-rendering.
+            recomputeBenchClips()
             sessions = computeSessions()
             recomputeAbsorbedMedia()
             registerSessionIds()
@@ -186,9 +207,12 @@ struct SessionListView: View {
             for: .NSManagedObjectContextObjectsDidChange,
             object: context
         )) { _ in
-            // Media refs land as unplaced refs on Core Data change.
-            // Re-absorb so a photo captured now appears inside its
-            // sitting's session card.
+            // P0-3: a materialized voice ref (this device) or a ref synced
+            // in from another device lands here — recompute the bench so it
+            // re-groups. Also media refs land as unplaced refs; re-absorb so
+            // a photo captured now appears inside its sitting's session card.
+            recomputeBenchClips()
+            sessions = computeSessions()
             recomputeAbsorbedMedia()
             registerSessionIds()
         }
@@ -220,6 +244,31 @@ struct SessionListView: View {
         )
         absorbedMediaBySessionId = result.mediaBySessionId
         BenchAbsorbedMediaBus.shared.setAbsorbed(result.absorbedRefIds)
+    }
+
+    /// Recompute the unified bench clip list (P0-3 piece B). Manifest rows
+    /// first (in-flight / not-yet-materialized), then materialized zero-edge
+    /// voice refs win on collision — the ref is the source of truth. Kept in
+    /// `@State` (not a computed prop) so the header + grouper read it without a
+    /// Core Data fetch on every SwiftUI render; the recompute sites drive it.
+    private func recomputeBenchClips() {
+        benchClips = ArrivedClipMaterializer.composeBenchClips(
+            manifestClips: inbox.clips,
+            refs: fetchZeroEdgeVoiceRefs()
+        )
+    }
+
+    /// Fetch the materialized bench voice clips — zero-edge, non-recycled
+    /// `MediaReference`s of `mediaType == voice`. The read-side mirror of
+    /// `fetchUnplacedNonVoiceRefs` (which pulls the absorbable photo/video).
+    private func fetchZeroEdgeVoiceRefs() -> [MediaReference] {
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(
+            format: "edges.@count == 0 AND recycledAt == nil AND mediaType == %@",
+            MediaReference.MediaType.voice.rawValue
+        )
+        req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+        return (try? context.fetch(req)) ?? []
     }
 
     /// Fetch unplaced photo/video/note MediaReferences — candidates
@@ -254,7 +303,7 @@ struct SessionListView: View {
         // New = unseen: drop reviewed clips so a session the user has
         // already eyeballed leaves the New lens (P7-2). All shows
         // everything (hideReviewed == false).
-        let base = (applyFilter && hideReviewed) ? inbox.clips.filter { !$0.reviewed } : inbox.clips
+        let base = (applyFilter && hideReviewed) ? benchClips.filter { !$0.reviewed } : benchClips
         guard !inFlight.isEmpty else {
             return ClipSessionGrouper.group(base, soloClipIds: solo)
         }
@@ -303,7 +352,7 @@ struct SessionListView: View {
     /// Member clips of a cluster (kept + set-aside), ordered by the
     /// proposal's `clipIds`, for the expanded editor rows.
     private func clips(forCluster proposal: ClusterProposal) -> [InboxClip] {
-        let byId = Dictionary(inbox.clips.map { ($0.clipId, $0) }, uniquingKeysWith: { first, _ in first })
+        let byId = Dictionary(benchClips.map { ($0.clipId, $0) }, uniquingKeysWith: { first, _ in first })
         return proposal.clipIds.compactMap { byId[$0] }
     }
 
@@ -321,7 +370,7 @@ struct SessionListView: View {
         guard let trimmed = ClusterTrim.keptForCommit(
             proposals: [proposal], removedByFingerprint: removedByFingerprint
         ).first else { return }
-        let byId = Dictionary(inbox.clips.map { ($0.clipId, $0) }, uniquingKeysWith: { first, _ in first })
+        let byId = Dictionary(benchClips.map { ($0.clipId, $0) }, uniquingKeysWith: { first, _ in first })
         let kept = trimmed.keptClipIds.compactMap { byId[$0] }
         guard !kept.isEmpty else { return }
         bundleSession = BundleRequest(
@@ -509,14 +558,14 @@ struct SessionListView: View {
         // from the phone Clips-FAB, so the headline never names a
         // source. Source lives per-clip on the card, not here.
         let inFlightOnly = arrivals.clipsInFlight.keys.filter { id in
-            !inbox.clips.contains(where: { $0.clipId == id })
+            !benchClips.contains(where: { $0.clipId == id })
         }.count
         // Include absorbed photo/video items (July 11 media-agnostic
         // lock) so the count is honest across media types — a mixed
         // sitting reads "3 new clips," not "2" with a stray photo
         // row inside the card.
         let absorbedMediaCount = absorbedMediaBySessionId.values.reduce(0) { $0 + $1.count }
-        let n = inbox.count + inFlightOnly + absorbedMediaCount
+        let n = benchClips.count + inFlightOnly + absorbedMediaCount
         return BenchHeaderTitleBuilder.title(clipCount: n)
     }
 
@@ -525,7 +574,7 @@ struct SessionListView: View {
         // rows AND in-flight tracker entries. Pre-announced but
         // not-yet-landed clips carry their `capturedAt` from the
         // wire payload.
-        let manifestCapturedAts = inbox.clips.map(\.capturedAt)
+        let manifestCapturedAts = benchClips.map(\.capturedAt)
         let inFlightCapturedAts = arrivals.clipsInFlight.values.map(\.capturedAt)
         let all = manifestCapturedAts + inFlightCapturedAts
         guard let first = all.min(), let last = all.max() else { return "" }
@@ -1150,7 +1199,10 @@ struct SessionListView: View {
         retryingClipIds.remove(clipId)
         switch outcome {
         case .transcribed(let result) where !result.text.isEmpty:
-            InboxManifest.shared.recordTranscriptionAttempt(clipId: clipId, transcript: result.text)
+            // P0-3: land the re-transcription on whichever store backs the
+            // clip — a materialized clip is a ref, so the manifest path alone
+            // would silently drop the retry result.
+            lifecycle.writeBenchClipTranscript(clipId: clipId, transcript: result.text)
             clipRetryStatus[clipId] = nil
             return
         case .transcribed(let result):

@@ -489,86 +489,28 @@ struct CreateMemoryFromClipsSheet: View {
     /// The write path creates the edge atomically (Phase 2+3 —
     /// see `docs/architecture/2026-07-08-evidence-context-ontology-plan.md`).
     private func createMemory() {
-        var movedClips: [InboxClip] = []
-        let fm = FileManager.default
+        // P0-3: bench clips are already CloudKit-synced zero-edge
+        // `MediaReference`s (materialize-on-arrival). Materialize each —
+        // idempotent, a no-op when the ref already exists, but promoting any
+        // clip that finished transcribing this very instant — so every clipId
+        // resolves to a ref; then EDGE the existing refs via
+        // `createMemoryFromExistingClips`. We never re-materialize (the
+        // double-ref bug the old move+mint path would now cause), and there is
+        // no audio move here: `materialize` owns the Inbox→Audio move.
         for clip in clips {
-            let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
-            let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
-            // **Where the audio lives depends on the source.** Watch
-            // clips land at `InboxManifest.audioURL` (`Documents/Inbox/`)
-            // and need the move to `SpeechService.audioURL`
-            // (`Documents/Audio/`). Phone clips are written directly
-            // by `VoiceCaptureScreen` at `SpeechService.audioURL` —
-            // they were NEVER in the inbox directory. Pre-fix the
-            // create-memory code assumed every clip was watch-origin
-            // and always tried to move from Inbox → Audio; for phone
-            // clips the source didn't exist, and the coordinated
-            // move (which pre-deletes the destination as
-            // `.forReplacing`) was **deleting the actual audio file**
-            // the phone had just written. That's how a fresh phone-
-            // recorded session failed to attach any clips.
-            if fm.fileExists(atPath: voiceURL.path) {
-                // Already at the destination (phone clip, or a
-                // previous partial run that got the file there).
-                // Nothing to move.
-                movedClips.append(clip)
-                continue
-            }
-            do {
-                // Not at destination — try to move from the inbox
-                // (watch case). Uses `NSFileCoordinator` per
-                // `UbiquityStore.moveIntoStore`.
-                _ = try UbiquityStore.shared.moveIntoStore(
-                    sourceURL: inboxURL,
-                    destinationURL: voiceURL
-                )
-                movedClips.append(clip)
-            } catch {
-                // Neither at destination nor at inbox — audio is
-                // genuinely absent (iCloud hasn't downloaded a watch
-                // clip yet, or the file was deleted out of band).
-                // Log with source hint for diagnosis. Console
-                // filter: `[HiMem][CreateMemory] move failed`.
-                NSLog("[HiMem][CreateMemory] move failed for clip=\(clip.clipId.uuidString.prefix(8)) source=\(clip.source) file=\(clip.audioFilename) error=\(error.localizedDescription)")
-                // Path-level diagnostic — the "the former doesn't
-                // exist, or the folder containing the latter doesn't
-                // exist" error is ambiguous (source? destination?
-                // folder? unclear). Dump both paths, whether they
-                // exist, and whether the target directory is present
-                // so the next log has enough signal to isolate.
-                Self.dumpPathDiagnostic(inboxURL: inboxURL, voiceURL: voiceURL, fm: fm)
-                continue
-            }
-        }
-        // Guardrail — if every move failed we would otherwise create
-        // an empty memory (transcript = "", no fragments). Bail
-        // instead so the user's clips stay on the bench for retry.
-        // The bus signal + dismiss below would otherwise land them
-        // on an empty Memory Detail, which is exactly the July 12
-        // dogfood symptom.
-        guard !movedClips.isEmpty else {
-            NSLog("[HiMem][CreateMemory] aborting — every clip's audio file failed to move; nothing to bundle")
-            return
+            ArrivedClipMaterializer.materialize(clip, in: storage.viewContext)
         }
 
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Delegate the "N voice clips → 1 new memory" assembly to the
-        // lifecycle primitive so the reconcile between `entry.content`
-        // and the joined-of-fragments happens on the same code path as
-        // `save(voiceFilename:)` and `appendClips`. Without it, orphan-
-        // content migration on Memory Detail open mints a duplicate
-        // `.note` (2026-07-13 dogfood defect). Money-tested by
-        // `CreateMemoryFromClipsAssemblyTests`.
-        let voiceClips = movedClips
-            .sorted { $0.capturedAt < $1.capturedAt }
-            .map { (audioFilename: $0.audioFilename, transcript: $0.transcript, capturedAt: $0.capturedAt) }
-        let newId = lifecycle.createMemoryFromVoiceClips(
-            voiceClips,
-            topicName: selectedTopic,
-            // A session is effectively single-source; carry its origin onto
-            // the promoted clips (B4) so a watch session keeps its glyph.
-            sourceDevice: movedClips.first.flatMap { JournalEntry.SourceDevice(rawValue: $0.source) }
+        // Assemble the new memory by attaching the existing refs (append order
+        // by capturedAt is enforced inside `attachExistingClips`). The content
+        // reconcile — which prevents the orphan-`.note` duplication (2026-07-13
+        // dogfood defect, `CreateMemoryFromClipsAssemblyTests`) — lives in
+        // `attachExistingClips`, the same joined-of-fragments path.
+        let newId = lifecycle.createMemoryFromExistingClips(
+            clipIds: clips.map(\.clipId),
+            topicName: selectedTopic
         )
         // No explicit `loadEntries` — `JournalViewModel.observeStorage
         // Changes` is subscribed to `NSManagedObjectContextObjectsDid
@@ -609,7 +551,7 @@ struct CreateMemoryFromClipsSheet: View {
             // alongside the date + time. No-op when the watch
             // captured without a fix (location permission off, no
             // signal, etc.).
-            for clip in movedClips {
+            for clip in clips {
                 ClipLocationResolver.stamp(
                     osIdentifier: clip.audioFilename,
                     latitude: clip.latitude,
@@ -626,8 +568,11 @@ struct CreateMemoryFromClipsSheet: View {
             }
         }
 
-        // Drop manifest rows — audio files were already moved out.
-        InboxManifest.shared.removeBatch(clipIds: movedClips.map { $0.clipId })
+        // Belt: any manifest rows are already demoted to tombstones by
+        // `materialize` (which the loop above ran on every clip) — this is a
+        // harmless no-op for materialized clips, and a safety net for any that
+        // somehow weren't.
+        InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
         // Post-create acceptance criteria per `Clip model · spec.md`
         // §Start a Memory (July 12 2026): the sheet dismisses,
         // the session is consumed (the manifest publish above
@@ -654,48 +599,28 @@ struct CreateMemoryFromClipsSheet: View {
     private func appendToExistingMemory() {
         guard let entryId = selectedExistingEntryId else { return }
 
-        var payload: [(audioFilename: String, transcript: String, capturedAt: Date)] = []
-        var locationStamps: [(audioFilename: String, latitude: Double?, longitude: Double?)] = []
-        let fm = FileManager.default
+        // P0-3: bench clips are already CloudKit-synced zero-edge refs.
+        // Materialize each (idempotent) so every clipId resolves to a ref, then
+        // EDGE the existing refs onto the memory (`attachExistingClips`, which
+        // orders by capturedAt and reconciles content) — never re-materialize.
         for clip in clips {
-            let inboxURL = InboxManifest.audioURL(for: clip.audioFilename)
-            let voiceURL = SpeechService.audioURL(for: clip.audioFilename)
-            // Same phone-vs-watch source logic as `createMemory` —
-            // phone clips are already at the destination; watch
-            // clips live in the inbox and need the move.
-            if fm.fileExists(atPath: voiceURL.path) {
-                payload.append((clip.audioFilename, clip.transcript, clip.capturedAt))
-                locationStamps.append((clip.audioFilename, clip.latitude, clip.longitude))
-                continue
-            }
-            do {
-                _ = try UbiquityStore.shared.moveIntoStore(
-                    sourceURL: inboxURL,
-                    destinationURL: voiceURL
-                )
-                payload.append((clip.audioFilename, clip.transcript, clip.capturedAt))
-                locationStamps.append((clip.audioFilename, clip.latitude, clip.longitude))
-            } catch {
-                NSLog("[HiMem][AppendMemory] move failed for clip=\(clip.clipId.uuidString.prefix(8)) source=\(clip.source) file=\(clip.audioFilename) error=\(error.localizedDescription)")
-                continue
-            }
+            ArrivedClipMaterializer.materialize(clip, in: storage.viewContext)
         }
 
-        let written = lifecycle.appendClips(
+        let written = lifecycle.attachExistingClips(
             entryId: entryId,
-            clips: payload,
-            sourceDevice: clips.first.flatMap { JournalEntry.SourceDevice(rawValue: $0.source) }
+            clipIds: clips.map(\.clipId)
         )
         guard written > 0 else { return }
 
-        // Stamp per-clip lat/lon onto the freshly-created MediaReferences
-        // so the clip-row header in Memory Detail shows the same
-        // "Bishop St, Bluffton" line we'd get on the new-memory path.
-        for stamp in locationStamps {
+        // Stamp per-clip lat/lon onto the refs so the clip-row header in Memory
+        // Detail shows the same "Bishop St, Bluffton" line as the new-memory
+        // path. Idempotent — re-stamps the same values the ref already carries.
+        for clip in clips {
             ClipLocationResolver.stamp(
-                osIdentifier: stamp.audioFilename,
-                latitude: stamp.latitude,
-                longitude: stamp.longitude,
+                osIdentifier: clip.audioFilename,
+                latitude: clip.latitude,
+                longitude: clip.longitude,
                 in: storage.viewContext
             )
         }
@@ -726,40 +651,5 @@ struct CreateMemoryFromClipsSheet: View {
 
         InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
         dismiss()
-    }
-
-    /// Emits a per-clip path diagnostic when the move fails. Dumps
-    /// the source / destination URLs, whether either file exists,
-    /// whether each parent directory exists, and — most usefully —
-    /// looks for the filename in the sandbox `Documents/Audio/`
-    /// path. If the file ended up in the sandbox instead of the
-    /// iCloud container (warmUp race, migration edge case), the
-    /// sandbox check tells us so instantly.
-    /// Console filter: `[HiMem][CreateMemory][pathDx]`.
-    private static func dumpPathDiagnostic(
-        inboxURL: URL,
-        voiceURL: URL,
-        fm: FileManager
-    ) {
-        let sandboxDocs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let sandboxAudio = sandboxDocs
-            .appendingPathComponent("Audio", isDirectory: true)
-            .appendingPathComponent(voiceURL.lastPathComponent)
-        let sandboxInbox = sandboxDocs
-            .appendingPathComponent("Inbox", isDirectory: true)
-            .appendingPathComponent(inboxURL.lastPathComponent)
-        NSLog("[HiMem][CreateMemory][pathDx] voiceURL=\(voiceURL.path) exists=\(fm.fileExists(atPath: voiceURL.path))")
-        NSLog("[HiMem][CreateMemory][pathDx] voiceDir=\(voiceURL.deletingLastPathComponent().path) exists=\(fm.fileExists(atPath: voiceURL.deletingLastPathComponent().path))")
-        NSLog("[HiMem][CreateMemory][pathDx] inboxURL=\(inboxURL.path) exists=\(fm.fileExists(atPath: inboxURL.path))")
-        NSLog("[HiMem][CreateMemory][pathDx] inboxDir=\(inboxURL.deletingLastPathComponent().path) exists=\(fm.fileExists(atPath: inboxURL.deletingLastPathComponent().path))")
-        NSLog("[HiMem][CreateMemory][pathDx] sandboxAudio=\(sandboxAudio.path) exists=\(fm.fileExists(atPath: sandboxAudio.path))")
-        NSLog("[HiMem][CreateMemory][pathDx] sandboxInbox=\(sandboxInbox.path) exists=\(fm.fileExists(atPath: sandboxInbox.path))")
-        // Directory listing of the current Audio dir — bounded to
-        // 20 entries so we don't spam Console.
-        let audioDir = voiceURL.deletingLastPathComponent()
-        if let contents = try? fm.contentsOfDirectory(atPath: audioDir.path) {
-            let sample = contents.prefix(20).joined(separator: ", ")
-            NSLog("[HiMem][CreateMemory][pathDx] audioDir contents (\(contents.count) total): \(sample)")
-        }
     }
 }

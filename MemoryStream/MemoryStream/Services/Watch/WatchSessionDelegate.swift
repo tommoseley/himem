@@ -345,6 +345,14 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                         clipId: clip.clipId,
                         transcript: InboxTranscriptionDispatcher.transcriptForMark(from: outcome)
                     )
+                    // P0-3: the clip is transcribed — promote it to a synced
+                    // zero-edge MediaReference NOW, bench-open-independent, so
+                    // a clip follows the person to every device the moment
+                    // it's ready (not only when the Clips tab next opens). The
+                    // manifest row is demoted to a tombstone inside materialize.
+                    if let transcribed = InboxManifest.shared.clips.first(where: { $0.clipId == clip.clipId }) {
+                        ArrivedClipMaterializer.materialize(transcribed, in: StorageService.shared.viewContext)
+                    }
                 } else {
                     NSLog("[HiMem][Inbox] transcribe deferred clip=\(clip.clipId.uuidString.prefix(8)) outcome=\(outcome)")
                 }

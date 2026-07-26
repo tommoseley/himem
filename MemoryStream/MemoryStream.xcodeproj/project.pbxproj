@@ -196,6 +196,7 @@
 		A200000046 /* BurstThumbnailPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000046 /* BurstThumbnailPrefetcher.swift */; };
 		A200000047 /* TranscriptClipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000047 /* TranscriptClipController.swift */; };
 		A200000091 /* ClipEditorModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000091 /* ClipEditorModal.swift */; };
+		A200000092 /* ArrivedClipMaterializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000092 /* ArrivedClipMaterializer.swift */; };
 		A2000000FB /* FABHandednessSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000FB /* FABHandednessSync.swift */; };
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
@@ -466,6 +467,7 @@
 		B200000046 /* BurstThumbnailPrefetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BurstThumbnailPrefetcher.swift; path = MemoryStream/Views/Clip/BurstThumbnailPrefetcher.swift; sourceTree = SOURCE_ROOT; };
 		B200000047 /* TranscriptClipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TranscriptClipController.swift; path = MemoryStream/Views/Clip/TranscriptClipController.swift; sourceTree = SOURCE_ROOT; };
 		B200000091 /* ClipEditorModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipEditorModal.swift; path = MemoryStream/Views/Clip/ClipEditorModal.swift; sourceTree = SOURCE_ROOT; };
+		B200000092 /* ArrivedClipMaterializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ArrivedClipMaterializer.swift; path = MemoryStream/Services/Storage/ArrivedClipMaterializer.swift; sourceTree = SOURCE_ROOT; };
 		B2000000FB /* FABHandednessSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FABHandednessSync.swift; path = MemoryStream/Services/FABHandednessSync.swift; sourceTree = SOURCE_ROOT; };
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
@@ -786,6 +788,7 @@
 				B100000503 /* FragmentMigration.swift */,
 				B100000509 /* SummaryFieldMigration.swift */,
 				B200000031 /* PhoneCaptureBenchDispatcher.swift */,
+				B200000092 /* ArrivedClipMaterializer.swift */,
 				B200000035 /* UnifiedBenchGrouper.swift */,
 				B200000036 /* SessionMediaAbsorber.swift */,
 				B200000037 /* BenchAbsorbedMediaBus.swift */,
@@ -1409,6 +1412,7 @@
 				A200000029 /* BenchHeaderTitleBuilder.swift in Sources */,
 				A200000030 /* ProjectsNavigationContext.swift in Sources */,
 				A200000031 /* PhoneCaptureBenchDispatcher.swift in Sources */,
+				A200000092 /* ArrivedClipMaterializer.swift in Sources */,
 				A200000032 /* CaptureLandingRouter.swift in Sources */,
 				A2000000FB /* FABHandednessSync.swift in Sources */,
 				A200000033 /* NewProjectRequestBus.swift in Sources */,
@@ -1609,7 +1613,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MemoryStream/MemoryStream.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
@@ -1650,7 +1654,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MemoryStream/MemoryStream.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
@@ -1714,7 +1718,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -1773,7 +1777,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -1833,7 +1837,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch Watch App/Himem Watch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1906,7 +1910,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch Watch App/Himem Watch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1976,7 +1980,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2036,7 +2040,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2094,7 +2098,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2153,7 +2157,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2214,7 +2218,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch WidgetsExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2285,7 +2289,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch WidgetsExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
