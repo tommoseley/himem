@@ -100,4 +100,40 @@ struct TruthReconcilerTests {
         // Different token → kept as-is (never mis-merged).
         #expect(TruthReconciler.reconcileMentions(extracted: ["Ben"], library: ["Benjamin"]) == ["Ben"])
     }
+
+    // MARK: - Structural-claim leakage (the "text clip 1 / two video clips" bug)
+
+    /// The exact reported failure: a Lincoln voice+photo memory whose summary
+    /// narrates clip scaffolding. The proper-noun check misses it (lowercase
+    /// common words); the structural check catches `clip`/`clips`/`video`, and
+    /// `violates` fires on both tiers.
+    @Test func structuralLeak_clipAndMediaWords_flagged() {
+        let clips = "I am not bound to win, but I am bound to be true."
+        let summary = "You, while reflecting on the quote, held two memories: text clip 1 and two video clips."
+        let hits = TruthReconciler.fabricatedStructuralClaims(in: summary, sourceText: clips)
+        #expect(hits.contains("clip"))
+        #expect(hits.contains("clips"))
+        #expect(hits.contains("video"))
+        #expect(TruthReconciler.violates(summary: summary, sourceText: clips, strictness: .strict))
+        #expect(TruthReconciler.violates(summary: summary, sourceText: clips, strictness: .relaxed))
+        // The proper-noun path alone would NOT have caught it.
+        #expect(TruthReconciler.fabricatedEntities(in: summary, sourceText: clips, strictness: .strict).isEmpty)
+    }
+
+    /// If the clips genuinely use a media word, the summary may too — grounded,
+    /// not flagged (no false positive when the content is really about video).
+    @Test func structuralWord_presentInClips_notFlagged() {
+        let clips = "Spent the afternoon editing a video of the garden — the light was perfect."
+        let summary = "You edited a video of the garden while the light held."
+        #expect(TruthReconciler.fabricatedStructuralClaims(in: summary, sourceText: clips).isEmpty)
+        #expect(!TruthReconciler.violates(summary: summary, sourceText: clips, strictness: .strict))
+    }
+
+    /// The extractive fallback is drawn from the clips, so it can't introduce a
+    /// structural word the source lacks — it passes the structural check too.
+    @Test func extractiveFallback_hasNoStructuralLeak() {
+        let clips = "I am not bound to win, but I am bound to be true."
+        let fallback = TruthReconciler.extractiveSummary(fromClipText: clips)
+        #expect(TruthReconciler.fabricatedStructuralClaims(in: fallback, sourceText: clips).isEmpty)
+    }
 }

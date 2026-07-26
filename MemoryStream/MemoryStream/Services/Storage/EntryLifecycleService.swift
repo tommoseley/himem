@@ -477,6 +477,28 @@ final class EntryLifecycleService {
         return parts.joined(separator: "\n\n")
     }
 
+    /// Discards an **uncommitted organize draft** — the X on the review /
+    /// reorganize sheet (spec §8, dismiss = discard-to-last-committed,
+    /// 2026-07-24; supersedes the June 12 "dismiss = decide later, never
+    /// discard" pin). Deletes the draft `OrganizePass`; then, if the memory has
+    /// **no committed pass left** (Case 2 — a first draft, never committed),
+    /// also deletes the now-orphaned `InferenceSummary` so the legacy inference
+    /// card can't render a summary over an unorganized memory (the display
+    /// contradiction the caveat warned about). **Case 1** (a prior committed
+    /// pass remains — Reorganize on an already-Organized memory) leaves the
+    /// summary, since it belongs to the restored committed version. Topics and
+    /// mentions (library-backed associations) are never touched — re-organize
+    /// reconciles them.
+    static func discardDraftPass(_ pass: OrganizePass, in context: NSManagedObjectContext) {
+        let entry = pass.entry
+        context.delete(pass)
+        try? context.save()   // pass truly gone → latestOrganizePass reflects reality
+        if let entry, entry.latestOrganizePass == nil, let inference = entry.inferenceSummary {
+            context.delete(inference)
+            try? context.save()
+        }
+    }
+
     /// Deletes the specified MediaReferences (and their cached thumbnails, and
     /// for voice refs, the underlying audio file) by id, regardless of which
     /// entry they belong to. Used by Contribute Mode's X-cancel to remove only
