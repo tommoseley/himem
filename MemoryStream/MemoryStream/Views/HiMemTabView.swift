@@ -106,6 +106,50 @@ struct HiMemTabView: View {
     }
 
     var body: some View {
+        // CRAP 2026-07-26: the observer cluster + presentation modifiers are
+        // split off `body` — it was sitting exactly on the CC-30 critical line
+        // (a tab shell hanging ~13 `.onChange` bus observers off one body; F2b's
+        // `restorePending` observer was the latest nudge). Body is now the
+        // layout + presentation; routing observers live in `tabRoutingObservers`.
+        tabRoutingObservers(
+            tabRootLayout
+                .captureFlowHost(
+                    activeModality: $activeCaptureModality,
+                    speechService: speechService,
+                    captureSource: captureSource,
+                    onCaptured: handleCapturedItem
+                )
+                .fullScreenCover(item: Binding(
+                    get: { coachmarks.visible },
+                    set: { newValue in
+                        if newValue == nil, let current = coachmarks.visible {
+                            coachmarks.dismiss(current)
+                        }
+                    }
+                )) { kind in
+                    CoachmarkView(kind: kind) {
+                        coachmarks.dismiss(kind)
+                    }
+                    .presentationBackground(.clear)
+                }
+                .sheet(isPresented: Binding(
+                    get: { clipsStatusSheet != nil },
+                    set: { presented in if !presented { clipsStatusSheet = nil } }
+                )) {
+                    if let data = clipsStatusSheet {
+                        ClipsStatusSheet(data: data) {
+                            clipsStatusSheet = nil
+                        }
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.hidden)
+                        .presentationBackground(Crucible.Color.paper)
+                    }
+                }
+        )
+    }
+
+    /// The tab shell's layout — TabView + context-aware FAB + presence dot.
+    private var tabRootLayout: some View {
         // FAB anchor edge follows the Left-Handed FAB preference. The presence
         // dot self-positions (GeometryReader + `.position`) so it's unaffected;
         // the TabView fills. Only the FAB moves. See `FABHandedness`.
@@ -189,25 +233,14 @@ struct HiMemTabView: View {
                     .allowsHitTesting(false)
             }
         }
-        .captureFlowHost(
-            activeModality: $activeCaptureModality,
-            speechService: speechService,
-            captureSource: captureSource,
-            onCaptured: handleCapturedItem
-        )
-        .fullScreenCover(item: Binding(
-            get: { coachmarks.visible },
-            set: { newValue in
-                if newValue == nil, let current = coachmarks.visible {
-                    coachmarks.dismiss(current)
-                }
-            }
-        )) { kind in
-            CoachmarkView(kind: kind) {
-                coachmarks.dismiss(kind)
-            }
-            .presentationBackground(.clear)
-        }
+    }
+
+    /// The cross-tab event-bus routing observers (+ the cold-launch `onAppear`),
+    /// split off `body` in the 2026-07-26 CRAP pass — ~13 `.onChange` handlers,
+    /// each individually trivial (route a bus signal to a tab selection or a
+    /// capture modality) but collectively at the CC-30 line when inline.
+    private func tabRoutingObservers(_ content: some View) -> some View {
+        content
         .onChange(of: coachmarks.restorePending) { _, pending in
             // F2b: "Show me around" was tapped in the Learn hub — it reset the
             // seen flags and set this flag. Wait for the hub's navigation pop
@@ -219,19 +252,6 @@ struct HiMemTabView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                 guard coachmarks.restorePending else { return }
                 coachmarks.consumeRestore(currentTab: coachmarkKind(for: selection))
-            }
-        }
-        .sheet(isPresented: Binding(
-            get: { clipsStatusSheet != nil },
-            set: { presented in if !presented { clipsStatusSheet = nil } }
-        )) {
-            if let data = clipsStatusSheet {
-                ClipsStatusSheet(data: data) {
-                    clipsStatusSheet = nil
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.hidden)
-                .presentationBackground(Crucible.Color.paper)
             }
         }
         .onChange(of: captureLanding.pendingReturnToClips) { _, pending in
