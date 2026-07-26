@@ -269,19 +269,28 @@ final class ProcessingEngine {
         // grounds a name that shares a distinctive token with the clips while
         // still catching true fabrications (no shared token: "Ben", "Albert
         // Einstein"). The `strictness` param now governs only the mention-drop.
-        if TruthReconciler.violates(summary: result.summary, sourceText: clipText, strictness: .relaxed) {
-            NSLog("[HiMem][TruthReconciler] summary named an entity absent from the clips; retrying once")
-            if let retried = await retry(),
-               !TruthReconciler.violates(summary: retried.summary, sourceText: clipText, strictness: .relaxed) {
-                reconciled = retried
-            } else {
-                NSLog("[HiMem][TruthReconciler] retry still fabricated; falling back to extractive summary")
+        // Gate on the summary AND the title (P1-2, 2026-07-25). The title needs
+        // its own check — title-casing defeats the summary heuristic, so a
+        // fabricated author or a copied quote used to sail through. One retry
+        // covers both; if it doesn't clear, each bad field falls back
+        // INDEPENDENTLY so a clean field isn't discarded for the other's sin.
+        let summaryBad = TruthReconciler.violates(summary: result.summary, sourceText: clipText, strictness: .relaxed)
+        let titleBad = TruthReconciler.titleViolates(title: result.title ?? "", sourceText: clipText, strictness: .relaxed)
+        if summaryBad || titleBad {
+            NSLog("[HiMem][TruthReconciler] summary/title named an entity absent from the clips (or the title copied a quote); retrying once")
+            let candidate = await retry() ?? result
+            let sBad = TruthReconciler.violates(summary: candidate.summary, sourceText: clipText, strictness: .relaxed)
+            let tBad = TruthReconciler.titleViolates(title: candidate.title ?? "", sourceText: clipText, strictness: .relaxed)
+            if sBad || tBad {
+                NSLog("[HiMem][TruthReconciler] retry still fabricated; extractive summary / structural title as needed")
                 reconciled = ClaudeAPIService.AnalysisResult(
-                    entities: result.entities,
-                    topics: result.topics,
-                    summary: TruthReconciler.extractiveSummary(fromClipText: clipText),
-                    title: TruthReconciler.extractiveTitle(fromClipText: clipText)
+                    entities: candidate.entities,
+                    topics: candidate.topics,
+                    summary: sBad ? TruthReconciler.extractiveSummary(fromClipText: clipText) : candidate.summary,
+                    title: tBad ? TruthReconciler.structuralTitle(topics: candidate.topics) : candidate.title
                 )
+            } else {
+                reconciled = candidate
             }
         }
         // Ungrounded-mention drop is the on-device palette-bleed guard
@@ -497,10 +506,16 @@ final class ProcessingEngine {
         // "Lincoln", discarding the whole draft for the bare-quote extractive.
         var draftTitle = result.title
         var draftSummary = result.summary
+        // Summary AND title gated independently (P1-2): a fabricated title
+        // (invented author / copied quote) is caught on its own and replaced
+        // with a structural title; a clean summary is kept.
         if TruthReconciler.violates(summary: result.summary, sourceText: content, strictness: .relaxed) {
-            NSLog("[HiMem][TruthReconciler] reorganize draft named an entity absent from the clips; falling back to extractive")
+            NSLog("[HiMem][TruthReconciler] reorganize summary named an entity absent from the clips; extractive summary")
             draftSummary = TruthReconciler.extractiveSummary(fromClipText: content)
-            draftTitle = TruthReconciler.extractiveTitle(fromClipText: content)
+        }
+        if TruthReconciler.titleViolates(title: result.title ?? "", sourceText: content, strictness: .relaxed) {
+            NSLog("[HiMem][TruthReconciler] reorganize title fabricated a name or copied a quote; structural title")
+            draftTitle = TruthReconciler.structuralTitle(topics: result.topics)
         }
 
         await context.perform { [self] in

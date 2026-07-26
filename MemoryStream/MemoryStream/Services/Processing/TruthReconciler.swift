@@ -116,6 +116,75 @@ enum TruthReconciler {
             || !fabricatedStructuralClaims(in: summary, sourceText: sourceText).isEmpty
     }
 
+    // MARK: - Title grounding (P1-2, 2026-07-25)
+
+    /// The gate trigger for a TITLE, checked on its own. `violates(summary:)`
+    /// can't see a fabricated title: the model title-cases every word, so the
+    /// mid-sentence-capitalization heuristic is noise there — which let a title
+    /// smuggle an invented author ("Ralph Waldo Emerson's Reflection" on an
+    /// unattributed quote) or a raw verbatim clip quote ("I am not bound to
+    /// win", reading as the user's own words) straight past the summary gate.
+    /// Two case-normalized checks:
+    ///  1. an ungrounded MULTI-WORD proper-noun run (an invented name), and
+    ///  2. the title being a long verbatim run of the source (a copied quote).
+    static func titleViolates(title: String, sourceText: String, strictness: Strictness) -> Bool {
+        !fabricatedTitleNames(in: title, sourceText: sourceText, strictness: strictness).isEmpty
+            || isVerbatimQuoteFragment(title: title, sourceText: sourceText)
+    }
+
+    /// Multi-word proper-noun runs in a TITLE that aren't grounded in the
+    /// source. Unlike `fabricatedEntities`, it does NOT skip the first token (a
+    /// title has no grammar-initial word to excuse — "Emerson's Reflection"
+    /// leads with the name) and requires a run of **≥2** capitalized tokens: a
+    /// single title-cased word is editorial framing ("Reflection"), not a
+    /// claimed name, so requiring a run keeps false positives off ordinary
+    /// titles. Grounding is case-insensitive (`isGrounded` lowercases both
+    /// sides) — the "case-normalize before matching" fix, so title-casing can't
+    /// hide an ungrounded name.
+    static func fabricatedTitleNames(in title: String, sourceText: String, strictness: Strictness) -> [String] {
+        let words = tokenize(Substring(title))
+        var violations: [String] = []
+        var i = 0
+        while i < words.count {
+            guard isProperNounCandidate(words[i]) else { i += 1; continue }
+            var run = [words[i]]
+            var j = i + 1
+            while j < words.count, isProperNounCandidate(words[j]) { run.append(words[j]); j += 1 }
+            if run.count >= 2 {
+                let phrase = run.joined(separator: " ")
+                if !isGrounded(phrase, in: sourceText, strictness: strictness) { violations.append(phrase) }
+            }
+            i = j
+        }
+        return violations
+    }
+
+    /// True when the title is a long (≥5-word) verbatim run of the source — a
+    /// raw quote fragment presented as a title reads as the user's own words.
+    /// The word floor keeps short descriptive titles (legitimately drawn from
+    /// the content) safe.
+    static func isVerbatimQuoteFragment(title: String, sourceText: String) -> Bool {
+        let t = title.trimmingCharacters(in: CharacterSet(charactersIn: "“”\"…,. ")).lowercased()
+        guard t.split(whereSeparator: { $0 == " " }).count >= 5 else { return false }
+        return sourceText.lowercased().contains(t)
+    }
+
+    /// A structural fallback title that can neither fabricate a name nor copy a
+    /// quote: built from the (already-reconciled, grounded) topic, else a plain
+    /// descriptor. Deliberately NOT `extractiveTitle` — that draws the clip
+    /// lead, which for a quote memory reproduces the very fragment we're
+    /// avoiding.
+    /// NOTE (copy is a *what*, flagged for Tom): the punch-list example was
+    /// "A reflection on integrity"; that assumes a *reflective* memory, so this
+    /// uses the neutral topic label. Adjust to a ruled copy form if desired.
+    static func structuralTitle(topics: [String]) -> String {
+        if let topic = topics.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            let t = topic.trimmingCharacters(in: .whitespaces)
+            return t.prefix(1).uppercased() + t.dropFirst()
+        }
+        return "A captured moment"
+    }
+
     // MARK: - Structural-claim leakage (clip scaffolding narrated as content)
 
     /// The container's own vocabulary — words HiMem uses to talk about how a
