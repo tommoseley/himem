@@ -27,7 +27,12 @@ import Foundation
 struct ThumbnailServiceDedupTests {
 
     @Test func inFlight_drained_afterConcurrentSameIdCalls() async {
-        let service = ThumbnailService.shared
+        // Own instance, NOT `.shared` (F6, 2026-07-26): `_inFlightCount` reads
+        // the instance's `inFlight` map. Asserting it on the singleton races
+        // any parallel suite that mutates `ThumbnailService.shared` (every test
+        // that saves a media ref → `EntryLifecycleService.cacheThumbnails`).
+        // `.serialized` can't fix a cross-SUITE race; an isolated instance does.
+        let service = ThumbnailService()
         // Nonexistent identifier — MediaResolver falls through and
         // both callers get nil, but the dedup gate + drain still
         // exercises.
@@ -43,7 +48,8 @@ struct ThumbnailServiceDedupTests {
     }
 
     @Test func inFlight_isolated_perOsIdentifier() async {
-        let service = ThumbnailService.shared
+        // Own instance, not `.shared` — see the sibling test (F6, 2026-07-26).
+        let service = ThumbnailService()
         let idA = "test-nonexistent-A-\(UUID().uuidString)"
         let idB = "test-nonexistent-B-\(UUID().uuidString)"
 
