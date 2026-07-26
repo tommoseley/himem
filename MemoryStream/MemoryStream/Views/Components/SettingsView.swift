@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var refreshID = UUID()
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
+    /// Hands-free (Siri) recording cap in minutes; `0` = No limit. Default 10.
+    @AppStorage("handsFreeRecordingLimitMinutes") private var handsFreeLimitMinutes = 10
     @AppStorage("tagMemoriesWithLocation") private var tagMemoriesWithLocation = true
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
     @AppStorage("appearance") private var appearanceRaw: String = Appearance.system.rawValue
@@ -222,17 +224,22 @@ struct SettingsView: View {
                 Section {
                     Toggle("Save voice recordings", isOn: $saveVoiceEntries)
                         .tint(Crucible.Color.accent)
+                    Picker("Recording limit", selection: $handsFreeLimitMinutes) {
+                        Text("5 minutes").tag(5)
+                        Text("10 minutes").tag(10)
+                        Text("30 minutes").tag(30)
+                        Text("60 minutes").tag(60)
+                        Text("No limit").tag(0)
+                    }
                     Picker("Voice search pace", selection: $voiceSilenceModeRaw) {
                         ForEach(VoiceSilenceMode.allCases) { mode in
                             Text("\(mode.label) · \(mode.subtitle)").tag(mode.rawValue)
                         }
                     }
                 } header: {
-                    Text("Voice")
+                    Text("Voice & recording")
                 } footer: {
-                    Text(saveVoiceEntries
-                        ? "Voice recordings are saved on device. You can play them back from entry cards. Tap Done to finish a voice search; the pace setting only controls how long HiMem waits if you stop talking."
-                        : "Voice recordings are discarded after transcription. Only the text is kept. Tap Done to finish a voice search; the pace setting only controls how long HiMem waits if you stop talking.")
+                    Text("Recordings you start hands-free stop and save at this limit. Nothing is lost.")
                 }
 
                 // MARK: - Privacy
