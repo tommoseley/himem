@@ -44,6 +44,23 @@ struct SynthesizedNoteRenderGuardTests {
         return try? storage.viewContext.fetch(request).first
     }
 
+    /// A memory with N voice fragments (cleaned transcripts) + reconciled
+    /// content — the fixture these guards need. This is a **setup vehicle
+    /// only**; it replaces the retired `createMemoryFromVoiceClips` (2026-07-26
+    /// sweep). The guard under test is `migrateOrphanedContentIfNeeded` /
+    /// `append` — both live — exercised AFTER the test forces the raw-content
+    /// drift manually below, so nothing about the guard's bite depends on this
+    /// helper.
+    private func makeVoiceMemory(_ service: EntryLifecycleService, _ storage: StorageService, clips: [(file: String, transcript: String, createdAt: Date)]) throws -> UUID {
+        let entry = try service.createEmptyEntry(inputType: .voiceInApp)
+        for c in clips {
+            _ = try storage.createVoiceFragment(for: entry, audioFilename: c.file, transcript: c.transcript, createdAt: c.createdAt)
+        }
+        entry.content = EntryLifecycleService.joinedContent(from: entry)  // reconciled fixture
+        try storage.viewContext.save()
+        return entry.id
+    }
+
     // MARK: - The fail-safe
 
     /// The money test. A memory whose voice fragments hold **cleaned**
@@ -56,15 +73,10 @@ struct SynthesizedNoteRenderGuardTests {
         let (storage, service) = makeService()
 
         let t0 = Date()
-        let newId = try #require(
-            service.createMemoryFromVoiceClips(
-                [
-                    ("a.caf", ". first capture", t0),               // leading ASR noise
-                    ("b.caf", "second capture", t0.addingTimeInterval(10)),
-                ],
-                topicName: nil
-            )
-        )
+        let newId = try makeVoiceMemory(service, storage, clips: [
+            (file: "a.caf", transcript: ". first capture", createdAt: t0),               // leading ASR noise
+            (file: "b.caf", transcript: "second capture", createdAt: t0.addingTimeInterval(10)),
+        ])
 
         // Simulate a FUTURE write path that leaves `entry.content` as the
         // RAW join (the reconcile `077de8c` added is absent), while the
@@ -108,15 +120,10 @@ struct SynthesizedNoteRenderGuardTests {
         let (storage, service) = makeService()
 
         let t0 = Date()
-        let newId = try #require(
-            service.createMemoryFromVoiceClips(
-                [
-                    ("a.caf", ". first capture", t0),               // leading ASR noise
-                    ("b.caf", "second capture", t0.addingTimeInterval(10)),
-                ],
-                topicName: nil
-            )
-        )
+        let newId = try makeVoiceMemory(service, storage, clips: [
+            (file: "a.caf", transcript: ". first capture", createdAt: t0),               // leading ASR noise
+            (file: "b.caf", transcript: "second capture", createdAt: t0.addingTimeInterval(10)),
+        ])
 
         // Force the raw-join drift: `entry.content` byte-unequal to the
         // cleaned `joinedContent(from:)`, exactly as a synced pre-fix

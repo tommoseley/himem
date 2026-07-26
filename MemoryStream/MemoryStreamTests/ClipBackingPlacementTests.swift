@@ -46,27 +46,11 @@ struct ClipBackingPlacementTests {
         #expect(ref.referencingMemoryCount == 2, "managed clip placed into a second memory via an edge")
     }
 
-    /// Inbox backing: promoting a bench clip into an existing memory (the core
-    /// of `EntryLifecycleService.placeInboxClip`, via `appendClips`)
-    /// materializes a `MediaReference` + edge — the thing the placeholder used
-    /// to stub out.
-    @Test func inboxClip_promoteIntoMemory_materializesRefAndEdge() throws {
-        let storage = StorageService(inMemory: true)
-        let lifecycle = EntryLifecycleService(storage: storage, processingEngine: .shared)
-        let target = try storage.createEntry(content: "", inputType: .typed, title: "Target")
-
-        let written = lifecycle.appendClips(
-            entryId: target.id,
-            clips: [("bench.m4a", "a bench clip transcript", Date())],
-            sourceDevice: .phone
-        )
-        #expect(written == 1, "the manifest-backed clip is materialized, not stubbed")
-
-        storage.viewContext.refreshAllObjects()
-        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-        req.predicate = NSPredicate(format: "osIdentifier == %@", "bench.m4a")
-        let ref = try storage.viewContext.fetch(req).first
-        #expect(ref != nil, "a MediaReference now backs the promoted clip")
-        #expect(ref?.referencingMemoryCount == 1, "edged to the target memory")
-    }
+    // NOTE (2026-07-26 sweep): the former `inboxClip_promoteIntoMemory_-
+    // materializesRefAndEdge` test exercised the retired `appendClips`
+    // promotion path. Post-P0-3 a bench clip is materialized on arrival and
+    // placement edges the EXISTING ref — that invariant (bench clip → ref +
+    // edge, no duplicate) is covered by `ClipPlacementEdgesExistingRefTests`
+    // (`existingMemory_attachExisting_edgesSameRef_noDuplicate` +
+    // `newMemory_fromExistingClip_edgesSameRef_noDuplicate`). No coverage lost.
 }

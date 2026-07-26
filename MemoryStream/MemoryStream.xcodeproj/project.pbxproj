@@ -169,7 +169,6 @@
 		A200000010 /* MemoryClipEdge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000010 /* MemoryClipEdge.swift */; };
 		A200000020 /* HiMemTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000020 /* HiMemTabView.swift */; };
 		A200000021 /* ClipsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000021 /* ClipsTabView.swift */; };
-		A200000022 /* ClipDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000022 /* ClipDetailView.swift */; };
 		A200000023 /* PlaceClipSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000023 /* PlaceClipSheet.swift */; };
 		A200000024 /* ClipFateRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000024 /* ClipFateRow.swift */; };
 		A200000025 /* CoachmarkOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000025 /* CoachmarkOrchestrator.swift */; };
@@ -440,7 +439,6 @@
 		B200000010 /* MemoryClipEdge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryClipEdge.swift; sourceTree = "<group>"; };
 		B200000020 /* HiMemTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiMemTabView.swift; sourceTree = "<group>"; };
 		B200000021 /* ClipsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipsTabView.swift; sourceTree = "<group>"; };
-		B200000022 /* ClipDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipDetailView.swift; sourceTree = "<group>"; };
 		B200000023 /* PlaceClipSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceClipSheet.swift; sourceTree = "<group>"; };
 		B200000024 /* ClipFateRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipFateRow.swift; sourceTree = "<group>"; };
 		B200000025 /* CoachmarkOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CoachmarkOrchestrator.swift; path = MemoryStream/Services/Tutorials/CoachmarkOrchestrator.swift; sourceTree = SOURCE_ROOT; };
@@ -639,7 +637,6 @@
 				B200000020 /* HiMemTabView.swift */,
 				B200000021 /* ClipsTabView.swift */,
 				B200000027 /* ClipsStatusSheet.swift */,
-				B200000022 /* ClipDetailView.swift */,
 				G200000010 /* Clip */,
 				G100000070 /* Launch */,
 				G100000080 /* Onboarding */,
@@ -1433,7 +1430,6 @@
 				A200000045 /* ClipCollection.swift in Sources */,
 				A200000046 /* BurstThumbnailPrefetcher.swift in Sources */,
 				A200000047 /* TranscriptClipController.swift in Sources */,
-				A200000022 /* ClipDetailView.swift in Sources */,
 				A200000023 /* PlaceClipSheet.swift in Sources */,
 				A100000509 /* SummaryFieldMigration.swift in Sources */,
 				A100000009 /* ClaudeAPIService.swift in Sources */,

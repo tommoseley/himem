@@ -133,7 +133,7 @@ struct MemoryAddExistingClipsTests {
 
     /// Spec (`Memory Detail · unified editing model.md` §"Adding clips
     /// to a memory"): "New clips append in `orderInMemory`/**capturedAt**
-    /// order" — same chronological bulk-append as `appendClips`, NOT the
+    /// order" — chronological bulk-append, NOT the
     /// order the user happened to tap them. Select newer-then-older; they
     /// must still land oldest-first after the memory's existing clips.
     @Test func attachExistingClips_appendsInCapturedAtOrder_notTapOrder() throws {
