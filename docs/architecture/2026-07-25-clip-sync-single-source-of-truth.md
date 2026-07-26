@@ -34,6 +34,16 @@ This *derives* the state from position rather than storing a flag that can disag
 - **C** ✅ placement edges the existing ref — `createMemory` / `appendToExistingMemory` / `PlaceClipSheet.commit` now materialize-then-`attachExistingClips` (or `createMemoryFromExistingClips`). Deleted `placeInboxClip` / `createMemoryFromInboxClip` / `moveInboxAudioIfNeeded` + the sheet move-loops + `dumpPathDiagnostic`. Commit `20ca598`, 4 money tests. **The double-ref bug (B-without-C) is the thing C exists to prevent.**
 - **migration** ✅ **`materializeAll` IS the migration** — it runs on every bench `onAppear`, so the first post-upgrade Clips-tab open sweeps every pre-existing `.transcribed` manifest clip into a ref (`id == clipId`, `reviewed` carried), idempotent thereafter (`materializeAll_isIdempotentAcrossAppears`). Kept OFF the cold-launch path (per the 400ms target) — pre-existing clips still render on the bench from the manifest union until that first sweep, so no data is lost in the interim; new clips sync immediately via the arrival-materialize wiring.
 
+## Write-path coherence sweep (added after C — non-negotiable #2)
+Post-materialize a bench clip is a ref, but several per-clip write paths were statically dispatched on the `.inbox` `Source` and so **silently no-op'd on a materialized clip**. All now route through backing-aware lifecycle methods (ref-if-exists-else-manifest):
+- **transcript edit** (`ClipEditorModal` `.inbox`) + **Transcribe-again** (`SessionListView.applyClipRetryOutcome`) → `writeBenchClipTranscript`.
+- **delete** (`ClipEditorModal.deleteClip` `.inbox`) → `recycleBenchClip`.
+- **reviewed-on-open** (`ClipEditorModal` `.inbox`) → marks BOTH the manifest flag and the ref-keyed `BenchClipReviewStore`.
+- **duration** — `BenchClipDurationStore` caches the payload duration at materialize (ref has no duration attribute); the bench card shows real session length on the originating device (`syntheticClip` reads it), degrading to 0 on a receive-only device (ruling a) pending async `AVURLAsset` derivation.
+
+Verified NOT gaps: `ClipsTabView.performSelectionDelete` partitions dynamically against the live manifest (materialized clips fall into `refIds`); `soloClipIds` is clipId-keyed on `benchClips` (backing-agnostic); `SessionListView`'s session-open review already marks both stores; `ClipDetailView` is dead (no constructors — superseded by `ClipEditorModal`), so its `.inbox` write path is unreachable.
+
 ## Follow-ups (flagged, not done in this PR)
+- **`ClipDetailView` is dead** (no constructors) — remove it in a follow-up.
 - `createMemoryFromVoiceClips` + `appendClips` are now **production-dead** (only test-covered) after C rewired their callers. Recommend removing them with `CreateMemoryFromClipsAssemblyTests` / `EntryLifecycleServiceAppendClipsTests` in a follow-up.
 - Pre-existing red on the branch (NOT from this work, reproduced on the A-only state which touches no `ProcessingEngine` code): `ExistingMentionsRefinementTests.processEntry_sendsExistingMentionValuesToAnalyzer` + `…_dedupedCaseInsensitively` — `processEntry` sends an empty existing-mentions list. Worth its own bug-first cycle.
