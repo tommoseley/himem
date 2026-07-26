@@ -50,6 +50,9 @@ enum ArrivedClipMaterializer {
         // Per-device `reviewed` carries into the ref-keyed store (stays
         // per-device by design — risk-2, not synced).
         if clip.reviewed { BenchClipReviewStore.markReviewed(clip.clipId) }
+        // Cache the payload duration (the ref has no duration attribute) so the
+        // bench card shows real session length on the originating device.
+        BenchClipDurationStore.record(clip.clipId, clip.duration)
         // Demote the manifest active row → ref is now the source of truth.
         // Tombstones the clip, gating a late watch redelivery (risk-3).
         InboxManifest.shared.removeBatch(clipIds: [clip.clipId])
@@ -102,15 +105,16 @@ enum ArrivedClipMaterializer {
     /// - `transcriptionAttempted: true` — a materialized ref is post-attempt by
     ///   construction (design decision #1: state derived from store position).
     /// - `status: .transcribed` — likewise.
-    /// - `duration: 0` — `MediaReference` carries none; the session-duration
-    ///   line resolves async (`AVURLAsset.load(.duration)`) and degrades until
-    ///   it lands, exactly as the All lens already does (ruling a).
+    /// - `duration` — read from the per-device `BenchClipDurationStore` (the
+    ///   ref has no duration attribute). Real on the originating device; a
+    ///   receive-only device degrades to 0 (ruling a) until an async
+    ///   `AVURLAsset.load(.duration)` follow-up lands.
     /// - `reviewed` — read from the per-device `BenchClipReviewStore` (risk-2).
     static func syntheticClip(from ref: MediaReference) -> InboxClip {
         InboxClip(
             clipId: ref.id,
             capturedAt: ref.createdAt ?? Date(timeIntervalSince1970: 0),
-            duration: 0,
+            duration: BenchClipDurationStore.duration(ref.id) ?? 0,
             transcript: ref.transcript ?? "",
             latitude: ref.latitude?.doubleValue,
             longitude: ref.longitude?.doubleValue,

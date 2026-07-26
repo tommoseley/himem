@@ -1264,6 +1264,30 @@ enum BenchClipReviewStore {
     }
 }
 
+/// Per-device duration cache for materialized bench clips (P0-3). A voice
+/// `MediaReference` carries no `duration` attribute (the no-schema-change
+/// constraint), so the duration from the capture payload is stashed here at
+/// materialize time and read back into the synthetic bench clip — the
+/// originating device shows the real session length immediately. A device that
+/// only RECEIVES the ref via CloudKit has no cache entry and shows 0:00; the
+/// graceful degradation ruling (a) accepted (2026-07-25), pending an async
+/// `AVURLAsset.load(.duration)` derivation on the bench card as a follow-up.
+enum BenchClipDurationStore {
+    private static let key = "com.himem.bench.clipDurations"
+
+    static func duration(_ id: UUID) -> TimeInterval? {
+        UserDefaults.standard.dictionary(forKey: key)?[id.uuidString] as? Double
+    }
+
+    /// Idempotent; a non-positive duration is not recorded (nothing to show).
+    static func record(_ id: UUID, _ duration: TimeInterval) {
+        guard duration > 0 else { return }
+        var dict = UserDefaults.standard.dictionary(forKey: key) ?? [:]
+        dict[id.uuidString] = duration
+        UserDefaults.standard.set(dict, forKey: key)
+    }
+}
+
 /// Per-device "was in a memory" marker (P7-3, July 19 2026). A
 /// `MediaReference` with `edges == 0` is otherwise indistinguishable
 /// between never-connected (phone-bench capture) and previously-attached-

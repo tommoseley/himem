@@ -71,6 +71,11 @@ struct ArrivedClipMaterializerTests {
             #expect(ref.rollGroupId == clip.rollGroupId)
             #expect(ref.sourceDevice == clip.source)
             #expect(ref.referencingMemoryCount == 0, "materializes UNPLACED — a zero-edge ref")
+
+            // Duration (no ref attribute) carries via the per-device cache, so
+            // the bench card shows real session length on the capture device.
+            let synth = ArrivedClipMaterializer.syntheticClip(from: ref)
+            #expect(synth.duration == clip.duration, "payload duration survives materialize→synth")
         }
     }
 
