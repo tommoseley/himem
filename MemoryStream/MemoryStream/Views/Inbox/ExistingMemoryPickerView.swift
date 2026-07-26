@@ -195,10 +195,14 @@ struct ExistingMemoryPickerView: View {
     /// "only ~3 memories" bug.)
     static func fetchAllMemories(in ctx: NSManagedObjectContext) -> [JournalEntry] {
         let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
-        // `!= YES` (not `== NO`) so CloudKit-synced records that stored the
-        // flag as nil still appear — the same nil-safe form the main
-        // Memories fetch uses (`JournalEntry` recycled predicate).
-        req.predicate = NSPredicate(format: "isRecycled != YES")
+        // Nil-safe form: `isRecycled` is modeled optional, so a CloudKit-synced
+        // or pre-attribute record can store NULL. In the SQLite store `!= YES`
+        // compiles to `<> 1`, and `NULL <> 1` is NULL (not true) — which
+        // silently DROPS a nil-`isRecycled` memory (the "my only memory won't
+        // list" bug). This is the same nil-inclusive predicate the Memories
+        // tab (`JournalEntry.fetchAllChronological`), search, and epigraph
+        // fetches all use.
+        req.predicate = NSPredicate(format: "isRecycled == NO OR isRecycled == nil")
         let raw = (try? ctx.fetch(req)) ?? []
         return raw.sorted { mostRecentClipDate($0) > mostRecentClipDate($1) }
     }

@@ -97,4 +97,57 @@ struct ExistingMemoryPickerFetchTests {
         let all = ExistingMemoryPickerView.fetchAllMemories(in: storage.viewContext)
         #expect(ExistingMemoryPickerView.filter(all, query: "   ").count == 2)
     }
+
+    /// **The money test (#3, 2026-07-25).** A memory whose `isRecycled` is a
+    /// genuine SQL NULL — the state CloudKit-synced or pre-attribute records
+    /// land in — MUST still list in the picker. The old `isRecycled != YES`
+    /// predicate compiled to `<> 1`, and `NULL <> 1` is NULL (not true), so it
+    /// silently dropped that memory (device: "my only memory won't list").
+    ///
+    /// This MUST run against a real SQLite store: the in-memory store used by
+    /// the other tests evaluates the predicate via Foundation with a scalar
+    /// `Bool` default of `false`, where `!= YES` spuriously PASSES — masking
+    /// the bug. Reverting the fix to `isRecycled != YES` makes this fail; the
+    /// nil-safe `== NO OR == nil` makes it pass.
+    @Test func fetchAll_includesMemoryWithNullRecycledFlag_sqliteStore() throws {
+        let (container, url) = StorageService.makeSQLiteTestContainer()
+        defer {
+            for suffix in ["", "-wal", "-shm"] {
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: url.path + suffix))
+            }
+        }
+        let ctx = container.viewContext
+
+        // Seed three memories: one with a genuine NULL isRecycled, one live
+        // (false), one recycled (true).
+        for title in ["NullFlag", "LiveFalse", "RecycledTrue"] {
+            let e = JournalEntry(context: ctx)
+            e.id = UUID()
+            e.createdAt = Date()
+            e.title = title
+            e.isRecycled = (title == "RecycledTrue")
+        }
+        try ctx.save()
+
+        // Force a genuine SQL NULL on NullFlag via a batch update — this writes
+        // straight to the store, bypassing the scalar-Bool coercion that would
+        // otherwise store 0. (NSBatchUpdateRequest is unsupported in-memory,
+        // which is the other reason this test needs the SQLite store.)
+        let batch = NSBatchUpdateRequest(entityName: "JournalEntry")
+        batch.predicate = NSPredicate(format: "title == %@", "NullFlag")
+        batch.propertiesToUpdate = ["isRecycled": NSExpression(forConstantValue: nil)]
+        batch.resultType = .updatedObjectIDsResultType
+        let result = try ctx.execute(batch) as? NSBatchUpdateResult
+        let updated = (result?.result as? [NSManagedObjectID]) ?? []
+        #expect(updated.count == 1, "batch update should NULL exactly the NullFlag row")
+        // Batch updates bypass the context — drop cached state so the fetch
+        // reads the store's NULL, not the in-memory 0.
+        ctx.reset()
+
+        let titles = ExistingMemoryPickerView.fetchAllMemories(in: ctx)
+            .map { ExistingMemoryPickerView.rowTitle($0) }
+        #expect(titles.contains("NullFlag"), "A NULL-isRecycled memory must list (the #3 bug)")
+        #expect(titles.contains("LiveFalse"))
+        #expect(!titles.contains("RecycledTrue"), "A genuinely recycled memory stays out")
+    }
 }
