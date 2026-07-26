@@ -477,6 +477,28 @@ final class EntryLifecycleService {
         return parts.joined(separator: "\n\n")
     }
 
+    /// Discards an **uncommitted organize draft** — the X on the review /
+    /// reorganize sheet (spec §8, dismiss = discard-to-last-committed,
+    /// 2026-07-24; supersedes the June 12 "dismiss = decide later, never
+    /// discard" pin). Deletes the draft `OrganizePass`; then, if the memory has
+    /// **no committed pass left** (Case 2 — a first draft, never committed),
+    /// also deletes the now-orphaned `InferenceSummary` so the legacy inference
+    /// card can't render a summary over an unorganized memory (the display
+    /// contradiction the caveat warned about). **Case 1** (a prior committed
+    /// pass remains — Reorganize on an already-Organized memory) leaves the
+    /// summary, since it belongs to the restored committed version. Topics and
+    /// mentions (library-backed associations) are never touched — re-organize
+    /// reconciles them.
+    static func discardDraftPass(_ pass: OrganizePass, in context: NSManagedObjectContext) {
+        let entry = pass.entry
+        context.delete(pass)
+        try? context.save()   // pass truly gone → latestOrganizePass reflects reality
+        if let entry, entry.latestOrganizePass == nil, let inference = entry.inferenceSummary {
+            context.delete(inference)
+            try? context.save()
+        }
+    }
+
     /// Deletes the specified MediaReferences (and their cached thumbnails, and
     /// for voice refs, the underlying audio file) by id, regardless of which
     /// entry they belong to. Used by Contribute Mode's X-cancel to remove only
@@ -756,6 +778,63 @@ final class EntryLifecycleService {
     /// Refresh · 1 assist"`. The user spends the assist by tapping
     /// Refresh — never automatically.
     ///
+    /// Move a bench clip's audio into the memory store if it isn't already
+    /// there — phone clips arrive at the destination, watch clips live in the
+    /// inbox store. Returns false only if the audio can't be located anywhere
+    /// (nothing to promote). Same dual-store logic as `appendToExistingMemory`.
+    private func moveInboxAudioIfNeeded(audioFilename: String) -> Bool {
+        let voiceURL = SpeechService.audioURL(for: audioFilename)
+        if FileManager.default.fileExists(atPath: voiceURL.path) { return true }
+        let inboxURL = InboxManifest.audioURL(for: audioFilename)
+        guard FileManager.default.fileExists(atPath: inboxURL.path) else { return false }
+        do {
+            _ = try UbiquityStore.shared.moveIntoStore(sourceURL: inboxURL, destinationURL: voiceURL)
+            return true
+        } catch {
+            NSLog("[HiMem][PlaceInboxClip] audio move failed for \(audioFilename): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// **Promote-then-place (Tom, July 16; wired 2026-07-25).** Materialize a
+    /// bench `InboxClip` into an EXISTING memory: move its audio, mint a
+    /// `MediaReference` + edge (via `appendClips`), stamp its location, and drop
+    /// the manifest row. Called only ON CONFIRM (the user picked a destination),
+    /// so a cancel never leaves an orphan ref. Returns true on success. This is
+    /// the fix for the "Add to a memory" placeholder on manifest-backed clips.
+    @discardableResult
+    func placeInboxClip(_ clip: InboxClip, intoExisting entryId: UUID) -> Bool {
+        guard moveInboxAudioIfNeeded(audioFilename: clip.audioFilename) else { return false }
+        let written = appendClips(
+            entryId: entryId,
+            clips: [(clip.audioFilename, clip.transcript, clip.capturedAt)],
+            sourceDevice: JournalEntry.SourceDevice(rawValue: clip.source)
+        )
+        guard written > 0 else { return false }
+        ClipLocationResolver.stamp(osIdentifier: clip.audioFilename,
+                                   latitude: clip.latitude, longitude: clip.longitude,
+                                   in: storage.viewContext)
+        InboxManifest.shared.removeBatch(clipIds: [clip.clipId])
+        return true
+    }
+
+    /// Promote a bench `InboxClip` into a NEW memory (Start a Memory with one
+    /// clip). Returns the new memory id. Same materialize-on-confirm contract.
+    @discardableResult
+    func createMemoryFromInboxClip(_ clip: InboxClip) -> UUID? {
+        guard moveInboxAudioIfNeeded(audioFilename: clip.audioFilename) else { return nil }
+        guard let id = createMemoryFromVoiceClips(
+            [(clip.audioFilename, clip.transcript, clip.capturedAt)],
+            topicName: nil,
+            sourceDevice: JournalEntry.SourceDevice(rawValue: clip.source)
+        ) else { return nil }
+        ClipLocationResolver.stamp(osIdentifier: clip.audioFilename,
+                                   latitude: clip.latitude, longitude: clip.longitude,
+                                   in: storage.viewContext)
+        InboxManifest.shared.removeBatch(clipIds: [clip.clipId])
+        return id
+    }
+
     /// Returns the count of clips successfully appended.
     @discardableResult
     func appendClips(
@@ -1212,7 +1291,7 @@ final class EntryLifecycleService {
             // arbiter has nothing to guard on this path).
             for edge in entry.edgesArray {
                 guard let clip = edge.clip else { continue }
-                if clip.referencingMemoryCount == 1 { // this memory is its only edge
+                if clip.edgeCount == 1 { // this memory is its only edge (raw P8 count)
                     clip.recycledAt = now
                 }
             }
@@ -1238,7 +1317,7 @@ final class EntryLifecycleService {
             // an accepted corner of the no-history design.
             for edge in entry.edgesArray {
                 guard let clip = edge.clip, clip.recycledAt != nil else { continue }
-                if clip.referencingMemoryCount == 1 {
+                if clip.edgeCount == 1 { // raw P8 count — symmetric with recycle
                     clip.recycledAt = nil
                 }
             }

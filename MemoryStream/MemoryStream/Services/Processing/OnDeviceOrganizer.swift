@@ -25,8 +25,13 @@ import FoundationModels
 /// false"). Models are advisory; code is authoritative. Documented 3B QUALITY ceilings
 /// that remain (hand-editable, frontier/Plus clears them, not open bugs):
 /// purposive drift · visible-photo claims · occasional voice slip ·
-/// subject-out POV slip · invent-a-speaker — the last is now caught by the
-/// gate before it ships, even though the model still produces it.
+/// subject-out POV slip · invent-a-speaker · structural-metadata leak
+/// (narrating "text clip 1" / "two video clips") — the last two are now caught
+/// by the gate before they ship, even though the model can still produce them.
+/// The structural leak was also fixed at the source (2026-07-24): `formatPrompt`
+/// no longer wraps content in a `Text clip 1:` scaffold and the prompt no
+/// longer tells the model to "reference [media] by count only" — prompt is
+/// primary defense, the `TruthReconciler` structural-leak check is the belt.
 ///
 /// Cross-memory contamination was a real bug, fixed at the source: the
 /// library topics/mentions palette is no longer fed to the model (it
@@ -103,7 +108,7 @@ final class OnDeviceOrganizer: Organizer {
     - If the memory has NO first-person voice — only a photo or a bare observation, nobody speaking as "I" — leave the owner out entirely. Do NOT write "You're capturing…" or "You…". Name only what is there. Example: for a sunset photo, "A deep-orange sunset over the ridge," not "You captured a sunset."
     - Do not add reasons, purposes, or causes the clips don't state. No "to ___," no "because ___."
     - Cadence: write the summary as ONE connected thought, the way a thoughtful friend would recap — flowing, subordinated sentences that string the facts together, connected with subordinating words (while, and, since, as). Never a run of short, clipped "You're X. You're Y. The Z is …" declaratives; that reads as a cold status log about the person. And never a comma list of fragments ("You, X, and Y, three things"). Keep the memory's own specific nouns; change only how they connect.
-    - Photo and video clips are not visible. Do not describe their visual content. Reference them by count only.
+    - Describe only what was said or shown — never the container it arrived in. NEVER mention clips, a number of clips, "clip 1" / "clip N", or media types (photo, video, voice, note, audio, text). Photos and videos are not visible to you: do not invent their visual content, and do not count or label them. If a photo or video came with a description, treat that description as plain content, not as "a photo."
     - Topic selection: when the input lists the user's existing topics, prefer one of those exact labels if any fits this memory. Coin a new topic only when none of the existing topics reasonably fit.
     - Mention selection: when the input lists people, places, and projects the user has mentioned before, prefer one of those exact names if the memory refers to the same one. Coin a new mention only when none of the existing ones match.
     - Only ever name a topic or mention that THIS memory's clips actually refer to. The existing-topics and existing-mentions lists are for spelling and avoiding near-duplicates — they are NOT things to add. Never insert a name or topic from those lists that this memory does not mention. If the clips name no people, places, or projects, return no mentions. If nothing fits, return none.
@@ -138,11 +143,19 @@ final class OnDeviceOrganizer: Organizer {
 
     enum OrganizerError: Error, LocalizedError {
         case modelUnavailable(String)
+        /// Apple's on-device safety guardrail refused the content ("Detected
+        /// content likely to be unsafe"). A distinct case so the caller can
+        /// STOP rather than fall back — a refusal is a sensitivity signal, and
+        /// we never answer it by shipping the content off-device
+        /// (`ProcessingEngine`, Memory Polish spec §3a guardrail note).
+        case safetyRefusal
 
         var errorDescription: String? {
             switch self {
             case .modelUnavailable(let reason):
                 return "On-device organize unavailable: \(reason)"
+            case .safetyRefusal:
+                return "On-device organize declined this content."
             }
         }
     }
@@ -217,6 +230,13 @@ final class OnDeviceOrganizer: Organizer {
                 category = "other"
             }
             NSLog("[HiMem][OnDeviceOrganizer]   category=\(category)")
+            // A safety refusal is thrown as a typed case so the engine can stop
+            // instead of falling back to the cloud (never send refused =
+            // sensitive content off-device). Every other error re-throws
+            // unchanged, keeping the existing timeout/context/other fallback.
+            if category == "guardrail-violation" {
+                throw OrganizerError.safetyRefusal
+            }
             throw error
         }
     }
@@ -301,10 +321,16 @@ final class OnDeviceOrganizer: Organizer {
             entries: existingMentions,
             header: "People, places, and projects this user has mentioned before (prefer one of these if any fits):"
         )
+        // The content is presented plainly — NO "Text clip N:" scaffold, no
+        // media labels, no counts (2026-07-24). The 3B model parroted the
+        // "Text clip 1:" wrapper and the "reference by count only" rule into
+        // summaries ("text clip 1", "two video clips") — structural metadata
+        // narrated as content. The payload is the clips' transcript/
+        // description text only; the model must describe that, never the
+        // container. (Same failure family as the cadence-example bleed.)
         return """
         MEMORY
 
-        Text clip 1:
         "\(content)"
         \(topicsSection)\(mentionsSection)
 

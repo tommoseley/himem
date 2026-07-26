@@ -14,8 +14,10 @@ import Foundation
 /// **Invariant (the honesty contract).** An AI summary/title may compress,
 /// rephrase, reorder, generalize, and carry tone — it may **not introduce
 /// people, places, orgs, dates, events, actions, or relationships absent from
-/// the source clips.** A proper name / concrete entity in the model's output
-/// that is not present in the clips is a fabrication.
+/// the source clips, nor narrate the memory's storage structure** (clip
+/// counts, media types, "clip N"). A proper name / concrete entity in the
+/// model's output that is not present in the clips is a fabrication; so is a
+/// container/media word (`fabricatedStructuralClaims`) the clips never used.
 ///
 /// **Enforcement (deterministic).** Verify entities (proper names, places,
 /// orgs, dates) in the summary/title against the clip text → retry the pass
@@ -104,13 +106,52 @@ enum TruthReconciler {
     }
 
     /// The gate trigger: true when the **summary** contains a fabricated
-    /// entity. Scoped to the summary (not the title) on purpose — the model
-    /// title-cases every word, so a capitalization signal there is noise
-    /// ("A Reflection on Integrity"). On a violation the caller falls back
-    /// BOTH summary and title to extractive, so a fabricated title can't
-    /// survive either.
+    /// entity OR a fabricated structural claim. Scoped to the summary (not the
+    /// title) on purpose — the model title-cases every word, so a
+    /// capitalization signal there is noise ("A Reflection on Integrity"). On a
+    /// violation the caller falls back BOTH summary and title to extractive, so
+    /// a fabricated title can't survive either.
     static func violates(summary: String, sourceText: String, strictness: Strictness) -> Bool {
         !fabricatedEntities(in: summary, sourceText: sourceText, strictness: strictness).isEmpty
+            || !fabricatedStructuralClaims(in: summary, sourceText: sourceText).isEmpty
+    }
+
+    // MARK: - Structural-claim leakage (clip scaffolding narrated as content)
+
+    /// The container's own vocabulary — words HiMem uses to talk about how a
+    /// memory is stored, never words about what it's *about*. A summary that
+    /// says "text clip 1" / "two video clips" is narrating structure the model
+    /// was handed as scaffolding, not content (the 2026-07-24 leak). These are
+    /// the app-internal container words; deliberately excludes ambiguous
+    /// content words ("note", "text", "memory") to keep false-positives near
+    /// zero.
+    private static let structuralTokens: Set<String> = [
+        "clip", "clips", "photo", "photos", "video", "videos",
+        "voice", "audio", "recording", "recordings",
+    ]
+
+    /// Structural/media words in `text` (the summary) that are NOT present in
+    /// `sourceText` (the clips). Empty = clean. Grounding is exact-word: if the
+    /// clips genuinely say "video" or "photo", the summary may too — the leak
+    /// is only when the model invents container/media language the content
+    /// never used. Deterministic and tier-independent (the same wherever the
+    /// summary came from). Catches what the proper-noun check can't: these are
+    /// lowercase common words, not proper nouns.
+    static func fabricatedStructuralClaims(in text: String, sourceText: String) -> [String] {
+        let sourceWords = Set(lowercasedWords(in: sourceText))
+        var hits: [String] = []
+        var seen = Set<String>()
+        for word in lowercasedWords(in: text) {
+            guard structuralTokens.contains(word), !sourceWords.contains(word), !seen.contains(word) else { continue }
+            hits.append(word)
+            seen.insert(word)
+        }
+        return hits
+    }
+
+    /// Whole words (letters only), lowercased — used for exact-word grounding.
+    private static func lowercasedWords(in s: String) -> [String] {
+        s.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
     }
 
     // MARK: - Extractive fallback (cannot fabricate)

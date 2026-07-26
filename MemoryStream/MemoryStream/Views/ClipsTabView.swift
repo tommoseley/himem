@@ -1576,10 +1576,13 @@ struct FlatClipsListView: View {
         case .all:
             break
         }
-        // Unconnected lens: zero edges (the same predicate the New-view
-        // unplaced stack uses). ANDed with the type filter.
+        // Unconnected lens: no edge to a LIVE memory. An edge to a recycled
+        // memory is preserved but doesn't count as a connection, so a clip
+        // whose only memory is trashed surfaces here (TestFlight #4a) instead
+        // of stranding in All. (The New-view unplaced stack still uses raw
+        // `edges.@count == 0` — "never placed" ≠ "no live connection".)
         if connection == .unconnected {
-            subpredicates.append(NSPredicate(format: "edges.@count == 0"))
+            subpredicates.append(MediaReference.noLiveMemoryConnectionPredicate)
         }
         // P8: recycled clips (Recently Deleted) never show on any Clips lens.
         subpredicates.append(NSPredicate(format: "recycledAt == nil"))

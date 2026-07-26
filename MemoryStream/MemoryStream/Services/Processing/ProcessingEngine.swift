@@ -149,25 +149,33 @@ final class ProcessingEngine {
             if succeeded { return }
         }
 
+        var refusedOnDevice = false
         if hasAI {
-            let succeeded = await processWithOnDevice(objectID: objectID, content: content, context: context)
-            if succeeded { return }
+            switch await processWithOnDevice(objectID: objectID, content: content, context: context) {
+            case .success: return
+            case .refused: refusedOnDevice = true // Ruling 1: do NOT go to cloud
+            case .failed: break                   // other failure → cloud fallback below
+            }
         }
 
-        // Cloud as last-resort fallback when we're online and haven't
-        // already tried it. Covers the Free + hasAI case where the
-        // on-device safety classifier rejects content ("Detected
-        // content likely to be unsafe") — Anthropic's policy differs
-        // from Apple's, so content the local model refuses often
-        // organizes cleanly via cloud. Costs us COGS on Free users
-        // but produces honest output instead of mentions-only via
-        // NLTagger. Per Tom 2026-06-08.
-        if !cloudAttempted && connectivity.isConnected {
+        // Cloud as last-resort fallback when we're online, haven't already
+        // tried it, AND the on-device pass did not REFUSE. A refusal
+        // (Ruling 1, 2026-07-25) must never trigger a cloud send: Apple
+        // refuses because it judges the content sensitive, so answering by
+        // routing that exact content to a third-party model gives the most
+        // private material the least private handling. Timeout/context/other
+        // failures still fall back to cloud as before. (Memory Polish §3a.)
+        if !refusedOnDevice && !cloudAttempted && connectivity.isConnected {
             NSLog("[HiMem][Organize] on-device failed; retrying via cloud as last-resort fallback")
             let succeeded = await processWithCloud(objectID: objectID, content: content, context: context, isFallback: true)
             if succeeded { return }
         }
 
+        // Ruling 2: organize must never silently no-op. Nothing produced a real
+        // OrganizePass, so leave an honest, RETRYABLE failure state (the Memory
+        // Detail card reads "Couldn't organize this one. Tap to try again.")
+        // rather than resetting to idle. Best-effort on-device mentions are
+        // still extracted; no auto-retry (respects no-auto-reprocess).
         await processLocally(objectID: objectID, content: content, context: context)
     }
 
@@ -180,7 +188,12 @@ final class ProcessingEngine {
     /// through to the existing connectivity-based routing.
     ///
     /// Skips the assist debit — on-device organize is unmetered.
-    private func processWithOnDevice(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async -> Bool {
+    /// Outcome of the on-device organize pass. `.refused` (Apple's safety
+    /// guardrail) is distinct from `.failed` (timeout / context / save error)
+    /// so the caller can STOP instead of falling back to the cloud.
+    enum OnDeviceOutcome { case success, refused, failed }
+
+    private func processWithOnDevice(objectID: NSManagedObjectID, content: String, context: NSManagedObjectContext) async -> OnDeviceOutcome {
         let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
         do {
             // Palette-bleed fix #2 (2026-07-23): the mentions palette is NOT
@@ -205,12 +218,19 @@ final class ProcessingEngine {
                     content: content, existingTopics: existingTopics, existingMentions: []
                 )
             }
-            return await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
+            let committed = await applyAnalysisResult(result, existingTopics: existingTopics, existingMentions: existingMentions, to: objectID, in: context)
+            return committed ? .success : .failed
+        } catch OnDeviceOrganizer.OrganizerError.safetyRefusal {
+            // Apple's guardrail refused the content. STOP — do not fall back to
+            // the cloud: a refusal is a signal the content is sensitive, and
+            // routing that same content to a third-party model means the most
+            // private material gets the least private handling. The caller
+            // surfaces an honest, retryable failure. (Memory Polish spec §3a.)
+            NSLog("[HiMem][Organize] on-device pass REFUSED by safety guardrail — staying on-device, not falling back to cloud")
+            return .refused
         } catch {
             // Detailed diagnostic logging — Apple's Foundation Models
-            // errors are opaque ("Detected content likely to be unsafe"
-            // tells us a filter tripped but not which kind, on which
-            // content). We dump every signal available so failures
+            // errors are opaque. We dump every signal available so failures
             // can be correlated against content patterns.
             let typeStr = String(describing: type(of: error))
             let desc = error.localizedDescription
@@ -221,7 +241,7 @@ final class ProcessingEngine {
             if !nsErr.userInfo.isEmpty {
                 NSLog("[HiMem][Organize]   userInfo=\(nsErr.userInfo)")
             }
-            return false
+            return .failed
         }
     }
 
@@ -242,10 +262,17 @@ final class ProcessingEngine {
         retry: () async -> ClaudeAPIService.AnalysisResult?
     ) async -> ClaudeAPIService.AnalysisResult {
         var reconciled = result
-        if TruthReconciler.violates(summary: result.summary, sourceText: clipText, strictness: strictness) {
-            NSLog("[HiMem][TruthReconciler] summary named an entity absent from the clips (\(strictness)); retrying once")
+        // Summary grounding is RELAXED on both tiers (2026-07-24). Strict
+        // exact-substring falsely flagged legitimate name expansions — the
+        // model wrote "Abraham Lincoln" when the clips say "Lincoln", so the
+        // whole summary got discarded for the bare-quote extractive. Relaxed
+        // grounds a name that shares a distinctive token with the clips while
+        // still catching true fabrications (no shared token: "Ben", "Albert
+        // Einstein"). The `strictness` param now governs only the mention-drop.
+        if TruthReconciler.violates(summary: result.summary, sourceText: clipText, strictness: .relaxed) {
+            NSLog("[HiMem][TruthReconciler] summary named an entity absent from the clips; retrying once")
             if let retried = await retry(),
-               !TruthReconciler.violates(summary: retried.summary, sourceText: clipText, strictness: strictness) {
+               !TruthReconciler.violates(summary: retried.summary, sourceText: clipText, strictness: .relaxed) {
                 reconciled = retried
             } else {
                 NSLog("[HiMem][TruthReconciler] retry still fabricated; falling back to extractive summary")
@@ -354,10 +381,19 @@ final class ProcessingEngine {
                     }
                 }
 
-                // Mark completed
+                // Ruling 2 (2026-07-25): no OrganizePass was produced, so this
+                // is a FAILED organize, not a silent success. Mark the task
+                // `.failed` (retryable) — the Memory Detail card then reads
+                // "Couldn't organize this one. Tap to try again." instead of
+                // resetting to idle (a tap that looks like a no-op is the worst
+                // outcome). NEVER store Apple's guardrail/"unsafe" text: that's
+                // Apple's judgment, not ours, and telling someone their memory
+                // about a death was flagged is unacceptable in a memory-keeper.
+                // Mentions extracted above are kept as a best-effort bonus.
                 if let task = entryInContext.latestProcessingTask() {
-                    task.status = ProcessingTask.Status.completed.rawValue
-                    task.progressDescription = "Processed locally. Connect to the internet for richer analysis."
+                    task.status = ProcessingTask.Status.failed.rawValue
+                    task.errorMessage = "organize_incomplete" // neutral marker; never user-facing
+                    task.progressDescription = nil
                     task.processedAt = Date()
                 }
 
@@ -390,7 +426,17 @@ final class ProcessingEngine {
     /// handles per-field accept-or-keep.
     func processReorganize(_ entry: JournalEntry) async {
         let objectID = entry.objectID
-        let content = entry.content
+        // Rebuild the payload from the memory's LIVE clips at run time — the
+        // cached `entry.content` can lag (a clip added, or a voice transcript
+        // that landed, after the last cache write), which made reorganize
+        // organize a stale snapshot that ignored newly-added clips (2026-07-24,
+        // money-tested by `ReorganizePayloadFreshnessTests`). Fall back to the
+        // cached content only when the memory has no clip edges (legacy
+        // typed-only entries) so we never hand the model an empty payload.
+        let (liveContent, cachedContent) = await MainActor.run {
+            (EntryLifecycleService.joinedContent(from: entry), entry.content)
+        }
+        let content = liveContent.isEmpty ? cachedContent : liveContent
         let context = storage.backgroundContext()
         let (existingTopics, existingMentions) = await readExistingOrganizeContext(objectID: objectID, context: context)
 
@@ -399,7 +445,6 @@ final class ProcessingEngine {
         let shouldTryAnthropic = connectivity.isConnected && (plus || !hasAI)
 
         var cloudAttempted = false
-        var producedByOnDevice = false
         var result: ClaudeAPIService.AnalysisResult?
         if shouldTryAnthropic {
             cloudAttempted = true
@@ -418,7 +463,6 @@ final class ProcessingEngine {
                 existingTopics: existingTopics,
                 existingMentions: existingMentions
             )
-            producedByOnDevice = result != nil
         }
 
         // Cloud as last-resort fallback — mirrors `processEntry`'s
@@ -448,12 +492,13 @@ final class ProcessingEngine {
         // pass the same gate. Reorganize writes only title + summary, so there
         // is nothing to reconcile but the prose. The multi-tier cascade above
         // already served as the retry; the extractive fallback is the final
-        // guarantee. Strictness matches the backend that produced the draft.
-        let strictness: TruthReconciler.Strictness = producedByOnDevice ? .strict : .relaxed
+        // guarantee. Grounding is RELAXED on both tiers (2026-07-24): strict
+        // exact-substring falsely flagged "Abraham Lincoln" when the clips say
+        // "Lincoln", discarding the whole draft for the bare-quote extractive.
         var draftTitle = result.title
         var draftSummary = result.summary
-        if TruthReconciler.violates(summary: result.summary, sourceText: content, strictness: strictness) {
-            NSLog("[HiMem][TruthReconciler] reorganize draft named an entity absent from the clips (\(strictness)); falling back to extractive")
+        if TruthReconciler.violates(summary: result.summary, sourceText: content, strictness: .relaxed) {
+            NSLog("[HiMem][TruthReconciler] reorganize draft named an entity absent from the clips; falling back to extractive")
             draftSummary = TruthReconciler.extractiveSummary(fromClipText: content)
             draftTitle = TruthReconciler.extractiveTitle(fromClipText: content)
         }

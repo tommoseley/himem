@@ -28,6 +28,10 @@ struct OrganizeMemorySection: View {
     var onOrganize: () -> Void
 
     @ObservedObject private var entitlement = Entitlement.shared
+    /// Drives the failed-state copy variant ("try again" vs "try again when
+    /// you're back online") from the CURRENT connection, so the honest failure
+    /// tells the user whether a retry can succeed right now.
+    @ObservedObject private var connectivity = ConnectivityMonitor.shared
     @FetchRequest private var entries: FetchedResults<JournalEntry>
 
     /// Reference to the currently-presented review sheet host, if
@@ -50,6 +54,11 @@ struct OrganizeMemorySection: View {
     /// Reorganize in flight — disables the affordance and surfaces a
     /// spinner alongside the chip.
     @State private var isReorganizing = false
+
+    /// Backs the presented `ReorganizeReviewSheet` so "Reorganize again" can
+    /// swap the fresh pass in place (Approach B, 2026-07-24) instead of the
+    /// old dismiss-then-re-present race.
+    @State private var reorganizeModel: ReorganizeReviewModel?
 
     init(
         entryID: UUID,
@@ -84,11 +93,26 @@ struct OrganizeMemorySection: View {
         entry?.summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
+    /// Whether the no-pass state is a FAILURE (retryable) rather than idle:
+    /// true iff the latest processing task ended `.failed`. Pure + `static` so
+    /// the Ruling-2 money test can exercise it without a View. Callers guard
+    /// `pass == nil` first (a committed pass always wins).
+    static func failedStateApplies(latestTaskStatus: ProcessingTask.Status?) -> Bool {
+        latestTaskStatus == .failed
+    }
+
     /// Single source of truth for what to render. Every branch in the
     /// body reads `aiState`; nothing else mirrors the model.
     private var aiState: AIState {
         guard let entry else { return .missing }
-        guard let pass else { return .idle }
+        guard let pass else {
+            // No committed pass. If the last organize attempt FAILED, show the
+            // honest retryable failure — never silent idle (Ruling 2).
+            if Self.failedStateApplies(latestTaskStatus: entry.latestProcessingTask()?.statusEnum) {
+                return .failed(offline: !connectivity.isConnected)
+            }
+            return .idle
+        }
         if pass.isReviewed {
             return .organized(pass: pass, entry: entry, stale: isStale)
         }
@@ -105,6 +129,8 @@ struct OrganizeMemorySection: View {
                 EmptyView()
             case .idle:
                 OrganizeMemoryCard(state: .idle, onOrganize: onOrganize, isProcessing: isProcessing)
+            case .failed(let offline):
+                OrganizeMemoryCard(state: .failed(offline: offline), onOrganize: onOrganize, isProcessing: isProcessing)
             case .draftReviewing(let pass, _, _):
                 organizedRow(pass: pass)
             case .organized(let pass, let entry, let stale):
@@ -179,7 +205,7 @@ struct OrganizeMemorySection: View {
         var hostRef: UIHostingController<AnyView>?
         let dismissHost: () -> Void = { hostRef?.dismiss(animated: true) }
         let host = UIHostingController(rootView: AnyView(
-            DraftReviewSheet(pass: pass, entry: entry, onDismiss: dismissHost)
+            DraftReviewSheet(pass: pass, entry: entry, onDismiss: { handleDismissDraft(dismissHost: dismissHost) })
         ))
         hostRef = host
         host.modalPresentationStyle = .pageSheet
@@ -200,12 +226,16 @@ struct OrganizeMemorySection: View {
         guard let entry, let pass else { return }
         var hostRef: UIHostingController<AnyView>?
         let dismissHost: () -> Void = { hostRef?.dismiss(animated: true) }
+        let model = ReorganizeReviewModel(
+            currentTitle: entry.title ?? "",
+            newTitle: pass.suggestedTitle ?? "",
+            currentSummary: acceptedSummary,
+            newSummary: pass.summaryText ?? ""
+        )
+        reorganizeModel = model
         let host = UIHostingController(rootView: AnyView(
             ReorganizeReviewSheet(
-                currentTitle: entry.title ?? "",
-                newTitle: pass.suggestedTitle ?? "",
-                currentSummary: acceptedSummary,
-                newSummary: pass.summaryText ?? "",
+                model: model,
                 onKeep: { titleChoice, summaryChoice in
                     handleReorganizeKeep(
                         titleChoice: titleChoice,
@@ -213,8 +243,12 @@ struct OrganizeMemorySection: View {
                     )
                     dismissHost()
                 },
-                onReorganizeAgain: { handleReorganizeAgain(dismissCurrentHost: dismissHost) },
-                onDismiss: dismissHost
+                // Approach B: no dismiss — the sheet stays up, shows a working
+                // state, and swaps the fresh pass into `model` in place.
+                onReorganizeAgain: { handleReorganizeAgain() },
+                // X discards the reorganize draft → the prior committed pass
+                // resurfaces (Case 1). Never leaves a Draft-organized strand.
+                onDismiss: { handleDismissDraft(dismissHost: dismissHost) }
             )
         ))
         hostRef = host
@@ -376,33 +410,30 @@ struct OrganizeMemorySection: View {
         // (see `presentReorganizeReview`), not here.
     }
 
-    /// "Reorganize again" from inside the sheet. The current sheet
-    /// renders frozen at construction time (manual UIKit presentation
-    /// doesn't reactively update its `rootView` like SwiftUI's
-    /// `.sheet(item:)` would), so we explicitly dismiss + re-present
-    /// after the new pass lands so the user sees the fresh
-    /// before/after instead of stale snapshot.
+    /// "Reorganize again" from inside the sheet (Approach B, 2026-07-24).
+    /// The sheet observes `reorganizeModel`, so it **stays presented**: we flip
+    /// it to a working state, run the pass, then swap the fresh title/summary
+    /// into the model in place. No dismiss, no re-present — this kills the
+    /// present-while-dismissing race that used to leave the sheet closed.
     ///
-    /// Discard order matters: we let the new pass write *first*, then
-    /// delete the superseded one, so `latestOrganizePass` never falls
-    /// back to a stale pass during the transition.
-    private func handleReorganizeAgain(dismissCurrentHost: @escaping () -> Void) {
-        guard let entry, let pass else { return }
+    /// Discard order matters: we let the new pass write *first*, then delete
+    /// the superseded one, so `latestOrganizePass` never falls back to a stale
+    /// pass during the transition.
+    private func handleReorganizeAgain() {
+        guard let entry, let pass, let model = reorganizeModel else { return }
         let supersededID = pass.objectID
+        model.isWorking = true
         isReorganizing = true
         Task { @MainActor in
             await ProcessingEngine.shared.processReorganize(entry)
             await discardPass(objectID: supersededID)
             isReorganizing = false
-            // Tear down the stale-content host, then re-present with
-            // the fresh values. The brief dismiss-then-present
-            // animation is acceptable for the deliberate
-            // "Reorganize again" path.
-            dismissCurrentHost()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                guard self.entry != nil, self.pass != nil else { return }
-                presentReorganizeReview()
-            }
+            guard let freshPass = self.pass else { model.isWorking = false; return }
+            // Swap the fresh suggestion into the same sheet, in place.
+            model.applyFreshPass(
+                newTitle: freshPass.suggestedTitle ?? "",
+                newSummary: freshPass.summaryText ?? ""
+            )
         }
     }
 
@@ -418,6 +449,36 @@ struct OrganizeMemorySection: View {
                 try? ctx.save()
             }
         }
+    }
+
+    /// X on the review / reorganize sheet **discards the uncommitted draft** and
+    /// returns the memory to its last committed state — never the old
+    /// "Draft organized / Review draft" strand (spec §8, reversed 2026-07-24;
+    /// the June 12 "dismiss = decide later, never discard" pin is superseded).
+    /// Both cases fall out of deleting the current draft `OrganizePass`:
+    ///   • **Case 1** — a prior committed pass exists (Reorganize on an already-
+    ///     Organized memory, then X): the draft is deleted, so `latestOrganizePass`
+    ///     resurfaces the prior committed pass → memory reads Organized, the
+    ///     action is a Reorganize CTA. X here == "Keep this version."
+    ///   • **Case 2** — first draft, never committed, X'd: the only pass is
+    ///     deleted → memory reads unorganized, the action is an Organize CTA.
+    /// Topics/mentions (library-backed associations) are NEVER destroyed here;
+    /// re-organize reconciles them. Dismiss first, then delete, so the sheet's
+    /// content isn't mutated under it.
+    ///
+    /// Caveat resolution (Tom's ruling a + "hide the lingering summary"): the
+    /// initial draft's own `InferenceSummary` would otherwise un-suppress the
+    /// legacy `InferenceCard` once the pass is gone (`LegacyInferenceCardSlot`
+    /// renders when `latestOrganizePass == nil`) → "unorganized card but a
+    /// summary shows." So on a Case-2 discard (no committed pass remains) the
+    /// orphaned draft summary goes too — it's the draft's artifact, not an
+    /// association. Case 1 keeps it (it belongs to the restored committed pass).
+    private func handleDismissDraft(dismissHost: () -> Void) {
+        let draftPass = pass
+        dismissHost()
+        guard let draftPass else { return }
+        let ctx = StorageService.shared.viewContext
+        ctx.perform { EntryLifecycleService.discardDraftPass(draftPass, in: ctx) }
     }
 
     private func handleSeePlus() {
@@ -467,6 +528,11 @@ struct OrganizeMemorySection: View {
 private enum AIState {
     case missing
     case idle
+    /// A previous organize attempt failed and produced no `OrganizePass`
+    /// (on-device refusal, timeout, or offline with no cloud). Ruling 2
+    /// (2026-07-25): show an honest, retryable state — never reset to idle,
+    /// which reads as "the tap did nothing." `offline` picks the copy variant.
+    case failed(offline: Bool)
     case draftReviewing(pass: OrganizePass, entry: JournalEntry, kind: DraftKind)
     case organized(pass: OrganizePass, entry: JournalEntry, stale: Bool)
 }
