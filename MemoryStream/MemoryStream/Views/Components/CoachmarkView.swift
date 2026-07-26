@@ -49,6 +49,18 @@ struct CoachmarkView: View {
                 .foregroundStyle(Crucible.Color.ink2)
                 .lineSpacing(4)
 
+            // F2b · recoverability (2026-07-26): every coachmark card teaches
+            // the way back. Quiet label register (ink3, no border, not
+            // tappable) — information, not an action; it must not read as a
+            // button. Shown every time the card is dismissed, not just the
+            // first. Copy is design-authority (locked). Since each tab's
+            // coachmark is a single self-contained card, this IS the final
+            // beat of that card.
+            Text("That's it! You can bring this tour back any time from ? → Show me around.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Crucible.Color.ink3)
+                .lineSpacing(3)
+
             HStack {
                 Button("Skip", action: onDismiss)
                     .font(.system(size: 15, weight: .semibold))

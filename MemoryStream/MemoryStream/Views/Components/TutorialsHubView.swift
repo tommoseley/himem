@@ -71,8 +71,14 @@ struct TutorialsHubView: View {
     /// apart per `Tutorials · triggers spec.md`.
     @ViewBuilder
     private var tourCard: some View {
-        NavigationLink {
-            TutorialCatalog.tour.destination
+        // F2b (2026-07-26): "Show me around" is an ACTION, not a navigation —
+        // it resets every coachmark's seen flag and re-fires the current tab's
+        // coachmark once this hub pops (`HiMemTabView` observes `restorePending`
+        // and calls `consumeRestore`). Stateless: always present, never gated
+        // on whether coachmarks have been seen, no "seen" checkmark.
+        Button {
+            CoachmarkOrchestrator.shared.restoreTour()
+            dismiss()
         } label: {
             TutorialsHubRow(entry: TutorialCatalog.tour)
         }
@@ -175,25 +181,22 @@ private struct TutorialsHubRow: View {
 /// is intentionally not in the hub (by the time a user could replay
 /// it, they've already accepted or declined the install).
 enum TutorialCatalog {
-    /// The tour row per `Tutorials · triggers spec.md` §"The '?' toolbar
-    /// entry + Learn hub": "Take a tour of the screen — 'What each
-    /// button and area does' (the anchored coachmark walkthrough — set
-    /// apart at the top; 'Show me around' on the empty home launches
-    /// the same thing)."
-    ///
-    /// The coachmark tour surface isn't built yet; wire this to the
-    /// Capture tutorial as the canonical "how HiMem works" tour so the
-    /// row lands somewhere honest until the coachmark ships. Post-launch
-    /// this becomes the contextual coachmark tour keyed to the screen
-    /// the user came from.
+    /// The tour row — **"Show me around"** (F2b · 2026-07-26). This is the
+    /// recoverability entry for the anchored per-tab coachmarks: tapping it
+    /// resets every coachmark's seen flag and re-fires the current tab's
+    /// coachmark once the hub closes (`CoachmarkOrchestrator.restoreTour`). The
+    /// `CaptureTutorialView` stub that stood in until the coachmark shipped is
+    /// retired — the row is now an action, not a navigation, so `destination`
+    /// is unused. Spec: `Tutorials · triggers spec.md` §"Coachmark
+    /// recoverability".
     static let tour = TutorialCatalogEntry(
         id: "screen-tour",
-        title: "Take a tour of the screen",
+        title: "Show me around",
         subtitle: "What each button and area does",
         systemImage: "hand.point.up.left.fill",
         tint: .accent,
         isPlusOnly: false,
-        destination: AnyView(CaptureTutorialView())
+        destination: AnyView(EmptyView())
     )
 
     static let byFeature: [TutorialCatalogEntry] = [

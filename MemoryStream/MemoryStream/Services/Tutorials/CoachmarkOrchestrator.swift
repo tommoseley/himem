@@ -93,6 +93,45 @@ final class CoachmarkOrchestrator: ObservableObject {
         if visible == kind { visible = nil }
     }
 
+    // MARK: - Recoverability ("Show me around", F2b · 2026-07-26)
+
+    /// Set by `restoreTour()`; `HiMemTabView` observes it, waits for the Learn
+    /// hub to finish popping, then re-fires the current tab's coachmark via
+    /// `consumeRestore(currentTab:)`. The two-step (flag → consume) exists
+    /// because the coachmark's `fullScreenCover` can't present until the hub's
+    /// navigation pop settles.
+    @Published var restorePending = false
+
+    /// "Show me around" (Learn hub) → restore the anchored tour. Clears every
+    /// per-tab seen flag so each tab re-coaches on first visit, exactly like a
+    /// fresh install — but deliberately does **not** touch the session counter:
+    /// the user is well past the second-session gate, and a manual restore must
+    /// re-coach now, not wait for a cold launch. Sets `restorePending` so the
+    /// current tab re-fires once the hub closes. Spec: `Tutorials · triggers
+    /// spec.md` §"Coachmark recoverability".
+    func restoreTour() {
+        for kind in Kind.allCases {
+            UserDefaults.standard.removeObject(forKey: kind.seenKey)
+        }
+        restorePending = true
+    }
+
+    /// Consume a pending restore: fire `currentTab`'s coachmark now. Called by
+    /// `HiMemTabView` after the hub has popped. The explicit-request path, so
+    /// it bypasses the session/content gate `tryFire` enforces — the user asked
+    /// for the tour by name.
+    func consumeRestore(currentTab: Kind) {
+        restorePending = false
+        forceFire(currentTab)
+    }
+
+    /// Fire `kind` unconditionally (no session/content gate) unless a coachmark
+    /// is already showing. Backs the explicit "Show me around" re-fire.
+    func forceFire(_ kind: Kind) {
+        guard visible == nil else { return }
+        visible = kind
+    }
+
     // MARK: - Debug helpers
 
     /// Reset every coachmark's seen flag AND the session counter AND
@@ -103,6 +142,7 @@ final class CoachmarkOrchestrator: ObservableObject {
             UserDefaults.standard.removeObject(forKey: kind.seenKey)
         }
         UserDefaults.standard.removeObject(forKey: sessionCounterKey)
+        restorePending = false
         visible = nil
     }
 }
