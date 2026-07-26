@@ -43,11 +43,18 @@ struct CoachmarkView: View {
                 .tracking(-0.3)
                 .lineSpacing(3)
                 .foregroundStyle(Crucible.Color.ink)
+                // F7a (2026-07-26): the serif display title — the whole point of
+                // the card — was truncating to one line ("Threads pulled across
+                // memo…") inside the clear-background fullScreenCover, which
+                // compresses the VStack. fixedSize forces the Text to claim its
+                // full multi-line height so the title renders in full.
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(kind.body)
                 .font(.system(size: 14))
                 .foregroundStyle(Crucible.Color.ink2)
                 .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
 
             // F2b · recoverability (2026-07-26): every coachmark card teaches
             // the way back. Quiet label register (ink3, no border, not
@@ -60,6 +67,7 @@ struct CoachmarkView: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(Crucible.Color.ink3)
                 .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 Button("Skip", action: onDismiss)
