@@ -116,59 +116,39 @@ final class ProcessingEngine {
             }
         }
 
-        // Routing matrix (2026-06-06):
-        //
-        //   tier | hasAI | online | primary    | fallback
-        //   -----+-------+--------+------------+-----------------
-        //   Plus |  yes  |  yes   | Anthropic  | AI → NLTagger
-        //   Plus |  yes  |  no    | AI         | NLTagger
-        //   Plus |  no   |  yes   | Anthropic  | NLTagger
-        //   Plus |  no   |  no    | NLTagger   | —
-        //   Free |  yes  |  yes   | AI         | NLTagger
-        //   Free |  yes  |  no    | AI         | NLTagger
-        //   Free |  no   |  yes   | Anthropic  | NLTagger
-        //   Free |  no   |  no    | NLTagger   | —
-        //
-        // Condition collapses to: try Anthropic iff
-        //   online && (isPlus || !hasAI)
-        // Otherwise the hierarchy is AI → NLTagger. Free with AI
-        // never sees Anthropic; Plus always sees it when online; Free
-        // without AI gets Anthropic as their only AI-quality path.
-        //
-        // No reprocess-on-reconnect: once an organize runs, it sticks
-        // until the user explicitly taps Reorganize (see memory entry
-        // `feedback_no_auto_reprocess`).
-        let plus = await MainActor.run { self.isPlus() }
-        let hasAI = useOnDevice && hasAvailableAI()
-        let shouldTryAnthropic = connectivity.isConnected && (plus || !hasAI)
-        var cloudAttempted = false
-
-        if shouldTryAnthropic {
-            cloudAttempted = true
-            let succeeded = await processWithCloud(objectID: objectID, content: content, context: context)
-            if succeeded { return }
-        }
-
+        // The routing plan (tier × on-device availability × connectivity) is a
+        // pure, unit-tested decision — `organizeRoute` — so the matrix can't
+        // silently drift from the code again (it changed four times this month
+        // and had no test; `ProcessingRouteTests` now pins all eight cases).
+        // `processLocally` is the guaranteed terminal (Ruling 2: organize never
+        // silently no-ops). Two runtime overrides sit on top of the static plan:
+        // a success returns immediately, and an on-device REFUSAL (Ruling 1)
+        // must never route that same content to a third-party cloud — so it
+        // skips any trailing cloud step. No reprocess-on-reconnect (once an
+        // organize runs it sticks until Reorganize — `feedback_no_auto_reprocess`).
+        let plan = Self.organizeRoute(
+            online: connectivity.isConnected,
+            isPlus: await MainActor.run { self.isPlus() },
+            hasAI: useOnDevice && hasAvailableAI()
+        )
         var refusedOnDevice = false
-        if hasAI {
-            switch await processWithOnDevice(objectID: objectID, content: content, context: context) {
-            case .success: return
-            case .refused: refusedOnDevice = true // Ruling 1: do NOT go to cloud
-            case .failed: break                   // other failure → cloud fallback below
+        for (index, backend) in plan.enumerated() {
+            switch backend {
+            case .cloud:
+                if refusedOnDevice { continue } // Ruling 1: refusal never → cloud
+                if index > 0 {
+                    NSLog("[HiMem][Organize] on-device failed; retrying via cloud as last-resort fallback")
+                }
+                if await processWithCloud(objectID: objectID, content: content, context: context, isFallback: index > 0) {
+                    return
+                }
+            case .onDevice:
+                switch await processWithOnDevice(objectID: objectID, content: content, context: context) {
+                case .success: return
+                case .refused: refusedOnDevice = true // do NOT go to cloud
+                case .failed: break                   // other failure → cloud fallback if planned
+                }
             }
-        }
-
-        // Cloud as last-resort fallback when we're online, haven't already
-        // tried it, AND the on-device pass did not REFUSE. A refusal
-        // (Ruling 1, 2026-07-25) must never trigger a cloud send: Apple
-        // refuses because it judges the content sensitive, so answering by
-        // routing that exact content to a third-party model gives the most
-        // private material the least private handling. Timeout/context/other
-        // failures still fall back to cloud as before. (Memory Polish §3a.)
-        if !refusedOnDevice && !cloudAttempted && connectivity.isConnected {
-            NSLog("[HiMem][Organize] on-device failed; retrying via cloud as last-resort fallback")
-            let succeeded = await processWithCloud(objectID: objectID, content: content, context: context, isFallback: true)
-            if succeeded { return }
         }
 
         // Ruling 2: organize must never silently no-op. Nothing produced a real
@@ -177,6 +157,41 @@ final class ProcessingEngine {
         // rather than resetting to idle. Best-effort on-device mentions are
         // still extracted; no auto-retry (respects no-auto-reprocess).
         await processLocally(objectID: objectID, content: content, context: context)
+    }
+
+    // MARK: - Organize routing (pure — pinned by ProcessingRouteTests)
+
+    /// A backend the organize pass can attempt (before the always-terminal
+    /// `processLocally` / NLTagger fallback).
+    enum OrganizeBackend: Equatable { case cloud, onDevice }
+
+    /// The ordered organize plan from tier × on-device availability ×
+    /// connectivity — the STATIC decision, before any runtime outcome (a
+    /// success returns early; an on-device refusal drops a trailing cloud step,
+    /// Ruling 1). `processLocally` is the guaranteed terminal, not part of the
+    /// plan. Pure so the matrix is unit-tested and can't drift from the code
+    /// (it changed four times this month). Behavior below matches the SHIPPED
+    /// code — NOT the older inline comment, which under-stated the Free-tier
+    /// cloud fallback:
+    ///
+    ///   online·isPlus·hasAI → plan
+    ///   ────────────────────────────────────────────────────────
+    ///   on  · plus · ai  → [cloud, onDevice]   cloud primary, on-device fallback
+    ///   on  · plus · —   → [cloud]
+    ///   on  · free · ai  → [onDevice, cloud]   on-device primary, cloud last-resort
+    ///   on  · free · —   → [cloud]             cloud is the only AI-quality path
+    ///   off · —    · ai  → [onDevice]          offline: on-device only
+    ///   off · —    · —   → []                  offline, no AI → straight to local terminal
+    ///
+    /// A cloud step at plan index 0 is the primary; at index > 0 it is the
+    /// last-resort fallback (drives `processWithCloud(isFallback:)`).
+    static func organizeRoute(online: Bool, isPlus: Bool, hasAI: Bool) -> [OrganizeBackend] {
+        let cloudFirst = online && (isPlus || !hasAI)
+        var plan: [OrganizeBackend] = []
+        if cloudFirst { plan.append(.cloud) }
+        if hasAI { plan.append(.onDevice) }
+        if online && !cloudFirst { plan.append(.cloud) } // last-resort cloud fallback
+        return plan
     }
 
     // MARK: - On-device Processing (PR 8a, debug-gated)
