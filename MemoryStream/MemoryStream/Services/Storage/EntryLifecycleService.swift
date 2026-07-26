@@ -763,21 +763,6 @@ final class EntryLifecycleService {
         }
     }
 
-    /// Bulk-appends N inbox-sourced voice clips to an existing entry as
-    /// `.voice` MediaReferences in chronological order. Audio files are
-    /// assumed to already live in the standard voice store; the caller
-    /// (Captured Clips bundle sheet) moves them out of the inbox before
-    /// invoking this.
-    ///
-    /// Crucially: this **does not** trigger re-organization. Per AI
-    /// Organize §8 (`docs/design/AI Organize · spec.md`): "Refresh costs
-    /// an assist. The previous summary remains visible until the refresh
-    /// commits." The append marks the memory stale by adding fragments
-    /// whose `createdAt > entry.lastOrganizedAt`, which the memory-view
-    /// stale detector reads to render the amber footer `"N new clips ·
-    /// Refresh · 1 assist"`. The user spends the assist by tapping
-    /// Refresh — never automatically.
-    ///
     /// Create a NEW memory from EXISTING bench clips — P0-3's Start-a-Memory
     /// path. The clips are already CloudKit-synced zero-edge `MediaReference`s
     /// (materialize-on-arrival), so this creates the entry and **edges the
@@ -785,10 +770,10 @@ final class EntryLifecycleService {
     /// double-ref bug the old `createMemoryFromInboxClip` would now cause. The
     /// caller guarantees each clip is materialized first (idempotent
     /// `ArrivedClipMaterializer.materialize`), so every clipId resolves to a ref.
-    /// Mirrors `createMemoryFromVoiceClips` (entry + reconcile + topic +
-    /// `processEntry`), but attaches instead of minting. Content reconcile
-    /// happens inside `attachExistingClips`. Returns the new memory id, or nil
-    /// if nothing resolved (no empty memory is left behind).
+    /// Entry + topic + `processEntry`, attaching existing refs instead of
+    /// minting fragments. Content reconcile happens inside
+    /// `attachExistingClips`. Returns the new memory id, or nil if nothing
+    /// resolved (no empty memory is left behind).
     @discardableResult
     func createMemoryFromExistingClips(clipIds: [UUID], topicName: String? = nil) -> UUID? {
         guard !clipIds.isEmpty else { return nil }
@@ -820,35 +805,6 @@ final class EntryLifecycleService {
         }
     }
 
-    /// Returns the count of clips successfully appended.
-    @discardableResult
-    func appendClips(
-        entryId: UUID,
-        clips: [(audioFilename: String, transcript: String, capturedAt: Date)],
-        sourceDevice: JournalEntry.SourceDevice? = nil
-    ) -> Int {
-        guard !clips.isEmpty else { return 0 }
-        do {
-            guard let entry = try fetchEntry(id: entryId) else { return 0 }
-            let ordered = clips.sorted { $0.capturedAt < $1.capturedAt }
-            for clip in ordered {
-                _ = try storage.createVoiceFragment(
-                    for: entry,
-                    audioFilename: clip.audioFilename,
-                    transcript: clip.transcript,
-                    createdAt: clip.capturedAt,
-                    sourceDevice: sourceDevice
-                )
-            }
-            entry.content = Self.joinedContent(from: entry)
-            try storage.save(context: storage.viewContext)
-            return ordered.count
-        } catch {
-            ErrorState.shared.report(.editFailed(error.localizedDescription))
-            return 0
-        }
-    }
-
     /// Attaches N existing bench clips (loose `MediaReference`s, already
     /// captured and transcribed) to an existing memory as new
     /// `MemoryClipEdge`s in append order, then reconciles `entry.content`.
@@ -856,15 +812,14 @@ final class EntryLifecycleService {
     /// (`Memory Detail · unified editing model.md` §"Adding clips to a
     /// memory").
     ///
-    /// **No re-organization**, exactly like `appendClips`. Each new edge
-    /// is stamped `linkedAt = now`, which pushes the memory past its
-    /// last-organize watermark (`JournalEntry.clipsAddedSinceLastOrganize`
-    /// reads the edge, not the clip's capture time) — so Memory Detail
-    /// shows the stale "N new clips · Reorganize" callout and the user
-    /// spends the pass on tap, never automatically (AI Organize §8; the
-    /// Move/Add spec's "identical to new clips arriving"). This is why
-    /// the path must NOT ride `append()` — that queues a ProcessingTask
-    /// and (on Plus) auto-organizes.
+    /// **No re-organization.** Each new edge is stamped `linkedAt = now`,
+    /// which pushes the memory past its last-organize watermark
+    /// (`JournalEntry.clipsAddedSinceLastOrganize` reads the edge, not the
+    /// clip's capture time) — so Memory Detail shows the stale "N new clips ·
+    /// Reorganize" callout and the user spends the pass on tap, never
+    /// automatically (AI Organize §8; the Move/Add spec's "identical to new
+    /// clips arriving"). This is why the path must NOT ride `append()` — that
+    /// queues a ProcessingTask and (on Plus) auto-organizes.
     ///
     /// Idempotent per (memory, clip) via `createEdge` — re-adding an
     /// already-attached clip is a no-op. Recycled clips are skipped.
@@ -902,75 +857,6 @@ final class EntryLifecycleService {
         } catch {
             ErrorState.shared.report(.editFailed(error.localizedDescription))
             return 0
-        }
-    }
-
-    // MARK: - Create memory from N voice clips (Captured Clips → Start a Memory)
-
-    /// Creates a new memory whose evidence is the supplied voice clips.
-    /// Used by `CreateMemoryFromClipsSheet` for the "Start a Memory"
-    /// path. Absorbed media, project assignment, title, and location
-    /// stamping stay in the sheet — this primitive owns only the
-    /// entry + voice fragments + reconciled `entry.content`.
-    ///
-    /// **The reconcile matters.** Voice fragments store
-    /// `JournalEntry.cleanedTranscript(transcript)` — leading ASR noise
-    /// (`.`, `,`, `…`, whitespace) is stripped at ingest. If we let
-    /// `entry.content` remain the raw joined transcript, it drifts
-    /// from `joinedContent(from: entry)` (which trims + reads cleaned
-    /// fragment text), and `migrateOrphanedContentIfNeeded` — fired on
-    /// Memory Detail onAppear — mints a `.note` MediaReference to
-    /// "preserve" the orphaned text. Result: N voice clips become N+1
-    /// clips in the memory, the extra being a synthesized note
-    /// duplicating the audio's own transcripts. Dogfood 2026-07-13.
-    /// Money-tested by
-    /// `CreateMemoryFromClipsAssemblyTests
-    /// .createMemoryFromNVoiceClips_yieldsExactlyNClips_zeroSynthesizedNotes`.
-    @discardableResult
-    func createMemoryFromVoiceClips(
-        _ clips: [(audioFilename: String, transcript: String, capturedAt: Date)],
-        topicName: String?,
-        sourceDevice: JournalEntry.SourceDevice? = nil
-    ) -> UUID? {
-        guard !clips.isEmpty else { return nil }
-        do {
-            // Start with an empty content field — the voice fragments
-            // themselves carry the words. Below, `entry.content` is
-            // re-derived from the joined-of-fragments so it stays
-            // byte-equal to what `joinedContent(from: entry)` returns.
-            let entry = try storage.createEntry(content: "", inputType: .voiceInApp)
-            try storage.save(context: storage.viewContext)
-            let _ = try storage.createProcessingTask(for: entry)
-
-            let ordered = clips.sorted { $0.capturedAt < $1.capturedAt }
-            for clip in ordered {
-                _ = try storage.createVoiceFragment(
-                    for: entry,
-                    audioFilename: clip.audioFilename,
-                    transcript: clip.transcript,
-                    createdAt: clip.capturedAt,
-                    sourceDevice: sourceDevice
-                )
-            }
-
-            // Reconcile — same shape as `save(voiceFilename:)` at ~L425
-            // and `appendClips` at ~L624. Without this, orphan-content
-            // migration on detail-view open mints a duplicate `.note`
-            // to "preserve" `entry.content` — the 2026-07-13 defect.
-            entry.content = Self.joinedContent(from: entry)
-
-            if let topicName {
-                let paletteKey = TopicPaletteStore.shared.key(for: topicName)
-                let topic = try storage.findOrCreateTopic(name: topicName, paletteKey: paletteKey)
-                entry.addToTopics(topic)
-            }
-
-            try storage.save(context: storage.viewContext)
-            processEntry(entry)
-            return entry.id
-        } catch {
-            ErrorState.shared.report(.saveFailed(error.localizedDescription))
-            return nil
         }
     }
 
