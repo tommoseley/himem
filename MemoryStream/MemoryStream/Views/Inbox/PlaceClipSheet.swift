@@ -325,13 +325,17 @@ struct PlaceInboxClipSheet: View {
     }
 
     private func commit() {
+        // P0-3: the bench clip is already a CloudKit-synced zero-edge ref.
+        // Materialize (idempotent) so its clipId resolves to a ref, then EDGE
+        // the existing ref — never re-materialize (the double-ref bug).
+        ArrivedClipMaterializer.materialize(clip, in: StorageService.shared.viewContext)
         let ok: Bool
         switch destination {
         case .existingMemory:
             guard let entryId = selectedEntryId else { return }
-            ok = lifecycle.placeInboxClip(clip, intoExisting: entryId)
+            ok = lifecycle.attachExistingClips(entryId: entryId, clipIds: [clip.clipId]) > 0
         case .newMemory:
-            ok = lifecycle.createMemoryFromInboxClip(clip) != nil
+            ok = lifecycle.createMemoryFromExistingClips(clipIds: [clip.clipId]) != nil
         }
         if ok {
             onPlaced?()

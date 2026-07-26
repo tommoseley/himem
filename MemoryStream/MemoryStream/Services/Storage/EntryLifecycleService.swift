@@ -778,61 +778,46 @@ final class EntryLifecycleService {
     /// Refresh · 1 assist"`. The user spends the assist by tapping
     /// Refresh — never automatically.
     ///
-    /// Move a bench clip's audio into the memory store if it isn't already
-    /// there — phone clips arrive at the destination, watch clips live in the
-    /// inbox store. Returns false only if the audio can't be located anywhere
-    /// (nothing to promote). Same dual-store logic as `appendToExistingMemory`.
-    private func moveInboxAudioIfNeeded(audioFilename: String) -> Bool {
-        let voiceURL = SpeechService.audioURL(for: audioFilename)
-        if FileManager.default.fileExists(atPath: voiceURL.path) { return true }
-        let inboxURL = InboxManifest.audioURL(for: audioFilename)
-        guard FileManager.default.fileExists(atPath: inboxURL.path) else { return false }
+    /// Create a NEW memory from EXISTING bench clips — P0-3's Start-a-Memory
+    /// path. The clips are already CloudKit-synced zero-edge `MediaReference`s
+    /// (materialize-on-arrival), so this creates the entry and **edges the
+    /// existing refs** (`attachExistingClips`) — it never re-materializes, the
+    /// double-ref bug the old `createMemoryFromInboxClip` would now cause. The
+    /// caller guarantees each clip is materialized first (idempotent
+    /// `ArrivedClipMaterializer.materialize`), so every clipId resolves to a ref.
+    /// Mirrors `createMemoryFromVoiceClips` (entry + reconcile + topic +
+    /// `processEntry`), but attaches instead of minting. Content reconcile
+    /// happens inside `attachExistingClips`. Returns the new memory id, or nil
+    /// if nothing resolved (no empty memory is left behind).
+    @discardableResult
+    func createMemoryFromExistingClips(clipIds: [UUID], topicName: String? = nil) -> UUID? {
+        guard !clipIds.isEmpty else { return nil }
         do {
-            _ = try UbiquityStore.shared.moveIntoStore(sourceURL: inboxURL, destinationURL: voiceURL)
-            return true
+            let entry = try storage.createEntry(content: "", inputType: .voiceInApp)
+            try storage.save(context: storage.viewContext)
+            let _ = try storage.createProcessingTask(for: entry)
+
+            let attached = attachExistingClips(entryId: entry.id, clipIds: clipIds)
+            guard attached > 0 else {
+                // No ref resolved — don't strand an empty memory (the July 12
+                // empty-Memory-Detail symptom). Roll back the entry + task.
+                storage.viewContext.delete(entry)
+                try? storage.save(context: storage.viewContext)
+                return nil
+            }
+
+            if let topicName {
+                let paletteKey = TopicPaletteStore.shared.key(for: topicName)
+                let topic = try storage.findOrCreateTopic(name: topicName, paletteKey: paletteKey)
+                entry.addToTopics(topic)
+            }
+            try storage.save(context: storage.viewContext)
+            processEntry(entry)
+            return entry.id
         } catch {
-            NSLog("[HiMem][PlaceInboxClip] audio move failed for \(audioFilename): \(error.localizedDescription)")
-            return false
+            ErrorState.shared.report(.saveFailed(error.localizedDescription))
+            return nil
         }
-    }
-
-    /// **Promote-then-place (Tom, July 16; wired 2026-07-25).** Materialize a
-    /// bench `InboxClip` into an EXISTING memory: move its audio, mint a
-    /// `MediaReference` + edge (via `appendClips`), stamp its location, and drop
-    /// the manifest row. Called only ON CONFIRM (the user picked a destination),
-    /// so a cancel never leaves an orphan ref. Returns true on success. This is
-    /// the fix for the "Add to a memory" placeholder on manifest-backed clips.
-    @discardableResult
-    func placeInboxClip(_ clip: InboxClip, intoExisting entryId: UUID) -> Bool {
-        guard moveInboxAudioIfNeeded(audioFilename: clip.audioFilename) else { return false }
-        let written = appendClips(
-            entryId: entryId,
-            clips: [(clip.audioFilename, clip.transcript, clip.capturedAt)],
-            sourceDevice: JournalEntry.SourceDevice(rawValue: clip.source)
-        )
-        guard written > 0 else { return false }
-        ClipLocationResolver.stamp(osIdentifier: clip.audioFilename,
-                                   latitude: clip.latitude, longitude: clip.longitude,
-                                   in: storage.viewContext)
-        InboxManifest.shared.removeBatch(clipIds: [clip.clipId])
-        return true
-    }
-
-    /// Promote a bench `InboxClip` into a NEW memory (Start a Memory with one
-    /// clip). Returns the new memory id. Same materialize-on-confirm contract.
-    @discardableResult
-    func createMemoryFromInboxClip(_ clip: InboxClip) -> UUID? {
-        guard moveInboxAudioIfNeeded(audioFilename: clip.audioFilename) else { return nil }
-        guard let id = createMemoryFromVoiceClips(
-            [(clip.audioFilename, clip.transcript, clip.capturedAt)],
-            topicName: nil,
-            sourceDevice: JournalEntry.SourceDevice(rawValue: clip.source)
-        ) else { return nil }
-        ClipLocationResolver.stamp(osIdentifier: clip.audioFilename,
-                                   latitude: clip.latitude, longitude: clip.longitude,
-                                   in: storage.viewContext)
-        InboxManifest.shared.removeBatch(clipIds: [clip.clipId])
-        return id
     }
 
     /// Returns the count of clips successfully appended.
