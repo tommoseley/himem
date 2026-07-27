@@ -124,17 +124,23 @@ struct OrganizeMemorySection: View {
 
     var body: some View {
         Group {
-            switch aiState {
-            case .missing:
+            if case .missing = aiState {
                 EmptyView()
-            case .idle:
-                OrganizeMemoryCard(state: .idle, onOrganize: onOrganize, isProcessing: isProcessing)
-            case .failed(let offline):
-                OrganizeMemoryCard(state: .failed(offline: offline), onOrganize: onOrganize, isProcessing: isProcessing)
-            case .draftReviewing(let pass, _, _):
-                organizedRow(pass: pass)
-            case .organized(let pass, let entry, let stale):
-                organizedRow(pass: pass, entry: entry, stale: stale)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    // F7c · the Organize help ?. Anchored in a fixed header row
+                    // that WRAPS the state switch — not inside any one state's
+                    // card — so it never relocates when the card flips from the
+                    // idle CTA to the organized chip+button (Tom's constraint,
+                    // 2026-07-27: a help affordance that moves on state change is
+                    // worse than none). No new eyebrow — a bare ?, left-aligned
+                    // where the other sections' ? sits.
+                    HStack {
+                        SectionHelpButton(topic: .memoryOrganize, size: 15)
+                        Spacer(minLength: 0)
+                    }
+                    stateCard
+                }
             }
         }
         // NO `.fullScreenCover(item:)` or `.sheet(item:)` here —
@@ -144,6 +150,24 @@ struct OrganizeMemorySection: View {
         // go through manual UIKit via `presentInitialReview()`,
         // `presentReorganizeReview()`, and `presentPricing()`.
         .onAppear { attemptOrganizingTutorial() }
+    }
+
+    /// The state-dependent card body — extracted so `body` can wrap it with the
+    /// fixed F7c help header without the `?` living inside any one state.
+    @ViewBuilder
+    private var stateCard: some View {
+        switch aiState {
+        case .missing:
+            EmptyView()
+        case .idle:
+            OrganizeMemoryCard(state: .idle, onOrganize: onOrganize, isProcessing: isProcessing)
+        case .failed(let offline):
+            OrganizeMemoryCard(state: .failed(offline: offline), onOrganize: onOrganize, isProcessing: isProcessing)
+        case .draftReviewing(let pass, _, _):
+            organizedRow(pass: pass)
+        case .organized(let pass, let entry, let stale):
+            organizedRow(pass: pass, entry: entry, stale: stale)
+        }
     }
 
     // MARK: - Organized row (chip + action button + nudge + stale)
