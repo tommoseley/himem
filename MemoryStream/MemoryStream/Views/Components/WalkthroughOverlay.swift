@@ -111,6 +111,22 @@ struct WalkthroughOverlay: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                if beat == .record {
+                    // Beat 1's FAB-stack illustration — so "tap +, tap Voice"
+                    // points at something recognizable before the user has
+                    // opened the stack. The banner sits at the TOP and the real
+                    // + is at the bottom, so the illustration never crowds the
+                    // control it points at. Height-constrained: the source is a
+                    // tall portrait (302×613) and low-res, so it can soften
+                    // above ~100pt on @3x — this frame is the device-tunable knob.
+                    Image("walkthrough-fab-stack")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 190)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel("The + button expands to Attach, Note, Video, Photo, and Voice")
+                }
+
                 if beat == .done {
                     // One closing line: the F7c ? hand-off + F2b recoverability,
                     // merged so the final beat reads as an exhale, not a wall.

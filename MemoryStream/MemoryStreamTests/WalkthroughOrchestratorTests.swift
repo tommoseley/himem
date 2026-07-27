@@ -172,6 +172,20 @@ struct WalkthroughOrchestratorTests {
         }
     }
 
+    @Test func recordBeat_statesTheModelBeforeTheTap() {
+        // Beat 1 must state the whole model (a memory = parts, multi-modal) and
+        // not silently teach "memory = voice" or name Voice before the +.
+        let copy = WalkthroughOrchestrator.Beat.record.body(isPlus: false)
+        #expect(copy.contains("parts"), "a memory is made of parts")
+        #expect(copy.contains("photos") && copy.contains("video"),
+                "names other media — a memory is not a voice thing")
+        #expect(copy.contains("+") && copy.contains("Voice"), "names the + and Voice")
+        if let plus = copy.range(of: "+"), let voice = copy.range(of: "Voice") {
+            #expect(plus.lowerBound < voice.lowerBound,
+                    "introduce the + / model before naming Voice")
+        }
+    }
+
     @Test func onARollBeat_namesNext() {
         // 1b must name the control it points at (F7e — the banner is anchored
         // to the Next glyph, so "tap here" would have no referent).

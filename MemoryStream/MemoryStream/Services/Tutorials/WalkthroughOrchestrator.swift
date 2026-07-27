@@ -200,9 +200,15 @@ extension WalkthroughOrchestrator.Beat {
         case .offer:
             return "Want to make your first memory together? It takes about a minute — I'll point at each step."
         case .record:
-            // Name the control — the banner sits at the top, away from the FAB
-            // stack, so "tap here" would have no referent (device pass 2026-07-26).
-            return "Tap Voice and say something on your mind — out loud. Anything. This becomes a clip."
+            // Beat 1 is the first concept moment — state the whole model (a
+            // memory = one-or-more parts; the + adds parts/memories) BEFORE
+            // naming the tap, so it doesn't silently teach "memory = voice" or
+            // name "Voice" before the user has seen the FAB stack. Longest
+            // banner in the flow, intentionally (Tom, 2026-07-27). "parts" not
+            // "evidence" (F7g). The banner also carries the FAB-stack
+            // illustration (see the overlay) so "tap +, tap Voice" points at
+            // something recognizable.
+            return "A memory is made up of one or more parts — voice notes or text notes, photos, video. The + button, which you'll see in various places, adds parts or memories, as applicable. Tap it and you'll see the options.\n\nFor now: tap +, tap Voice, and start your first memory with your first part."
         case .onARoll:
             // 1b — shown WHILE recording, anchored to Next. Introduces the
             // on-a-roll affordance a first-time user would otherwise tap-and-
