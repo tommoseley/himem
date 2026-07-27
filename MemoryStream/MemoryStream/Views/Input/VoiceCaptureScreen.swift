@@ -658,9 +658,12 @@ struct VoiceCaptureScreen: View {
             }
             .padding(14)
             .frame(maxWidth: 260, alignment: .trailing)
-            .background(Crucible.Color.paper, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Crucible.Color.accent.opacity(0.4), lineWidth: 1.5))
-            .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+            // Raised `card` surface + full-weight ochre border so it reads as a
+            // coaching overlay, not chrome (matches the tab banners; device
+            // pass 2026-07-27).
+            .background(Crucible.Color.card, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Crucible.Color.accent, lineWidth: 2))
+            .shadow(color: .black.opacity(0.20), radius: 18, y: 6)
             .padding(.trailing, 20)
             .padding(.bottom, 132)
             .allowsHitTesting(false)

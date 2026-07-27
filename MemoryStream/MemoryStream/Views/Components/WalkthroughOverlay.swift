@@ -141,11 +141,16 @@ struct WalkthroughOverlay: View {
                 }
             }
             .padding(16)
-            .background(Crucible.Color.paper, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Crucible.Color.accent.opacity(0.4), lineWidth: 1.5))
+            // Must read as an overlay at a glance, not part of the list — a
+            // raised `card` surface (distinct from the `paper` page), a
+            // full-weight ochre border (not a hairline), and a real drop shadow
+            // (device pass 2026-07-27: paper-on-paper + a 0.4 hairline blended
+            // into the page). Non-blocking to taps is unchanged.
+            .background(Crucible.Color.card, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Crucible.Color.accent, lineWidth: 2))
             .padding(.horizontal, 16)
             .padding(.top, 8)
-            .shadow(color: Color.black.opacity(0.12), radius: 12, y: 4)
+            .shadow(color: Color.black.opacity(0.20), radius: 18, y: 6)
 
             Spacer(minLength: 0)
         }
