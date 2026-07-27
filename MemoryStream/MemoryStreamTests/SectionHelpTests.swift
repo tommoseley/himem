@@ -36,3 +36,51 @@ struct SectionHelpTests {
         #expect(HelpTopic.editClip.whereItsMaintained.lowercased().contains("stored once"))
     }
 }
+
+/// D4 · the single section-`?` coachmark: fires once, only after the
+/// walkthrough, never during it; "Show me around" re-arms it. `.serialized` —
+/// both are UserDefaults-backed shared singletons.
+@MainActor
+@Suite(.serialized)
+struct SectionHelpCoachmarkTests {
+    private var c: SectionHelpCoachmark { .shared }
+    private var w: WalkthroughOrchestrator { .shared }
+
+    private func reset() {
+        UserDefaults.standard.removeObject(forKey: "himem.sectionHelpCoachmark.seen")
+        UserDefaults.standard.removeObject(forKey: "himem.walkthrough.completed")
+        c.visible = false
+        w.activeBeat = nil
+    }
+
+    @Test func neverFiresWhileTheWalkthroughRuns() {
+        reset()
+        w.start()                       // isRunning = true, not completed
+        c.armIfEligible()
+        #expect(c.visible == false, "the walkthrough is teaching; the coachmark stands down")
+        reset()
+    }
+
+    @Test func firesOnceAfterTheWalkthrough() {
+        reset()
+        w.skip()                        // completed + not running
+        c.armIfEligible()
+        #expect(c.visible == true, "first Memory Detail arrival post-walkthrough")
+        c.dismiss()
+        c.armIfEligible()
+        #expect(c.visible == false, "seen — never fires twice")
+        reset()
+    }
+
+    @Test func showMeAroundRearmsIt() {
+        reset()
+        w.skip()
+        c.armIfEligible(); c.dismiss()
+        #expect(c.hasSeen)
+        c.rearm()                       // "? → Show me around"
+        #expect(!c.hasSeen)
+        c.armIfEligible()
+        #expect(c.visible == true, "re-teaches alongside the relaunched walkthrough")
+        reset()
+    }
+}

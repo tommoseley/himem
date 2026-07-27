@@ -179,3 +179,90 @@ struct SectionHelpSheet: View {
         }
     }
 }
+
+// MARK: - D4 · the one coachmark that introduces the ? pattern
+
+/// F7c/D4 · a SINGLE coachmark that teaches the section-`?` affordance the
+/// walkthrough promises ("tap ? beside a section for help") but never shows.
+/// Fires ONCE, on first Memory Detail arrival AFTER the walkthrough is done
+/// (completed or skipped) — never during it. Tracked per-device like the other
+/// seen-flags; re-armed only through "? → Show me around" alongside the
+/// walkthrough (not a separate Learn entry).
+///
+/// **Deliberately one card.** We just retired the per-tab coachmark system;
+/// this reintroduces exactly one, justified because it teaches an affordance
+/// the walkthrough explicitly names but never demonstrates. If it ever wants
+/// siblings, stop and raise it (Tom, 2026-07-27) — a second card means we're
+/// rebuilding what we removed.
+@MainActor
+final class SectionHelpCoachmark: ObservableObject {
+    static let shared = SectionHelpCoachmark()
+    private let seenKey = "himem.sectionHelpCoachmark.seen"
+
+    @Published var visible = false
+
+    private init() {}
+
+    var hasSeen: Bool { UserDefaults.standard.bool(forKey: seenKey) }
+
+    /// Show it once, after the walkthrough — never while it's running, never
+    /// twice. Marks seen on fire so a dismiss (or a background) can't re-trigger.
+    func armIfEligible() {
+        guard !visible, !hasSeen,
+              WalkthroughOrchestrator.shared.hasCompleted,
+              !WalkthroughOrchestrator.shared.isRunning else { return }
+        visible = true
+        UserDefaults.standard.set(true, forKey: seenKey)
+    }
+
+    func dismiss() { visible = false }
+
+    /// Re-arm from "? → Show me around" so the `?` intro re-teaches alongside
+    /// the relaunched walkthrough — one recoverability entry, not two.
+    func rearm() {
+        UserDefaults.standard.removeObject(forKey: seenKey)
+        visible = false
+    }
+}
+
+/// The coachmark's banner — same non-blocking top-card register as F8's
+/// walkthrough banners (raised `card` surface, full-weight ochre border), so it
+/// reads as coaching, not chrome. Points at the section `?` glyphs; carries a
+/// single "Got it" dismiss. Host it as a top overlay; the empty area passes
+/// touches through so the `?`s underneath stay live.
+struct SectionHelpCoachmarkBanner: View {
+    @ObservedObject var coachmark: SectionHelpCoachmark = .shared
+
+    var body: some View {
+        if coachmark.visible {
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Each section has a ? — tap it for a short explanation of what that section is and how it works.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Crucible.Color.ink)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack {
+                        Spacer(minLength: 0)
+                        Button("Got it", action: coachmark.dismiss)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.accentInk)
+                            .padding(.horizontal, 16)
+                            .frame(height: 40)
+                            .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+                .padding(16)
+                .background(Crucible.Color.card, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Crucible.Color.accent, lineWidth: 2))
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .shadow(color: Color.black.opacity(0.20), radius: 18, y: 6)
+
+                Spacer(minLength: 0)
+            }
+            .transition(.opacity)
+        }
+    }
+}

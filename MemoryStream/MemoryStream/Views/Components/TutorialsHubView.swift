@@ -79,8 +79,11 @@ struct TutorialsHubView: View {
         Button {
             // "Show me around" launches the guided walkthrough (F8). The per-tab
             // coachmark cards + their restore were retired 2026-07-27 now that
-            // F8 (teach-by-doing) + F7c (section-?) cover the ground.
+            // F8 (teach-by-doing) + F7c (section-?) cover the ground. D4: also
+            // re-arm the section-? coachmark so it re-teaches alongside the
+            // walkthrough — one recoverability entry, not two.
             WalkthroughOrchestrator.shared.start()
+            SectionHelpCoachmark.shared.rearm()
             dismiss()
         } label: {
             TutorialsHubRow(entry: TutorialCatalog.tour)
