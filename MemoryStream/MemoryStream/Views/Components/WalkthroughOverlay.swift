@@ -115,14 +115,15 @@ struct WalkthroughOverlay: View {
                     // Beat 1's FAB-stack illustration — so "tap +, tap Voice"
                     // points at something recognizable before the user has
                     // opened the stack. The banner sits at the TOP and the real
-                    // + is at the bottom, so the illustration never crowds the
-                    // control it points at. Height-constrained: the source is a
-                    // tall portrait (302×613) and low-res, so it can soften
-                    // above ~100pt on @3x — this frame is the device-tunable knob.
+                    // + is at the bottom, so it never crowds the control it
+                    // points at. Rendered at 150pt wide (labels readable);
+                    // height follows the art's 0.557 ratio (~269pt), no
+                    // letterbox. Clean 480×862 @3x export (Tom, 2026-07-27) —
+                    // crisp at this width on @3x.
                     Image("walkthrough-fab-stack")
                         .resizable()
                         .scaledToFit()
-                        .frame(maxHeight: 190)
+                        .frame(width: 150)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("The + button expands to Attach, Note, Video, Photo, and Voice")
                 }
