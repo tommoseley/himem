@@ -100,6 +100,13 @@ struct VoiceCaptureScreen: View {
     /// system prompt would land *under* the tutorial sheet.
     @ObservedObject private var tutorialOrchestrator = TutorialOrchestrator.shared
 
+    /// F8 · beat 1b ("on a roll"). The root walkthrough overlay can't reach over
+    /// this screen's `fullScreenCover`, and the beat is anchored to the Next
+    /// glyph, so the composer renders it. Signals: `recordingDidStart()` at mic
+    /// start, `nextClipStarted()` on a fired Next tap, `recordingDidCancel()` on
+    /// discard. All are no-ops unless the walkthrough is on the matching beat.
+    @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
+
     enum ComposerPhase: Equatable {
         case breathing
         case recording
@@ -142,6 +149,10 @@ struct VoiceCaptureScreen: View {
                         permissionDeniedContent
                     case .recording:
                         composerBody
+                            // Beat 1b floats above the action row, anchored
+                            // toward Next; non-interactive so it never blocks
+                            // Stop & save / Next / Done (see the banner).
+                            .overlay(alignment: .bottomTrailing) { walkthroughOnARollBanner }
                     }
                 }
                 .opacity(isFinalizing ? 0.4 : 1.0)
@@ -617,6 +628,47 @@ struct VoiceCaptureScreen: View {
         }
     }
 
+    // MARK: - Walkthrough · beat 1b ("on a roll")
+
+    /// F8 1b — an informational callout anchored toward the Next satellite,
+    /// shown only while the walkthrough is on the `onARoll` beat. Floats ABOVE
+    /// the bottom action row (the `.bottom` padding clears the 84pt Stop button
+    /// + "Stop & save" caption + safe area) so it never obscures Stop & save or
+    /// the timer, and `allowsHitTesting(false)` guarantees it never blocks Next,
+    /// Stop, or Done. It carries no controls: beat 1b retires on the real signal
+    /// (Next tapped, or recording stopped), never on a tap of the banner.
+    ///
+    /// Precise glyph-anchored positioning is a follow-up; this floats near the
+    /// Next corner and names the control. Copy is design-authority (F7e), tier-
+    /// independent — passing `isPlus: false` reads identically to `true`.
+    @ViewBuilder
+    private var walkthroughOnARollBanner: some View {
+        if walkthrough.activeBeat == .onARoll {
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(WalkthroughOrchestrator.Beat.onARoll.body(isPlus: false))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Crucible.Color.ink)
+                    .lineSpacing(3)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+                Image(systemName: "arrow.turn.right.down")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Crucible.Color.accent)
+                    .accessibilityHidden(true)
+            }
+            .padding(14)
+            .frame(maxWidth: 260, alignment: .trailing)
+            .background(Crucible.Color.paper, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Crucible.Color.accent.opacity(0.4), lineWidth: 1.5))
+            .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+            .padding(.trailing, 20)
+            .padding(.bottom, 132)
+            .allowsHitTesting(false)
+            .transition(.opacity)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
     // MARK: - Finalizing overlay
 
     /// Shown when Done is tapped — split + re-transcribe runs
@@ -778,6 +830,9 @@ struct VoiceCaptureScreen: View {
         recording.start()
         nextController.sessionDidStart()
         recordingStartedAt = Date()
+        // F8 1b — mic is hot; move the walkthrough onto the on-a-roll beat
+        // (no-op unless it's on the record beat).
+        walkthrough.recordingDidStart()
         // Snapshot a one-shot location fix in parallel with the
         // recording. The result lands in `sessionLocation` whenever
         // CoreLocation returns; if Done fires before the fix arrives
@@ -804,6 +859,8 @@ struct VoiceCaptureScreen: View {
         _ = nextController.handleNextTap()
         if nextController.nextTapOffsets.count > prevCount {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            // F8 1b — the on-a-roll teaching has landed; retire its banner.
+            walkthrough.nextClipStarted()
             // Crash-safety sidecar so an in-progress session can be
             // recovered after relaunch. The orchestrator owns the
             // JSON write; the view supplies the session metadata.
@@ -836,6 +893,9 @@ struct VoiceCaptureScreen: View {
                 )
             }
             nextController.sessionDidEnd()
+            // F8 1b — discarded without a clip; return the walkthrough to the
+            // record prompt so it isn't stranded on an in-composer beat.
+            walkthrough.recordingDidCancel()
             onCancel()
             dismiss()
             return

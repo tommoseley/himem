@@ -46,12 +46,48 @@ struct WalkthroughOrchestratorTests {
         reset()
         o.offerIfFirstRun();      #expect(o.activeBeat == .offer)
         o.beginFromOffer();       #expect(o.activeBeat == .record)
-        o.clipDidLand();          #expect(o.activeBeat == .clipLanded)
+        o.recordingDidStart();    #expect(o.activeBeat == .onARoll, "mic hot → on-a-roll beat (1b)")
+        o.clipDidLand();          #expect(o.activeBeat == .clipLanded, "stop without Next → clip lands")
         o.advance();              #expect(o.activeBeat == .concept)
         o.advance();              #expect(o.activeBeat == .makeMemory)
         o.memoryDidStart();       #expect(o.activeBeat == .organize)
         o.organizeDidComplete();  #expect(o.activeBeat == .done)
         o.advance();              #expect(o.activeBeat == nil && o.hasCompleted)
+        reset()
+    }
+
+    /// The on-a-roll path: recording starts → 1b → the user taps Next (retires
+    /// the banner into the silent `rolling` hold) → stops → the clip lands.
+    @Test func onARollPath_nextTapRetiresBannerThenClipLands() {
+        reset()
+        o.start(); o.beginFromOffer()
+        o.recordingDidStart();  #expect(o.activeBeat == .onARoll)
+        o.nextClipStarted();    #expect(o.activeBeat == .rolling, "Next retires the banner but stays armed")
+        o.nextClipStarted();    #expect(o.activeBeat == .rolling, "further Next taps are no-ops")
+        o.clipDidLand();        #expect(o.activeBeat == .clipLanded, "rolling → clipLanded when the clip lands")
+        reset()
+    }
+
+    /// Beat 1b never advances on a tap of its banner — only the real signals
+    /// (Next tapped, or recording stopped) move it.
+    @Test func onARollBeat_ignoresTaps_waitsForRealSignal() {
+        reset()
+        o.start(); o.beginFromOffer(); o.recordingDidStart()
+        #expect(o.activeBeat == .onARoll)
+        o.advance(); #expect(o.activeBeat == .onARoll, "onARoll ignores taps")
+        reset()
+    }
+
+    /// Discarding the recording mid-walkthrough returns to the `record` prompt
+    /// so the flow isn't stranded on an in-composer beat once the composer
+    /// dismisses. Works from both `onARoll` and the silent `rolling` hold.
+    @Test func recordingCancel_returnsToRecordPrompt() {
+        reset()
+        o.start(); o.beginFromOffer(); o.recordingDidStart()
+        o.recordingDidCancel(); #expect(o.activeBeat == .record, "cancel from onARoll → record")
+        o.recordingDidStart(); o.nextClipStarted()
+        #expect(o.activeBeat == .rolling)
+        o.recordingDidCancel(); #expect(o.activeBeat == .record, "cancel from rolling → record")
         reset()
     }
 
@@ -100,6 +136,15 @@ struct WalkthroughOrchestratorTests {
             #expect(!f.contains("evidence") && !p.contains("evidence"),
                     "F7g: no user-facing 'evidence' in walkthrough copy — beat \(beat)")
         }
+    }
+
+    @Test func onARollBeat_namesNext() {
+        // 1b must name the control it points at (F7e — the banner is anchored
+        // to the Next glyph, so "tap here" would have no referent).
+        let copy = WalkthroughOrchestrator.Beat.onARoll.body(isPlus: false)
+        #expect(copy.contains("Next"), "on-a-roll copy names the Next control")
+        // Tier-independent: Free and Plus read identically.
+        #expect(copy == WalkthroughOrchestrator.Beat.onARoll.body(isPlus: true))
     }
 
     @Test func conceptBeat_carriesTheLoadBearingSentence() {

@@ -14,8 +14,11 @@ import SwiftUI
 /// device-verified (green-to-green — a later commit).
 ///
 /// The state machine is the spine (this file). The anchored overlay UI and the
-/// pipeline-signal wiring that calls `clipDidLand()` / `memoryDidStart()` /
-/// `organizeDidComplete()` land in follow-on commits.
+/// pipeline-signal wiring that calls `recordingDidStart()` / `nextClipStarted()`
+/// / `recordingDidCancel()` / `clipDidLand()` / `memoryDidStart()` /
+/// `organizeDidComplete()` live in the overlay + `VoiceCaptureScreen`. The
+/// `onARoll` beat (1b) is rendered in-composer because the root overlay can't
+/// reach over the recording screen's `fullScreenCover`.
 ///
 /// Spec: `Handoff · punch list · 2026-07-25.md` §F8. Copy is design-authority
 /// (drafted for cold validation per F7e; no "evidence" per F7g).
@@ -23,12 +26,15 @@ import SwiftUI
 final class WalkthroughOrchestrator: ObservableObject {
     static let shared = WalkthroughOrchestrator()
 
-    /// The beats, in order. `record` / `makeMemory` / `organize` advance on a
-    /// REAL pipeline signal (the user actually acts); `offer` / `clipLanded` /
-    /// `concept` / `done` advance on a tap.
+    /// The beats, in order. `record` / `onARoll` / `makeMemory` / `organize`
+    /// advance on a REAL pipeline signal (the user actually acts); `offer` /
+    /// `clipLanded` / `concept` / `done` advance on a tap. `rolling` is a silent
+    /// holding state (see `onARoll`).
     enum Beat: Int, CaseIterable, Identifiable {
         case offer       // "make your first memory together?"
         case record      // spotlight the +, "say something out loud — this is a clip"
+        case onARoll     // shown WHILE recording, anchored to Next — "tap Next to keep going" (1b)
+        case rolling     // silent: onARoll retired after a Next tap, still awaiting the clip to land
         case clipLanded  // spotlight the bench card, "clips are the building blocks of memories"
         case concept     // centered card, "a memory is made of one or more clips" (F7b)
         case makeMemory  // spotlight Start a Memory
@@ -85,23 +91,50 @@ final class WalkthroughOrchestrator: ObservableObject {
     }
 
     /// Tap-advance for the read-only beats (`concept`, `done`). The pipeline
-    /// beats (`record`, `makeMemory`, `organize`) ignore taps — they wait for
-    /// the real signal below so guidance never gets ahead of the user.
+    /// beats (`record`, `onARoll`, `makeMemory`, `organize`) and the silent
+    /// `rolling` beat ignore taps — they wait for the real signal below so
+    /// guidance never gets ahead of the user.
     func advance() {
         switch activeBeat {
         case .offer:      activeBeat = .record   // also reachable via beginFromOffer
         case .clipLanded: activeBeat = .concept
         case .concept:    activeBeat = .makeMemory
         case .done:       finish()
-        case .record, .makeMemory, .organize, .none: break
+        case .record, .onARoll, .rolling, .makeMemory, .organize, .none: break
         }
     }
 
     // MARK: - Real-pipeline advance signals (called by the F8 wiring commit)
 
+    /// Recording actually began (mic hot). Moves off the "tap Voice" prompt into
+    /// the **on-a-roll** beat, shown in-composer anchored to Next — the root
+    /// overlay can't reach over the composer's `fullScreenCover`, so
+    /// `VoiceCaptureScreen` renders this beat itself.
+    func recordingDidStart() { if activeBeat == .record { activeBeat = .onARoll } }
+
+    /// The user tapped **Next** (started a fresh clip without stopping). The
+    /// on-a-roll teaching has landed, so retire its banner — but stay armed:
+    /// `rolling` is silent and still awaits the clip to land on the bench.
+    func nextClipStarted() { if activeBeat == .onARoll { activeBeat = .rolling } }
+
+    /// The user discarded the recording (✕ / cancel) without producing a clip.
+    /// Return to the `record` prompt so the walkthrough isn't left stuck on an
+    /// in-composer beat once the composer dismisses.
+    func recordingDidCancel() {
+        if activeBeat == .onARoll || activeBeat == .rolling { activeBeat = .record }
+    }
+
     /// The clip finished recording and returned to Clips + materialized on the
     /// bench (`CaptureLandingBus.pendingReturnToClips` / arrival materialize).
-    func clipDidLand() { if activeBeat == .record { activeBeat = .clipLanded } }
+    /// Reachable from `record` (stopped before the on-a-roll beat rendered — a
+    /// defensive path), `onARoll` (stopped without ever tapping Next), or
+    /// `rolling` (tapped Next, then stopped).
+    func clipDidLand() {
+        switch activeBeat {
+        case .record, .onARoll, .rolling: activeBeat = .clipLanded
+        default: break
+        }
+    }
 
     /// The user created a memory from the clip (Start a Memory). `id` is the new
     /// memory — tracked so the host can watch it for organize completion.
@@ -141,7 +174,18 @@ extension WalkthroughOrchestrator.Beat {
         case .offer:
             return "Want to make your first memory together? It takes about a minute — I'll point at each step."
         case .record:
-            return "Tap here and say something on your mind — out loud. Anything. This becomes a clip."
+            // Name the control — the banner sits at the top, away from the FAB
+            // stack, so "tap here" would have no referent (device pass 2026-07-26).
+            return "Tap Voice and say something on your mind — out loud. Anything. This becomes a clip."
+        case .onARoll:
+            // 1b — shown WHILE recording, anchored to Next. Introduces the
+            // on-a-roll affordance a first-time user would otherwise tap-and-
+            // wonder about. Tier-independent (drafted for cold validation, F7e).
+            return "Still talking? Tap Next to start a new clip without stopping. They'll stay together."
+        case .rolling:
+            // Silent holding state — never rendered (retired after a Next tap,
+            // awaiting the clip to land). No copy.
+            return ""
         case .clipLanded:
             return "There's your clip, saved here in Clips. Clips are the building blocks of memories. Clips wait here until you decide where they belong — nothing's lost."
         case .concept:
