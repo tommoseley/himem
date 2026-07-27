@@ -173,7 +173,6 @@
 		A200000024 /* ClipFateRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000024 /* ClipFateRow.swift */; };
 		A200000025 /* CoachmarkOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000025 /* CoachmarkOrchestrator.swift */; };
 		A200000026 /* CoachmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000026 /* CoachmarkView.swift */; };
-		A200000094 /* WalkthroughOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000094 /* WalkthroughOverlay.swift */; };
 		A200000027 /* ClipsStatusSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000027 /* ClipsStatusSheet.swift */; };
 		A200000028 /* DebouncedTrigger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000028 /* DebouncedTrigger.swift */; };
 		A200000029 /* BenchHeaderTitleBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000029 /* BenchHeaderTitleBuilder.swift */; };
@@ -198,6 +197,8 @@
 		A200000091 /* ClipEditorModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000091 /* ClipEditorModal.swift */; };
 		A200000092 /* ArrivedClipMaterializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000092 /* ArrivedClipMaterializer.swift */; };
 		A200000093 /* WalkthroughOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000093 /* WalkthroughOrchestrator.swift */; };
+		A200000094 /* WalkthroughOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000094 /* WalkthroughOverlay.swift */; };
+		A200000095 /* SectionHelp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000095 /* SectionHelp.swift */; };
 		A2000000FB /* FABHandednessSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000FB /* FABHandednessSync.swift */; };
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
@@ -445,7 +446,6 @@
 		B200000024 /* ClipFateRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipFateRow.swift; sourceTree = "<group>"; };
 		B200000025 /* CoachmarkOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CoachmarkOrchestrator.swift; path = MemoryStream/Services/Tutorials/CoachmarkOrchestrator.swift; sourceTree = SOURCE_ROOT; };
 		B200000026 /* CoachmarkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CoachmarkView.swift; path = MemoryStream/Views/Components/CoachmarkView.swift; sourceTree = SOURCE_ROOT; };
-		B200000094 /* WalkthroughOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOverlay.swift; path = MemoryStream/Views/Components/WalkthroughOverlay.swift; sourceTree = SOURCE_ROOT; };
 		B200000027 /* ClipsStatusSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipsStatusSheet.swift; path = MemoryStream/Views/Clips/ClipsStatusSheet.swift; sourceTree = SOURCE_ROOT; };
 		B200000028 /* DebouncedTrigger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DebouncedTrigger.swift; path = MemoryStream/Services/DebouncedTrigger.swift; sourceTree = SOURCE_ROOT; };
 		B200000029 /* BenchHeaderTitleBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BenchHeaderTitleBuilder.swift; path = MemoryStream/Views/Inbox/BenchHeaderTitleBuilder.swift; sourceTree = SOURCE_ROOT; };
@@ -470,6 +470,8 @@
 		B200000091 /* ClipEditorModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipEditorModal.swift; path = MemoryStream/Views/Clip/ClipEditorModal.swift; sourceTree = SOURCE_ROOT; };
 		B200000092 /* ArrivedClipMaterializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ArrivedClipMaterializer.swift; path = MemoryStream/Services/Storage/ArrivedClipMaterializer.swift; sourceTree = SOURCE_ROOT; };
 		B200000093 /* WalkthroughOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOrchestrator.swift; path = MemoryStream/Services/Tutorials/WalkthroughOrchestrator.swift; sourceTree = SOURCE_ROOT; };
+		B200000094 /* WalkthroughOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOverlay.swift; path = MemoryStream/Views/Components/WalkthroughOverlay.swift; sourceTree = SOURCE_ROOT; };
+		B200000095 /* SectionHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SectionHelp.swift; path = MemoryStream/Views/Components/SectionHelp.swift; sourceTree = SOURCE_ROOT; };
 		B2000000FB /* FABHandednessSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FABHandednessSync.swift; path = MemoryStream/Services/FABHandednessSync.swift; sourceTree = SOURCE_ROOT; };
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
@@ -749,6 +751,7 @@
 				B200000093 /* WalkthroughOrchestrator.swift */,
 				B200000026 /* CoachmarkView.swift */,
 				B200000094 /* WalkthroughOverlay.swift */,
+				B200000095 /* SectionHelp.swift */,
 				B100000993 /* QuickLookViewer.swift */,
 				B100000998 /* PhotoViewerSheet.swift */,
 				B100000994 /* BottomDeleteButton.swift */,
@@ -1470,6 +1473,7 @@
 				A200000093 /* WalkthroughOrchestrator.swift in Sources */,
 				A200000026 /* CoachmarkView.swift in Sources */,
 				A200000094 /* WalkthroughOverlay.swift in Sources */,
+				A200000095 /* SectionHelp.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,
 				A100000998 /* PhotoViewerSheet.swift in Sources */,
 				A100000994 /* BottomDeleteButton.swift in Sources */,

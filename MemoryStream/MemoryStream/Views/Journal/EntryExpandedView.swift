@@ -579,10 +579,14 @@ struct EntryExpandedView: View {
     /// — it's orthogonal to topics and shouldn't squat the topic row.
     private var topicChipsRow: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("TOPICS")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.6)
-                .foregroundStyle(Crucible.Color.ink3)
+            HStack(spacing: 4) {
+                Text("TOPICS")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(Crucible.Color.ink3)
+                SectionHelpButton(topic: .memoryTopics, size: 13)  // F7c
+                Spacer(minLength: 0)
+            }
 
             // Chips size to their content (no text wrapping) and
             // flow-wrap to a new row when the available width runs
@@ -673,10 +677,14 @@ struct EntryExpandedView: View {
     /// one contextual exception to routing through the sheet.
     private var projectSection: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("PROJECTS")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.6)
-                .foregroundStyle(Crucible.Color.ink3)
+            HStack(spacing: 4) {
+                Text("PROJECTS")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(Crucible.Color.ink3)
+                SectionHelpButton(topic: .memoryProjects, size: 13)  // F7c
+                Spacer(minLength: 0)
+            }
 
             FlowLayout(spacing: 10) {
                 ForEach(entry.projectMemberships) { membership in
@@ -1199,11 +1207,15 @@ struct EntryExpandedView: View {
     @ViewBuilder
     private var mentionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("MENTIONS")
-                .font(.caption2)
-                .fontWeight(.bold)
-                .tracking(1.6)
-                .foregroundStyle(Crucible.Color.ink3)
+            HStack(spacing: 4) {
+                Text("MENTIONS")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .tracking(1.6)
+                    .foregroundStyle(Crucible.Color.ink3)
+                SectionHelpButton(topic: .memoryMentions, size: 13)  // F7c
+                Spacer(minLength: 0)
+            }
 
             FlowLayout(spacing: 10) {
                 ForEach(entry.mentions) { mention in

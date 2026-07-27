@@ -138,6 +138,7 @@ struct ClipEditorModal: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Crucible.Color.ink)
             Spacer()
+            SectionHelpButton(topic: .editClip, size: 17)  // F7c — one ? for the sheet
             Button("Done") { commitOpenEdits(); player.stop(); dismiss() }
                 .font(.system(size: 15.5, weight: .semibold))
                 .foregroundStyle(Crucible.Color.accent)
