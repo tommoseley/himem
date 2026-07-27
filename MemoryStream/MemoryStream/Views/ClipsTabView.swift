@@ -1931,7 +1931,16 @@ struct DragSelectCircle: View {
     @ObservedObject var selection: ClipsSelection
     var body: some View {
         SelectCircle(checked: checked)
-            .gesture(
+            // `.highPriorityGesture`, not `.gesture` (device fix 2026-07-27):
+            // a low-priority drag on the circle LOST arbitration to the
+            // enclosing ScrollView's pan — the drag was read as a scroll and
+            // `dragChanged` never fired (worse on the New lens, where
+            // SessionListView nests its own ScrollView inside the tab's). High
+            // priority + the small 4pt threshold lets a drag that BEGINS on the
+            // circle win the run-paint; drags that start anywhere else still
+            // scroll normally, so the gesture stays anchored to the circle and
+            // never steals scroll.
+            .highPriorityGesture(
                 DragGesture(minimumDistance: 4, coordinateSpace: .named(ClipsSelectionSpace.name))
                     .onChanged { selection.dragChanged(to: $0.location.y) }
                     .onEnded { _ in selection.dragEnded() }
