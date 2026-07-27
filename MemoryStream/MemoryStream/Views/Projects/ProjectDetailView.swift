@@ -215,6 +215,10 @@ struct ProjectDetailView: View {
             .padding(16)
         }
         .background(Crucible.Color.paper)
+        // Pushed view (same class as Memory Detail): clear the in-project FAB
+        // AND the tab bar so the Delete Project button doesn't tuck under them
+        // (device pass 2026-07-27). Fixed clearance — device-tunable knob.
+        .contentMargins(.bottom, 140, for: .scrollContent)
         .overlay(alignment: .bottom) {
             if let toast = removalToast {
                 removalToastView(toast)
