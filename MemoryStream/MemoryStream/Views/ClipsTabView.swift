@@ -105,7 +105,12 @@ struct ClipsTabView: View {
                         content
                             .padding(.horizontal, 16)
                             .padding(.top, 6)
-                            .padding(.bottom, selection.selecting ? 84 : 12)
+                            // Clear the floating capture FAB so the last clip
+                            // rows don't run under it (device pass 2026-07-27:
+                            // 12pt let rows sit under the FAB + tab pill). The
+                            // selecting case already reserves 84pt for the
+                            // selection action bar (the FAB is hidden then).
+                            .padding(.bottom, selection.selecting ? 84 : 108)
                     }
                 }
                 .coordinateSpace(name: ClipsSelectionSpace.name)

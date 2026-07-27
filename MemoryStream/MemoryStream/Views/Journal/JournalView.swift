@@ -452,6 +452,10 @@ struct JournalView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        // Clear the floating capture FAB so the last row (Memories and Projects
+        // tab lists) doesn't run under it (device pass 2026-07-27). Matches the
+        // 108pt FAB footprint clearance used on the Clips scroll + Memory Detail.
+        .contentMargins(.bottom, 108, for: .scrollContent)
         .refreshable {
             // Reload journal, nudge the watch to re-send any pending
             // clips (covers "watch was out of range"), AND re-broadcast
