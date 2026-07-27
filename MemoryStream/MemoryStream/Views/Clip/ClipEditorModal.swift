@@ -316,7 +316,7 @@ struct ClipEditorModal: View {
     private var zone2: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(edges.isEmpty ? "Not in any memory yet"
-                               : "Evidence in \(referencingCount) \(referencingCount == 1 ? "memory" : "memories")")
+                               : "In \(referencingCount) \(referencingCount == 1 ? "memory" : "memories")")
                 .font(.system(size: 10.5, weight: .bold))
                 .tracking(1.3)
                 .foregroundStyle(Crucible.Color.ink3)
@@ -546,7 +546,7 @@ struct ClipEditorModal: View {
     private var deleteWarning: String {
         referencingCount == 0
             ? "This clip isn't in any memory yet."
-            : "This clip is evidence in \(referencingCount) \(referencingCount == 1 ? "memory" : "memories"). Deleting it removes it from \(referencingCount == 1 ? "that memory" : "all of them")."
+            : "This clip is part of \(referencingCount) \(referencingCount == 1 ? "memory" : "memories"). Deleting it removes it from \(referencingCount == 1 ? "that memory" : "all of them")."
     }
 
     private var audioFilename: String? {
