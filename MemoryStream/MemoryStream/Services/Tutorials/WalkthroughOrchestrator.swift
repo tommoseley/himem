@@ -233,8 +233,10 @@ extension WalkthroughOrchestrator.Beat {
     }
 
     /// The single closing line on the final beat — the exhale should feel
-    /// light, so both promises (per-section `?` help → F7c, and re-running this
-    /// walkthrough → F2b recoverability) fold into one line rather than a wall
-    /// of three text blocks (Tom, 2026-07-27). Copy approved.
-    static let closingLine = "Anytime: tap ? for section help, or ? → Show me around to run this again."
+    /// light, so both promises fold into one line rather than a wall of three
+    /// text blocks (Tom, 2026-07-27). Names the per-section `?` help (F7c,
+    /// Option B — no screen-level nav `?`) and the re-run path (Settings → Learn,
+    /// where the walkthrough lives — no new affordance just to make copy true).
+    /// Copy approved.
+    static let closingLine = "Anytime: tap ? beside a section for help, or run this walkthrough again from Settings → Learn."
 }

@@ -192,8 +192,8 @@ struct WalkthroughOrchestratorTests {
         // The final beat's single closing line must keep both promises: the
         // per-section ? help (F7c) and re-running the walkthrough (F2b).
         let line = WalkthroughOrchestrator.Beat.closingLine
-        #expect(line.contains("section help"), "names the per-section ? help (F7c)")
-        #expect(line.contains("Show me around"), "names the re-run path (F2b)")
+        #expect(line.contains("beside a section"), "names the per-section ? help (F7c)")
+        #expect(line.contains("Settings → Learn"), "names the re-run path")
     }
 
     @Test func conceptBeat_carriesTheLoadBearingSentence() {
