@@ -60,6 +60,11 @@ struct EntryExpandedView: View {
     /// `PreferenceKey`s emitted from inside a `List`, which don't
     /// propagate to ancestor `onPreferenceChange`.
     @State private var letGoOnScreen = false
+    /// D5 · true while the Organize card is on screen. The append FAB steps
+    /// aside for it exactly as it does for Let Go, so a scrolled-to Organize
+    /// button isn't covered by the floating FAB (device pass 2026-07-27). Gated
+    /// by `topAnchorVisible` too — a short memory keeps the FAB (see below).
+    @State private var organizeOnScreen = false
     /// True while the zero-height top anchor is on screen — i.e. the body
     /// is at its resting top, not scrolled. Paired with `letGoOnScreen`
     /// so the FAB only hides after a deliberate scroll: a short memory
@@ -278,10 +283,20 @@ struct EntryExpandedView: View {
             // row) so a memory can always be filed; unified associations
             // read model (2026-07-17).
             headerRow(top: -3) { projectSection }
-            // Transcript Full ⇄ Compact toggle sits between the topic
-            // chips row and the chronological body. Hidden for short
-            // memories — the section header itself disappears, the
-            // body still renders fine without any eyebrow.
+            // Section order (ruling 2026-07-27): title → summary → TOPICS →
+            // PROJECTS → MENTIONS → PARTS (clips) → Organize → Let Go. The
+            // spec's summary→topics adjacency (`AI Organize · spec.md` §"A
+            // persistent home" — the derived layer reads as one block) is
+            // preserved; the clip body sits AFTER the metadata sections, before
+            // Organize. Supersedes the earlier clips-between-PROJECTS-and-
+            // MENTIONS placement; the "content-first / clips-before-topics"
+            // idea was withdrawn because it would split summary from topics.
+            sectionRow { mentionsSection }
+            // Transcript Full ⇄ Compact toggle heads the clip body (PARTS).
+            // Hidden for short memories — the header disappears, the body still
+            // renders fine without any eyebrow. D1: the clip body carries no
+            // eyebrow and no `?` — it's the memory's content, self-evident, and
+            // clip help lives one ✎-tap away in Edit Clip.
             if transcriptHeaderShown {
                 sectionRow {
                     TranscriptHeaderControl(
@@ -302,12 +317,6 @@ struct EntryExpandedView: View {
                 }
             }
             bodyContent
-            // Mentions promoted out of the previous bottom expander
-            // (was after OrganizeMemorySection / inferenceCardSection)
-            // and rendered as an always-visible row between the
-            // chronological capture stream and the Organized · review
-            // card. Spec: `docs/Memory Detail/screens-memory-detail.jsx`.
-            sectionRow { mentionsSection }
             sectionRow {
                 // Memory Detail AI zone — routes to Idle (no pass yet)
                 // / Draft (unreviewed pass, B1 review sheet on tap) /
@@ -329,6 +338,9 @@ struct EntryExpandedView: View {
                 // next presentation attempt. Pinning identity makes
                 // SwiftUI preserve the view across body re-evals.
                 .id(entry.id)
+                // D5 · tell the FAB to step aside for the Organize card.
+                .onAppear { organizeOnScreen = true }
+                .onDisappear { organizeOnScreen = false }
             }
             sectionRow { inferenceCardSection }
             // Bottom Delete memory — the sole memory-delete path per
@@ -532,7 +544,7 @@ struct EntryExpandedView: View {
             // `editCoordinator` flips on any title/summary/transcript
             // edit; the FAB disappears until the edit commits or
             // cancels.
-            if !editCoordinator.isAnyEditing && !(letGoOnScreen && !topAnchorVisible) {
+            if !editCoordinator.isAnyEditing && !((letGoOnScreen || organizeOnScreen) && !topAnchorVisible) {
                 AppendFAB(
                     onSelect: { modality in
                         appendCoordinator.activeCaptureModality = modality
@@ -564,6 +576,7 @@ struct EntryExpandedView: View {
         // (see `letGoOnScreen` / `topAnchorVisible`), which List fires
         // reliably; the FAB `if` above drops it from the hierarchy.
         .animation(.easeInOut(duration: 0.18), value: letGoOnScreen)
+        .animation(.easeInOut(duration: 0.18), value: organizeOnScreen)
         .animation(.easeInOut(duration: 0.18), value: topAnchorVisible)
     }
 

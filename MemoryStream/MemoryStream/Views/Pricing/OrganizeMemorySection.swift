@@ -128,15 +128,20 @@ struct OrganizeMemorySection: View {
                 EmptyView()
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    // F7c · the Organize help ?. Anchored in a fixed header row
-                    // that WRAPS the state switch — not inside any one state's
-                    // card — so it never relocates when the card flips from the
-                    // idle CTA to the organized chip+button (Tom's constraint,
-                    // 2026-07-27: a help affordance that moves on state change is
-                    // worse than none). No new eyebrow — a bare ?, left-aligned
-                    // where the other sections' ? sits.
-                    HStack {
-                        SectionHelpButton(topic: .memoryOrganize, size: 15)
+                    // F7c/D2 · ORGANIZE eyebrow + help ?, matching TOPICS /
+                    // PROJECTS / MENTIONS — one consistent pattern (every ?
+                    // hangs off an eyebrow), which is what makes D4's "each
+                    // section has a ?" coachmark honest. The eyebrow WRAPS the
+                    // state switch so the ? never relocates when the card flips
+                    // idle↔organized (Tom's fixed-position constraint). Replaces
+                    // the earlier bare card-chrome ?, which read as orphaned
+                    // (device pass 2026-07-27).
+                    HStack(spacing: 4) {
+                        Text("ORGANIZE")
+                            .font(.system(size: 10, weight: .bold))
+                            .tracking(1.6)
+                            .foregroundStyle(Crucible.Color.ink3)
+                        SectionHelpButton(topic: .memoryOrganize, size: 13)
                         Spacer(minLength: 0)
                     }
                     stateCard
