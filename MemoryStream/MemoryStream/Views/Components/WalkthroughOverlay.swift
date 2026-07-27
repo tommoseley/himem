@@ -112,16 +112,12 @@ struct WalkthroughOverlay: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if beat == .done {
-                    // F7c hand-off: name the per-section ? help, then the
-                    // walkthrough's own recoverability line.
-                    Text(WalkthroughOrchestrator.Beat.sectionHelpHint)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Crucible.Color.ink2)
-                        .lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(WalkthroughOrchestrator.Beat.recoverabilityLine)
-                        .font(.system(size: 12))
+                    // One closing line: the F7c ? hand-off + F2b recoverability,
+                    // merged so the final beat reads as an exhale, not a wall.
+                    Text(WalkthroughOrchestrator.Beat.closingLine)
+                        .font(.system(size: 12.5))
                         .foregroundStyle(Crucible.Color.ink3)
+                        .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 

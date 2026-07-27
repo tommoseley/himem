@@ -232,13 +232,9 @@ extension WalkthroughOrchestrator.Beat {
         }
     }
 
-    /// The recoverability line shown on the final beat (verbatim from F2b).
-    static let recoverabilityLine = "Bring this walkthrough back any time from ? → Show me around."
-
-    /// Closing hint on the final beat that the per-section `?` help exists —
-    /// so a first-timer knows Topics/Projects/Mentions are explained on demand
-    /// (F7c) rather than being left to wonder at the app's densest surface.
-    /// The walkthrough teaches only the spine; the `?` marks teach the rest.
-    /// (F7e — draft, not declared clear; F7c ships right behind F8.)
-    static let sectionHelpHint = "Each section has a ? — Topics, Projects, Mentions — that explains it whenever you want."
+    /// The single closing line on the final beat — the exhale should feel
+    /// light, so both promises (per-section `?` help → F7c, and re-running this
+    /// walkthrough → F2b recoverability) fold into one line rather than a wall
+    /// of three text blocks (Tom, 2026-07-27). Copy approved.
+    static let closingLine = "Anytime: tap ? for section help, or ? → Show me around to run this again."
 }

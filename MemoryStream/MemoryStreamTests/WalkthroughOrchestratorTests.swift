@@ -188,12 +188,12 @@ struct WalkthroughOrchestratorTests {
         #expect(copy == WalkthroughOrchestrator.Beat.openMemory.body(isPlus: true), "tier-independent")
     }
 
-    @Test func doneBeat_handsOffToSectionHelp() {
-        // F7c hand-off: the final beat must point at the per-section ? help so
-        // the user knows Topics/Projects/Mentions are explained on demand.
-        let hint = WalkthroughOrchestrator.Beat.sectionHelpHint
-        #expect(hint.contains("?"))
-        #expect(hint.contains("Topics") && hint.contains("Projects") && hint.contains("Mentions"))
+    @Test func doneBeat_closingLineKeepsBothPromises() {
+        // The final beat's single closing line must keep both promises: the
+        // per-section ? help (F7c) and re-running the walkthrough (F2b).
+        let line = WalkthroughOrchestrator.Beat.closingLine
+        #expect(line.contains("section help"), "names the per-section ? help (F7c)")
+        #expect(line.contains("Show me around"), "names the re-run path (F2b)")
     }
 
     @Test func conceptBeat_carriesTheLoadBearingSentence() {
