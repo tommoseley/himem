@@ -66,10 +66,19 @@ struct EntryExpandedView: View {
     /// by `topAnchorVisible` too — a short memory keeps the FAB (see below).
     @State private var organizeOnScreen = false
     /// True while the zero-height top anchor is on screen — i.e. the body
-    /// is at its resting top, not scrolled. Paired with `letGoOnScreen`
-    /// so the FAB only hides after a deliberate scroll: a short memory
-    /// shows both anchor and Delete at once (`letGoOnScreen && !scrolled`
-    /// → keep the FAB), so the only add affordance is never stranded.
+    /// is at its resting top, not scrolled. Paired with `letGoOnScreen` /
+    /// `organizeOnScreen` so the FAB only hides after a deliberate scroll.
+    ///
+    /// **Deliberate tradeoff — do NOT "fix" this into a hidden FAB (ruling
+    /// 2026-07-27).** On a memory too short to scroll, the top anchor stays
+    /// visible, so the FAB is KEPT even while Let Go / Organize are on screen.
+    /// That accepts a corner overlap of the floating FAB over the bottom card
+    /// on a tiny (one-short-clip) memory — the strictly lesser evil, because
+    /// the FAB is the only add-clips affordance and hiding it here would strand
+    /// it. The section reorder (clips above Organize) makes any memory with a
+    /// real transcript scrollable, shrinking this to almost nothing. A future
+    /// pass that hides the FAB on short memories to kill the overlap would
+    /// re-strand the append path — that's a regression, not a fix.
     @State private var topAnchorVisible = true
     /// P8 Let Go split disclosure, computed once on appear (nil → the static
     /// footnote shows until it's ready).
