@@ -196,6 +196,7 @@
 		A200000047 /* TranscriptClipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000047 /* TranscriptClipController.swift */; };
 		A200000091 /* ClipEditorModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000091 /* ClipEditorModal.swift */; };
 		A200000092 /* ArrivedClipMaterializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000092 /* ArrivedClipMaterializer.swift */; };
+		A200000093 /* WalkthroughOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000093 /* WalkthroughOrchestrator.swift */; };
 		A2000000FB /* FABHandednessSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000FB /* FABHandednessSync.swift */; };
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
@@ -466,6 +467,7 @@
 		B200000047 /* TranscriptClipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TranscriptClipController.swift; path = MemoryStream/Views/Clip/TranscriptClipController.swift; sourceTree = SOURCE_ROOT; };
 		B200000091 /* ClipEditorModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipEditorModal.swift; path = MemoryStream/Views/Clip/ClipEditorModal.swift; sourceTree = SOURCE_ROOT; };
 		B200000092 /* ArrivedClipMaterializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ArrivedClipMaterializer.swift; path = MemoryStream/Services/Storage/ArrivedClipMaterializer.swift; sourceTree = SOURCE_ROOT; };
+		B200000093 /* WalkthroughOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOrchestrator.swift; path = MemoryStream/Services/Tutorials/WalkthroughOrchestrator.swift; sourceTree = SOURCE_ROOT; };
 		B2000000FB /* FABHandednessSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FABHandednessSync.swift; path = MemoryStream/Services/FABHandednessSync.swift; sourceTree = SOURCE_ROOT; };
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
@@ -742,6 +744,7 @@
 				B100000991 /* TutorialsHubView.swift */,
 				B100000992 /* TutorialOrchestrator.swift */,
 				B200000025 /* CoachmarkOrchestrator.swift */,
+				B200000093 /* WalkthroughOrchestrator.swift */,
 				B200000026 /* CoachmarkView.swift */,
 				B100000993 /* QuickLookViewer.swift */,
 				B100000998 /* PhotoViewerSheet.swift */,
@@ -1461,6 +1464,7 @@
 				A100000991 /* TutorialsHubView.swift in Sources */,
 				A100000992 /* TutorialOrchestrator.swift in Sources */,
 				A200000025 /* CoachmarkOrchestrator.swift in Sources */,
+				A200000093 /* WalkthroughOrchestrator.swift in Sources */,
 				A200000026 /* CoachmarkView.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,
 				A100000998 /* PhotoViewerSheet.swift in Sources */,
