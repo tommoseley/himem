@@ -44,13 +44,13 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .memoryTopics:
             return "The themes this memory touches. The app reads your words and suggests them."
         case .memoryProjects:
-            return "The projects this memory belongs to. A project connects related memories — it doesn't contain them."
+            return "Projects are things you're working on over time. A memory can belong to several — or none."
         case .memoryMentions:
             return "People, places, and ideas the app noticed in this memory."
         case .memoryClip:
             return "A clip is one thing you captured — a voice note, photo, video, or written note. A memory is built from one or more of them."
         case .memoryOrganize:
-            return "Organize reads this memory's clips and writes a title and summary — from your own words, not invented."
+            return "Organize reads this memory's clips and writes a title and summary in your own words."
         case .editClip:
             return "This is a single clip — the smallest thing you capture. What you change here changes the clip everywhere it's used."
         }
@@ -83,13 +83,24 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .memoryProjects:
             return "Tap Edit on the Projects row to add this memory to a project or take it out. The memory stays either way."
         case .memoryMentions:
-            return "Tap Edit on the Mentions row to correct, add, or remove them."
+            return "Mentions are shared across your memories — you can rename or remove one everywhere from Settings."
         case .memoryClip:
             return "A clip is stored once and can belong to several memories. Open it to see where else it's used — or to let it go."
         case .memoryOrganize:
             return "You decide when it runs; nothing is rewritten on its own. Re-run it anytime from here."
         case .editClip:
-            return "A clip is stored once and shared across memories. \u{201C}In N memories\u{201D} shows where it lives; deleting it removes it from all of them."
+            return "A clip is stored once and shared across memories. The In N memories line shows where it lives; deleting it removes it from all of them."
+        }
+    }
+
+    /// The label for clause 3, per-panel. Default "WHERE IT LIVES" fits the
+    /// where-it-persists sections; Organize is about when/how it runs, not where
+    /// it lives, so it gets its own label (Tom, 2026-07-27 — a label that's
+    /// untrue for the panel is a sign it doesn't fit).
+    var clause3Label: String {
+        switch self {
+        case .memoryOrganize: return "HOW IT RUNS"
+        default:              return "WHERE IT LIVES"
         }
     }
 }
@@ -137,7 +148,7 @@ struct SectionHelpSheet: View {
 
                     clause("WHAT IT IS", topic.whatItIs)
                     clause("WHAT YOU CAN DO", topic.whatYouCanDo)
-                    clause("WHERE IT LIVES", topic.whereItsMaintained)
+                    clause(topic.clause3Label, topic.whereItsMaintained)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(24)
