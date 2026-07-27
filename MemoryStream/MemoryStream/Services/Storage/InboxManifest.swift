@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreData
 import UserNotifications
 
 /// One row in the inbox manifest — represents an unorganized clip that
@@ -1259,8 +1260,60 @@ enum BenchClipReviewStore {
         UserDefaults.standard.set(Array(ids), forKey: key)
     }
 
+    /// Batch variant — one write for the whole set (used by the backfill
+    /// migration). Idempotent; no write when nothing new is added.
+    static func markReviewed(_ ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        var set = reviewedIds()
+        var changed = false
+        for id in ids where set.insert(id.uuidString).inserted { changed = true }
+        guard changed else { return }
+        UserDefaults.standard.set(Array(set), forKey: key)
+    }
+
     private static func reviewedIds() -> Set<String> {
         Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
+    }
+}
+
+/// One-time backfill (2026-07-27): mark the entire PRE-EXISTING bench library
+/// reviewed. Review tracking — `InboxClip.reviewed` (P7-2, July 18 2026) and
+/// the ref-keyed `BenchClipReviewStore` — only records opens made THROUGH the
+/// clip editor AFTER those mechanisms shipped. Every clip captured/opened/
+/// promoted before then has no review record and decodes `reviewed == false`;
+/// when such a clip later returns from a memory as a loose ref (`edges == 0`)
+/// it floods the New lens as "unseen" though it was handled months ago (device
+/// pass 2026-07-27: New listed May/June clips already opened and once in
+/// memories).
+///
+/// This is a watermark, not a live-wiring fix — the open paths are correct
+/// (every one presents `ClipEditorModal`, whose `.onAppear` marks reviewed).
+/// Mark every `MediaReference` present at upgrade time reviewed. Scoped to
+/// refs ONLY: recent manifest clips are all post-P7-2 and track correctly, so
+/// blanket-marking them would wrongly hide genuinely-new arrivals.
+enum BenchReviewBackfillMigration {
+    static let doneKey = "com.himem.bench.reviewBackfill.v1.done"
+
+    static var hasRun: Bool { UserDefaults.standard.bool(forKey: doneKey) }
+
+    /// Pure core (unit-tested): record the ids reviewed and set the done flag.
+    static func apply(refIds: [UUID]) {
+        BenchClipReviewStore.markReviewed(refIds)
+        UserDefaults.standard.set(true, forKey: doneKey)
+    }
+
+    /// Fetch every existing bench ref id and back-fill, once. Runs from
+    /// `LaunchScreenView.runMigration` (post-CloudKit-settle, so historical
+    /// refs are present) on a background context.
+    static func runIfNeeded(in storage: StorageService) {
+        guard !hasRun else { return }
+        let ctx = storage.backgroundContext()
+        ctx.perform {
+            let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+            let ids = ((try? ctx.fetch(req)) ?? []).map { $0.id }
+            apply(refIds: ids)
+            NSLog("[HiMem][Inbox] bench review backfill: marked \(ids.count) existing ref(s) reviewed")
+        }
     }
 }
 

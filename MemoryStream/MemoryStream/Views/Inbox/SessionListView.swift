@@ -24,6 +24,12 @@ struct SessionListView: View {
     /// the sessions so the New lens shows only fresh, un-eyeballed intake.
     /// Default false (All shows everything).
     var hideReviewed: Bool = false
+    /// True when a SIBLING view in the same lens (the New lens's unplaced
+    /// day-grouped ref stack) has content. The empty state must be mutually
+    /// exclusive with ALL lens content, not just this view's sessions — else
+    /// "Nothing new" renders directly above the sibling's populated rows
+    /// (device pass 2026-07-27). See `showsEmptyState`.
+    var hasSiblingContent: Bool = false
     /// P7-4 multi-select (shared Clips-tab selection). Selecting a session
     /// card batch-selects every clip in it (matches the "opening a session
     /// marks all its clips" orthogonality); Sort cluster proposals are NOT
@@ -131,8 +137,16 @@ struct SessionListView: View {
         // Settings + JournalView (2026-07-09) are retired.
         ZStack {
             Crucible.Color.paper.ignoresSafeArea()
-            if inbox.isEmpty {
-                emptyState
+            // Gate on the VISIBLE sessions (hideReviewed-filtered), not
+            // `inbox.isEmpty` (the raw manifest) — the New lens also draws
+            // materialized/loose refs the manifest doesn't know about. And show
+            // the empty state only when the whole lens is empty: not while a
+            // sibling stack has content (device pass 2026-07-27).
+            if sessions.isEmpty {
+                if Self.showsEmptyState(sessionsEmpty: true, hasSiblingContent: hasSiblingContent) {
+                    emptyState
+                }
+                // else: a sibling (unplaced stack) is rendering — draw nothing.
             } else {
                 list
             }
@@ -415,6 +429,14 @@ struct SessionListView: View {
     }
 
     // MARK: - Empty state
+
+    /// The empty state is shown iff this view has no visible sessions AND no
+    /// sibling lens content — pure so the mutual-exclusivity rule is money-
+    /// tested (device pass 2026-07-27: "Nothing new" rendered above eight
+    /// populated loose-ref rows because the gate ignored the sibling stack).
+    static func showsEmptyState(sessionsEmpty: Bool, hasSiblingContent: Bool) -> Bool {
+        sessionsEmpty && !hasSiblingContent
+    }
 
     private var emptyState: some View {
         // Source-agnostic copy per `CLAUDE.md` §Phone (July 12 2026):
