@@ -370,10 +370,14 @@ struct EntryExpandedView: View {
                 }
                 .padding(.top, 24)
             }
-            // Bottom inset so the floating Contribute FAB doesn't cover the
-            // last row.
+            // Bottom inset so the floating append FAB doesn't cover the last
+            // row (the Let Go footer). Sized to the FAB's real footprint:
+            // 60pt circle + 28pt bottom padding = 88pt (`AppendFAB` frame +
+            // `.padding(.bottom, 28)`), plus a 20pt gap — else the FAB's top
+            // sat ~8pt into the centered full-width footnote and its right
+            // edge ran under the orange circle (device pass 2026-07-26).
             Color.clear
-                .frame(height: 80)
+                .frame(height: 108)
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
