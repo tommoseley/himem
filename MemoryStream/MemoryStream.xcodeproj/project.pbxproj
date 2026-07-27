@@ -171,8 +171,6 @@
 		A200000021 /* ClipsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000021 /* ClipsTabView.swift */; };
 		A200000023 /* PlaceClipSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000023 /* PlaceClipSheet.swift */; };
 		A200000024 /* ClipFateRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000024 /* ClipFateRow.swift */; };
-		A200000025 /* CoachmarkOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000025 /* CoachmarkOrchestrator.swift */; };
-		A200000026 /* CoachmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000026 /* CoachmarkView.swift */; };
 		A200000027 /* ClipsStatusSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000027 /* ClipsStatusSheet.swift */; };
 		A200000028 /* DebouncedTrigger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000028 /* DebouncedTrigger.swift */; };
 		A200000029 /* BenchHeaderTitleBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000029 /* BenchHeaderTitleBuilder.swift */; };
@@ -444,8 +442,6 @@
 		B200000021 /* ClipsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipsTabView.swift; sourceTree = "<group>"; };
 		B200000023 /* PlaceClipSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceClipSheet.swift; sourceTree = "<group>"; };
 		B200000024 /* ClipFateRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipFateRow.swift; sourceTree = "<group>"; };
-		B200000025 /* CoachmarkOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CoachmarkOrchestrator.swift; path = MemoryStream/Services/Tutorials/CoachmarkOrchestrator.swift; sourceTree = SOURCE_ROOT; };
-		B200000026 /* CoachmarkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CoachmarkView.swift; path = MemoryStream/Views/Components/CoachmarkView.swift; sourceTree = SOURCE_ROOT; };
 		B200000027 /* ClipsStatusSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipsStatusSheet.swift; path = MemoryStream/Views/Clips/ClipsStatusSheet.swift; sourceTree = SOURCE_ROOT; };
 		B200000028 /* DebouncedTrigger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DebouncedTrigger.swift; path = MemoryStream/Services/DebouncedTrigger.swift; sourceTree = SOURCE_ROOT; };
 		B200000029 /* BenchHeaderTitleBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BenchHeaderTitleBuilder.swift; path = MemoryStream/Views/Inbox/BenchHeaderTitleBuilder.swift; sourceTree = SOURCE_ROOT; };
@@ -747,9 +743,7 @@
 				B100000950 /* TopicChip.swift */,
 				B100000991 /* TutorialsHubView.swift */,
 				B100000992 /* TutorialOrchestrator.swift */,
-				B200000025 /* CoachmarkOrchestrator.swift */,
 				B200000093 /* WalkthroughOrchestrator.swift */,
-				B200000026 /* CoachmarkView.swift */,
 				B200000094 /* WalkthroughOverlay.swift */,
 				B200000095 /* SectionHelp.swift */,
 				B100000993 /* QuickLookViewer.swift */,
@@ -1469,9 +1463,7 @@
 				A100000950 /* TopicChip.swift in Sources */,
 				A100000991 /* TutorialsHubView.swift in Sources */,
 				A100000992 /* TutorialOrchestrator.swift in Sources */,
-				A200000025 /* CoachmarkOrchestrator.swift in Sources */,
 				A200000093 /* WalkthroughOrchestrator.swift in Sources */,
-				A200000026 /* CoachmarkView.swift in Sources */,
 				A200000094 /* WalkthroughOverlay.swift in Sources */,
 				A200000095 /* SectionHelp.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,

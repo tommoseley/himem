@@ -45,9 +45,8 @@ struct HiMemTabView: View {
     @StateObject private var speechService = SpeechService()
     @ObservedObject private var captureLanding = CaptureLandingBus.shared
     @ObservedObject private var captureRequests = CaptureRequestBus.shared
-    @ObservedObject private var coachmarks = CoachmarkOrchestrator.shared
-    // F8 · guided walkthrough (do-it-with-me first run). Runs alongside the
-    // per-tab coachmarks until F8 is device-verified; the cards retire after.
+    // F8 · guided walkthrough (do-it-with-me first run). Replaced the per-tab
+    // coachmark cards, retired 2026-07-27 (F8 + F7c section-? cover the ground).
     @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
     @ObservedObject private var entitlement = Entitlement.shared
     @ObservedObject private var inbox = InboxManifest.shared
@@ -84,12 +83,6 @@ struct HiMemTabView: View {
     @ObservedObject private var projectOpen = ProjectOpenBus.shared
     /// Routes a mention read-chip tap to the Memories tab's mention filter.
     @ObservedObject private var mentionFilter = MentionFilterBus.shared
-    /// Set true when `pendingReturnToClips` fires; consumed by the
-    /// next Clips coachmark evaluation so guardrail #3 ("suppress the
-    /// Clips coachmark when arriving from a capture") holds. Cleared
-    /// once the coachmark decision is made — subsequent neutral
-    /// arrivals at Clips are eligible.
-    @State private var justArrivedFromCapture = false
 
     /// Custom binding that intercepts every tab tap — including taps
     /// on the already-active tab, which SwiftUI's `$selection` handles
@@ -123,19 +116,6 @@ struct HiMemTabView: View {
                     captureSource: captureSource,
                     onCaptured: handleCapturedItem
                 )
-                .fullScreenCover(item: Binding(
-                    get: { coachmarks.visible },
-                    set: { newValue in
-                        if newValue == nil, let current = coachmarks.visible {
-                            coachmarks.dismiss(current)
-                        }
-                    }
-                )) { kind in
-                    CoachmarkView(kind: kind) {
-                        coachmarks.dismiss(kind)
-                    }
-                    .presentationBackground(.clear)
-                }
                 .sheet(isPresented: Binding(
                     get: { clipsStatusSheet != nil },
                     set: { presented in if !presented { clipsStatusSheet = nil } }
@@ -249,22 +229,8 @@ struct HiMemTabView: View {
     /// capture modality) but collectively at the CC-30 line when inline.
     private func tabRoutingObservers(_ content: some View) -> some View {
         content
-        .onChange(of: coachmarks.restorePending) { _, pending in
-            // F2b: "Show me around" was tapped in the Learn hub — it reset the
-            // seen flags and set this flag. Wait for the hub's navigation pop
-            // to settle before presenting the coachmark's fullScreenCover (a
-            // same-frame present races the dismiss and drops the coachmark),
-            // then re-fire the CURRENT tab's coachmark. Other tabs re-coach on
-            // their next first visit via the ordinary `tryFire` gate.
-            guard pending else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                guard coachmarks.restorePending else { return }
-                coachmarks.consumeRestore(currentTab: coachmarkKind(for: selection))
-            }
-        }
         .onChange(of: captureLanding.pendingReturnToClips) { _, pending in
             if pending {
-                justArrivedFromCapture = true
                 selection = .clips
                 captureLanding.pendingReturnToClips = false
                 // F8 · the recorded clip returned to Clips and lands on the bench.
@@ -324,7 +290,6 @@ struct HiMemTabView: View {
             }
         }
         .onChange(of: selection) { _, newTab in
-            evaluateCoachmark(for: newTab)
             // Clear the arrival dot on Clips per `CLAUDE.md` §Phone —
             // "the dot represents new, unseen arrivals and clears when
             // the user opens Clips."
@@ -366,11 +331,6 @@ struct HiMemTabView: View {
             if selection == .clips && inbox.hasUnseenArrivals {
                 InboxManifest.shared.markAllSeen()
             }
-            // Cold-launch session bump for the coachmark's "never on
-            // first launch" guardrail (spec guardrail #4). Runs once
-            // per cold launch — SwiftUI calls `onAppear` on the root
-            // tab shell as the app boots.
-            coachmarks.armSession()
             // F8 · offer the guided walkthrough on first run (post-onboarding —
             // the tab shell only appears once onboarding completes). Once, then
             // never re-offered; always retrievable from ? → Show me around.
@@ -385,10 +345,6 @@ struct HiMemTabView: View {
                 captureSource = .manual
                 DispatchQueue.main.async { activeCaptureModality = modality }
             }
-            // Evaluate the coachmark for the cold-launch landing tab
-            // (Memories by default). No-op on session 1 with no
-            // content per the gate.
-            evaluateCoachmark(for: selection)
         }
         // Any surface (App Shortcuts, other in-app triggers) can request
         // capture by setting `pendingModality`.
@@ -401,55 +357,6 @@ struct HiMemTabView: View {
         }
     }
 
-    /// Coachmark trigger dispatch per `Tutorials · triggers spec.md`
-    /// §"Per-tab coachmark on first arrival." Applies the four
-    /// guardrails via `CoachmarkOrchestrator.tryFire`.
-    /// The coachmark `Kind` for a tab — the wiring symmetry the orchestrator's
-    /// `Kind` order mirrors. Shared by first-arrival firing and the "Show me
-    /// around" restore re-fire (F2b).
-    private func coachmarkKind(for tab: Tab) -> CoachmarkOrchestrator.Kind {
-        switch tab {
-        case .clips:    return .clips
-        case .memories: return .memories
-        case .projects: return .projects
-        }
-    }
-
-    private func evaluateCoachmark(for tab: Tab) {
-        // F8 · while the guided walkthrough is running, the per-tab coachmarks
-        // stand down — the walkthrough is teaching the same thing, in context.
-        // Both stay reachable (green-to-green); the cards retire once F8 is
-        // device-verified, in their own commit.
-        guard !walkthrough.isRunning else { return }
-        let kind = coachmarkKind(for: tab)
-        let suppressed = (tab == .clips) && justArrivedFromCapture
-        coachmarks.tryFire(
-            kind,
-            tabHasContent: tabHasContent(for: tab),
-            suppressedByCaptureArrival: suppressed
-        )
-        // Consume the "just arrived from capture" flag after this
-        // evaluation — the next arrival at Clips is neutral.
-        if suppressed {
-            justArrivedFromCapture = false
-        }
-    }
-
-    /// Rough "is there anything to anchor to" check per guardrail #4.
-    /// Returns true when the tab has enough content that a tour is
-    /// meaningful. Doesn't need to be perfect — an over-shown
-    /// coachmark is only shown once ever, and Skip is instant.
-    private func tabHasContent(for tab: Tab) -> Bool {
-        switch tab {
-        case .clips:
-            return !inbox.isEmpty
-        case .memories:
-            return coreDataCount(entityName: "JournalEntry") > 0
-        case .projects:
-            return coreDataCount(entityName: "Project") > 0
-        }
-    }
-
     /// True once the walkthrough's memory has an organize pass — its title +
     /// summary now exist. Drives the F8 `organize` → `done` advance (checked on
     /// Core Data change since `lastOrganizedAt` isn't broadcast).
@@ -459,13 +366,6 @@ struct HiMemTabView: View {
         req.fetchLimit = 1
         guard let entry = try? StorageService.shared.viewContext.fetch(req).first else { return false }
         return entry.inferenceSummary != nil || entry.lastOrganizedAt != nil
-    }
-
-    private func coreDataCount(entityName: String) -> Int {
-        let ctx = StorageService.shared.viewContext
-        let req = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
-        req.resultType = .countResultType
-        return (try? ctx.count(for: req)) ?? 0
     }
 
     /// Current FAB routing intent per `CaptureLandingRouter`. Reactive

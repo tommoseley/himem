@@ -9,9 +9,9 @@ import SwiftUI
 ///
 /// Offered once on first run (post-onboarding), skippable, and **re-runnable
 /// from ? → Show me around** — the same recoverability F2b built, repointed
-/// from restoring coachmarks to relaunching this. Sibling to
-/// `CoachmarkOrchestrator`; the per-tab coachmark cards retire once this is
-/// device-verified (green-to-green — a later commit).
+/// from restoring coachmarks to relaunching this. It **replaced** the per-tab
+/// coachmark cards, retired 2026-07-27 once F8 + F7c (section-?) covered the
+/// ground.
 ///
 /// The state machine is the spine (this file). The anchored overlay UI and the
 /// pipeline-signal wiring that calls `recordingDidStart()` / `nextClipStarted()`
@@ -49,7 +49,7 @@ final class WalkthroughOrchestrator: ObservableObject {
     }
 
     /// The active beat; `nil` when the walkthrough isn't running. Published so
-    /// the overlay host presents it (same pattern as `CoachmarkOrchestrator.visible`).
+    /// the overlay host presents it.
     @Published var activeBeat: Beat?
 
     /// The memory the user created during the walkthrough (set by

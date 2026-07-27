@@ -77,12 +77,10 @@ struct TutorialsHubView: View {
         // and calls `consumeRestore`). Stateless: always present, never gated
         // on whether coachmarks have been seen, no "seen" checkmark.
         Button {
-            // F8 · "Show me around" now launches the guided walkthrough. The
-            // coachmark restore stays wired alongside it (green-to-green) until
-            // the walkthrough is device-verified — then the cards + this
-            // restore call retire in their own commit.
+            // "Show me around" launches the guided walkthrough (F8). The per-tab
+            // coachmark cards + their restore were retired 2026-07-27 now that
+            // F8 (teach-by-doing) + F7c (section-?) cover the ground.
             WalkthroughOrchestrator.shared.start()
-            CoachmarkOrchestrator.shared.restoreTour()
             dismiss()
         } label: {
             TutorialsHubRow(entry: TutorialCatalog.tour)
@@ -186,14 +184,12 @@ private struct TutorialsHubRow: View {
 /// is intentionally not in the hub (by the time a user could replay
 /// it, they've already accepted or declined the install).
 enum TutorialCatalog {
-    /// The tour row — **"Show me around"** (F2b · 2026-07-26). This is the
-    /// recoverability entry for the anchored per-tab coachmarks: tapping it
-    /// resets every coachmark's seen flag and re-fires the current tab's
-    /// coachmark once the hub closes (`CoachmarkOrchestrator.restoreTour`). The
-    /// `CaptureTutorialView` stub that stood in until the coachmark shipped is
-    /// retired — the row is now an action, not a navigation, so `destination`
-    /// is unused. Spec: `Tutorials · triggers spec.md` §"Coachmark
-    /// recoverability".
+    /// The tour row — **"Show me around"** (F2b · 2026-07-26). The
+    /// recoverability entry for the guided walkthrough: tapping it relaunches
+    /// F8 (`WalkthroughOrchestrator.start`) once the hub closes. The per-tab
+    /// coachmark cards this originally restored were retired 2026-07-27 (F8 +
+    /// F7c cover the ground). The row is an action, not a navigation, so
+    /// `destination` is unused.
     static let tour = TutorialCatalogEntry(
         id: "screen-tour",
         title: "Show me around",
