@@ -6,8 +6,9 @@ import SwiftUI
 ///
 /// - **Modal card** (`offer` · `concept`) — beats with NO real target to reveal;
 ///   a card over a dim scrim, driven by its buttons.
-/// - **Top banner** (`record` · `clipLanded` · `makeMemory` · `organize` ·
-///   `done`) — every beat that points at a real control. Pinned to the TOP so it
+/// - **Top banner** (`record` · `clipLanded` · `makeMemory` · `openMemory` ·
+///   `organize` · `done`) — every beat that points at a real control (the
+///   `openMemory` banner names the "Memory created · View" toast). Pinned to the TOP so it
 ///   never **occludes** the target (device pass 2026-07-26: a bottom banner sat
 ///   over the Voice row in the FAB stack — non-blocking-to-taps but hiding the
 ///   one control the copy names). The empty area passes touches through, so the
@@ -33,7 +34,7 @@ struct WalkthroughOverlay: View {
             switch beat {
             case .offer, .concept:
                 modalCard(beat)
-            case .record, .clipLanded, .makeMemory, .organize, .done:
+            case .record, .clipLanded, .makeMemory, .openMemory, .organize, .done:
                 topBanner(beat)
             case .onARoll, .rolling:
                 // 1b is rendered in-composer (`VoiceCaptureScreen`) — the root
@@ -111,6 +112,13 @@ struct WalkthroughOverlay: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if beat == .done {
+                    // F7c hand-off: name the per-section ? help, then the
+                    // walkthrough's own recoverability line.
+                    Text(WalkthroughOrchestrator.Beat.sectionHelpHint)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Crucible.Color.ink2)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(WalkthroughOrchestrator.Beat.recoverabilityLine)
                         .font(.system(size: 12))
                         .foregroundStyle(Crucible.Color.ink3)

@@ -16,9 +16,12 @@ import SwiftUI
 /// The state machine is the spine (this file). The anchored overlay UI and the
 /// pipeline-signal wiring that calls `recordingDidStart()` / `nextClipStarted()`
 /// / `recordingDidCancel()` / `clipDidLand()` / `memoryDidStart()` /
-/// `organizeDidComplete()` live in the overlay + `VoiceCaptureScreen`. The
-/// `onARoll` beat (1b) is rendered in-composer because the root overlay can't
-/// reach over the recording screen's `fullScreenCover`.
+/// `memoryDidOpen()` / `organizeDidComplete()` live in the overlay +
+/// `VoiceCaptureScreen` + `EntryExpandedView`. Two beats render outside the
+/// root overlay's reach: `onARoll` (1b) in-composer (the recording screen is a
+/// `fullScreenCover`); the `organize`/`done` beats only arm once
+/// `EntryExpandedView` reports the memory opened (`memoryDidOpen`), because
+/// Start a Memory returns to Clips without navigating to Memory Detail.
 ///
 /// Spec: `Handoff · punch list · 2026-07-25.md` §F8. Copy is design-authority
 /// (drafted for cold validation per F7e; no "evidence" per F7g).
@@ -38,7 +41,8 @@ final class WalkthroughOrchestrator: ObservableObject {
         case clipLanded  // spotlight the bench card, "clips are the building blocks of memories"
         case concept     // centered card, "a memory is made of one or more clips" (F7b)
         case makeMemory  // spotlight Start a Memory
-        case organize    // Free: spotlight Organize · Plus: narrate
+        case openMemory  // spotlight the "Memory created · View" toast — bridge Clips → Memory Detail
+        case organize    // Free: spotlight Organize · Plus: narrate — on Memory Detail
         case done        // spotlight the title + summary, "clips are what you catch; memories are what they become"
 
         var id: Int { rawValue }
@@ -100,7 +104,7 @@ final class WalkthroughOrchestrator: ObservableObject {
         case .clipLanded: activeBeat = .concept
         case .concept:    activeBeat = .makeMemory
         case .done:       finish()
-        case .record, .onARoll, .rolling, .makeMemory, .organize, .none: break
+        case .record, .onARoll, .rolling, .makeMemory, .openMemory, .organize, .none: break
         }
     }
 
@@ -138,17 +142,39 @@ final class WalkthroughOrchestrator: ObservableObject {
 
     /// The user created a memory from the clip (Start a Memory). `id` is the new
     /// memory — tracked so the host can watch it for organize completion.
+    ///
+    /// Advances to `openMemory`, NOT straight to `organize` — Start a Memory
+    /// dismisses to the calm Clips list with a "Memory created · View" toast
+    /// (the locked "no teleport" spec); the organize/done beats point at
+    /// controls that only exist on Memory Detail, so they must wait until the
+    /// user actually opens it (`memoryDidOpen`). Arming `organize` here would
+    /// display it against a control that isn't on screen (device pass 2026-07-26,
+    /// beats 5/6 never fired on Memory Detail).
     func memoryDidStart(id: UUID? = nil) {
         if activeBeat == .makeMemory {
             walkthroughMemoryId = id
-            activeBeat = .organize
+            activeBeat = .openMemory
         }
     }
 
+    /// The walkthrough's memory opened on Memory Detail (its `EntryExpandedView`
+    /// appeared, by any route). Only now — with Organize and the title/summary
+    /// on screen — do the organize/done beats arm.
+    ///
+    /// `alreadyOrganized` skips straight to `done`: on Plus the memory
+    /// auto-organizes at creation (`processEntry`), so by the time the user
+    /// opens it the title + summary already exist and there's no Organize to
+    /// point at — `done` names the result. On Free (manual organize) it's
+    /// false, so `organize` arms and waits for the user's Organize tap.
+    func memoryDidOpen(alreadyOrganized: Bool) {
+        guard activeBeat == .openMemory else { return }
+        activeBeat = alreadyOrganized ? .done : .organize
+    }
+
     /// The memory's organize pass completed — its title + summary now exist
-    /// (`entry.lastOrganizedAt` + `inferenceSummary`). On Plus this fires ~at
-    /// once after `memoryDidStart` (beat 5 collapses to a narration); on Free
-    /// it fires after the user taps Organize.
+    /// (`entry.lastOrganizedAt` + `inferenceSummary`). On Free this fires after
+    /// the user taps Organize; on Plus, if the auto-organize finishes *after*
+    /// the user opened the memory, it advances the narration to `done`.
     func organizeDidComplete() { if activeBeat == .organize { activeBeat = .done } }
 }
 
@@ -192,6 +218,11 @@ extension WalkthroughOrchestrator.Beat {
             return "A memory is made of one or more clips. You have one clip now. Next you'll turn it into a memory."
         case .makeMemory:
             return "Open your clip and tap Start a Memory. Your clip becomes the first part of that memory."
+        case .openMemory:
+            // Bridges Clips → Memory Detail. The app doesn't teleport you there
+            // (locked no-teleport spec), so name the toast's control. Tier-
+            // independent. (F7e — draft, not declared clear.)
+            return "Your memory is saved. Tap View to open it."
         case .organize:
             return isPlus
                 ? "The app already read your clip and wrote a title and summary from your own words."
@@ -203,4 +234,11 @@ extension WalkthroughOrchestrator.Beat {
 
     /// The recoverability line shown on the final beat (verbatim from F2b).
     static let recoverabilityLine = "Bring this walkthrough back any time from ? → Show me around."
+
+    /// Closing hint on the final beat that the per-section `?` help exists —
+    /// so a first-timer knows Topics/Projects/Mentions are explained on demand
+    /// (F7c) rather than being left to wonder at the app's densest surface.
+    /// The walkthrough teaches only the spine; the `?` marks teach the rest.
+    /// (F7e — draft, not declared clear; F7c ships right behind F8.)
+    static let sectionHelpHint = "Each section has a ? — Topics, Projects, Mentions — that explains it whenever you want."
 }

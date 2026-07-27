@@ -50,9 +50,40 @@ struct WalkthroughOrchestratorTests {
         o.clipDidLand();          #expect(o.activeBeat == .clipLanded, "stop without Next → clip lands")
         o.advance();              #expect(o.activeBeat == .concept)
         o.advance();              #expect(o.activeBeat == .makeMemory)
-        o.memoryDidStart();       #expect(o.activeBeat == .organize)
+        o.memoryDidStart();       #expect(o.activeBeat == .openMemory, "Start a Memory returns to Clips → bridge beat, not organize")
+        o.memoryDidOpen(alreadyOrganized: false); #expect(o.activeBeat == .organize, "opening Memory Detail arms organize (Free)")
         o.organizeDidComplete();  #expect(o.activeBeat == .done)
         o.advance();              #expect(o.activeBeat == nil && o.hasCompleted)
+        reset()
+    }
+
+    /// Beats 5/6 must anchor to Memory-Detail *arrival*, not memory creation —
+    /// Start a Memory returns to the Clips list (no teleport), so arming
+    /// organize at creation displayed it against a control that wasn't on
+    /// screen (device pass 2026-07-26: beats 5/6 never fired on Memory Detail).
+    @Test func organizeArmsOnlyOnMemoryOpen_notCreation() {
+        reset()
+        o.start(); o.beginFromOffer(); o.recordingDidStart(); o.clipDidLand()
+        o.advance(); o.advance()                 // clipLanded → concept → makeMemory
+        #expect(o.activeBeat == .makeMemory)
+        o.memoryDidStart(id: UUID())
+        #expect(o.activeBeat == .openMemory, "creation bridges to open-your-memory, not organize")
+        o.advance(); #expect(o.activeBeat == .openMemory, "openMemory ignores taps — waits for the real open signal")
+        o.memoryDidOpen(alreadyOrganized: false)
+        #expect(o.activeBeat == .organize, "organize arms only once Memory Detail is on screen")
+        reset()
+    }
+
+    /// Plus auto-organizes at creation (`processEntry`), so by the time the
+    /// user opens the memory the title + summary already exist and there's no
+    /// Organize to tap — skip straight to the "that's a memory" beat.
+    @Test func memoryOpen_whenAlreadyOrganized_skipsToDone() {
+        reset()
+        o.start(); o.beginFromOffer(); o.recordingDidStart(); o.clipDidLand()
+        o.advance(); o.advance(); o.memoryDidStart(id: UUID())
+        #expect(o.activeBeat == .openMemory)
+        o.memoryDidOpen(alreadyOrganized: true)
+        #expect(o.activeBeat == .done, "already-organized (Plus) → straight to done, no organize beat")
         reset()
     }
 
@@ -103,6 +134,9 @@ struct WalkthroughOrchestratorTests {
         #expect(o.activeBeat == .makeMemory)
         o.advance(); #expect(o.activeBeat == .makeMemory, "makeMemory ignores taps — waits for memoryDidStart")
         o.memoryDidStart()
+        #expect(o.activeBeat == .openMemory)
+        o.advance(); #expect(o.activeBeat == .openMemory, "openMemory ignores taps — waits for memoryDidOpen")
+        o.memoryDidOpen(alreadyOrganized: false)
         #expect(o.activeBeat == .organize)
         o.advance(); #expect(o.activeBeat == .organize, "organize ignores taps — waits for organizeDidComplete")
         reset()
@@ -145,6 +179,21 @@ struct WalkthroughOrchestratorTests {
         #expect(copy.contains("Next"), "on-a-roll copy names the Next control")
         // Tier-independent: Free and Plus read identically.
         #expect(copy == WalkthroughOrchestrator.Beat.onARoll.body(isPlus: true))
+    }
+
+    @Test func openMemoryBeat_namesView() {
+        // Bridges Clips → Memory Detail; must name the toast's control.
+        let copy = WalkthroughOrchestrator.Beat.openMemory.body(isPlus: false)
+        #expect(copy.contains("View"), "open-memory copy names the View control")
+        #expect(copy == WalkthroughOrchestrator.Beat.openMemory.body(isPlus: true), "tier-independent")
+    }
+
+    @Test func doneBeat_handsOffToSectionHelp() {
+        // F7c hand-off: the final beat must point at the per-section ? help so
+        // the user knows Topics/Projects/Mentions are explained on demand.
+        let hint = WalkthroughOrchestrator.Beat.sectionHelpHint
+        #expect(hint.contains("?"))
+        #expect(hint.contains("Topics") && hint.contains("Projects") && hint.contains("Mentions"))
     }
 
     @Test func conceptBeat_carriesTheLoadBearingSentence() {

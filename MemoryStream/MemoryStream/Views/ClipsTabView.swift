@@ -155,6 +155,12 @@ struct ClipsTabView: View {
                 // extend the visible time correctly.
                 toastAutoDismissTask?.cancel()
                 guard newValue != nil else { return }
+                // F8 · during the guided walkthrough, keep the "Memory created ·
+                // View" toast up until the user taps View — its `openMemory`
+                // beat points at this toast, and a 3.5s auto-dismiss would
+                // strand it. `isRunning` (not a specific beat) so this is robust
+                // to onChange ordering with `memoryDidStart`.
+                guard !WalkthroughOrchestrator.shared.isRunning else { return }
                 toastAutoDismissTask = Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 3_500_000_000)
                     if !Task.isCancelled {

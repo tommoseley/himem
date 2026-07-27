@@ -399,6 +399,18 @@ struct EntryExpandedView: View {
             // the shell FAB stacks above Memory Detail's own append
             // FAB — the "two RABs" bug (July 11 2026).
             MemoryDetailPresentationContext.shared.enter(memoryId: entry.id)
+            // F8 · if this is the walkthrough's memory, arm the organize/done
+            // beats now that Organize + the title/summary are on screen. On
+            // Plus the auto-organize (processEntry) has usually already run, so
+            // pass whether it's organized — the orchestrator skips straight to
+            // the "that's a memory" beat rather than pointing at an Organize
+            // control that isn't there.
+            if WalkthroughOrchestrator.shared.walkthroughMemoryId == entry.id {
+                // `inferenceSummary` is the display model's organized signal —
+                // the AI-written title/summary. Non-nil ⇒ Plus already
+                // auto-organized ⇒ skip the organize beat.
+                WalkthroughOrchestrator.shared.memoryDidOpen(alreadyOrganized: entry.inferenceSummary != nil)
+            }
         }
         .onDisappear {
             MemoryDetailPresentationContext.shared.exit(memoryId: entry.id)
