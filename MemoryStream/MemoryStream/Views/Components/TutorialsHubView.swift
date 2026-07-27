@@ -596,7 +596,7 @@ struct OrganizingTutorialView: View {
     var body: some View {
         TutorialPage(
             eyebrow: "Organizing with AI",
-            title: "A first draft, in your words.",
+            title: "A first draft, from your clips.",
             intro: "When you ask, HiMem drafts the details so a memory is easy to find later — but you stay the editor.",
             points: [
                 TutorialPoint(systemImage: "sparkles", tint: .aiBlue,

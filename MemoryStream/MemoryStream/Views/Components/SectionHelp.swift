@@ -50,7 +50,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .memoryClip:
             return "A clip is one thing you captured — a voice note, photo, video, or written note. A memory is built from one or more of them."
         case .memoryOrganize:
-            return "Organize reads this memory's clips and writes a title and summary in your own words."
+            // Honest Label (Tom 2026-07-27): the AI writes those sentences —
+            // they are NOT the user's words. What's true is it draws only on
+            // what's in the clips and adds nothing.
+            return "Organize reads this memory's parts and writes a title and summary. It only uses what's in your clips — it never adds anything that isn't there."
         case .editClip:
             return "This is a single clip — the smallest thing you capture. What you change here changes the clip everywhere it's used."
         }

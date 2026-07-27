@@ -230,11 +230,14 @@ extension WalkthroughOrchestrator.Beat {
             // independent. (F7e — draft, not declared clear.)
             return "Your memory is saved. Tap View to open it."
         case .organize:
+            // Honest Label (Tom 2026-07-27): the AI writes the title/summary —
+            // they're the app's sentences, not the user's words. Name that it
+            // draws only on the clip and adds nothing; never "your own words."
             return isPlus
-                ? "The app already read your clip and wrote a title and summary from your own words."
-                : "Tap Organize — the app reads your clip and writes a title and summary from your own words."
+                ? "The app already read your clip and wrote a title and summary, using only what's in it — nothing added."
+                : "Tap Organize — the app reads your clip and writes a title and summary, using only what's in it."
         case .done:
-            return "That's a memory: your clip, plus a title and summary written from your own words. Clips are what you catch; memories are what they become."
+            return "That's a memory: your clip, plus a title and summary the app wrote using only what's in it. Clips are what you catch; memories are what they become."
         }
     }
 
