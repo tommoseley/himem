@@ -46,6 +46,10 @@ struct HiMemTabView: View {
     @ObservedObject private var captureLanding = CaptureLandingBus.shared
     @ObservedObject private var captureRequests = CaptureRequestBus.shared
     @ObservedObject private var coachmarks = CoachmarkOrchestrator.shared
+    // F8 · guided walkthrough (do-it-with-me first run). Runs alongside the
+    // per-tab coachmarks until F8 is device-verified; the cards retire after.
+    @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
+    @ObservedObject private var entitlement = Entitlement.shared
     @ObservedObject private var inbox = InboxManifest.shared
     /// Reads which project (if any) the user is currently viewing —
     /// routes the Projects tab FAB per the July 10 context-aware
@@ -146,6 +150,10 @@ struct HiMemTabView: View {
                     }
                 }
         )
+        // F8 · the guided walkthrough renders above the live tab content. Modal
+        // beats block; action beats are a non-blocking banner so the real
+        // control the user must tap stays live underneath.
+        .overlay { WalkthroughOverlay(isPlus: entitlement.isPlus) }
     }
 
     /// The tab shell's layout — TabView + context-aware FAB + presence dot.
@@ -259,7 +267,23 @@ struct HiMemTabView: View {
                 justArrivedFromCapture = true
                 selection = .clips
                 captureLanding.pendingReturnToClips = false
+                // F8 · the recorded clip returned to Clips and lands on the bench.
+                walkthrough.clipDidLand()
             }
+        }
+        // F8 · the user created a memory from their clip (Start a Memory) —
+        // advance to the organize beat and track the memory so we can watch it
+        // organize below.
+        .onChange(of: memoryNavigation.justCreatedMemoryId) { _, newId in
+            if let newId { walkthrough.memoryDidStart(id: newId) }
+        }
+        // F8 · watch the walkthrough's memory for organize completion (its
+        // title + summary appearing). `lastOrganizedAt` isn't broadcast, so we
+        // check on Core Data change. On Plus this fires ~at once; on Free after
+        // the user taps Organize.
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange)) { _ in
+            guard walkthrough.activeBeat == .organize, let id = walkthrough.walkthroughMemoryId else { return }
+            if walkthroughMemoryIsOrganized(id) { walkthrough.organizeDidComplete() }
         }
         // Create-one-memory landing (`Himem · Memory Detail.html`
         // §Just created, July 12 2026): after
@@ -347,6 +371,10 @@ struct HiMemTabView: View {
             // per cold launch — SwiftUI calls `onAppear` on the root
             // tab shell as the app boots.
             coachmarks.armSession()
+            // F8 · offer the guided walkthrough on first run (post-onboarding —
+            // the tab shell only appears once onboarding completes). Once, then
+            // never re-offered; always retrievable from ? → Show me around.
+            walkthrough.offerIfFirstRun()
             if captureRequests.pendingVoiceRecord {
                 captureRequests.pendingVoiceRecord = false
                 captureSource = .handsFree // Siri cold-launch → ad-hoc, lands on bench
@@ -388,6 +416,11 @@ struct HiMemTabView: View {
     }
 
     private func evaluateCoachmark(for tab: Tab) {
+        // F8 · while the guided walkthrough is running, the per-tab coachmarks
+        // stand down — the walkthrough is teaching the same thing, in context.
+        // Both stay reachable (green-to-green); the cards retire once F8 is
+        // device-verified, in their own commit.
+        guard !walkthrough.isRunning else { return }
         let kind = coachmarkKind(for: tab)
         let suppressed = (tab == .clips) && justArrivedFromCapture
         coachmarks.tryFire(
@@ -415,6 +448,17 @@ struct HiMemTabView: View {
         case .projects:
             return coreDataCount(entityName: "Project") > 0
         }
+    }
+
+    /// True once the walkthrough's memory has an organize pass — its title +
+    /// summary now exist. Drives the F8 `organize` → `done` advance (checked on
+    /// Core Data change since `lastOrganizedAt` isn't broadcast).
+    private func walkthroughMemoryIsOrganized(_ id: UUID) -> Bool {
+        let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        guard let entry = try? StorageService.shared.viewContext.fetch(req).first else { return false }
+        return entry.inferenceSummary != nil || entry.lastOrganizedAt != nil
     }
 
     private func coreDataCount(entityName: String) -> Int {

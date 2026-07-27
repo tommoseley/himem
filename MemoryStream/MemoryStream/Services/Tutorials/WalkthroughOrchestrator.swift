@@ -42,6 +42,12 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// the overlay host presents it (same pattern as `CoachmarkOrchestrator.visible`).
     @Published var activeBeat: Beat?
 
+    /// The memory the user created during the walkthrough (set by
+    /// `memoryDidStart`). The host watches THIS entry for organize completion —
+    /// `lastOrganizedAt` / `inferenceSummary` is not broadcast, so the host
+    /// checks it on Core Data change and calls `organizeDidComplete()`.
+    private(set) var walkthroughMemoryId: UUID?
+
     private let completedKey = "himem.walkthrough.completed"
 
     private init() {}
@@ -74,6 +80,7 @@ final class WalkthroughOrchestrator: ObservableObject {
 
     private func finish() {
         activeBeat = nil
+        walkthroughMemoryId = nil
         UserDefaults.standard.set(true, forKey: completedKey)
     }
 
@@ -96,8 +103,14 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// bench (`CaptureLandingBus.pendingReturnToClips` / arrival materialize).
     func clipDidLand() { if activeBeat == .record { activeBeat = .clipLanded } }
 
-    /// The user created a memory from the clip (Start a Memory).
-    func memoryDidStart() { if activeBeat == .makeMemory { activeBeat = .organize } }
+    /// The user created a memory from the clip (Start a Memory). `id` is the new
+    /// memory — tracked so the host can watch it for organize completion.
+    func memoryDidStart(id: UUID? = nil) {
+        if activeBeat == .makeMemory {
+            walkthroughMemoryId = id
+            activeBeat = .organize
+        }
+    }
 
     /// The memory's organize pass completed — its title + summary now exist
     /// (`entry.lastOrganizedAt` + `inferenceSummary`). On Plus this fires ~at

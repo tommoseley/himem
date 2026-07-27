@@ -77,6 +77,11 @@ struct TutorialsHubView: View {
         // and calls `consumeRestore`). Stateless: always present, never gated
         // on whether coachmarks have been seen, no "seen" checkmark.
         Button {
+            // F8 · "Show me around" now launches the guided walkthrough. The
+            // coachmark restore stays wired alongside it (green-to-green) until
+            // the walkthrough is device-verified — then the cards + this
+            // restore call retire in their own commit.
+            WalkthroughOrchestrator.shared.start()
             CoachmarkOrchestrator.shared.restoreTour()
             dismiss()
         } label: {
