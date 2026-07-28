@@ -122,6 +122,34 @@ struct WalkthroughOrchestratorTests {
         reset()
     }
 
+    /// "Got it." on a SIGNAL beat retires the card only — no advance, no
+    /// completion, no abandon. The walkthrough stays armed and the real signal
+    /// still advances it (invariant untouched), and the flag resets on the change.
+    @Test func gotIt_onSignalBeat_retiresBannerOnly() {
+        reset()
+        o.start(); o.beginFromOffer()          // → .record (a signal beat)
+        #expect(o.activeBeat == .record)
+        o.gotIt()
+        #expect(o.currentBannerRetired, "the card is retired")
+        #expect(o.activeBeat == .record, "no advance — still armed for the real signal")
+        #expect(!o.hasCompleted && o.isRunning, "no completion, not abandoned")
+        o.recordingDidStart()                  // the real signal
+        #expect(o.activeBeat == .onARoll)
+        #expect(!o.currentBannerRetired, "flag resets on the beat change")
+        reset()
+    }
+
+    /// "Got it." on a tap-gated READ beat is its continue (the card is the gate).
+    @Test func gotIt_onReadBeat_isTheContinue() {
+        reset()
+        o.start(); o.beginFromOffer(); o.recordingDidStart(); o.clipDidLand()  // → .clipLanded
+        #expect(o.activeBeat == .clipLanded)
+        o.gotIt(); #expect(o.activeBeat == .concept, "clipLanded → concept")
+        o.gotIt(); #expect(o.activeBeat == .makeMemory, "concept → makeMemory")
+        #expect(!o.currentBannerRetired && o.isRunning)
+        reset()
+    }
+
     /// The load-bearing invariant: a pipeline beat NEVER advances on a tap — it
     /// waits for the real signal, so the coaching can't run ahead of the user.
     @Test func pipelineBeats_ignoreTaps_waitForRealSignal() {

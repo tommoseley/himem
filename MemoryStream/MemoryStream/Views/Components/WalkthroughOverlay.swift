@@ -35,7 +35,14 @@ struct WalkthroughOverlay: View {
             case .offer, .concept:
                 modalCard(beat)
             case .record, .clipLanded, .makeMemory, .openMemory, .organize, .done:
-                topBanner(beat)
+                // "Got it." on a signal beat retires its banner; the walkthrough
+                // stays armed for the real signal (only signal beats ever set
+                // this flag — read beats advance instead).
+                if orchestrator.currentBannerRetired {
+                    EmptyView()
+                } else {
+                    topBanner(beat)
+                }
             case .onARoll, .rolling:
                 // 1b is rendered in-composer (`VoiceCaptureScreen`) — the root
                 // overlay can't reach over the recording `fullScreenCover`;
@@ -43,6 +50,32 @@ struct WalkthroughOverlay: View {
                 EmptyView()
             }
         }
+    }
+
+    // MARK: - Shared "Got it." acknowledgement (one pattern with CoachmarkBanner)
+
+    /// The single "Got it." — CoachmarkBanner's exact shape, so the walkthrough
+    /// and the coachmarks read as one pattern. Retires the current beat's card
+    /// (`gotIt()`): never abandons; on a signal beat the walkthrough stays armed.
+    private var gotItButton: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button("Got it", action: orchestrator.gotIt)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Crucible.Color.accentInk)
+                .padding(.horizontal, 16)
+                .frame(height: 40)
+                .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityLabel("Got it — dismiss this tip")
+        }
+    }
+
+    /// The quiet breadcrumb caption under "Got it." — where to re-run later.
+    private var skipBreadcrumbCaption: some View {
+        Text(WalkthroughOrchestrator.Beat.skipBreadcrumb)
+            .font(.system(size: 12))
+            .foregroundStyle(Crucible.Color.ink3)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Modal beats (no real target) — card over a scrim
@@ -92,26 +125,10 @@ struct WalkthroughOverlay: View {
                     }
                     .padding(.top, 4)
                 } else {
-                    HStack {
-                        Button("Skip", action: orchestrator.skip)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Crucible.Color.ink2)
-                            .frame(minHeight: 44)
-                            .accessibilityLabel("Skip the walkthrough")
-                        Spacer(minLength: 0)
-                        Button("Continue", action: orchestrator.advance)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Crucible.Color.accentInk)
-                            .padding(.horizontal, 20)
-                            .frame(height: 44)
-                            .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 12))
-                    }
-                    .padding(.top, 4)
-                    // A bare Skip must say where the coaching went (Tom 2026-07-27).
-                    Text(WalkthroughOrchestrator.Beat.skipBreadcrumb)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Crucible.Color.ink3)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // Concept: one "Got it." (retires the card — for this
+                    // gated read beat that's its continue) + breadcrumb.
+                    gotItButton.padding(.top, 4)
+                    skipBreadcrumbCaption
                 }
             }
             .padding(22)
@@ -164,31 +181,15 @@ struct WalkthroughOverlay: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                HStack {
-                    Button("Skip", action: orchestrator.skip)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.ink3)
-                        .frame(minHeight: 44)
-                        .accessibilityLabel("Skip the walkthrough")
-                    Spacer(minLength: 0)
-                    // Tap beats carry a primary button; signal beats advance on
-                    // the real pipeline signal and show only Skip.
-                    if let label = primaryLabel(beat) {
-                        Button(label, action: orchestrator.advance)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Crucible.Color.accentInk)
-                            .padding(.horizontal, 16)
-                            .frame(height: 40)
-                            .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 10))
-                    }
-                }
-                // A bare Skip must say where the coaching went — except on the
-                // done beat, which already carries `closingLine` (Tom 2026-07-27).
+                // One "Got it." on every beat — retires this card (its continue
+                // on the tap-gated read beats; hides it on signal beats while
+                // the walkthrough waits for the real action). No Skip, no second
+                // control (Tom 2026-07-27).
+                gotItButton
+                // Breadcrumb caption — except done, which already carries
+                // `closingLine`.
                 if beat != .done {
-                    Text(WalkthroughOrchestrator.Beat.skipBreadcrumb)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Crucible.Color.ink3)
-                        .fixedSize(horizontal: false, vertical: true)
+                    skipBreadcrumbCaption
                 }
             }
             .padding(16)
@@ -207,13 +208,4 @@ struct WalkthroughOverlay: View {
         }
     }
 
-    /// The primary-button label for the TAP-advance banner beats, nil for the
-    /// signal beats (which advance on the real pipeline signal).
-    private func primaryLabel(_ beat: WalkthroughOrchestrator.Beat) -> String? {
-        switch beat {
-        case .clipLanded: return "Continue"
-        case .done:       return "Done"
-        default:          return nil   // record / makeMemory / organize
-        }
-    }
 }

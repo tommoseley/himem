@@ -49,8 +49,15 @@ final class WalkthroughOrchestrator: ObservableObject {
     }
 
     /// The active beat; `nil` when the walkthrough isn't running. Published so
-    /// the overlay host presents it.
-    @Published var activeBeat: Beat?
+    /// the overlay host presents it. Any beat change resets `currentBannerRetired`
+    /// so the new beat's card shows fresh.
+    @Published var activeBeat: Beat? { didSet { currentBannerRetired = false } }
+
+    /// True when the user tapped "Got it." on the current beat — retires THIS
+    /// beat's banner only. No advance, no completion, no new state: the
+    /// walkthrough stays armed and the next beat fires on its real signal
+    /// (Tom 2026-07-27). Reset automatically on every beat change (didSet above).
+    @Published var currentBannerRetired = false
 
     /// The memory the user created during the walkthrough (set by
     /// `memoryDidStart`). The host watches THIS entry for organize completion —
@@ -87,6 +94,25 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// Skip / dismiss at any beat. Marks complete so first-run won't re-offer;
     /// the walkthrough stays retrievable from the hub.
     func skip() { finish() }
+
+    /// The teaching card's "Got it." — retires THIS beat's banner, nothing more.
+    /// One button, one meaning on every beat: "I've read this card." It never
+    /// abandons the walkthrough. On the tap-gated read beats (clipLanded /
+    /// concept / done) the card IS the gate, so retiring it is their existing
+    /// continue (unchanged behavior). On the signal beats (record / makeMemory /
+    /// openMemory / organize) it just hides the card; the walkthrough stays
+    /// armed and the next beat fires on its real signal — the pipeline-beat
+    /// invariant is untouched (Tom 2026-07-27).
+    func gotIt() {
+        switch activeBeat {
+        case .clipLanded, .concept, .done:
+            advance()
+        case .record, .makeMemory, .openMemory, .organize:
+            currentBannerRetired = true
+        case .offer, .onARoll, .rolling, .none:
+            break
+        }
+    }
 
     private func finish() {
         activeBeat = nil
