@@ -23,6 +23,10 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case memoryClip
     case memoryOrganize
     case editClip
+    // Project Detail (F7c, both surfaces · 2026-07-27)
+    case projectGoal
+    case projectMemories
+    case projectFindThread
 
     var id: String { rawValue }
 
@@ -35,6 +39,9 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .memoryClip:     return "Clips"
         case .memoryOrganize: return "Organize"
         case .editClip:       return "Editing a clip"
+        case .projectGoal:        return "Goal"
+        case .projectMemories:    return "Memories"
+        case .projectFindThread:  return "Find the thread"
         }
     }
 
@@ -56,6 +63,12 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             return "Organize reads this memory's parts and writes a title and summary. It only uses what's in your clips — it never adds anything that isn't there."
         case .editClip:
             return "This is a single clip — the smallest thing you capture. What you change here changes the clip everywhere it's used."
+        case .projectGoal:
+            return "The goal names what this project is building toward — a line you write for yourself."
+        case .projectMemories:
+            return "The memories connected to this project."
+        case .projectFindThread:
+            return "Find the thread is the project's one AI action. It reads across the project's memories and writes a short summary of what connects them — and suggests a few other memories that might belong."
         }
     }
 
@@ -74,6 +87,12 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             return "Run it from the Organize card. Add more clips later, then Reorganize to fold them in."
         case .editClip:
             return "Re-transcribe it, add a note, add it to a memory, or delete it."
+        case .projectGoal:
+            return "Tap it to write or change it — one line about what you're working toward."
+        case .projectMemories:
+            return "Open any of them, or add more from your library."
+        case .projectFindThread:
+            return "Run it when you want a fresh read. Nothing auto-adds — the suggestions are yours to accept or ignore."
         }
     }
 
@@ -93,6 +112,12 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             return "You decide when it runs; nothing is rewritten on its own. Re-run it anytime from here."
         case .editClip:
             return "A clip is stored once and shared across memories. The In N memories line shows where it lives; deleting it removes it from all of them."
+        case .projectGoal:
+            return "It's yours — the app never changes it."
+        case .projectMemories:
+            return "Add or remove them here anytime. Removing a memory from a project never deletes it — it stays in your library, and can be in other projects too."
+        case .projectFindThread:
+            return "It reads only your memories' titles, topics, dates, and summaries — never the raw transcripts. Re-run it anytime; you decide when."
         }
     }
 
@@ -102,8 +127,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     /// untrue for the panel is a sign it doesn't fit).
     var clause3Label: String {
         switch self {
-        case .memoryOrganize: return "HOW IT RUNS"
-        default:              return "WHERE IT LIVES"
+        case .memoryOrganize, .projectFindThread: return "HOW IT RUNS"
+        default:                                   return "WHERE IT LIVES"
         }
     }
 }
@@ -183,64 +208,84 @@ struct SectionHelpSheet: View {
     }
 }
 
-// MARK: - D4 · the one coachmark that introduces the ? pattern
+// MARK: - One-shot coachmarks (the single-card pattern)
 
-/// F7c/D4 · a SINGLE coachmark that teaches the section-`?` affordance the
-/// walkthrough promises ("tap ? beside a section for help") but never shows.
-/// Fires ONCE, on first Memory Detail arrival AFTER the walkthrough is done
-/// (completed or skipped) — never during it. Tracked per-device like the other
-/// seen-flags; re-armed only through "? → Show me around" alongside the
-/// walkthrough (not a separate Learn entry).
+/// A SINGLE non-blocking coachmark, tracked per-device, fired once on first
+/// arrival at its surface. One mechanism for the (deliberately few) cards we
+/// allow after retiring the per-tab system:
 ///
-/// **Deliberately one card.** We just retired the per-tab coachmark system;
-/// this reintroduces exactly one, justified because it teaches an affordance
-/// the walkthrough explicitly names but never demonstrates. If it ever wants
-/// siblings, stop and raise it (Tom, 2026-07-27) — a second card means we're
-/// rebuilding what we removed.
+/// - `sectionHelp` — introduces the section-`?` affordance the walkthrough
+///   promises ("tap ? beside a section for help") but never shows (Memory
+///   Detail, after the walkthrough).
+/// - `projectsConcept` — teaches what a project IS on first Projects-list
+///   arrival (the walkthrough covers clips→memories, not projects).
+///
+/// **Hold the line at these two.** We retired the per-tab coachmarks; each card
+/// here must teach something the walkthrough genuinely doesn't. A third that
+/// just explains a tab is the system we removed — stop and raise it (Tom,
+/// 2026-07-27).
 @MainActor
-final class SectionHelpCoachmark: ObservableObject {
-    static let shared = SectionHelpCoachmark()
-    private let seenKey = "himem.sectionHelpCoachmark.seen"
+final class OneShotCoachmark: ObservableObject {
+    private let seenKey: String
+    let text: String
+    /// When true, waits until the walkthrough is done (completed or skipped) —
+    /// `sectionHelp` (the walkthrough promises the `?`). `projectsConcept` is
+    /// independent of the walkthrough, so false.
+    private let requiresWalkthroughDone: Bool
 
     @Published var visible = false
 
-    private init() {}
+    init(seenKey: String, text: String, requiresWalkthroughDone: Bool) {
+        self.seenKey = seenKey
+        self.text = text
+        self.requiresWalkthroughDone = requiresWalkthroughDone
+    }
 
     var hasSeen: Bool { UserDefaults.standard.bool(forKey: seenKey) }
 
-    /// Show it once, after the walkthrough — never while it's running, never
-    /// twice. Marks seen on fire so a dismiss (or a background) can't re-trigger.
+    /// Fire once, never while the walkthrough runs, never twice. Marks seen on
+    /// fire so a dismiss (or a background) can't re-trigger.
     func armIfEligible() {
-        guard !visible, !hasSeen,
-              WalkthroughOrchestrator.shared.hasCompleted,
-              !WalkthroughOrchestrator.shared.isRunning else { return }
+        guard !visible, !hasSeen, !WalkthroughOrchestrator.shared.isRunning,
+              (!requiresWalkthroughDone || WalkthroughOrchestrator.shared.hasCompleted) else { return }
         visible = true
         UserDefaults.standard.set(true, forKey: seenKey)
     }
 
     func dismiss() { visible = false }
 
-    /// Re-arm from "? → Show me around" so the `?` intro re-teaches alongside
-    /// the relaunched walkthrough — one recoverability entry, not two.
+    /// Re-armed from "? → Show me around" so every card re-teaches alongside the
+    /// relaunched walkthrough — one recoverability entry, not several.
     func rearm() {
         UserDefaults.standard.removeObject(forKey: seenKey)
         visible = false
     }
+
+    static let sectionHelp = OneShotCoachmark(
+        seenKey: "himem.sectionHelpCoachmark.seen",
+        text: "Each section has a ? — tap it for a short explanation of what that section is and how it works.",
+        requiresWalkthroughDone: true
+    )
+
+    static let projectsConcept = OneShotCoachmark(
+        seenKey: "himem.projectsCoachmark.seen",
+        text: "A project is something you're working on over time. It connects related memories — the same one can be in several projects, or none. Tap + to start one.",
+        requiresWalkthroughDone: false
+    )
 }
 
-/// The coachmark's banner — same non-blocking top-card register as F8's
-/// walkthrough banners (raised `card` surface, full-weight ochre border), so it
-/// reads as coaching, not chrome. Points at the section `?` glyphs; carries a
-/// single "Got it" dismiss. Host it as a top overlay; the empty area passes
-/// touches through so the `?`s underneath stay live.
-struct SectionHelpCoachmarkBanner: View {
-    @ObservedObject var coachmark: SectionHelpCoachmark = .shared
+/// The coachmark banner — non-blocking top-card register matching F8's
+/// walkthrough banners (raised `card` surface, full-weight ochre border), one
+/// "Got it" dismiss. Host it as a top overlay; the empty area passes touches
+/// through so the controls underneath stay live.
+struct CoachmarkBanner: View {
+    @ObservedObject var coachmark: OneShotCoachmark
 
     var body: some View {
         if coachmark.visible {
             VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Each section has a ? — tap it for a short explanation of what that section is and how it works.")
+                    Text(coachmark.text)
                         .font(.system(size: 14))
                         .foregroundStyle(Crucible.Color.ink)
                         .lineSpacing(4)

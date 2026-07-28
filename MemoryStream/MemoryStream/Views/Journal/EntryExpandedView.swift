@@ -409,7 +409,7 @@ struct EntryExpandedView: View {
         .background(Crucible.Color.paper)
         // D4 · the one-time section-`?` coachmark, pinned below the nav bar;
         // non-blocking so the `?` glyphs underneath stay tappable.
-        .overlay(alignment: .top) { SectionHelpCoachmarkBanner() }
+        .overlay(alignment: .top) { CoachmarkBanner(coachmark: .sectionHelp) }
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) { leadingToolbar }
@@ -438,7 +438,7 @@ struct EntryExpandedView: View {
             }
             // D4 · introduce the section-`?` affordance once, after the
             // walkthrough (the guard no-ops during it and on later visits).
-            SectionHelpCoachmark.shared.armIfEligible()
+            OneShotCoachmark.sectionHelp.armIfEligible()
         }
         .onDisappear {
             MemoryDetailPresentationContext.shared.exit(memoryId: entry.id)

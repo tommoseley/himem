@@ -105,6 +105,11 @@ struct ProjectListView: View {
                 .scrollContentBackground(.hidden)
             }
         }
+        // Item 2 · teach what a project IS on first arrival — the walkthrough
+        // covers clips→memories, not projects. One card, non-blocking, once
+        // per device; re-armed with the walkthrough from Settings → Learn.
+        .onAppear { OneShotCoachmark.projectsConcept.armIfEligible() }
+        .overlay(alignment: .top) { CoachmarkBanner(coachmark: .projectsConcept) }
         .sheet(isPresented: $showNewProject) {
             NewProjectSheet(
                 name: $newProjectName,

@@ -78,6 +78,17 @@ struct ProjectDetailView: View {
                     ClipEditButton(action: { editSheetFocus = .name })
                 }
 
+                // F7c · GOAL eyebrow + help ? (Project Detail help, 2026-07-27).
+                // Same small-caps eyebrow pattern as Memory Detail — every ?
+                // hangs off an eyebrow.
+                HStack(spacing: 4) {
+                    Text("GOAL")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(Crucible.Color.ink3)
+                    SectionHelpButton(topic: .projectGoal, size: 13)
+                    Spacer(minLength: 0)
+                }
                 // Goal — italic serif when present (read-only; edited via the
                 // ✎ Edit button, not tap-the-text, F4). Dashed "+ Add a goal"
                 // add-affordance when empty (dashed = add/provisional, an
@@ -149,6 +160,16 @@ struct ProjectDetailView: View {
                     }
                 }
 
+                // F7c · FIND THE THREAD eyebrow + help ?, labeling the whole AI
+                // zone (summary card + Find-the-thread button + suggestions).
+                HStack(spacing: 4) {
+                    Text("FIND THE THREAD")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(Crucible.Color.ink3)
+                    SectionHelpButton(topic: .projectFindThread, size: 13)
+                    Spacer(minLength: 0)
+                }
                 // Project Assist summary — spec § States state 4
                 // "Summarized". Rendered above the memory list
                 // when a prior Find-the-thread run has persisted
@@ -166,11 +187,19 @@ struct ProjectDetailView: View {
                 // section's presence is its own affordance.
                 suggestionsAffordance
 
-                // Memory count
+                // F7c · MEMORIES eyebrow + help ?, with the live count trailing.
                 let displayCount = topicFilter == nil ? entries.count : entries.filter { $0.topicNames.contains(topicFilter!) }.count
-                Text("\(displayCount) memor\(displayCount == 1 ? "y" : "ies")")
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink3)
+                HStack(spacing: 4) {
+                    Text("MEMORIES")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(Crucible.Color.ink3)
+                    SectionHelpButton(topic: .projectMemories, size: 13)
+                    Spacer(minLength: 0)
+                    Text("\(displayCount) memor\(displayCount == 1 ? "y" : "ies")")
+                        .font(.caption)
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
 
                 // Memory stack — entry cards
                 if entries.isEmpty {

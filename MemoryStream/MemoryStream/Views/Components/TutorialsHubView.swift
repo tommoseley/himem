@@ -83,7 +83,8 @@ struct TutorialsHubView: View {
             // re-arm the section-? coachmark so it re-teaches alongside the
             // walkthrough — one recoverability entry, not two.
             WalkthroughOrchestrator.shared.start()
-            SectionHelpCoachmark.shared.rearm()
+            OneShotCoachmark.sectionHelp.rearm()
+            OneShotCoachmark.projectsConcept.rearm()
             dismiss()
         } label: {
             TutorialsHubRow(entry: TutorialCatalog.tour)
