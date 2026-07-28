@@ -87,6 +87,11 @@ struct WalkthroughOverlay: View {
                         .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.top, 4)
+                // A bare Skip must say where the coaching went (Tom 2026-07-27).
+                Text(WalkthroughOrchestrator.Beat.skipBreadcrumb)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(22)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -155,6 +160,14 @@ struct WalkthroughOverlay: View {
                             .frame(height: 40)
                             .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 10))
                     }
+                }
+                // A bare Skip must say where the coaching went — except on the
+                // done beat, which already carries `closingLine` (Tom 2026-07-27).
+                if beat != .done {
+                    Text(WalkthroughOrchestrator.Beat.skipBreadcrumb)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Crucible.Color.ink3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(16)

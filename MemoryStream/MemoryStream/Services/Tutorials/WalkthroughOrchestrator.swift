@@ -248,4 +248,10 @@ extension WalkthroughOrchestrator.Beat {
     /// where the walkthrough lives — no new affordance just to make copy true).
     /// Copy approved.
     static let closingLine = "Anytime: tap ? beside a section for help, or run this walkthrough again from Settings → Learn."
+
+    /// The breadcrumb shown beside Skip so a bare "Skip" never drops the user
+    /// with nowhere to go — the multi-beat walkthrough is the one place a skip
+    /// belongs, and it must say where the coaching went (Tom, 2026-07-27). Not
+    /// shown on the final beat, which already carries `closingLine`.
+    static let skipBreadcrumb = "You'll find this again in Settings → Learn."
 }
