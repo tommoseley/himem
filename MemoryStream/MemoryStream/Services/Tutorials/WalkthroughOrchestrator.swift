@@ -211,7 +211,7 @@ extension WalkthroughOrchestrator.Beat {
     /// prompt carried entirely by `body`).
     var title: String? {
         switch self {
-        case .offer:   return "Make your first memory"
+        case .offer:   return "Want to walk through it together?"
         case .concept: return "Clips become memories"
         case .done:    return "That's a memory"
         default:       return nil
@@ -224,7 +224,10 @@ extension WalkthroughOrchestrator.Beat {
     func body(isPlus: Bool) -> String {
         switch self {
         case .offer:
-            return "Want to make your first memory together? It takes about a minute — I'll point at each step."
+            // Honest from ANY tab — "make your first memory" wrong-foots a user
+            // launching from Clips (they're looking at parts). Name the arc
+            // instead (Tom 2026-07-27). The title carries the invite question.
+            return "You'll catch a part, then turn it into a memory. About a minute — I'll point at each step."
         case .record:
             // Beat 1 is the first concept moment — state the whole model (a
             // memory = one-or-more parts; the + adds parts/memories) BEFORE
