@@ -71,27 +71,48 @@ struct WalkthroughOverlay: View {
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack {
-                    Button(beat == .offer ? "Not now" : "Skip", action: orchestrator.skip)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.ink2)
-                        .frame(minHeight: 44)
-                        .accessibilityLabel("Skip the walkthrough")
-                    Spacer(minLength: 0)
-                    Button(beat == .offer ? "Start" : "Continue",
-                           action: beat == .offer ? orchestrator.beginFromOffer : orchestrator.advance)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Crucible.Color.accentInk)
-                        .padding(.horizontal, 20)
-                        .frame(height: 44)
-                        .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 12))
+                if beat == .offer {
+                    // The re-run offer's decline is an INFORMED choice, not a
+                    // dead end — it names where the coaching lives (Tom
+                    // 2026-07-27). Stacked so the long decline label fits;
+                    // it carries the breadcrumb itself, so no separate line.
+                    VStack(spacing: 12) {
+                        Button("Start", action: orchestrator.beginFromOffer)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.accentInk)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 12))
+                        Button("Not now — you'll find this in Settings → Learn.", action: orchestrator.skip)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Crucible.Color.ink3)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .accessibilityLabel("Not now — you'll find this later in Settings, under Learn")
+                    }
+                    .padding(.top, 4)
+                } else {
+                    HStack {
+                        Button("Skip", action: orchestrator.skip)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.ink2)
+                            .frame(minHeight: 44)
+                            .accessibilityLabel("Skip the walkthrough")
+                        Spacer(minLength: 0)
+                        Button("Continue", action: orchestrator.advance)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Crucible.Color.accentInk)
+                            .padding(.horizontal, 20)
+                            .frame(height: 44)
+                            .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .padding(.top, 4)
+                    // A bare Skip must say where the coaching went (Tom 2026-07-27).
+                    Text(WalkthroughOrchestrator.Beat.skipBreadcrumb)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Crucible.Color.ink3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.top, 4)
-                // A bare Skip must say where the coaching went (Tom 2026-07-27).
-                Text(WalkthroughOrchestrator.Beat.skipBreadcrumb)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Crucible.Color.ink3)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(22)
             .frame(maxWidth: .infinity, alignment: .leading)

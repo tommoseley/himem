@@ -219,7 +219,12 @@ extension WalkthroughOrchestrator.Beat {
             // awaiting the clip to land). No copy.
             return ""
         case .clipLanded:
-            return "There's your clip, saved here in Clips. Clips are the building blocks of memories. Clips wait here until you decide where they belong — nothing's lost."
+            // Beat 2 · the load-bearing concept moment for Clips — the user is
+            // on the bench looking at their first clip. Teach the whole clip
+            // concept: a clip is a PART of a memory, and the bench exists so
+            // you capture now and decide later. Second-longest banner after
+            // beat 1, intentionally. "parts" per F7g. (Tom 2026-07-27.)
+            return "There's your clip — a part, saved on the bench. Parts are what you catch in the moment; you decide what they become later. Nothing's lost while it waits here."
         case .concept:
             return "A memory is made of one or more clips. You have one clip now. Next you'll turn it into a memory."
         case .makeMemory:
