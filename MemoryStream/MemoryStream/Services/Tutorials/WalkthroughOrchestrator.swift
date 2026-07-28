@@ -226,7 +226,8 @@ extension WalkthroughOrchestrator.Beat {
             // beat 1, intentionally. "parts" per F7g. (Tom 2026-07-27.)
             return "There's your clip — a part, saved on the bench. Parts are what you catch in the moment; you decide what they become later. Nothing's lost while it waits here."
         case .concept:
-            return "A memory is made of one or more clips. You have one clip now. Next you'll turn it into a memory."
+            // "parts" for the concept (F7g); "clip" where it's her concrete one.
+            return "A memory is made of one or more parts. You have one clip now. Next you'll turn it into a memory."
         case .makeMemory:
             return "Open your clip and tap Start a Memory. Your clip becomes the first part of that memory."
         case .openMemory:

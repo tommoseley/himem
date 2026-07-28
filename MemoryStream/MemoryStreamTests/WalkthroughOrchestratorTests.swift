@@ -212,7 +212,7 @@ struct WalkthroughOrchestratorTests {
 
     @Test func conceptBeat_carriesTheLoadBearingSentence() {
         #expect(WalkthroughOrchestrator.Beat.concept.body(isPlus: false)
-            .contains("A memory is made of one or more clips"))
+            .contains("A memory is made of one or more parts"))
         // Beat 2 (clip lands) carries the full clip concept: a clip is a part,
         // and the bench is capture-now-decide-later (Tom 2026-07-27).
         let beat2 = WalkthroughOrchestrator.Beat.clipLanded.body(isPlus: false)
