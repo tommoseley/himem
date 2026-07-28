@@ -34,7 +34,7 @@ struct WalkthroughOverlay: View {
             switch beat {
             case .offer, .concept:
                 modalCard(beat)
-            case .record, .clipLanded, .makeMemory, .openMemory, .organize, .done:
+            case .record, .clipLanded, .makeMemory, .openMemory, .organize, .done, .ontology:
                 // "Got it." on a signal beat retires its banner; the walkthrough
                 // stays armed for the real signal (only signal beats ever set
                 // this flag — read beats advance instead).
@@ -171,9 +171,9 @@ struct WalkthroughOverlay: View {
                         .accessibilityLabel("The + button expands to Attach, Note, Video, Photo, and Voice")
                 }
 
-                if beat == .done {
-                    // One closing line: the F7c ? hand-off + F2b recoverability,
-                    // merged so the final beat reads as an exhale, not a wall.
+                if beat == .ontology {
+                    // The single closing line lives on the final beat (ontology),
+                    // the one ending: F7c ? hand-off + F2b recoverability.
                     Text(WalkthroughOrchestrator.Beat.closingLine)
                         .font(.system(size: 12.5))
                         .foregroundStyle(Crucible.Color.ink3)
@@ -186,9 +186,9 @@ struct WalkthroughOverlay: View {
                 // the walkthrough waits for the real action). No Skip, no second
                 // control (Tom 2026-07-27).
                 gotItButton
-                // Breadcrumb caption — except done, which already carries
-                // `closingLine`.
-                if beat != .done {
+                // Breadcrumb caption — except the final ontology beat, which
+                // already carries `closingLine`.
+                if beat != .ontology {
                     skipBreadcrumbCaption
                 }
             }

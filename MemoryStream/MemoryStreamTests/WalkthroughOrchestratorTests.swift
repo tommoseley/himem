@@ -53,8 +53,18 @@ struct WalkthroughOrchestratorTests {
         o.memoryDidStart();       #expect(o.activeBeat == .openMemory, "Start a Memory returns to Clips → bridge beat, not organize")
         o.memoryDidOpen(alreadyOrganized: false); #expect(o.activeBeat == .organize, "opening Memory Detail arms organize (Free)")
         o.organizeDidComplete();  #expect(o.activeBeat == .done)
+        o.advance();              #expect(o.activeBeat == .ontology, "done (payoff) → the closing model beat")
         o.advance();              #expect(o.activeBeat == nil && o.hasCompleted)
         reset()
+    }
+
+    @Test func ontologyBeat_statesTheWholeModelOnce() {
+        // Beat 7 names all three objects (parts → memory → project) in "parts",
+        // and beat 6 no longer restates the model (one ending, not two).
+        let seven = WalkthroughOrchestrator.Beat.ontology.body(isPlus: false)
+        #expect(seven.contains("parts") && seven.contains("memory") && seven.contains("project"))
+        let six = WalkthroughOrchestrator.Beat.done.body(isPlus: false)
+        #expect(!six.contains("what they become"), "beat 6 dropped its model tail")
     }
 
     /// Beats 5/6 must anchor to Memory-Detail *arrival*, not memory creation —

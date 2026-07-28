@@ -43,7 +43,8 @@ final class WalkthroughOrchestrator: ObservableObject {
         case makeMemory  // spotlight Start a Memory
         case openMemory  // spotlight the "Memory created · View" toast — bridge Clips → Memory Detail
         case organize    // Free: spotlight Organize · Plus: narrate — on Memory Detail
-        case done        // spotlight the title + summary, "clips are what you catch; memories are what they become"
+        case done        // the immediate payoff — "that's a memory"
+        case ontology    // beat 7 · the closing model statement (parts → memory → project) + closing line
 
         var id: Int { rawValue }
     }
@@ -105,7 +106,7 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// invariant is untouched (Tom 2026-07-27).
     func gotIt() {
         switch activeBeat {
-        case .clipLanded, .concept, .done:
+        case .clipLanded, .concept, .done, .ontology:
             advance()
         case .record, .makeMemory, .openMemory, .organize:
             currentBannerRetired = true
@@ -129,7 +130,8 @@ final class WalkthroughOrchestrator: ObservableObject {
         case .offer:      activeBeat = .record   // also reachable via beginFromOffer
         case .clipLanded: activeBeat = .concept
         case .concept:    activeBeat = .makeMemory
-        case .done:       finish()
+        case .done:       activeBeat = .ontology  // the payoff → the closing model beat
+        case .ontology:   finish()
         case .record, .onARoll, .rolling, .makeMemory, .openMemory, .organize, .none: break
         }
     }
@@ -272,7 +274,14 @@ extension WalkthroughOrchestrator.Beat {
                 ? "The app already read your clip and wrote a title and summary, using only what's in it — nothing added."
                 : "Tap Organize — the app reads your clip and writes a title and summary, using only what's in it."
         case .done:
-            return "That's a memory: your clip, plus a title and summary the app wrote using only what's in it. Clips are what you catch; memories are what they become."
+            // The immediate payoff only — the model + farewell moved to the
+            // ontology beat so there's one ending, not two (Tom 2026-07-27).
+            return "That's a memory: your clip, plus a title and summary the app wrote using only what's in it."
+        case .ontology:
+            // Beat 7 · the payoff beat where the vocabulary finally has referents
+            // (she's built two of the three). States the whole model once, in
+            // "parts." Copy approved 2026-07-27.
+            return "That's the shape of HiMem: parts are what you catch. A memory is what they become. A project connects related memories over time — you can start one whenever you want."
         }
     }
 
