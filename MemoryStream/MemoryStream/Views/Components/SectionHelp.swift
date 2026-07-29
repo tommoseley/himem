@@ -107,7 +107,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .memoryMentions:
             return "Mentions are shared across your memories — you can rename or remove one everywhere from Settings."
         case .memoryClip:
-            return "A clip is stored once and can belong to several memories. Open it to see where else it's used — or to let it go."
+            return "A clip is stored once and can belong to several memories. Open it to see where else it's used — or to delete it."
         case .memoryOrganize:
             return "You decide when it runs; nothing is rewritten on its own. Re-run it anytime from here."
         case .editClip:

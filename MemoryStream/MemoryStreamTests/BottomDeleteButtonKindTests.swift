@@ -14,11 +14,17 @@ struct BottomDeleteButtonKindTests {
                 "deleting the container never deletes the memories — say so")
     }
 
-    @Test func memoryAndClipLabels_unchanged() {
-        // Guard the other two labels so a copy refactor can't drift them.
-        #expect(BottomDeleteButton.Kind.delete(noun: "memory").label == "Let Go of this Memory")
+    @Test func memoryAndClipLabels_areLiteralNotMetaphor() {
+        // The memory label is the literal "Delete this Memory" — the old "Let Go"
+        // metaphor read as ambiguity about whether the memory survives, exactly
+        // when certainty is owed (locked Voice principle, 2026-07-28). The
+        // footnote carries the nuance (the clips stay).
+        #expect(BottomDeleteButton.Kind.delete(noun: "memory").label == "Delete this Memory")
         #expect(BottomDeleteButton.Kind.delete(noun: "clip").label == "Delete this Clip")
-        #expect(BottomDeleteButton.Kind.delete(noun: "memory").footnote.contains("The clips stay"))
+        #expect(BottomDeleteButton.Kind.delete(noun: "memory").footnote.contains("The parts stay"),
+                "the delete-moment disclosure uses the user-facing noun 'parts' (F7g)")
+        // No metaphor survives on the destructive label.
+        #expect(!BottomDeleteButton.Kind.delete(noun: "memory").label.contains("Let Go"))
     }
 
     @Test func removeFromProject_namesTheProject() {

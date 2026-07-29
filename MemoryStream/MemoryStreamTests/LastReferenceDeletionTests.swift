@@ -107,7 +107,7 @@ struct LetGoFootnoteTests {
 
     @Test func bothSides_pluralized() {
         let s = BottomDeleteButton.letGoFootnote(stayCount: 8, moveCount: 5)
-        #expect(s == "8 clips are also used elsewhere and will stay · 5 are only here and move to Recently Deleted for 30 days.")
+        #expect(s == "8 parts are also used elsewhere and will stay · 5 are only here and move to Recently Deleted for 30 days.")
     }
 
     @Test func moveZero_showsOnlyStay() {
@@ -118,12 +118,12 @@ struct LetGoFootnoteTests {
 
     @Test func stayZero_namesTheMovingCount() {
         let s = BottomDeleteButton.letGoFootnote(stayCount: 0, moveCount: 4)
-        #expect(s == "4 clips are only here and move to Recently Deleted for 30 days.")
+        #expect(s == "4 parts are only here and move to Recently Deleted for 30 days.")
     }
 
     @Test func singular_stayAndMove() {
         let s = BottomDeleteButton.letGoFootnote(stayCount: 1, moveCount: 1)
-        #expect(s == "1 clip is also used elsewhere and will stay · 1 is only here and moves to Recently Deleted for 30 days.")
+        #expect(s == "1 part is also used elsewhere and will stay · 1 is only here and moves to Recently Deleted for 30 days.")
     }
 
     @Test func noClips_fallsBackToMemoryNet() {
