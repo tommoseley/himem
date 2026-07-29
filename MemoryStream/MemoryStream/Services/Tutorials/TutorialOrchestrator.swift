@@ -103,6 +103,13 @@ final class TutorialOrchestrator: ObservableObject {
     /// rules without a queue.
     func tryFire(_ tutorial: Tutorial) {
         guard isArmed else { return }
+        // F8 owns first-run teaching. While the guided walkthrough runs, the
+        // legacy one-pager auto-tutorials must NOT fire: a `.capture` fire lands
+        // over the walkthrough's composer and sets `visible`, and the composer's
+        // auto-boot is gated on `visible == nil` — so the recorder never starts
+        // and beat 1 is terminal (F9, 2026-07-28). They stay reachable from
+        // Settings → Learn; on walkthrough end they're marked seen (below).
+        guard !WalkthroughOrchestrator.shared.isRunning else { return }
         guard !hasSeen(tutorial) else { return }
         guard !(tutorial.isPlusOnly && !Entitlement.shared.isPlus) else { return }
         guard !sessionFiredOne else { return }
@@ -119,6 +126,18 @@ final class TutorialOrchestrator: ObservableObject {
     func dismiss(_ tutorial: Tutorial) {
         UserDefaults.standard.set(true, forKey: tutorial.hasSeenKey)
         if visible == tutorial { visible = nil }
+    }
+
+    /// Called when the F8 guided walkthrough ends — completed OR abandoned. F8
+    /// is the single owner of first-run teaching, so the one-pagers it already
+    /// covers — `.capture` and `.organizing` — are marked seen and never
+    /// auto-fire again: re-teaching a step she just performed is the redundant
+    /// push F13 forbids, and a surprise one-pager after she opted out of guided
+    /// teaching is the same abandonment-flavored confusion in reverse. Both stay
+    /// pulled content in Settings → Learn (Tom 2026-07-28).
+    func retireOnePagersReplacedByWalkthrough() {
+        UserDefaults.standard.set(true, forKey: Tutorial.capture.hasSeenKey)
+        UserDefaults.standard.set(true, forKey: Tutorial.organizing.hasSeenKey)
     }
 
     /// DEBUG path: clears the persisted seen flag for one tutorial so

@@ -645,7 +645,7 @@ struct VoiceCaptureScreen: View {
     private var walkthroughOnARollBanner: some View {
         if walkthrough.activeBeat == .onARoll {
             VStack(alignment: .trailing, spacing: 6) {
-                Text(WalkthroughOrchestrator.Beat.onARoll.body(isPlus: false))
+                Text(WalkthroughOrchestrator.Beat.onARoll.body(alreadyOrganized: false))
                     .font(.system(size: 13))
                     .foregroundStyle(Crucible.Color.ink)
                     .lineSpacing(3)

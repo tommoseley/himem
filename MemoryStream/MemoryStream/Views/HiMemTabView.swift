@@ -48,7 +48,6 @@ struct HiMemTabView: View {
     // F8 · guided walkthrough (do-it-with-me first run). Replaced the per-tab
     // coachmark cards, retired 2026-07-27 (F8 + F7c section-? cover the ground).
     @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
-    @ObservedObject private var entitlement = Entitlement.shared
     @ObservedObject private var inbox = InboxManifest.shared
     /// Reads which project (if any) the user is currently viewing —
     /// routes the Projects tab FAB per the July 10 context-aware
@@ -133,7 +132,7 @@ struct HiMemTabView: View {
         // F8 · the guided walkthrough renders above the live tab content. Modal
         // beats block; action beats are a non-blocking banner so the real
         // control the user must tap stays live underneath.
-        .overlay { WalkthroughOverlay(isPlus: entitlement.isPlus) }
+        .overlay { WalkthroughOverlay() }
     }
 
     /// The tab shell's layout — TabView + context-aware FAB + presence dot.
@@ -248,7 +247,12 @@ struct HiMemTabView: View {
         // check on Core Data change. On Plus this fires ~at once; on Free after
         // the user taps Organize.
         .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange)) { _ in
-            guard walkthrough.activeBeat == .organize, let id = walkthrough.walkthroughMemoryId else { return }
+            // Free only: detect the organize pass finishing → advance to done. On
+            // Plus the organize beat is a *confirmation* (organizeAlreadyDone) the
+            // user taps through, so auto-advancing would skip step 4 — the exact
+            // "I didn't see it happen" miss F10 exists to fix (Tom 2026-07-28).
+            guard walkthrough.activeBeat == .organize, !walkthrough.organizeAlreadyDone,
+                  let id = walkthrough.walkthroughMemoryId else { return }
             if walkthroughMemoryIsOrganized(id) { walkthrough.organizeDidComplete() }
         }
         // Create-one-memory landing (`Himem · Memory Detail.html`
