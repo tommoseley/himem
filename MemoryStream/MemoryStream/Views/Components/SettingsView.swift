@@ -388,13 +388,30 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
 
-                    // RH-8: sweep the backlog of orphaned media blobs left in
-                    // iCloud Files by the old purge paths. Runs the dry-run
-                    // plan first and shows the count; deletion happens only on
-                    // the destructive confirm. Keep-set = live + recycled
-                    // clips; age-guarded so in-flight arrivals aren't swept.
+                    // RH-8 orphaned-blob sweep — **DISABLED (F23, 2026-07-31).**
+                    //
+                    // Its keep-set unions CloudKit-synced `MediaReference`
+                    // filenames with `InboxManifest.referencedAudioFilenames`,
+                    // but the manifest is SANDBOX-LOCAL (`Documents/ClipInbox`,
+                    // "per-device sync state, not user content" by its own
+                    // source) while the files it judges live in the SHARED
+                    // ubiquity container. Unpromoted watch clips exist only as
+                    // manifest rows, so on a second device — or after a manifest
+                    // reset — every staged clip in `Inbox/` is unreferenced by
+                    // construction, ages past the 1-hour guard, and is deleted.
+                    // Once the watch has been acked and purged its own copy that
+                    // staged file is THE ONLY COPY of the recording.
+                    //
+                    // Debug-only, so no shipped user could fire it — but the
+                    // dogfood devices are precisely the ones carrying real
+                    // recordings. The button is disabled rather than deleted so
+                    // the intent survives; the pure `orphans(...)` predicate and
+                    // its tests are kept (the arithmetic is sound, the keep-set
+                    // is not). Re-enable only once the keep-set can see every
+                    // device's staged clips — that is the clip-storage seam
+                    // rebuild, post-tag. Guarded by
+                    // `OrphanSweepReachabilityTests`.
                     Button {
-                        sweepPlan = MediaBlobOrphanSweep.plan(context: storage.viewContext)
                         showSweepAlert = true
                     } label: {
                         HStack {
@@ -464,10 +481,7 @@ struct SettingsView: View {
                     if sweepPlan.isEmpty {
                         Button("OK", role: .cancel) { }
                     } else {
-                        Button("Delete \(sweepPlan.count) forever", role: .destructive) {
-                            MediaBlobOrphanSweep.execute(plan: sweepPlan)
-                            sweepPlan = []
-                        }
+                        // Destructive path removed with the sweep (F23).
                         Button("Cancel", role: .cancel) { }
                     }
                 } message: {
