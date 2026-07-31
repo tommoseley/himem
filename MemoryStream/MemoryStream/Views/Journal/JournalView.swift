@@ -8,6 +8,8 @@ struct JournalView: View {
     @StateObject private var cameraService = CameraService()
     @StateObject private var projectVM = ProjectViewModel()
     @ObservedObject private var errorState = ErrorState.shared
+    /// F16 · drives the walkthrough ring on the row she just made.
+    @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
     @EnvironmentObject private var quickAction: QuickActionState
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @State private var viewMode: ViewMode
@@ -21,6 +23,17 @@ struct JournalView: View {
     init(initialMode: ViewMode = .memories, hidesModeToggle: Bool = false) {
         self._viewMode = State(initialValue: initialMode)
         self.hidesModeToggle = hidesModeToggle
+    }
+
+    /// The memory the walkthrough is pointing at, or nil. Non-nil ONLY while
+    /// step 3 is open (`openMemory` — the View toast is up — or `memoryInList`,
+    /// its list-side alternative), so the ring appears exactly when a beat is
+    /// making a claim about that row and disappears the moment she's past it.
+    private var walkthroughTargetId: UUID? {
+        switch walkthrough.activeBeat {
+        case .openMemory, .memoryInList: return walkthrough.walkthroughMemoryId
+        default:                         return nil
+        }
     }
 
     enum ViewMode: String, CaseIterable {
@@ -407,6 +420,34 @@ struct JournalView: View {
                     Section {
                         ForEach(group.entries) { entry in
                             EntryCardView(entry: entry)
+                            // F16 · she reached the list rather than the View
+                            // toast. Swap step 3's anchor from the toast to her
+                            // row. Per-row `onAppear` rather than a list-level
+                            // one because a PreferenceKey does not propagate out
+                            // of a `List` (device-only bug, 2026-07) — the row
+                            // appearing IS the signal that it is on screen.
+                            .onAppear {
+                                if entry.id == walkthrough.walkthroughMemoryId {
+                                    walkthrough.memoriesListDidShowWalkthroughMemory()
+                                }
+                            }
+                            // F16 · the target identifies itself. The walkthrough
+                            // overlay has no anchoring primitive (no
+                            // anchorPreference / GeometryReader / spotlight), so
+                            // rather than have a floating banner claim "your
+                            // memory is in the list" and leave her guessing which
+                            // row, the row she just made wears a ring while the
+                            // walkthrough is pointing at it. Reuses the locked
+                            // "selection = ring" affordance (`Crucible`
+                            // accessibility rules) — no new vocabulary, no new UI.
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(
+                                        Crucible.Color.accent,
+                                        lineWidth: walkthroughTargetId == entry.id ? 2 : 0
+                                    )
+                                    .allowsHitTesting(false)
+                            )
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)

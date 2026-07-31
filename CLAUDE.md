@@ -59,6 +59,17 @@ This rule applies to all runtime defects including: exceptions, incorrect output
 
 *Origin: three instances in one session (2026-07-29/30) — a truncated `grep` producing "P0-3 is unwired" when it was fully wired; a watch-suite count reported as 27 when it was 28; and exit 65 read as an assertion failure when it was twice a compile error and once a simulator launch denial.*
 
+### Assert the Meaning, Not the Phrasing (Mandatory)
+
+**A test that pins exact user-facing copy breaks on every approved rewording — which trains people to update tests reflexively, and a test updated reflexively has stopped guarding.**
+
+- Assert the **clause that carries the invariant**, not the sentence it currently appears in. `#expect(body.contains("only what's in them"))` survives a rewrite that keeps the Honest-Label promise and still fails if the promise is dropped. `#expect(body == "<the whole line>")` fails on a comma.
+- When copy is the *subject* of the rule (a locked label, a retired metaphor), pinning the literal is correct — e.g. asserting a destructive button says "Delete" and does **not** say "Let Go". State in the test which one it is and why, so the next reader knows whether a failure means "copy changed" or "promise broken".
+- **A failing copy test is a question, not a chore.** Before updating it, decide which happened: the wording moved (update the assertion, keep the invariant) or the meaning moved (that is a design change and needs a ruling, per Design Authority).
+- Prefer several small assertions naming each promise over one assertion pinning a paragraph — a paragraph-level match tells you *that* something changed, never *what*.
+
+*Origin: 2026-07-30, F16. Rewording the organize beat to the plural ("only what's in **them**") broke `organizeBeat_isTierAware_honestLabel`, which had pinned the singular literal. The promise was intact; only the phrasing had moved. Rewritten to assert the limit-naming clause per tier, plus the new "Nothing happens until you ask" promise — so the requirement is pinned rather than incidental.*
+
 ### Money Tests
 
 Bug fixes MUST include a "money test" that reproduces the exact root-cause scenario:

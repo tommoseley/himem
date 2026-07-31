@@ -58,6 +58,18 @@ final class WalkthroughOrchestrator: ObservableObject {
         case clipLanded  // step 2 — "Saved. Here it is." (confirmation)
         case makeMemory  // step 3 — "Open your clip and tap Start a Memory"
         case openMemory  // step 3 — "Tap View" (same intention, second tap)
+        /// step 3, ALTERNATIVE anchor to `openMemory` — not a later step. F16:
+        /// she missed the View toast and landed on the Memories list with her
+        /// new memory unhighlighted, guessing which row she'd just made. Fires
+        /// only if the list appears while step 3 is still open; if she taps
+        /// View it never fires, because she doesn't need it. Sequencing it
+        /// after `openMemory` would mean sending her back to the list, which
+        /// the no-navigation rule forbids.
+        case memoryInList
+        /// UN-numbered orientation beat on Memory Detail arrival (F16). Not a
+        /// step — there is nothing to do — so it carries no step number, same
+        /// treatment as `onARoll`.
+        case detailTour
         case organize    // step 4 — "let the app write a title and summary"
         case done        // step 5 — "that's a memory · find it under Memories"
 
@@ -137,7 +149,7 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// invariant untouched — Tom 2026-07-27).
     func gotIt() {
         switch activeBeat {
-        case .clipLanded, .done:
+        case .clipLanded, .detailTour, .done:
             advance()
         case .organize:
             // Free: organize is a signal beat (waits for the real Organize tap →
@@ -145,7 +157,7 @@ final class WalkthroughOrchestrator: ObservableObject {
             // already done, so the card is a confirmation the user reads and
             // continues.
             if organizeAlreadyDone { advance() } else { currentBannerRetired = true }
-        case .record, .makeMemory, .openMemory:
+        case .record, .makeMemory, .openMemory, .memoryInList:
             currentBannerRetired = true
         case .offer, .onARoll, .rolling, .none:
             break
@@ -170,10 +182,12 @@ final class WalkthroughOrchestrator: ObservableObject {
     func advance() {
         switch activeBeat {
         case .offer:      activeBeat = .record   // also reachable via beginFromOffer
-        case .clipLanded: activeBeat = .makeMemory
-        case .organize:   if organizeAlreadyDone { activeBeat = .done }
-        case .done:       finish()
-        case .record, .onARoll, .rolling, .makeMemory, .openMemory, .none: break
+        case .clipLanded:  activeBeat = .makeMemory
+        case .detailTour:  activeBeat = .organize
+        case .organize:    if organizeAlreadyDone { activeBeat = .done }
+        case .done:        finish()
+        case .record, .onARoll, .rolling, .makeMemory, .openMemory,
+             .memoryInList, .none: break
         }
     }
 
@@ -236,9 +250,24 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// (`organizeAlreadyDone`), on Free an instruction that waits for the real
     /// Organize tap.
     func memoryDidOpen(alreadyOrganized: Bool) {
-        guard activeBeat == .openMemory else { return }
+        // Either step-3 anchor may be live: the View toast (`openMemory`) or her
+        // ringed row in the list (`memoryInList`). Both mean "she reached the
+        // memory", so both hand off here.
+        guard activeBeat == .openMemory || activeBeat == .memoryInList else { return }
         organizeAlreadyDone = alreadyOrganized
-        activeBeat = .organize
+        // F16: orient her to the screen BEFORE asking for the Organize tap. The
+        // tour is un-numbered and tap-advances into step 4.
+        activeBeat = .detailTour
+    }
+
+    /// The Memories list is on screen and the walkthrough's memory is in it —
+    /// she reached the list rather than the View toast (F16). Swaps step 3's
+    /// anchor from the toast to her ringed row; the ring is rendered by the row
+    /// itself (`JournalView`), so this only supplies the confirming copy.
+    /// No-op once she's past step 3.
+    func memoriesListDidShowWalkthroughMemory() {
+        guard activeBeat == .openMemory else { return }
+        activeBeat = .memoryInList
     }
 
     /// The memory's organize pass completed (its title + summary now exist). On
@@ -262,7 +291,9 @@ extension WalkthroughOrchestrator.Beat {
         case .offer:                       return nil
         case .record, .onARoll, .rolling:  return 1
         case .clipLanded:                  return 2
-        case .makeMemory, .openMemory:     return 3
+        case .makeMemory, .openMemory,
+             .memoryInList:                return 3
+        case .detailTour:                  return nil   // orientation, not a step
         case .organize:                    return 4
         case .done:                        return 5
         }
@@ -330,12 +361,26 @@ extension WalkthroughOrchestrator.Beat {
         case .openMemory:
             // Step 3, second tap. Names the toast's control (no-teleport spec).
             return "Your memory is saved. Tap View to open it."
+        case .memoryInList:
+            // Step 3 alternative. The RING on her row does the pointing (the
+            // target identifies itself — there is no overlay anchoring
+            // primitive and inventing one was ruled out); this copy only
+            // confirms what the ring marks. "The one you just made" names it by
+            // her action, not by our noun for it.
+            return "The one you just made. Tap it to open."
+        case .detailTour:
+            // Orientation, not curriculum (F13 holds): describes what the
+            // screen is FOR in her words. No ontology nouns — "recordings",
+            // never "parts", because this beat is describing rather than
+            // labelling a thing she'll tap. Section order matches the shipped
+            // layout: title/summary → topics → projects → mentions → clips.
+            return "The title and summary are up top. Below them: ways to find this again later — topics, projects, and anyone you mentioned. Your recordings are at the bottom."
         case .organize:
             // Step 4. Honest Label: the app writes the title/summary — its
             // sentences, not the user's words; it draws only on the clip.
             return alreadyOrganized
-                ? "The app already wrote a title and summary from your clip, using only what's in it — no tap needed."
-                : "Tap Organize. The app reads your clip and writes a title and summary, using only what's in it."
+                ? "The app already wrote the title and summary, using only what's in your recordings. You can run it again whenever you want."
+                : "Tap Organize when you're ready. The app reads your recordings and writes a title and summary, using only what's in them. Nothing happens until you ask."
         case .done:
             // Step 5 · confirmation + payoff. The title carries "That's a memory";
             // the body names where it lives. `closingLine` (the ? / re-run hand-

@@ -61,7 +61,8 @@ struct WalkthroughOrchestratorTests {
         o.clipDidLand();          #expect(o.activeBeat == .clipLanded, "step 2 · saved")
         o.advance();              #expect(o.activeBeat == .makeMemory, "step 3 · make it a memory (concept beat retired)")
         o.memoryDidStart();       #expect(o.activeBeat == .openMemory, "still step 3 — the View bridge, not organize")
-        o.memoryDidOpen(alreadyOrganized: false); #expect(o.activeBeat == .organize, "step 4 · let the app write (Free)")
+        o.memoryDidOpen(alreadyOrganized: false); #expect(o.activeBeat == .detailTour, "F16 · orient her to the screen on arrival, before asking for the tap")
+        o.advance();              #expect(o.activeBeat == .organize, "step 4 · let the app write (Free)")
         o.organizeDidComplete();  #expect(o.activeBeat == .done, "step 5 · done")
         o.advance();              #expect(o.activeBeat == nil && o.hasCompleted, "done → finish (ontology beat retired)")
         reset()
@@ -79,6 +80,8 @@ struct WalkthroughOrchestratorTests {
         #expect(o.activeBeat == .openMemory, "creation bridges to open-your-memory, not organize")
         o.advance(); #expect(o.activeBeat == .openMemory, "openMemory ignores taps — waits for the real open signal")
         o.memoryDidOpen(alreadyOrganized: false)
+        #expect(o.activeBeat == .detailTour, "arrival opens the orientation beat")
+        o.advance()
         #expect(o.activeBeat == .organize, "organize arms only once Memory Detail is on screen")
         reset()
     }
@@ -93,10 +96,88 @@ struct WalkthroughOrchestratorTests {
         o.advance(); o.memoryDidStart(id: UUID())
         #expect(o.activeBeat == .openMemory)
         o.memoryDidOpen(alreadyOrganized: true)
+        #expect(o.activeBeat == .detailTour, "Plus gets the same orientation beat")
+        o.advance()
         #expect(o.activeBeat == .organize, "step 4 still shows on Plus (progress stays 1→5)")
         #expect(o.organizeAlreadyDone, "flagged as already done → confirmation, not instruction")
         o.gotIt(); #expect(o.activeBeat == .done, "Plus: organize is a confirmation the user taps through")
         reset()
+    }
+
+    // MARK: - F16 · the ending that stopped abandoning her
+
+    // Dogfood round 3: she completed the flow, the memory landed in the list
+    // unhighlighted (she had to guess which row she'd just made), and Memory
+    // Detail gave her no orientation. Root cause was NOT a regressed bridge —
+    // `memoryDidOpen` survived intact. It is that the overlay has no anchoring
+    // primitive at all, so every beat is a floating claim about something on
+    // screen. Beats work while the referent is unambiguous (the FAB, Stop &
+    // save) and fail the moment it is one of many. Fix: the target identifies
+    // itself (ring on her row), and arrival orients her before asking for a tap.
+
+    /// THE MONEY ASSERTION for the list-side anchor. If she reaches the
+    /// Memories list instead of tapping View, step 3 re-anchors to her ringed
+    /// row rather than leaving a toast-referencing banner pointing at nothing.
+    @Test func memoriesList_reAnchorsStepThreeToHerRow() {
+        reset()
+        o.start(); o.beginFromOffer()
+        o.recordingDidStart(); o.clipDidLand(); o.advance()
+        let id = UUID()
+        o.memoryDidStart(id: id)
+        #expect(o.activeBeat == .openMemory, "step 3 opens on the View toast")
+        o.memoriesListDidShowWalkthroughMemory()
+        #expect(o.activeBeat == .memoryInList, "list sighting swaps the anchor, still step 3")
+        #expect(o.walkthroughMemoryId == id, "the ring needs the id to mark HER row")
+        #expect(o.activeBeat?.stepNumber == 3, "an alternative anchor, not a later step")
+        reset()
+    }
+
+    /// The list anchor is an ALTERNATIVE, not an extra step: reaching Memory
+    /// Detail from it advances exactly as the toast path does.
+    @Test func memoryInList_reachesDetailAndOrients() {
+        reset()
+        o.start(); o.beginFromOffer()
+        o.recordingDidStart(); o.clipDidLand(); o.advance()
+        o.memoryDidStart(id: UUID())
+        o.memoriesListDidShowWalkthroughMemory()
+        o.memoryDidOpen(alreadyOrganized: false)
+        #expect(o.activeBeat == .detailTour, "either step-3 anchor hands off to the orientation beat")
+        reset()
+    }
+
+    /// If she taps View, the list beat never fires — she does not need it.
+    @Test func tappingView_neverShowsTheListBeat() {
+        reset()
+        o.start(); o.beginFromOffer()
+        o.recordingDidStart(); o.clipDidLand(); o.advance()
+        o.memoryDidStart(id: UUID())
+        o.memoryDidOpen(alreadyOrganized: false)
+        #expect(o.activeBeat == .detailTour)
+        o.memoriesListDidShowWalkthroughMemory()
+        #expect(o.activeBeat == .detailTour, "past step 3 — a late list sighting must not rewind her")
+        reset()
+    }
+
+    /// The orientation beat is un-numbered: there is nothing to do on it, so it
+    /// must not inflate the 5-step progress she is counting against.
+    @Test func detailTour_isUnnumbered_andTapAdvances() {
+        reset()
+        o.start(); o.beginFromOffer()
+        o.recordingDidStart(); o.clipDidLand(); o.advance()
+        o.memoryDidStart(id: UUID()); o.memoryDidOpen(alreadyOrganized: false)
+        #expect(o.activeBeat?.stepNumber == nil, "orientation carries no step number")
+        #expect(o.activeBeat?.progressLabel == nil, "and no 'Step N of 5' label")
+        o.advance(); #expect(o.activeBeat == .organize, "the card IS the gate — Got it. continues")
+        reset()
+    }
+
+    /// Progress still counts to five with two beats added — the arc the user
+    /// sees is unchanged.
+    @Test func progress_stillCountsToFive() {
+        #expect(WalkthroughOrchestrator.Beat.totalSteps == 5)
+        #expect(WalkthroughOrchestrator.Beat.memoryInList.stepNumber == 3)
+        #expect(WalkthroughOrchestrator.Beat.detailTour.stepNumber == nil)
+        #expect(WalkthroughOrchestrator.Beat.organize.stepNumber == 4)
     }
 
     // MARK: - On-a-roll
@@ -133,6 +214,8 @@ struct WalkthroughOrchestratorTests {
         #expect(o.activeBeat == .openMemory)
         o.advance(); #expect(o.activeBeat == .openMemory, "openMemory ignores taps — waits for memoryDidOpen")
         o.memoryDidOpen(alreadyOrganized: false)
+        #expect(o.activeBeat == .detailTour, "arrival orients before instructing (F16)")
+        o.advance()
         #expect(o.activeBeat == .organize)
         o.advance(); #expect(o.activeBeat == .organize, "organize (Free) ignores taps — waits for organizeDidComplete")
         reset()
@@ -269,8 +352,13 @@ struct WalkthroughOrchestratorTests {
     }
 
     @Test func de_ontology_conceptAndOntologyBeatsAreGone() {
-        // The nine surviving beats — no `concept`, no `ontology`.
-        #expect(Beat.allCases.count == 9)
+        // 11 beats: the nine post-F13 survivors plus F16's `memoryInList`
+        // (step 3's list-side anchor) and `detailTour` (un-numbered orientation).
+        // Still no `concept`, no `ontology` — F13 is NOT reversed by F16, which
+        // describes what is on the screen rather than teaching the model. The
+        // count is the guard because the retired cases cannot be referenced by
+        // name: they no longer exist.
+        #expect(Beat.allCases.count == 11)
         let names = Set(Beat.allCases.map { String(describing: $0) })
         #expect(!names.contains("concept") && !names.contains("ontology"),
                 "the model-teaching beats are retired (F13)")
@@ -282,9 +370,13 @@ struct WalkthroughOrchestratorTests {
         #expect(free.contains("Tap Organize"), "Free guides the tap")
         #expect(done.contains("already wrote"), "Plus confirms — no button that isn't there")
         #expect(free != done)
-        // Honest Label: the app writes those sentences using only the clip.
-        #expect(free.contains("only what's in it") && done.contains("only what's in it"),
-                "never claims to add anything the clip doesn't contain")
+        // Honest Label: the app writes those sentences using only her own
+        // recordings. Wording moved to the plural at F16 (on-a-roll can leave
+        // several), so match the invariant rather than one phrasing.
+        #expect(free.contains("only what's in them"), "Free names the limit")
+        #expect(done.contains("only what's in your recordings"), "Plus names the limit")
+        #expect(free.contains("Nothing happens until you ask"),
+                "F16 · she decides when it runs")
     }
 
     @Test func noBeatCopyUsesTheWordEvidence() {
