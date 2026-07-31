@@ -8,12 +8,6 @@ These rules are derived from battle-tested governance in The Combine (`~/dev/The
 
 ---
 
-## Project Root
-
-**Filesystem path:** `~/dev/himem/`
-
----
-
 ## Design Authority (read first)
 
 **The designs and specs in `docs/design/` are decisions, not suggestions.** You build what they specify. Your latitude is *how*, never *what*: view structure, state plumbing, file organization, internal naming, the mechanics of making the specified behavior work. Behavior, copy, verbs, ontology, layout intent, and interaction model are already decided.
@@ -35,8 +29,9 @@ When a runtime error, exception, or incorrect behavior is observed, the followin
 
 1. **Reproduce First** -- A failing automated test MUST be written that reproduces the observed behavior. The test must fail for the same reason the runtime behavior failed.
 2. **Verify Failure** -- The test MUST be executed and verified to fail before any code changes are made.
-3. **Fix the Code** -- Only after the failure is verified may code be modified to correct the issue.
-4. **Verify Resolution** -- The test MUST pass after the fix. No fix is considered complete unless the reproducing test passes.
+3. **Identify the Red** -- The failure MUST be confirmed to be an *assertion* failure, at the expected assertion, with the expected values. Neither a build failure nor a launch failure is a red.
+4. **Fix the Code** -- Only after the failure is verified may code be modified to correct the issue.
+5. **Verify Resolution** -- The test MUST pass after the fix. No fix is considered complete unless the reproducing test passes.
 
 #### Constraints
 
@@ -44,8 +39,25 @@ When a runtime error, exception, or incorrect behavior is observed, the followin
 - Code MUST NOT be changed before a reproducing test exists.
 - If a bug cannot be reliably reproduced in a test, the issue MUST be escalated rather than patched heuristically.
 - Vibe-based fixes are explicitly disallowed.
+- **"I saw red" is meaningless without naming *which* red.** `xcodebuild` exits **65** for at least three unrelated conditions — identical signal, completely different meanings:
+  1. **Compilation failure** — the test never ran. Detect: `grep -E "^/.*: error:"`.
+  2. **Assertion failure** — the only real red. Detect: a named failing test plus its message, read from the `.xcresult` (`xcrun xcresulttool get test-results tests --path <bundle>`); the console does not always print it.
+  3. **Launch/infrastructure failure** — e.g. `Testing failed: Simulator device failed to launch … denied by service delegate (SBMainWorkspace)`, or a run that wedges at 0% CPU with no simulator booted. **This is the sneakiest of the three: no compile error and no assertion, so it reads as a genuine test failure until you check the tail of the log.** Usually stale simulator state — `xcrun simctl shutdown all` and re-run.
+
+  A test that didn't compile, or never launched, has proven nothing. Mistaking either for a reproduction silently invalidates the whole Bug-First method: you proceed to "fix" a defect you never observed. **Always identify which of the three you have; never trust the exit code alone.** *Origin: all three hit in one session, 2026-07-29/30 — a `@MainActor`-isolation compile error read as a passing red gate; a duplicate-declaration compile error likewise; and a full suite "failing" on a simulator launch denial that passed unchanged after a simulator reset.*
 
 This rule applies to all runtime defects including: exceptions, incorrect outputs, state corruption, and boundary condition failures.
+
+### Measurement Discipline (Mandatory)
+
+**Name what a measurement actually is before building on it.** Every diagnostic failure in this project has been a signal that *looked* authoritative because it was well-formed, and was in fact truncated, aggregated, or overloaded. None looked like an error at the moment it was read — which is why care alone doesn't catch them.
+
+- **Never let `head` (or any limit) bound a completeness claim.** "No callers exist" is a statement about the whole codebase; a `head -8` that filled with matches from one test file cannot support it. If the conclusion is *"there are none"*, the command must be able to show all of them — filter the noise out (`grep -v`), don't cap the output.
+- **Count by the structure you mean.** Counting unique log *lines* is not counting test *cases*: interleaved timestamps split one result line in two, and the halves de-duplicate as distinct entries. Aggregate on the actual unit (per-suite tallies), not on incidental text.
+- **Never treat one exit code as one meaning.** See the Bug-First constraint above: `xcodebuild` returns **65** for compile failure, assertion failure, *and* launch/infrastructure failure.
+- **A conclusion inherits the weakness of its weakest input.** When a finding rests on a measurement, state the measurement alongside it, so a wrong reading is visible as a wrong reading rather than propagating as fact.
+
+*Origin: three instances in one session (2026-07-29/30) — a truncated `grep` producing "P0-3 is unwired" when it was fully wired; a watch-suite count reported as 27 when it was 28; and exit 65 read as an assertion failure when it was twice a compile error and once a simulator launch denial.*
 
 ### Money Tests
 
@@ -92,6 +104,7 @@ Remediation path: decompose into focused sub-methods (cyclomatic complexity redu
 - Make every change as simple as possible. Find root causes, not symptoms.
 - No temporary fixes. No "we'll clean this up later" without a tech debt entry.
 - Changes should only touch what is necessary.
+- If a fix feels hacky, pause and find the elegant solution.
 
 ---
 
@@ -237,14 +250,6 @@ For any non-trivial task (3+ steps or architectural decisions):
 - Get alignment before executing.
 
 If something goes wrong during execution, **STOP and re-plan**. Do not push through a failing approach.
-
-### Simplicity First
-
-- Make every change as simple as possible.
-- Find root causes, not symptoms.
-- No temporary fixes without a tech debt entry.
-- Changes should only touch what is necessary.
-- If a fix feels hacky, pause and find the elegant solution.
 
 ### Verification Before Done
 
