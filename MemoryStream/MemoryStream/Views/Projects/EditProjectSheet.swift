@@ -203,6 +203,9 @@ struct EditProjectSheet: View {
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Crucible.Color.aiBlue, lineWidth: 1.5)
             )
+            // F17 · the pill is stroked, not filled — without this the tap
+            // region is only the drawn text. Guarded by ButtonHitRegionTests.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Find the thread with AI")

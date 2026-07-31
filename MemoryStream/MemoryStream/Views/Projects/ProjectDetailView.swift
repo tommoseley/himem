@@ -119,6 +119,9 @@ struct ProjectDetailView: View {
                                 style: StrokeStyle(lineWidth: 1, dash: [3, 2])
                             )
                         )
+                        // F17 · the pill is stroked, not filled — without this the tap
+                        // region is only the drawn text. Guarded by ButtonHitRegionTests.
+                        .contentShape(Rectangle())
                         .frame(minHeight: 38)
                     }
                     .buttonStyle(.plain)
@@ -648,6 +651,9 @@ struct ProjectDetailView: View {
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(Crucible.Color.aiBlue, lineWidth: 1.5)
                         )
+                        // F17 · the pill is stroked, not filled — without this the tap
+                        // region is only the drawn text. Guarded by ButtonHitRegionTests.
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(assistVM.isRunning)

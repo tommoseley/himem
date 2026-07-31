@@ -823,6 +823,9 @@ private struct WhenPopover: View {
                                 .foregroundStyle(Crucible.Color.accent)
                                 .frame(maxWidth: .infinity, minHeight: 40)
                                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Crucible.Color.accent, lineWidth: 1))
+                                // F17 · the pill is stroked, not filled — without this the tap
+                                // region is only the drawn text. Guarded by ButtonHitRegionTests.
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }

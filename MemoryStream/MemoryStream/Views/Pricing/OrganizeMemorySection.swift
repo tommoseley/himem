@@ -356,6 +356,9 @@ struct OrganizeMemorySection: View {
                 RoundedRectangle(cornerRadius: 22)
                     .strokeBorder(Crucible.Color.aiBlue, lineWidth: 1.5)
             )
+            // F17 · the pill is stroked, not filled — without this the tap
+            // region is only the drawn text. Guarded by ButtonHitRegionTests.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isReorganizing)

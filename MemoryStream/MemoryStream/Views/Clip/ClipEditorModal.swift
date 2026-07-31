@@ -299,6 +299,9 @@ struct ClipEditorModal: View {
                 .frame(minHeight: 38)
                 .padding(.horizontal, 15)
                 .overlay(RoundedRectangle(cornerRadius: 11).stroke(Crucible.Color.aiBlue, lineWidth: 1))
+                // F17 · the pill is stroked, not filled — without this the tap
+                // region is only the drawn text. Guarded by ButtonHitRegionTests.
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(isRetranscribing)

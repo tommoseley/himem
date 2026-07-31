@@ -210,6 +210,9 @@ struct ReorganizeReviewSheet: View {
                     RoundedRectangle(cornerRadius: 14)
                         .stroke(Crucible.Color.hairline, lineWidth: 1)
                 )
+                // F17 · the pill is stroked, not filled — without this the tap
+                // region is only the drawn text. Guarded by ButtonHitRegionTests.
+                .contentShape(Rectangle())
                 .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
