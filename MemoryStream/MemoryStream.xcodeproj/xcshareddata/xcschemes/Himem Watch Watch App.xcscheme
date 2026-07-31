@@ -85,7 +85,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E2AD0E3B2FAD185D009FFEA1"
             BuildableName = "Himem Watch Watch App.app"
-            BlueprintName = "Himem Watch Watch App"
             ReferencedContainer = "container:MemoryStream.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -102,7 +101,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E2AD0E3B2FAD185D009FFEA1"
             BuildableName = "Himem Watch Watch App.app"
-            BlueprintName = "Himem Watch Watch App"
             ReferencedContainer = "container:MemoryStream.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
