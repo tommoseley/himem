@@ -18,7 +18,7 @@ import AVFoundation
 ///
 /// **Explicit mono downmix (defensive).** Under `.measurement` session mode
 /// the watch input was 3-channel (dogfood 2026-07-14); the capture-gain P0
-/// fix (`WatchAudioSessionConfig.recordMode = .default`, 2026-07-15) now
+/// fix (`CaptureAudioSessionConfig.recordMode = .default`, 2026-07-15) now
 /// yields mono on device, so N is normally 1. But we still downmix N→1
 /// ourselves by **extracting the hottest channel** — retained as tested
 /// defense for any future multichannel route. (Pick-hottest, not average:

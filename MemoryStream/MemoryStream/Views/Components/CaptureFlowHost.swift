@@ -69,28 +69,50 @@ struct CaptureFlowHost: ViewModifier {
                 )
             }
             .fullScreenCover(isPresented: photoBinding) {
-                CameraPickerView(
-                    captureMode: .photo,
-                    onCapture: { result in
-                        Task { await handleCameraResult(result) }
-                    },
-                    onDismiss: {
-                        activeModality = nil
-                    }
-                )
-                .ignoresSafeArea()
+                // F18 · never present a dead interface. If the camera can't
+                // start we say so where the viewfinder would have been —
+                // a black preview is the silent no-op this project has
+                // rejected twice (F9's stranded recorder, F6d's silent delete).
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    CameraPickerView(
+                        captureMode: .photo,
+                        onCapture: { result in
+                            Task { await handleCameraResult(result) }
+                        },
+                        onDismiss: {
+                            activeModality = nil
+                        }
+                    )
+                    .ignoresSafeArea()
+                } else {
+                    CaptureUnavailableView(
+                        message: CaptureUnavailableView.cameraMessage,
+                        onDismiss: { activeModality = nil }
+                    )
+                }
             }
             .fullScreenCover(isPresented: videoBinding) {
-                CameraPickerView(
-                    captureMode: .video,
-                    onCapture: { result in
-                        Task { await handleCameraResult(result) }
-                    },
-                    onDismiss: {
-                        activeModality = nil
-                    }
-                )
-                .ignoresSafeArea()
+                // F18 · never present a dead interface. If the camera can't
+                // start we say so where the viewfinder would have been —
+                // a black preview is the silent no-op this project has
+                // rejected twice (F9's stranded recorder, F6d's silent delete).
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    CameraPickerView(
+                        captureMode: .video,
+                        onCapture: { result in
+                            Task { await handleCameraResult(result) }
+                        },
+                        onDismiss: {
+                            activeModality = nil
+                        }
+                    )
+                    .ignoresSafeArea()
+                } else {
+                    CaptureUnavailableView(
+                        message: CaptureUnavailableView.cameraMessage,
+                        onDismiss: { activeModality = nil }
+                    )
+                }
             }
             .sheet(isPresented: attachBinding) {
                 PhotoLibraryPicker { results in

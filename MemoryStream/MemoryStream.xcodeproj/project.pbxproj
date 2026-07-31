@@ -146,8 +146,8 @@
 		A100000790 /* AddExistingClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000790 /* AddExistingClipsSheet.swift */; };
 		A100000802 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
 		A100000803 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
-		A100000811 /* WatchAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* WatchAudioSessionConfig.swift */; };
-		A100000812 /* WatchAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* WatchAudioSessionConfig.swift */; };
+		A100000811 /* CaptureAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* CaptureAudioSessionConfig.swift */; };
+		A100000812 /* CaptureAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* CaptureAudioSessionConfig.swift */; };
 		A100000900 /* UbiquityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000900 /* UbiquityStore.swift */; };
 		A100000901 /* MediaResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000901 /* MediaResolver.swift */; };
 		A100000902 /* MediaReferenceUbiquityMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000902 /* MediaReferenceUbiquityMigration.swift */; };
@@ -197,6 +197,7 @@
 		A200000093 /* WalkthroughOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000093 /* WalkthroughOrchestrator.swift */; };
 		A200000094 /* WalkthroughOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000094 /* WalkthroughOverlay.swift */; };
 		A200000095 /* SectionHelp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000095 /* SectionHelp.swift */; };
+		A200000401 /* CaptureUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000401 /* CaptureUnavailableView.swift */; };
 		A2000000FB /* FABHandednessSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000FB /* FABHandednessSync.swift */; };
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
@@ -418,7 +419,7 @@
 		B100000780 /* PermissionWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionWizardView.swift; sourceTree = "<group>"; };
 		B100000790 /* AddExistingClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddExistingClipsSheet.swift; sourceTree = "<group>"; };
 		B100000801 /* WatchTransferAudioTranscoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchTransferAudioTranscoder.swift; path = Shared/WatchTransferAudioTranscoder.swift; sourceTree = "<group>"; };
-		B100000810 /* WatchAudioSessionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchAudioSessionConfig.swift; path = Shared/WatchAudioSessionConfig.swift; sourceTree = "<group>"; };
+		B100000810 /* CaptureAudioSessionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureAudioSessionConfig.swift; path = Shared/CaptureAudioSessionConfig.swift; sourceTree = "<group>"; };
 		B100000900 /* UbiquityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UbiquityStore.swift; sourceTree = "<group>"; };
 		B100000901 /* MediaResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaResolver.swift; sourceTree = "<group>"; };
 		B100000902 /* MediaReferenceUbiquityMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReferenceUbiquityMigration.swift; sourceTree = "<group>"; };
@@ -468,6 +469,7 @@
 		B200000093 /* WalkthroughOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOrchestrator.swift; path = MemoryStream/Services/Tutorials/WalkthroughOrchestrator.swift; sourceTree = SOURCE_ROOT; };
 		B200000094 /* WalkthroughOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOverlay.swift; path = MemoryStream/Views/Components/WalkthroughOverlay.swift; sourceTree = SOURCE_ROOT; };
 		B200000095 /* SectionHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SectionHelp.swift; path = MemoryStream/Views/Components/SectionHelp.swift; sourceTree = SOURCE_ROOT; };
+		B200000401 /* CaptureUnavailableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureUnavailableView.swift; path = MemoryStream/Views/Components/CaptureUnavailableView.swift; sourceTree = SOURCE_ROOT; };
 		B2000000FB /* FABHandednessSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FABHandednessSync.swift; path = MemoryStream/Services/FABHandednessSync.swift; sourceTree = SOURCE_ROOT; };
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
@@ -746,6 +748,7 @@
 				B200000093 /* WalkthroughOrchestrator.swift */,
 				B200000094 /* WalkthroughOverlay.swift */,
 				B200000095 /* SectionHelp.swift */,
+				B200000401 /* CaptureUnavailableView.swift */,
 				B100000993 /* QuickLookViewer.swift */,
 				B100000998 /* PhotoViewerSheet.swift */,
 				B100000994 /* BottomDeleteButton.swift */,
@@ -933,7 +936,7 @@
 			children = (
 				B100000310 /* ClipMetadata.swift */,
 				B100000801 /* WatchTransferAudioTranscoder.swift */,
-				B100000810 /* WatchAudioSessionConfig.swift */,
+				B100000810 /* CaptureAudioSessionConfig.swift */,
 				B100000320 /* WatchSharedState.swift */,
 				B100000670 /* MinClipDebouncer.swift */,
 				B100000671 /* NextClipController.swift */,
@@ -1294,7 +1297,7 @@
 			files = (
 				A100000313 /* ClipMetadata.swift in Sources */,
 				A100000803 /* WatchTransferAudioTranscoder.swift in Sources */,
-				A100000812 /* WatchAudioSessionConfig.swift in Sources */,
+				A100000812 /* CaptureAudioSessionConfig.swift in Sources */,
 				A100000320 /* WatchSharedState.swift in Sources */,
 				A100000672 /* MinClipDebouncer.swift in Sources */,
 				A100000673 /* NextClipController.swift in Sources */,
@@ -1331,7 +1334,7 @@
 				A100000001 /* MemoryStreamApp.swift in Sources */,
 				A100000310 /* ClipMetadata.swift in Sources */,
 				A100000802 /* WatchTransferAudioTranscoder.swift in Sources */,
-				A100000811 /* WatchAudioSessionConfig.swift in Sources */,
+				A100000811 /* CaptureAudioSessionConfig.swift in Sources */,
 				A100000700 /* AudioCompressor.swift in Sources */,
 				A100000730 /* BreathCaption.swift in Sources */,
 				A100000732 /* TopicColorPicker.swift in Sources */,
@@ -1466,6 +1469,7 @@
 				A200000093 /* WalkthroughOrchestrator.swift in Sources */,
 				A200000094 /* WalkthroughOverlay.swift in Sources */,
 				A200000095 /* SectionHelp.swift in Sources */,
+				A200000401 /* CaptureUnavailableView.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,
 				A100000998 /* PhotoViewerSheet.swift in Sources */,
 				A100000994 /* BottomDeleteButton.swift in Sources */,

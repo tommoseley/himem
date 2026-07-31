@@ -93,7 +93,9 @@ final class SpeechService: ObservableObject {
             case .notAvailable:
                 return "Speech recognition isn't available on this device."
             case .audioSessionFailed:
-                return "Couldn't start recording. Try again in a moment."
+                // F18 · ruled copy (Tom, 2026-07-31). Crucible voice: describes
+                // the state, never blames, no jargon.
+                return CaptureUnavailableView.audioMessage
             case .recognitionFailed:
                 return "Speech recognition stopped unexpectedly. Try again."
             case .modelNotReady:
@@ -266,9 +268,17 @@ final class SpeechService: ObservableObject {
 
         let session = AVAudioSession.sharedInstance()
         do {
+            // Mode comes from the ONE owner, never a literal (F18,
+            // 2026-07-31). `.measurement` suppresses input gain: it killed the
+            // watch mic in July, and the phone kept this literal behind a
+            // comment claiming "the phone tolerates .measurement because its
+            // mic is hotter". It does not — iPad voice capture was dead (the
+            // waveform never moved) and every iPhone recording was quieter
+            // than it should be, which is the last thing you want in a noisy
+            // car. Guarded by `CaptureAudioSessionConfigTests`.
             try session.setCategory(
                 .record,
-                mode: .measurement,
+                mode: CaptureAudioSessionConfig.recordMode,
                 options: [.duckOthers, .allowBluetoothHFP]
             )
             try session.setActive(true, options: .notifyOthersOnDeactivation)

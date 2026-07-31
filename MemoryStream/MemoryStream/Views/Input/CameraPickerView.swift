@@ -31,9 +31,23 @@ struct CameraPickerView: UIViewControllerRepresentable {
         //      acknowledge.
         // Plus an iOS-16 geometry request to force-rotate now if the
         // device was already in landscape when the picker opened.
-        OrientationLock.shared.portraitOnly = true
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
+        //
+        // **iPad is excluded (F18, 2026-07-31).** The clamp cannot work there
+        // and made things worse. The app declares all four orientations for
+        // iPad (`UISupportedInterfaceOrientations_iPad`), which makes it
+        // multitasking-eligible — and iPadOS does not honour a runtime clamp
+        // to portrait for such an app, so `requestGeometryUpdate` does not
+        // take. The picker then adapted to an orientation its capture
+        // connection did not match, producing exactly the broken preview this
+        // lock exists to prevent: a BLACK camera and video preview on iPad.
+        // We honour the orientation the system gives us and let the picker
+        // adapt. Narrowing the iPad plist to portrait would "fix" it by
+        // breaking multitasking, which is a regression to any iPad user.
+        if UIDevice.current.userInterfaceIdiom != .pad {
+            OrientationLock.shared.portraitOnly = true
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
+            }
         }
         let picker = PortraitImagePickerController()
         picker.sourceType = .camera

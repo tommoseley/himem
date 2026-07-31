@@ -142,7 +142,7 @@ final class WatchRecordingService: NSObject, ObservableObject {
             // so warm and record configure the same mode — no reconfigure.
             try session.setCategory(
                 .playAndRecord,
-                mode: WatchAudioSessionConfig.recordMode,
+                mode: CaptureAudioSessionConfig.recordMode,
                 options: [.allowBluetoothHFP, .mixWithOthers]
             )
             try session.setActive(true, options: [])
@@ -203,12 +203,16 @@ final class WatchRecordingService: NSObject, ObservableObject {
             // `.measurement` mode minimizes system input processing — which
             // includes input GAIN — leaving the watch mic un-gained at
             // ~-40 dBFS (loud-clip dogfood: in_peak pinned ~0.01 regardless of
-            // how loud the user spoke). The phone tolerates `.measurement`
-            // because its mic is hotter; the watch mic isn't. `.default` lets
+            // how loud the user spoke). NOTE (F18, 2026-07-31): this comment
+            // used to claim "the phone tolerates `.measurement` because its mic
+            // is hotter" — it does not. That assumption scoped the fix to the
+            // watch and left a literal in `SpeechService`, which killed iPad
+            // voice capture outright and quietly under-gained every iPhone
+            // recording. The mode is one shared constant now. `.default` lets
             // the system apply normal input gain. Independent of the July-5
             // VPIO/clean-channel fix (that's `setVoiceProcessingEnabled` below,
             // a different knob) — this does not touch it.
-            try session.setCategory(.playAndRecord, mode: WatchAudioSessionConfig.recordMode, options: [.duckOthers, .allowBluetoothHFP])
+            try session.setCategory(.playAndRecord, mode: CaptureAudioSessionConfig.recordMode, options: [.duckOthers, .allowBluetoothHFP])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             NSLog("[HiMem][REC] start: AVAudioSession active in \(Int(Date().timeIntervalSince(sessionStart) * 1000))ms")
 
