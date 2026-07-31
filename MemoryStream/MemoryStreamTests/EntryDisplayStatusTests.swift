@@ -34,6 +34,7 @@ struct EntryDisplayStatusTests {
             longitude: nil,
             locationName: nil,
             renderedSummary: nil,
+            summaryUserEdited: false,
             projectMemberships: [],
             mentions: []
         )

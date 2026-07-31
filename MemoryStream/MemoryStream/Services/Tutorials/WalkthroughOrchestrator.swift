@@ -374,7 +374,7 @@ extension WalkthroughOrchestrator.Beat {
             // never "parts", because this beat is describing rather than
             // labelling a thing she'll tap. Section order matches the shipped
             // layout: title/summary → topics → projects → mentions → clips.
-            return "The title and summary are up top. Below them: ways to find this again later — topics, projects, and anyone you mentioned. Your recordings are at the bottom."
+            return "The title and summary are up top, then your recordings. Below those: ways to find this again later — topics, projects, and anyone you mentioned."
         case .organize:
             // Step 4. Honest Label: the app writes the title/summary — its
             // sentences, not the user's words; it draws only on the clip.

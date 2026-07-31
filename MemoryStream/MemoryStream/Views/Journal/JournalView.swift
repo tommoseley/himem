@@ -25,15 +25,30 @@ struct JournalView: View {
         self.hidesModeToggle = hidesModeToggle
     }
 
-    /// The memory the walkthrough is pointing at, or nil. Non-nil ONLY while
-    /// step 3 is open (`openMemory` — the View toast is up — or `memoryInList`,
-    /// its list-side alternative), so the ring appears exactly when a beat is
-    /// making a claim about that row and disappears the moment she's past it.
+    /// The memory the walkthrough is pointing at, or nil.
+    ///
+    /// **Window = from creation to the end of the walkthrough** (F20a,
+    /// 2026-07-31). It was originally scoped to step 3 only, which made the
+    /// ring unreachable on the path people actually take: the View toast sends
+    /// her from creation straight to Memory Detail, so she first sees the
+    /// Memories list *after* `done`, by which point a step-scoped ring is long
+    /// gone. Observed on device — "not highlighted at any point".
+    ///
+    /// The pointing was anchored to the step rather than to the moment she
+    /// needs it. `walkthroughMemoryId` is set at creation and cleared in
+    /// `finish()`, so keying off it gives exactly the right window and matches
+    /// the promise `done` already makes: "You'll find it under Memories
+    /// anytime."
+    /// Tells the walkthrough its memory is visible in the list, so step 3 can
+    /// re-anchor from the View toast to her ringed row. Guarded inside the
+    /// orchestrator; safe to call repeatedly.
+    private func announceIfWalkthroughRow(_ entry: EntryDisplayModel) {
+        guard entry.id == walkthrough.walkthroughMemoryId else { return }
+        walkthrough.memoriesListDidShowWalkthroughMemory()
+    }
+
     private var walkthroughTargetId: UUID? {
-        switch walkthrough.activeBeat {
-        case .openMemory, .memoryInList: return walkthrough.walkthroughMemoryId
-        default:                         return nil
-        }
+        walkthrough.isRunning ? walkthrough.walkthroughMemoryId : nil
     }
 
     enum ViewMode: String, CaseIterable {
@@ -426,10 +441,17 @@ struct JournalView: View {
                             // one because a PreferenceKey does not propagate out
                             // of a `List` (device-only bug, 2026-07) — the row
                             // appearing IS the signal that it is on screen.
-                            .onAppear {
-                                if entry.id == walkthrough.walkthroughMemoryId {
-                                    walkthrough.memoriesListDidShowWalkthroughMemory()
-                                }
+                            // F20b · `onAppear` fires when the row mounts. If the
+                            // Memories list was already rendered behind the flow
+                            // — the normal case — it fired long before the beat
+                            // armed and never fires again, so the list-side
+                            // anchor could not engage. Watch the beat as well:
+                            // whichever happens second is the one that matters.
+                            // `memoriesListDidShowWalkthroughMemory` no-ops
+                            // unless step 3 is open, so both calls are safe.
+                            .onAppear { announceIfWalkthroughRow(entry) }
+                            .onChange(of: walkthrough.activeBeat) { _, _ in
+                                announceIfWalkthroughRow(entry)
                             }
                             // F16 · the target identifies itself. The walkthrough
                             // overlay has no anchoring primitive (no

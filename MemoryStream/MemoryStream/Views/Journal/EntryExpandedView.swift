@@ -286,21 +286,23 @@ struct EntryExpandedView: View {
                     .foregroundStyle(Crucible.Color.ink3)
             }
             headerRow { summarySection }
-            headerRow(top: -3) { topicChipsRow }
-            // Project-context row (F2/F3): "In [project]" membership chips
-            // + a dashed "Edit" affordance. Always shown (like the topic
-            // row) so a memory can always be filed; unified associations
-            // read model (2026-07-17).
-            headerRow(top: -3) { projectSection }
-            // Section order (ruling 2026-07-27): title → summary → TOPICS →
-            // PROJECTS → MENTIONS → PARTS (clips) → Organize → Let Go. The
-            // spec's summary→topics adjacency (`AI Organize · spec.md` §"A
-            // persistent home" — the derived layer reads as one block) is
-            // preserved; the clip body sits AFTER the metadata sections, before
-            // Organize. Supersedes the earlier clips-between-PROJECTS-and-
-            // MENTIONS placement; the "content-first / clips-before-topics"
-            // idea was withdrawn because it would split summary from topics.
-            sectionRow { mentionsSection }
+            // **Section order (ruling 2026-07-31, F19a):**
+            //   title → summary → PARTS (clips) → TOPICS → PROJECTS →
+            //   MENTIONS → Organize → Delete.
+            //
+            // This deliberately REVERSES the 2026-07-27 ordering
+            // (summary → TOPICS → PROJECTS → MENTIONS → PARTS). That ruling
+            // predated seeing a real memory on device: with three empty
+            // "+ Edit" rows stacked under the summary, the only actual content
+            // — her recording — was pushed to a second screen. The metadata
+            // rows are cheap to scroll past; the content is what she opened the
+            // memory for, so it now sits directly under the summary.
+            //
+            // The `AI Organize · spec.md` summary→topics adjacency (the derived
+            // layer reading as one block) is knowingly given up: adjacency is
+            // worth less than the content being visible without scrolling.
+            // Sequenced BEFORE F16's `detailTour`, whose copy describes this
+            // order.
             // Transcript Full ⇄ Compact toggle heads the clip body (PARTS).
             // Hidden for short memories — the header disappears, the body still
             // renders fine without any eyebrow. D1: the clip body carries no
@@ -326,6 +328,13 @@ struct EntryExpandedView: View {
                 }
             }
             bodyContent
+            headerRow(top: -3) { topicChipsRow }
+            // Project-context row (F2/F3): "In [project]" membership chips
+            // + a dashed "Edit" affordance. Always shown (like the topic
+            // row) so a memory can always be filed; unified associations
+            // read model (2026-07-17).
+            headerRow(top: -3) { projectSection }
+            sectionRow { mentionsSection }
             sectionRow {
                 // Memory Detail AI zone — routes to Idle (no pass yet)
                 // / Draft (unreviewed pass, B1 review sheet on tap) /
@@ -839,31 +848,74 @@ struct EntryExpandedView: View {
     /// `summaryUserEdited` to true. Empty content on commit clears
     /// the summary back to nil; the section then renders an empty
     /// placeholder until the next organize pass or another edit.
+    /// **The summary slot always exists** (F19b, 2026-07-31), in one of three
+    /// states. It used to render nothing at all when there was no summary — the
+    /// doc comment claimed "an empty placeholder" that was never built — so an
+    /// un-organized memory showed a truncated transcript as its title and
+    /// simply *no* summary. That reads as broken rather than as not-yet-written,
+    /// and it silently made Organize the only route to a summary, which
+    /// contradicts J2/J5: meaning belongs to the human, the AI observes.
+    ///
+    /// Two doors to one field. She can write her own; Organize can write one.
+    /// Neither is the only way, and the slot never auto-fills from the
+    /// transcript — an excerpt masquerading as a summary is a confident wrong
+    /// proposal, the same lie class as F6i's "0:00".
     @ViewBuilder
     private var summarySection: some View {
         if summaryIsEditing {
             summaryEditor
         } else if let summary = entry.renderedSummary {
             summaryReadable(summary)
+        } else {
+            summaryEmptyInvite
         }
     }
 
-    private var summaryEyebrow: some View {
+    /// Provenance decides the eyebrow, because the eyebrow is a claim about
+    /// *who wrote this*.
+    ///
+    /// AI blue + sparkle is reserved for AI moments (`Crucible`), so wearing it
+    /// over her own words would be the app taking credit for them — the exact
+    /// mirror of the Honest-Label sweep that stopped Organize claiming the AI's
+    /// output was hers. Neutral whenever the text is the user's, or when there
+    /// is no text yet: an AI-blue invite would imply Organize is how you fill
+    /// it, which is the opposite of what this slot exists for.
+    private func summaryEyebrow(aiAuthored: Bool) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 9, weight: .semibold))
+            if aiAuthored {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 9, weight: .semibold))
+            }
             Text("SUMMARY")
                 .font(.caption2)
                 .fontWeight(.bold)
                 .tracking(0.5)
         }
-        .foregroundStyle(Crucible.Color.aiBlue)
+        .foregroundStyle(aiAuthored ? Crucible.Color.aiBlue : Crucible.Color.ink3)
+    }
+
+    /// Empty state — a quiet invite, not a placeholder pretending to be content.
+    /// Taps into the same inline editor every other text field uses.
+    @ViewBuilder
+    private var summaryEmptyInvite: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            summaryEyebrow(aiAuthored: false)
+            Text("Add a summary")
+                .font(.body)
+                .foregroundStyle(Crucible.Color.ink3)
+        }
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { beginEditingSummary() }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Write your own summary for this memory")
     }
 
     @ViewBuilder
     private func summaryReadable(_ summary: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            summaryEyebrow
+            summaryEyebrow(aiAuthored: !entry.summaryUserEdited)
             Text(summary)
                 .font(.body)
                 .foregroundStyle(Crucible.Color.ink)
@@ -878,7 +930,9 @@ struct EntryExpandedView: View {
     @ViewBuilder
     private var summaryEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            summaryEyebrow
+            // Editing IS the user authoring — neutral while she types, whatever
+            // the text was before.
+            summaryEyebrow(aiAuthored: false)
             // `TextField(axis: .vertical)` matches the read view's
             // metrics 1:1 and auto-grows to fit the entire content —
             // a 6-line summary edits in a 6-line field, no internal

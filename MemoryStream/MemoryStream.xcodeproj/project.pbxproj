@@ -197,8 +197,8 @@
 		A200000093 /* WalkthroughOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000093 /* WalkthroughOrchestrator.swift */; };
 		A200000094 /* WalkthroughOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000094 /* WalkthroughOverlay.swift */; };
 		A200000095 /* SectionHelp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000095 /* SectionHelp.swift */; };
-		A200000401 /* CaptureUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000401 /* CaptureUnavailableView.swift */; };
 		A2000000FB /* FABHandednessSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000FB /* FABHandednessSync.swift */; };
+		A200000401 /* CaptureUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000401 /* CaptureUnavailableView.swift */; };
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
@@ -469,8 +469,8 @@
 		B200000093 /* WalkthroughOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOrchestrator.swift; path = MemoryStream/Services/Tutorials/WalkthroughOrchestrator.swift; sourceTree = SOURCE_ROOT; };
 		B200000094 /* WalkthroughOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOverlay.swift; path = MemoryStream/Views/Components/WalkthroughOverlay.swift; sourceTree = SOURCE_ROOT; };
 		B200000095 /* SectionHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SectionHelp.swift; path = MemoryStream/Views/Components/SectionHelp.swift; sourceTree = SOURCE_ROOT; };
-		B200000401 /* CaptureUnavailableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureUnavailableView.swift; path = MemoryStream/Views/Components/CaptureUnavailableView.swift; sourceTree = SOURCE_ROOT; };
 		B2000000FB /* FABHandednessSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FABHandednessSync.swift; path = MemoryStream/Services/FABHandednessSync.swift; sourceTree = SOURCE_ROOT; };
+		B200000401 /* CaptureUnavailableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureUnavailableView.swift; path = MemoryStream/Views/Components/CaptureUnavailableView.swift; sourceTree = SOURCE_ROOT; };
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
