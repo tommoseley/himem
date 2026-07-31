@@ -203,13 +203,19 @@ struct PlaceClipSheet: View {
 
     private func commit() {
         do {
-            switch destination {
-            case .existingMemory:
-                try addToExisting()
-            case .newMemory:
-                try createNewMemory()
-            case .removeFromThisMemory:
-                try removeFromSource()
+            guard try Self.performPlacement(
+                destination: destination,
+                ref: ref,
+                selectedEntryId: selectedEntryId,
+                sourceMemoryId: sourceMemoryId,
+                newMemoryTitle: newMemoryTitle,
+                storage: storage
+            ) else {
+                // Nothing was written — do NOT confirm. Keeping the sheet
+                // open and saying so is the contract `PlaceInboxClipSheet`
+                // already honors below.
+                ErrorState.shared.report(.saveFailed(Self.failureMessage(for: destination)))
+                return
             }
             onPlaced?()
             dismiss()
@@ -218,49 +224,147 @@ struct PlaceClipSheet: View {
         }
     }
 
-    private func addToExisting() throws {
-        guard let entryId = selectedEntryId else { return }
+    /// Performs the placement and answers the one question `commit()` is
+    /// allowed to act on: **did anything actually get written?**
+    ///
+    /// `false` means the destination didn't resolve and nothing changed.
+    /// The caller must not fire `onPlaced?()` or dismiss on that path — a
+    /// confirmed placement that never happened is worse than a no-op,
+    /// because the user has been told the clip moved and has no reason to
+    /// look again (F23 T1.2, audit 2026-07-31). The sibling
+    /// `PlaceInboxClipSheet.commit()` has always checked its return code;
+    /// this struct predates that contract and was never brought up to it.
+    @MainActor
+    static func performPlacement(
+        destination: Destination,
+        ref: MediaReference,
+        selectedEntryId: UUID?,
+        sourceMemoryId: UUID?,
+        newMemoryTitle: String,
+        storage: StorageService
+    ) throws -> Bool {
+        switch destination {
+        case .existingMemory:
+            return try addToExisting(
+                ref: ref,
+                selectedEntryId: selectedEntryId,
+                sourceMemoryId: sourceMemoryId,
+                storage: storage
+            )
+        case .newMemory:
+            return try createNewMemory(
+                ref: ref,
+                sourceMemoryId: sourceMemoryId,
+                newMemoryTitle: newMemoryTitle,
+                storage: storage
+            )
+        case .removeFromThisMemory:
+            return try removeFromSource(
+                ref: ref,
+                sourceMemoryId: sourceMemoryId,
+                storage: storage
+            )
+        }
+    }
+
+    /// The line the sheet shows when the destination is gone — the memory
+    /// was deleted (or synced away) while the sheet was open, so "try
+    /// again" is the honest instruction. Same sentence as the sibling's;
+    /// the verb tracks the button the user actually tapped.
+    static func failureMessage(for destination: Destination) -> String {
+        switch destination {
+        case .existingMemory, .newMemory: return "Couldn't add this clip. Try again."
+        case .removeFromThisMemory:       return "Couldn't remove this clip. Try again."
+        }
+    }
+
+    @MainActor
+    private static func addToExisting(
+        ref: MediaReference,
+        selectedEntryId: UUID?,
+        sourceMemoryId: UUID?,
+        storage: StorageService
+    ) throws -> Bool {
+        guard let entryId = selectedEntryId else { return false }
         let ctx = storage.viewContext
         let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         req.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
         req.fetchLimit = 1
-        guard let entry = try ctx.fetch(req).first else { return }
+        guard let entry = try ctx.fetch(req).first else { return false }
         try StorageService.createEdge(from: entry, to: ref, linkedAt: Date(), in: ctx)
-        try dropSourceEdge(in: ctx)
+        try dropSourceEdge(ref: ref, sourceMemoryId: sourceMemoryId, in: ctx)
         try storage.save(context: ctx)
+        return true
     }
 
-    private func createNewMemory() throws {
+    /// Always `true` on return: `createEntry` and `save` throw on failure,
+    /// and a blank title is legal, so there is no "resolved nothing" path
+    /// to report here.
+    @MainActor
+    private static func createNewMemory(
+        ref: MediaReference,
+        sourceMemoryId: UUID?,
+        newMemoryTitle: String,
+        storage: StorageService
+    ) throws -> Bool {
         let ctx = storage.viewContext
         let entry = try storage.createEntry(content: "", inputType: .typed)
         let trimmed = newMemoryTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { entry.title = trimmed }
         try StorageService.createEdge(from: entry, to: ref, linkedAt: Date(), in: ctx)
-        try dropSourceEdge(in: ctx)
+        try dropSourceEdge(ref: ref, sourceMemoryId: sourceMemoryId, in: ctx)
         try storage.save(context: ctx)
+        return true
     }
 
-    private func removeFromSource() throws {
-        guard let sourceId = sourceMemoryId else { return }
+    /// `false` when there is no edge to drop — the clip is already out of
+    /// that memory, so "Removed" would be a claim about work that didn't
+    /// happen. The edge is resolved here rather than trusting
+    /// `removeClipFromMemory`, which returns `Void` and swallows the same
+    /// miss.
+    @MainActor
+    private static func removeFromSource(
+        ref: MediaReference,
+        sourceMemoryId: UUID?,
+        storage: StorageService
+    ) throws -> Bool {
+        guard let sourceId = sourceMemoryId else { return false }
+        guard try sourceEdge(ref: ref, sourceMemoryId: sourceId, in: storage.viewContext) != nil
+        else { return false }
         let service = EntryLifecycleService(storage: storage, processingEngine: nil)
         service.removeClipFromMemory(memoryId: sourceId, refId: ref.id)
+        return true
     }
 
     /// Drops the edge from `sourceMemoryId` if set — used by both
     /// "Move to another memory" and "Into a new memory" so the clip
     /// really moves out of its source, not just gets copied.
-    private func dropSourceEdge(in ctx: NSManagedObjectContext) throws {
+    @MainActor
+    private static func dropSourceEdge(
+        ref: MediaReference,
+        sourceMemoryId: UUID?,
+        in ctx: NSManagedObjectContext
+    ) throws {
         guard let sourceId = sourceMemoryId else { return }
+        if let edge = try sourceEdge(ref: ref, sourceMemoryId: sourceId, in: ctx) {
+            ctx.delete(edge)
+        }
+    }
+
+    @MainActor
+    private static func sourceEdge(
+        ref: MediaReference,
+        sourceMemoryId: UUID,
+        in ctx: NSManagedObjectContext
+    ) throws -> MemoryClipEdge? {
         let edgeReq = NSFetchRequest<MemoryClipEdge>(entityName: "MemoryClipEdge")
         edgeReq.predicate = NSPredicate(
             format: "clipId == %@ AND memoryId == %@",
             ref.id as CVarArg,
-            sourceId as CVarArg
+            sourceMemoryId as CVarArg
         )
         edgeReq.fetchLimit = 1
-        if let edge = try ctx.fetch(edgeReq).first {
-            ctx.delete(edge)
-        }
+        return try ctx.fetch(edgeReq).first
     }
 }
 
