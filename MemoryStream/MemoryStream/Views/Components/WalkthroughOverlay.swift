@@ -176,12 +176,12 @@ struct WalkthroughOverlay: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 12))
-                    Button("Not now — you'll find this in Settings → Learn.", action: orchestrator.skip)
+                    Button("Not now — you'll find this in Learn → Show me around.", action: orchestrator.skip)
                         .font(.system(size: 13))
                         .foregroundStyle(Crucible.Color.ink3)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .accessibilityLabel("Not now — you'll find this later in Settings, under Learn")
+                        .accessibilityLabel("Not now — you'll find this later in Learn, under Show me around")
                 }
                 .padding(.top, 4)
             }

@@ -400,10 +400,23 @@ struct WalkthroughOrchestratorTests {
         #expect(copy == Beat.openMemory.body(alreadyOrganized: true), "tier-independent")
     }
 
+    /// **This is a MEANING test, not a phrasing test** (CLAUDE.md § "Assert
+    /// the Meaning, Not the Phrasing"). A failure here means one of the two
+    /// promises was DROPPED, not that the sentence was reworded.
+    ///
+    /// It failed once, on F27 (2026-08-01), and the diagnosis was exactly the
+    /// distinction the rule exists for: the second assertion pinned the
+    /// literal `"Settings → Learn"` while its own message said it was
+    /// guarding *"names the re-run path."* The path moved to the nearer,
+    /// control-naming route (`Learn → Show me around`) and the promise was
+    /// intact — so the assertion was rewritten to pin the promise. It now
+    /// binds to the SHIPPED row title rather than any literal, so copy and
+    /// control cannot drift apart.
     @Test func doneBeat_closingLineKeepsBothPromises() {
         let line = Beat.closingLine
         #expect(line.contains("beside a section"), "names the per-section ? help (F7c)")
-        #expect(line.contains("Settings → Learn"), "names the re-run path")
+        #expect(line.contains(TutorialCatalog.tour.title),
+                "names the re-run path by the control that ships (\(TutorialCatalog.tour.title))")
     }
 
     @Test func offerCopy_promisesTheProcess_noOntology() {

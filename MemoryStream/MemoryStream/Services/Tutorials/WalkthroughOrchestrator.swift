@@ -462,9 +462,19 @@ extension WalkthroughOrchestrator.Beat {
 
     /// The single closing line on the final beat (`done`): the per-section `?`
     /// hand-off (F7c) + the re-run path (Settings → Learn). One light exhale.
-    static let closingLine = "Anytime: tap ? beside a section for help, or run this walkthrough again from Settings → Learn."
+    /// F27 · name the CONTROL, not just a location. The old line pointed at
+    /// "Settings → Learn" — a real path, but it stopped at the door: what she
+    /// taps once inside is a row called **Show me around**, and nothing told
+    /// her that. A breadcrumb that names a place but not the thing to press
+    /// is how "I have no idea what I'm supposed to do" happens one screen
+    /// later. Bound to the shipped row by `WalkthroughBreadcrumbTests`.
+    static let closingLine = "Anytime: tap ? beside a section for help, or start this again from Learn → Show me around."
 
     /// The breadcrumb beside "Got it." so a dismissal never drops the user with
     /// nowhere to go. Not shown on the final beat, which carries `closingLine`.
-    static let skipBreadcrumb = "You'll find this again in Settings → Learn."
+    /// F27 · names the nearer path and the control. `Settings → Learn` was
+    /// true but was the LONGER of two routes — there is a `?` in the toolbar
+    /// of the screen she is already on — and it never named the row she has
+    /// to recognise when she arrives.
+    static let skipBreadcrumb = "You'll find this again in Learn — tap ? at the top, then Show me around."
 }
