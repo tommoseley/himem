@@ -10,10 +10,18 @@ import AVFoundation
 ///
 /// **iOS-only.** AVFoundation's `AVAssetWriter` / `AVAssetReader` are
 /// unavailable on watchOS, so this lives in the shared folder but is
-/// only linked into the iPhone target. Watch clips arrive as raw PCM
-/// via WatchConnectivity, then get compressed on the phone in
-/// `WatchSessionDelegate` before landing in the inbox. Phone direct-
-/// voice clips get compressed in the same pipeline that splits them.
+/// only linked into the iPhone target.
+///
+/// **Watch clips no longer arrive as raw PCM.** Since 4a (July 2026) the watch
+/// transcodes to mono/16 kHz/AAC on-device before `transferFile`, so arrived
+/// clips already conform and `compressIfPossible` SKIPS them (RH-3 — an
+/// AAC→AAC re-encode measured ~2.7x attenuation). It now compresses only a
+/// non-conforming file, e.g. a legacy raw-PCM artifact. `WatchSessionDelegate`
+/// documents that retirement explicitly; this header still asserted the old
+/// premise until 2026-07-31.
+///
+/// Phone direct-voice clips get compressed in the same pipeline that splits
+/// them — that half is unchanged.
 ///
 /// AAC is iOS-native; no MP3 codec ships with `AVAssetWriter`. The
 /// output container is `.m4a` (standard AAC home). Existing `.caf`

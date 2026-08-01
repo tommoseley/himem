@@ -826,10 +826,15 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     ///      transfer, and the pending count clears in real time.
     ///   2. **`transferUserInfo` (durable)** — always queued as backup so
     ///      that if the watch goes to sleep or is out of range, the ack
-    ///      still delivers when the watch next activates. The watch's
-    ///      `handleAckPayload` is idempotent — re-sets of the same
-    ///      `@Published lastAckedClipId` to the same value don't re-fire
-    ///      the Combine sink, so receiving via both paths is harmless.
+    ///      still delivers when the watch next activates. Receiving via both
+    ///      paths is harmless — but NOT for the reason this comment used to
+    ///      give. `@Published` has no equality check, so re-assigning the same
+    ///      value DOES re-fire the sink, and `WatchAckPipelineMultiClipTests`
+    ///      explicitly forbids adding `.removeDuplicates()` (it would drop
+    ///      in-flight acks for distinct clips). What makes the double delivery
+    ///      safe is the sink's work being idempotent: `pending.remove(clipId:)`
+    ///      / `removeByRollGroup` on an already-removed row is a no-op. Right
+    ///      conclusion, wrong mechanism — corrected 2026-07-31.
     ///
     /// Previously we used `transferUserInfo` only. Durable, but the
     /// system delays its delivery to "when appropriate" — typically

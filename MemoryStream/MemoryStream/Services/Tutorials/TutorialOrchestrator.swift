@@ -4,7 +4,7 @@ import Combine
 /// Decides whether an auto-fire tutorial should surface NOW. Surface
 /// code calls `tryFire(.organizing)` (etc.) at the natural trigger
 /// moment; the orchestrator either returns true (caller presents the
-/// tutorial; `markSeen` flips the persisted flag on dismiss) or false
+/// tutorial; `dismiss(_:)` flips the persisted flag) or false
 /// (the call is a silent no-op — the unseen flag means the *next*
 /// natural trigger re-attempts, satisfying the once-each guarantee
 /// without queueing).
@@ -12,7 +12,18 @@ import Combine
 /// **Locked rules** (per `docs/design/Tutorials · triggers spec.md`,
 /// June 11 2026):
 /// - Every tutorial fires automatically, **exactly once**. Persisted
-///   per-tutorial `hasSeen<Name>` flag; only `markSeen` flips it.
+///   per-tutorial `hasSeen<Name>` flag.
+///
+///   **TWO things flip it, not one.** There is no `markSeen` — that name
+///   appears nowhere in the codebase. The writers are `dismiss(_:)` (the user
+///   saw it and closed it) and `retireOnePagersReplacedByWalkthrough()`, which
+///   marks `.capture` and `.organizing` seen **without the user ever seeing
+///   them** because the F8 walkthrough already taught those steps. That second
+///   writer is deliberate and load-bearing (Tom 2026-07-28), and it is exactly
+///   what the old "only `markSeen` flips it" wording denied — so a reader
+///   debugging "why didn't the capture one-pager fire?" was sent looking for a
+///   function that doesn't exist instead of at the walkthrough. Corrected
+///   2026-07-31.
 /// - **One auto-tutorial per session, max one per day — by deferral,
 ///   never cancellation.** A deferred fire keeps its unseen state and
 ///   re-attempts at its next natural trigger.
@@ -73,14 +84,21 @@ final class TutorialOrchestrator: ObservableObject {
     /// the user's first meaningful tap — we don't want a tutorial to
     /// land on the launch screen.
     ///
-    /// The flag is *post*-onboarding too: PermissionWizardView calls
-    /// `armForReadyState()` only when the wizard finishes. If a user
-    /// is still in onboarding, this stays false.
+    /// The flag is *post*-onboarding too: nothing arms it until the user is on
+    /// the Memories surface (see `armForReadyState`), so a user still in
+    /// onboarding leaves this false.
     @Published private(set) var isArmed: Bool = false
 
-    /// Flip from `OnboardingComplete` / "user has navigated at least
-    /// once after launch". Call this from `LaunchScreenView` when the
-    /// main UI takes over.
+    /// Flips the armed flag once the main UI is up and the user has landed on
+    /// a real surface.
+    ///
+    /// Called from `JournalView` (`:193`) — the sole caller. Neither
+    /// `LaunchScreenView` (which this comment used to name) nor
+    /// `PermissionWizardView` (which the property doc above names) calls it.
+    /// Both were describing intended wiring that landed somewhere else;
+    /// corrected 2026-07-31. The behaviour is right either way — Memories is
+    /// the cold-launch destination, so arming there IS "the main UI took
+    /// over" — but the doc should name the caller that exists.
     func armForReadyState() {
         isArmed = true
     }

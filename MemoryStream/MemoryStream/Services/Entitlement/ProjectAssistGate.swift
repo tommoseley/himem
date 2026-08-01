@@ -3,15 +3,16 @@ import Foundation
 /// Pure decision: is the "Find the thread" button (Project Assist)
 /// enabled for a project?
 ///
-/// Spec intent (Projects MVP spec § Trigger, cost) is to activate
-/// at ≥1 memory: "with one memory the 'summary' is closer to a
-/// paraphrase than a synthesis — fine; the user gets back what
-/// they asked for." Until we've validated the 1-memory output
-/// feels honest in TestFlight, this ships with the threshold gated
-/// off — production stays on the conservative ≥3 behavior.
+/// Per the Projects MVP spec (§ Trigger, cost) this activates at **≥1
+/// memory**: "with one memory the 'summary' is closer to a paraphrase than a
+/// synthesis — fine; the user gets back what they asked for."
 ///
-/// Flip `allowSingleMemoryThreshold` to `true` when ready; the
-/// spec-intended behavior takes over with no other code changes.
+/// **That is the shipping behaviour.** `allowSingleMemoryThreshold` was
+/// flipped to `true` on 2026-06-01, so `minimumMemories` is 1. This header
+/// used to say the opposite — "ships with the threshold gated off, production
+/// stays on the conservative ≥3" — contradicting the property's own doc four
+/// lines below it. Corrected 2026-07-31; the flag survives as the way back to
+/// ≥3 if the one-memory output ever reads as thin.
 enum ProjectAssistGate {
     /// Set to `true` to use the spec-intended ≥1 memory threshold.
     /// `false` keeps the previous conservative ≥3 behavior for the

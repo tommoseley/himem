@@ -16,9 +16,18 @@ import WatchKit
 /// Spec'd behaviors:
 ///
 /// - 5-minute hard cap with auto-stop
-/// - Wrist-off → auto stop & save (never discards) — handled by
-///   WKExtension's deactivate path; this service exposes `stop(save:)`
-///   for the deactivate observer to call.
+/// - 5-minute hard cap with auto-stop (above).
+/// - **Wrist-off → auto stop.** The net is SwiftUI:
+///   `WatchRecordingView.onDisappear` → `handleDisappear`, which calls
+///   `stop(save:)`. There is no `WKExtension` deactivate observer — no
+///   `WKExtension` reference exists in this target at all; that owner was
+///   documented and never built (corrected 2026-07-31).
+/// - **It does not "never discard".** `handleDisappear` saves only when the
+///   clip is not effectively empty: `elapsed < 1.0 && peakAudioLevel < 0.1`
+///   is treated as a tap-and-leave and passed `stop(save: false)`. The
+///   perishability rule is "never discard a thought the user walked away
+///   from" — a sub-second silent tap is not a thought, and that judgment is
+///   deliberate, not an oversight.
 /// - Single shot — recording one clip at a time; calling `start()` while
 ///   active is a no-op.
 @MainActor
@@ -26,10 +35,18 @@ final class WatchRecordingService: NSObject, ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var transcript: String = ""
-    /// Normalised mic input level in 0...1, sampled from
-    /// `AVAudioRecorder.averagePower(forChannel:)` and mapped to a
-    /// perceptually-flat range so the recording disc breathes with real
-    /// loudness. Quiet room ≈ 0; conversational speech ≈ 0.4–0.7;
+    /// Normalised mic input level in 0...1.
+    ///
+    /// Computed from the **true per-buffer peak of the input tap's PCM**
+    /// (`abs` max over the buffer, merged through `WaveformLevelThrottle`,
+    /// then `normalisedLevel(forPeakAmplitude:)`) — NOT from
+    /// `AVAudioRecorder.averagePower(forChannel:)`, which this class's own
+    /// header explains was abandoned for smearing transients with peak-hold
+    /// ballistics. The doc naming `averagePower` described the retired
+    /// mechanism (corrected 2026-07-31).
+    ///
+    /// Mapped to a perceptually-flat range so the recording disc breathes with
+    /// real loudness. Quiet room ≈ 0; conversational speech ≈ 0.4–0.7;
     /// shouting ≈ ~1.0. Driven by the same `tick` loop as `elapsed`.
     @Published private(set) var audioLevel: CGFloat = 0
 

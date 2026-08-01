@@ -35,8 +35,17 @@ final class SpeechService: ObservableObject {
     @Published var transcribedText = ""
     @Published var lastRecordingPath: String?
     @Published var error: SpeechError?
-    /// True once the SpeechTranscriber model is installed AND the
-    /// analyzer is prepared. UI gates the record button on this.
+    /// True once the SpeechTranscriber model is installed AND the analyzer is
+    /// prepared.
+    ///
+    /// **No UI reads this.** It is written once (`:257`) and read only inside
+    /// an `NSLog` in `startRecording`. The comment claiming "UI gates the
+    /// record button on this" described a gate that was never built
+    /// (corrected 2026-07-31) — the record button is always live, which is
+    /// consistent with the perishability rule: capture is one action from
+    /// anywhere, and a model that isn't ready degrades the transcript, not
+    /// the recording. Kept as a diagnostic; if a gate is ever wanted, that is
+    /// a design decision, not a wiring fix.
     @Published var isModelReady = false
     /// Normalised mic input level in 0...1 for the voice composer's
     /// live waveform. Sampled in the audio tap (peak amplitude →

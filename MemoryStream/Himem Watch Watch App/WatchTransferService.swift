@@ -273,12 +273,21 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         15_000_000_000   // 15s
     ]
 
-    /// Schedules a delayed re-attempt at `send(clip:)` for a clip
-    /// whose audio file wasn't on disk at the original call site.
-    /// Idempotent across multiple triggers: if a retry is already
-    /// scheduled at index N, a new call at the same index will be
-    /// suppressed by the retry-count map. Different clipIds are
-    /// independent.
+    /// Schedules a delayed re-attempt at `send(clip:)` for a clip whose audio
+    /// file wasn't on disk at the original call site.
+    ///
+    /// **Not idempotent across triggers.** The counter is incremented BEFORE
+    /// the Task is scheduled, so a second call doesn't collide with the first
+    /// — it reads the next index and schedules another sleeping Task. Three
+    /// triggers in the same window stack three of them. The CAP is real (the
+    /// clip can't retry forever); the de-duplication this comment used to
+    /// claim is not, and never was (corrected 2026-07-31).
+    ///
+    /// Harmless today because `send(clip:)` is itself idempotent — a clip
+    /// already ready+complete transfers without re-encoding, and
+    /// `shouldEnqueue` refuses anything outstanding or delivered-awaiting-ack.
+    /// Worth knowing before anyone relies on the suppression that isn't there.
+    /// Different clipIds are independent.
     private func scheduleFileMissingRetry(for clip: WatchPendingClip) {
         let attempt = fileMissingRetryCounts[clip.clipId] ?? 0
         guard attempt < fileMissingRetryDelays.count else {
