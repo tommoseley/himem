@@ -19,10 +19,20 @@ import FoundationModels
 /// behavior** — prompt tuning against a model Apple changes every OS release
 /// is permanently unstable. Honesty is enforced in **deterministic code**
 /// (`TruthReconciler`, applied on BOTH tiers via
-/// `ProcessingEngine.reconcileResult` — on-device gets `.strict` grounding):
-/// a proper name in the summary that the clips don't contain is rejected →
+/// `ProcessingEngine.reconcileResult`): a proper name in the summary that the
+/// clips don't contain is rejected →
 /// retry once → constrained extractive fallback ("say less before saying
-/// false"). Models are advisory; code is authoritative. Documented 3B QUALITY ceilings
+/// false"). Models are advisory; code is authoritative.
+///
+/// **Correction (2026-07-31):** this said on-device "gets `.strict` grounding."
+/// It does not — summary/title grounding is `.relaxed` on both tiers (strict
+/// exact-substring was removed 2026-07-24 for flagging legitimate name
+/// expansions). What on-device does get, and the frontier does not, is the
+/// ungrounded-**mention** drop. The Honest-Label argument for shipping the 3B
+/// to Free rests on relaxed grounding (which still catches a name sharing no
+/// token with the clips) + `titleViolates` + the verbatim-quote check +
+/// `fabricatedStructuralClaims` + that mention drop + the draft never being
+/// authoritative — not on a strictness the pipeline never passed. Documented 3B QUALITY ceilings
 /// that remain (hand-editable, frontier/Plus clears them, not open bugs):
 /// purposive drift · visible-photo claims · occasional voice slip ·
 /// subject-out POV slip · invent-a-speaker · structural-metadata leak
