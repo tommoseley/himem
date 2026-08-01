@@ -60,6 +60,11 @@ struct ClipEditorModal: View {
     /// presented over the bench is a message nobody reads. F18's ruled
     /// honest-failure placement: put it where the dead interface was.
     @State private var saveError: String? = nil
+    /// The last value this modal committed AND confirmed stored. Set
+    /// only from a write that reported success, so it can never assert
+    /// an edit that did not land. See `backingContent` for why a bench
+    /// clip cannot simply be re-read.
+    @State private var committedContent: String? = nil
 
     // Zone 2 — single-open edge accordion + inline annotation edit.
     @State private var openEdgeId: UUID? = nil
@@ -545,7 +550,29 @@ struct ClipEditorModal: View {
         }
     }
 
+    /// What Zone 1 must display: the value we last committed **and
+    /// confirmed stored**, else the backing's own value.
+    ///
+    /// `nil` committed → read the backing. Pure + static so the
+    /// invariant is red-able without a SwiftUI runtime.
+    static func resolvedContent(committed: String?, backing: String) -> String {
+        committed ?? backing
+    }
+
     private var currentContent: String {
+        Self.resolvedContent(committed: committedContent, backing: backingContent)
+    }
+
+    /// The backing store's own value. For `.managed` this is a live
+    /// `NSManagedObject` read. For `.inbox` it is a **frozen snapshot**:
+    /// `InboxClip` is a struct, captured when `.sheet(item:)` presented
+    /// this modal, and nothing here ever re-reads the manifest. So a
+    /// successful bench edit displayed the PRE-EDIT text — the save had
+    /// worked and the screen said otherwise (F24 Defect 2).
+    /// `committedContent` is what closes that, and it is only ever set
+    /// from a write that reported success (Defect 3), so the display
+    /// cannot claim an edit that did not land.
+    private var backingContent: String {
         switch source {
         case .inbox(let clip): return clip.transcript
         case .managed(let ref):
@@ -710,6 +737,8 @@ struct ClipEditorModal: View {
             }
         }
         saveError = (stored == nil) ? Self.saveFailedMessage : nil
+        // Only on a confirmed write — never display what we could not store.
+        if let stored { committedContent = stored }
     }
 
     /// What the top-bar **Done** must do with an open draft. `nil` = no
