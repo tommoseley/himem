@@ -65,6 +65,11 @@ struct ClipEditorModal: View {
     /// an edit that did not land. See `backingContent` for why a bench
     /// clip cannot simply be re-read.
     @State private var committedContent: String? = nil
+    /// This session's re-transcription returned `.transcribed` with no
+    /// text — the run succeeded and there was nothing to hear. Distinct
+    /// from "not yet transcribed" (see `EmptyContentState`) and from a
+    /// deferral, which is what `retryStatus` carries.
+    @State private var heardNothing = false
 
     // Zone 2 — single-open edge accordion + inline annotation edit.
     @State private var openEdgeId: UUID? = nil
@@ -90,6 +95,25 @@ struct ClipEditorModal: View {
     /// clips. Try again."), approved 2026-07-31. Crucible voice: names
     /// the state, never blames the user, offers the one useful action.
     static let saveFailedMessage = "Couldn't save your edit. Try again."
+
+    /// The AI action's label. **"again" is a claim about history and
+    /// must be true**: with no transcript nothing is being repeated, and
+    /// her model is "please transcribe this," not "retry" (F21).
+    ///
+    /// Offering it on an empty transcript is not a re-roll. F21 reasoned
+    /// that re-transcribe is a *retry* — same audio, same model, same
+    /// output — and the one thing that legitimately justifies a re-run
+    /// is a genuine condition change. There is one: `4a08423` fixed the
+    /// `.measurement` gain suppression, so every clip recorded before it
+    /// was captured under-gained, and a re-run on those can now succeed
+    /// where it previously heard nothing. That is exactly the population
+    /// this state describes.
+    ///
+    /// Crucible: blue AI buttons name the AI with a trailing sparkle
+    /// (the glyph is applied in `retranscribeAction`).
+    static func transcribeActionLabel(hasTranscript: Bool) -> String {
+        hasTranscript ? "Transcribe again with AI" : "Transcribe with AI"
+    }
 
     // MARK: - Body
 
@@ -317,7 +341,7 @@ struct ClipEditorModal: View {
                     if isRetranscribing {
                         ProgressView().controlSize(.small)
                     }
-                    Text(isRetranscribing ? "Transcribing…" : "Transcribe again with AI")
+                    Text(isRetranscribing ? "Transcribing…" : Self.transcribeActionLabel(hasTranscript: !currentContent.isEmpty))
                     if !isRetranscribing { Image(systemName: "sparkles").font(.system(size: 12)) }
                 }
                 .font(.system(size: 14, weight: .semibold))
@@ -584,10 +608,72 @@ struct ClipEditorModal: View {
         }
     }
 
+    /// Why an empty Zone 1 is three facts, not one.
+    ///
+    /// "We haven't transcribed this yet" and "we transcribed it and
+    /// there were no words" are **different facts and must never share
+    /// a string** (ruled 2026-07-31). Before F24 Defect 4 they shared
+    /// `"(no transcript)"`, and the transcribed-to-silence case had no
+    /// voice at all: `retranscribe` set `retryStatus` from
+    /// `userFacingDeferralMessage`, which returns nil for `.transcribed`
+    /// — so a run that succeeded and heard nothing showed a spinner
+    /// that returned to idle and said nothing. Indistinguishable from a
+    /// dead button.
+    ///
+    /// "No words in this recording." is the honest state: the
+    /// transcription ran and heard nothing. Not a failure, not a
+    /// deferral, no blame, and it promises no retry that won't help.
+    enum EmptyContentState: Equatable {
+        /// Photo/video with no description — an invitation, not a report.
+        case needsDescription
+        /// Never transcribed, or the attempt failed and will be retried.
+        case notYetTranscribed
+        /// Transcribed successfully; the recording contained no speech.
+        case transcribedToSilence
+
+        var message: String {
+            switch self {
+            case .needsDescription:     return "Add a description"
+            case .notYetTranscribed:    return "(no transcript)"
+            case .transcribedToSilence: return "No words in this recording."
+            }
+        }
+    }
+
+    /// Pure resolution of the three empty states, so each fact is
+    /// red-able independently of the SwiftUI runtime.
+    ///
+    /// - Parameter heardNothing: this session's re-transcription
+    ///   returned `.transcribed` with empty text.
+    /// - Parameter attemptedAndEmpty: the *stored* signal — the clip
+    ///   records a completed transcription attempt and has no text.
+    static func emptyContentState(isDescriptionField: Bool,
+                                  heardNothing: Bool,
+                                  attemptedAndEmpty: Bool) -> EmptyContentState {
+        if isDescriptionField { return .needsDescription }
+        return (heardNothing || attemptedAndEmpty) ? .transcribedToSilence : .notYetTranscribed
+    }
+
+    /// The stored "we transcribed it and it was empty" signal. Only
+    /// `.inbox` carries it (`InboxClip.transcriptionAttempted`);
+    /// `MediaReference` has no equivalent field, so a *managed* clip
+    /// that transcribed to silence reads as `.notYetTranscribed` until
+    /// she re-runs it in this session. Stated rather than papered over:
+    /// closing it needs a schema attribute and a CloudKit deploy
+    /// (the F6i option-C trade), which is not a nine-days-out change.
+    private var attemptedAndEmpty: Bool {
+        guard currentContent.isEmpty else { return false }
+        if case .inbox(let clip) = source { return clip.transcriptionAttempted }
+        return false
+    }
+
     private var displayContent: String {
-        currentContent.isEmpty
-            ? (media == .photo || media == .video ? "Add a description" : "(no transcript)")
-            : currentContent
+        guard currentContent.isEmpty else { return currentContent }
+        return Self.emptyContentState(
+            isDescriptionField: media == .photo || media == .video,
+            heardNothing: heardNothing,
+            attemptedAndEmpty: attemptedAndEmpty
+        ).message
     }
 
     private var contentLabel: String { (media == .photo || media == .video) ? "Description" : "Transcript" }
@@ -840,10 +926,24 @@ struct ClipEditorModal: View {
                 isRetranscribing = false
                 let text = outcome.textOrEmpty.trimmingCharacters(in: .whitespacesAndNewlines)
                 if text.isEmpty {
-                    retryStatus = outcome.userFacingDeferralMessage
+                    // Two very different empty results, and conflating them is
+                    // what made this button read as dead (F24 Defect 4).
+                    // `.transcribed` with no text means the run SUCCEEDED and
+                    // heard nothing — `userFacingDeferralMessage` is nil for
+                    // that case by design, so the old code showed nothing at
+                    // all. Say the honest thing instead, in the transcript's
+                    // own slot. Everything else is a genuine deferral.
+                    if case .transcribed = outcome {
+                        heardNothing = true
+                        retryStatus = nil
+                    } else {
+                        heardNothing = false
+                        retryStatus = outcome.userFacingDeferralMessage
+                    }
                 } else {
                     // Reseed the edit field with the fresh transcript; the user
                     // still commits via Done (one commit path).
+                    heardNothing = false
                     contentDraft = text
                 }
             }
