@@ -53,10 +53,9 @@ struct TranscriptionMaxDurationTests {
             Issue.record("Fixture long-speech-90s.caf missing")
             return
         }
-        guard await TranscriptionService.shared.modelIsInstalled(for: .current) else {
-            print("[Test] skipped — model not installed in this simulator")
-            return
-        }
+        guard await SpeechAssetGate.canExerciseTranscription(
+                "a six-minute clip round-trips compress + transcribe"
+            ) else { return }
 
         // Loop the 90 s fixture x 4 → ~360 s of speech audio. Just
         // over the watch's 300 s cap so any boundary effect (encoder

@@ -58,10 +58,9 @@ struct AudioCompressorTests {
 
         // Money assertion #2 — round-trips through the transcription
         // pipeline. Skip when the model isn't installed (env-dependent).
-        guard await TranscriptionService.shared.modelIsInstalled(for: .current) else {
-            print("[Test] skipping transcription leg — model not installed")
-            return
-        }
+        guard await SpeechAssetGate.canExerciseTranscription(
+                "a compressed clip still round-trips through transcription"
+            ) else { return }
         let outcome = await TranscriptionService.shared.transcribe(audioURL: dest)
         guard case .transcribed(let result) = outcome else {
             Issue.record("AAC file produced \(outcome) — expected .transcribed; round-trip broken")

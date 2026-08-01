@@ -38,10 +38,9 @@ struct WatchClipTranscriptionTests {
             Issue.record("Test fixture long-speech-90s.caf missing from MemoryStreamTests bundle")
             return
         }
-        guard await TranscriptionService.shared.modelIsInstalled(for: .current) else {
-            print("[Test] skipping watch-format repro — speech model not installed for current locale")
-            return
-        }
+        guard await SpeechAssetGate.canExerciseTranscription(
+                "watch-format .caf transcribes to non-empty text"
+            ) else { return }
 
         let source = try AVAudioFile(forReading: fixture)
         let sourceFormat = source.processingFormat  // typically Float32 non-interleaved at file rate
