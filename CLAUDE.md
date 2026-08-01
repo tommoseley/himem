@@ -70,6 +70,17 @@ This rule applies to all runtime defects including: exceptions, incorrect output
 
 *Origin: 2026-07-30, F16. Rewording the organize beat to the plural ("only what's in **them**") broke `organizeBeat_isTierAware_honestLabel`, which had pinned the singular literal. The promise was intact; only the phrasing had moved. Rewritten to assert the limit-naming clause per tier, plus the new "Nothing happens until you ask" promise — so the requirement is pinned rather than incidental.*
 
+### Guard the Caller, Not Just the Owner (Mandatory)
+
+**A test that proves an owner is correct proves nothing about whether anyone still calls it.** Every guard MUST assert that *the caller reaches the decision*, not merely that the decision is right — and every guard MUST be verified to fail.
+
+- **Test the wiring, not only the primitive.** "Does `isTransferReady` return false for raw PCM?" is a different question from "does the transfer path still ask?" Write the second one. Where the call site is private, unreachable, or bound to a system singleton, a **mechanical source-level assertion** is a legitimate guard — anchored on the real file, with a self-test proving the matcher recognizes the defect, and a walk that **throws if it reaches no source** (it must not pass by matching nothing).
+- **Mutation-verify every guard.** Break the invariant on purpose, watch the guard fail, put it back. *A guard that has never failed is a guard nobody has tested.* Record in the commit what you broke and what failed.
+- **A silent skip is not coverage.** A `print`-and-`return`, an environment-gated early exit, or a `#expect(true)` reports as **passed**. If a test cannot run, it must say so as a failure that names the cause and the remedy. Never add a local opt-out — an opt-out is how the gap hides.
+- **State the gate honestly.** When a suite is green with legs that never executed, the green is a count, not a coverage claim. Say which is which.
+
+*Origin: 2026-07-31, F23 Tier 2 — three instances in one pass, all the same failure. **T2.3**: `SessionListView` hand-rolled a second `AVAudioPlayer` while the correct `AudioPlayerService` sat unused. **T2.6**: deleting the `isTransferReady` guard from `enqueueReadyTransfer` left **all six** `WatchTransferAudioTranscoderTests` green — a suite CLAUDE.md names as the guard for "raw PCM never ships." **`:614`**: CC added `finishAppend`, tested it, and left the early `return` that bypassed it — reproducing the class one hour after closing it, with four green seam tests hiding it. Also that day: eight transcription legs silently skipped on the dev simulator, so every "1195 passed" gate that session contained zero end-to-end transcription coverage. A test style written against owners in isolation cannot see any of this.*
+
 ### Money Tests
 
 Bug fixes MUST include a "money test" that reproduces the exact root-cause scenario:
