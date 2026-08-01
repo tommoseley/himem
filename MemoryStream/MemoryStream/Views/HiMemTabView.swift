@@ -45,6 +45,11 @@ struct HiMemTabView: View {
     @StateObject private var speechService = SpeechService()
     @ObservedObject private var captureLanding = CaptureLandingBus.shared
     @ObservedObject private var captureRequests = CaptureRequestBus.shared
+    /// The landing intent decided when the user TAPPED the FAB, held
+    /// across the capture flow. Nil for captures that never touched the
+    /// FAB (Siri / hands-free), which fall back to a live route. See
+    /// `beginCapture` for why completion-time routing was wrong (F25).
+    @State private var pendingLanding: CaptureLandingIntent? = nil
     // F8 · guided walkthrough (do-it-with-me first run). Replaced the per-tab
     // coachmark cards, retired 2026-07-27 (F8 + F7c section-? cover the ground).
     @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
@@ -186,10 +191,7 @@ struct HiMemTabView: View {
                     // modality stack) + "Add existing memory" (the leading
                     // pill → the search-to-add sheet, via the request bus).
                     AppendFAB(
-                        onSelect: { modality in
-                            captureSource = .manual // FAB = user-initiated
-                            activeCaptureModality = modality
-                        },
+                        onSelect: { modality in beginCapture(modality) },
                         accessibilityLabel: currentFabAccessibilityLabel,
                         leadingAction: AppendFABLeadingAction(
                             label: "Add existing memory",
@@ -199,10 +201,7 @@ struct HiMemTabView: View {
                     )
                 case .dropOnBench, .createMemory:
                     AppendFAB(
-                        onSelect: { modality in
-                            captureSource = .manual // FAB = user-initiated
-                            activeCaptureModality = modality
-                        },
+                        onSelect: { modality in beginCapture(modality) },
                         accessibilityLabel: currentFabAccessibilityLabel
                     )
                 }
@@ -346,8 +345,9 @@ struct HiMemTabView: View {
             }
             if let modality = captureRequests.pendingModality {
                 captureRequests.pendingModality = nil
-                captureSource = .manual
-                DispatchQueue.main.async { activeCaptureModality = modality }
+                // Same decision point as a FAB tap: pin the landing now,
+                // while the navigation context is still whole (F25).
+                DispatchQueue.main.async { beginCapture(modality) }
             }
         }
         // Any surface (App Shortcuts, other in-app triggers) can request
@@ -355,8 +355,7 @@ struct HiMemTabView: View {
         .onChange(of: captureRequests.pendingModality) { _, modality in
             if let modality {
                 captureRequests.pendingModality = nil
-                captureSource = .manual
-                activeCaptureModality = modality
+                beginCapture(modality)
             }
         }
     }
@@ -411,16 +410,49 @@ struct HiMemTabView: View {
     /// voice items land as `InboxClip`s. On Memories, the composer's
     /// output turns into a `JournalEntry`. On Projects (inside a
     /// project), same but with a project association.
+    /// Begin a FAB-initiated capture. **The landing intent is decided
+    /// HERE, at tap time — not at completion.**
+    ///
+    /// F25: `handleCapturedItem` used to re-derive the destination from
+    /// `projectsNav.currentProjectId` when the capture finished, and the
+    /// capture flow itself destroys that value. The composer is hosted at
+    /// the tab shell, above the Projects `NavigationStack`, and photo and
+    /// video present as `fullScreenCover` — which removes the covered
+    /// `ProjectDetailView` and fires its `.onDisappear`, calling
+    /// `ProjectsNavigationContext.exit`. (That method's guard only
+    /// protects against a *different* project's late disappear; when the
+    /// same view is covered and uncovered the id matches and it clears.)
+    /// So by completion the context was nil, the route fell to
+    /// `.openNewProjectSheet`, and the item was dropped on the floor.
+    ///
+    /// Deciding at tap time is also what makes the fix cover attach,
+    /// photo and video together: it does not depend on which
+    /// presentation style clears what, only on reading the context while
+    /// the user is demonstrably still inside the project.
+    private func beginCapture(_ modality: CaptureModality) {
+        captureSource = .manual // FAB = user-initiated
+        pendingLanding = CaptureLandingRouter.route(
+            tab: routerTab(for: selection),
+            projectContext: projectsNav.currentProjectId,
+            source: .manual
+        )
+        activeCaptureModality = modality
+    }
+
     private func handleCapturedItem(_ item: CapturedItem) {
-        // Route by the *source-aware* intent, not the tab-only `currentIntent`
-        // (which drives the FAB affordance): a hands-free/Siri capture always
-        // lands on the bench, never a forced memory, regardless of the tab.
-        let landing = CaptureLandingRouter.route(
+        // Prefer the intent captured when the user tapped the FAB (F25).
+        // Fall back to a live route for captures that never touched the
+        // FAB — Siri / hands-free — where `source == .handsFree` already
+        // short-circuits to the bench regardless of the visible tab.
+        let landing = pendingLanding ?? CaptureLandingRouter.route(
             tab: routerTab(for: selection),
             projectContext: projectsNav.currentProjectId,
             source: captureSource
         )
-        defer { captureSource = .manual } // reset for the next capture
+        defer {
+            captureSource = .manual // reset for the next capture
+            pendingLanding = nil
+        }
         switch landing {
         case .dropOnBench:
             PhoneCaptureBenchDispatcher.dispatch(item)
@@ -463,9 +495,26 @@ struct HiMemTabView: View {
             // trigger, so keep the associative context in view.
 
         case .openNewProjectSheet:
-            // Unreachable: FAB variant for this intent never emits a
-            // CapturedItem; it opens the New Project sheet directly.
-            break
+            // This case previously read `break` under the comment
+            // "Unreachable: FAB variant for this intent never emits a
+            // CapturedItem." The comment was FALSE, and it is what made a
+            // silent drop look safe — F25's whole defect arrived through
+            // here. With the intent now captured at tap time it should
+            // genuinely be unreachable, but "unreachable" is precisely the
+            // claim that just cost us a P0, so it is made LOUD rather than
+            // trusted.
+            //
+            // DEBUG: fail the assertion, at the moment and place it happens.
+            // Release: land the clip on the bench rather than destroy it.
+            // Nothing is lost there — the bench IS the designed escape
+            // hatch, and the consolidation ladder exists to give an
+            // unfiled capture a home. Better than an error the user can
+            // do nothing with, and far better than silence.
+            assertionFailure(
+                "CapturedItem reached .openNewProjectSheet — the landing intent was not captured at tap time (F25)."
+            )
+            PhoneCaptureBenchDispatcher.dispatch(item)
+            CaptureLandingBus.shared.pendingReturnToClips = true
         }
     }
 
