@@ -649,7 +649,12 @@ struct CreateMemoryFromClipsSheet: View {
             entryId: entryId,
             clipIds: clips.map(\.clipId)
         )
-        guard written > 0 else { return }
+        // SINGLE EXIT: no early return here. The old `guard written > 0 else
+        // { return }` skipped straight past the end of the function, so "Add"
+        // did nothing and said nothing. Everything below is gated on the
+        // attach having happened, and EVERY path reaches `finishAppend`, which
+        // is the one place that decides what the user is told (F23).
+        if written > 0 {
 
         // Stamp per-clip lat/lon onto the refs so the clip-row header in Memory
         // Detail shows the same "Bishop St, Bluffton" line as the new-memory
@@ -687,7 +692,48 @@ struct CreateMemoryFromClipsSheet: View {
             }
         }
 
-        InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
+        }  // end `if written > 0`
+
+        Self.finishAppend(
+            written: written,
+            clipIds: clips.map(\.clipId),
+            consumeSession: { InboxManifest.shared.removeBatch(clipIds: $0) },
+            report: { ErrorState.shared.report(.saveFailed($0)) },
+            dismiss: { dismiss() }
+        )
+    }
+
+    /// The tail of `appendToExistingMemory()`. Mirrors `finishCreate`: the
+    /// session is consumed and the sheet dismissed only when clips actually
+    /// attached.
+    ///
+    /// `attachExistingClips` returns 0 when no ref resolved. The old code
+    /// `guard written > 0 else { return }`-ed there and said nothing, so "Add"
+    /// looked dead: the sheet stayed open, unchanged, with no explanation
+    /// (F23 audit finding #4). The session surviving was right; the silence
+    /// was not — Non-negotiable #2, every action works, is absent, or explains
+    /// itself.
+    @MainActor
+    static func finishAppend(
+        written: Int,
+        clipIds: [UUID],
+        consumeSession: ([UUID]) -> Void,
+        report: (String) -> Void,
+        dismiss: () -> Void
+    ) {
+        guard written > 0 else {
+            report(appendFailedMessage(clipCount: clipIds.count))
+            return
+        }
+        consumeSession(clipIds)
         dismiss()
+    }
+
+    /// Shown when nothing attached. Singular reuses the sibling's approved
+    /// line verbatim; the plural is the same construction.
+    static func appendFailedMessage(clipCount: Int) -> String {
+        clipCount == 1
+            ? "Couldn't add this clip. Try again."
+            : "Couldn't add these clips. Try again."
     }
 }
