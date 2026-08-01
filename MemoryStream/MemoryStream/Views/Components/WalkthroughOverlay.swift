@@ -54,6 +54,14 @@ struct WalkthroughOverlay: View {
                 .padding(.horizontal, 16)
                 .frame(height: 40)
                 .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 10))
+                // F29 · `Button("Got it", action:)` takes a STRING label, so
+                // everything above decorates the Button, not its label — the
+                // ochre pill drew at 40pt while the tap region stayed the
+                // width of the letters. F17 cleared the filled primaries
+                // because those fill INSIDE a label closure; this one has no
+                // closure to fill. Shape it, never re-fill it (a second fill
+                // would change the rank Buttons & Actions assigns).
+                .contentShape(Rectangle())
                 .accessibilityLabel("Got it — dismiss this tip")
         }
     }
@@ -176,6 +184,9 @@ struct WalkthroughOverlay: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 12))
+                        // F29 · the walkthrough's ENTRY button: full-width
+                        // ochre, and only the word "Start" was tappable.
+                        .contentShape(Rectangle())
                     Button("Not now — you'll find this in Learn → Show me around.", action: orchestrator.skip)
                         .font(.system(size: 13))
                         .foregroundStyle(Crucible.Color.ink3)

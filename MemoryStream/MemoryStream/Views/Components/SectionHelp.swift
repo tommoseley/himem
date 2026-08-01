@@ -299,6 +299,11 @@ struct CoachmarkBanner: View {
                             .padding(.horizontal, 16)
                             .frame(height: 40)
                             .background(Crucible.Color.accent, in: RoundedRectangle(cornerRadius: 10))
+                            // F29 · String-label Button: the fill decorates the
+                            // Button, not its label, so the pill drew at 40pt
+                            // and tapped only on the text. Twin of the
+                            // walkthrough's "Got it".
+                            .contentShape(Rectangle())
                     }
                 }
                 .padding(16)
