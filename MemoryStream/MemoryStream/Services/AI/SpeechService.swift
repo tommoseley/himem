@@ -177,9 +177,26 @@ final class SpeechService: ObservableObject {
                 )
             )
 
-            // Install the model if it isn't already on this device. Same
-            // path used by `TranscriptionService.ensureModelReady`.
-            try await TranscriptionService.shared.ensureModelReady(for: locale)
+            // Install the model if it isn't already on this device.
+            //
+            // Caught HERE, around this call alone, and deliberately non-fatal:
+            // live capture must proceed even when no model can be installed.
+            // The real pre-flight for live analysis is `prepareToAnalyze`
+            // below — if the analyzer genuinely can't run, that is what fails.
+            // Letting a model-install failure abort this `do` block instead
+            // would leave `analyzer`/`transcriber`/`bestFormat` unset and stop
+            // live capture from being configured at all, on exactly the
+            // configurations where the locale's asset is unsupported.
+            //
+            // Until B10 (2026-07-31) `ensureModelReady` returned silently on
+            // those paths, so this behaviour was real but accidental — an
+            // undocumented side effect of a false success. It is now a stated
+            // decision, and the behaviour at this call site is unchanged.
+            do {
+                try await TranscriptionService.shared.ensureModelReady(for: locale)
+            } catch {
+                NSLog("[HiMem][Speech] model not installed for \(locale.identifier): \(error.localizedDescription) — continuing; live analysis is gated by prepareToAnalyze")
+            }
 
             // Best format = what the analyzer's modules want. We convert
             // engine buffers to this in the live-input bridge.
