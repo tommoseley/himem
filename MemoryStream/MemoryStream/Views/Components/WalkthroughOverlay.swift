@@ -58,6 +58,29 @@ struct WalkthroughOverlay: View {
         }
     }
 
+    /// **The always-visible way out (F26, ruled 2026-08-01).**
+    ///
+    /// Every beat carries this, on every screen, for the whole run. A
+    /// stall-triggered escape hatch would require detecting the stall, which
+    /// is precisely what this open-loop design cannot reliably do — a
+    /// persistent affordance works whether or not the machine knows it is
+    /// stuck.
+    ///
+    /// It routes through `skip()` → `finish()`, and that is load-bearing:
+    /// `finish()` is the ONLY thing that clears `walkthroughMemoryId`, and the
+    /// ring renders on `isRunning ? walkthroughMemoryId : nil`. Any exit that
+    /// bypasses `finish()` re-creates the stuck ring this fixes. Blue text
+    /// link per Buttons & Actions (bare-text actions live only in a nav/sheet
+    /// top bar); never a scold, never fakes progress (F10).
+    private var endWalkthroughLink: some View {
+        Button("End walkthrough", action: orchestrator.skip)
+            .font(.system(size: 12.5, weight: .medium))
+            .foregroundStyle(Crucible.Color.aiBlue)
+            .frame(minHeight: 38)
+            .contentShape(Rectangle())
+            .accessibilityLabel("End the walkthrough")
+    }
+
     /// The quiet breadcrumb caption under "Got it." — where to re-run later.
     private var skipBreadcrumbCaption: some View {
         Text(WalkthroughOrchestrator.Beat.skipBreadcrumb)
@@ -179,9 +202,13 @@ struct WalkthroughOverlay: View {
         let showsConfirmation = beat.isConfirmation
             || (beat == .organize && orchestrator.organizeAlreadyDone)
 
-        // VStack { banner; Spacer() } pins the banner to the TOP; the empty area
-        // draws nothing, so taps pass through to the real control.
+        // The empty area draws nothing, so taps pass through to the real
+        // control. Which edge the card pins to is the beat's own decision —
+        // step 3 pins BOTTOM because its referents (the "Memory created ·
+        // View" toast, a clip row, her ringed row) all live low, and a
+        // top-pinned card hid them (F26).
         return VStack(spacing: 0) {
+            if beat.pinsToBottom { Spacer(minLength: 0) }
             VStack(alignment: .leading, spacing: 10) {
                 progressEyebrow(beat)
 
@@ -239,6 +266,9 @@ struct WalkthroughOverlay: View {
                 if beat != .done {
                     skipBreadcrumbCaption
                 }
+                // F26 · the way out is present on EVERY beat, not only where
+                // the flow happens to offer a continue.
+                endWalkthroughLink
             }
             .padding(16)
             // Reads as an overlay at a glance: raised `card` surface, full-weight
@@ -246,10 +276,20 @@ struct WalkthroughOverlay: View {
             .background(Crucible.Color.card, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(Crucible.Color.accent, lineWidth: 2))
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, beat.pinsToBottom ? 0 : 8)
+            // Clear the "Memory created · View" toast, which sits at the very
+            // bottom (`ClipsTabView` ZStack(alignment: .bottom), padding 12).
+            // Pinning flush would put this card ON TOP of the button step 3
+            // tells her to tap. Fixed clearance — a device-tunable knob, same
+            // shape as ProjectDetailView's bottom contentMargins.
+            .padding(.bottom, beat.pinsToBottom ? Self.bottomPinClearance : 0)
             .shadow(color: Color.black.opacity(0.20), radius: 18, y: 6)
 
-            Spacer(minLength: 0)
+            if !beat.pinsToBottom { Spacer(minLength: 0) }
         }
     }
+
+    /// Vertical space reserved below a bottom-pinned banner so it never covers
+    /// the created-memory toast. Needs device verification (F26).
+    static let bottomPinClearance: CGFloat = 88
 }

@@ -116,6 +116,11 @@ final class WalkthroughOrchestrator: ObservableObject {
 
     private init() {}
 
+    /// Set when the walkthrough begins: the flow runs on Clips, because that
+    /// is where the pipeline it teaches actually lands (F26). Announced in the
+    /// offer copy so she is never teleported without explanation.
+    @Published private(set) var pendingClipsTabSwitch = false
+
     var isRunning: Bool { activeBeat != nil }
 
     /// Persisted so first-run offers it exactly once (skip counts as done — a
@@ -135,8 +140,33 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// offer beat, regardless of `hasCompleted`.
     func start() { activeBeat = .offer }
 
-    /// The user accepted the offer → begin the guided capture.
-    func beginFromOffer() { if activeBeat == .offer { activeBeat = .record } }
+    /// The user accepted the offer → begin the guided capture **on Clips**.
+    ///
+    /// F26: the script is written for ONE pipeline — record → the clip lands
+    /// on the bench → Start a Memory → View → organize → done — and every
+    /// advance signal is wired to it. `clipDidLand()` has a single caller,
+    /// inside `.onChange(of: captureLanding.pendingReturnToClips)`, and that
+    /// flag is set only by the `.dropOnBench` branch. But the FAB is
+    /// context-aware (July 10 lock): on Memories, + creates a `JournalEntry`
+    /// directly, so the flag never flips, `clipDidLand()` never fires, and the
+    /// machine sits on `record` forever. **Cold launch lands on Memories**, so
+    /// the default first-run user started on the one tab where step 2 could
+    /// never arrive.
+    ///
+    /// Ruled 2026-08-01: switch to Clips rather than branch the script — the
+    /// walkthrough teaches capture, and capture lands on Clips. The move is
+    /// **announced** in the offer copy, never silent.
+    func beginFromOffer() {
+        guard activeBeat == .offer else { return }
+        pendingClipsTabSwitch = true
+        activeBeat = .record
+    }
+
+    /// Consumed by `HiMemTabView` to put the flow on Clips. One-shot.
+    func consumeClipsTabSwitch() -> Bool {
+        defer { pendingClipsTabSwitch = false }
+        return pendingClipsTabSwitch
+    }
 
     /// Skip / dismiss at any beat. Marks complete so first-run won't re-offer;
     /// the walkthrough stays retrievable from the hub.
@@ -164,10 +194,28 @@ final class WalkthroughOrchestrator: ObservableObject {
         }
     }
 
+    #if DEBUG
+    /// Test-only: place the machine at a beat (with an optional ring target)
+    /// so termination can be exercised from EVERY state — F26's defect was
+    /// that some states had no way out. Mirrors
+    /// `ProjectsNavigationContext.debugReset`; not exposed in release.
+    func debugForceBeat(_ beat: Beat, memoryId: UUID? = nil) {
+        activeBeat = beat
+        walkthroughMemoryId = memoryId
+    }
+    #endif
+
     private func finish() {
         activeBeat = nil
         walkthroughMemoryId = nil
         organizeAlreadyDone = false
+        // Every piece of walkthrough state dies here, including an
+        // unconsumed tab request — a stale flag surviving termination is the
+        // same family as the stuck ring this item exists to fix, and would
+        // yank the user to Clips long after the flow ended. (Caught by
+        // `beginningTheFlow_requestsTheClipsTab` failing on a dirty
+        // singleton, which is the leak reproducing itself.)
+        pendingClipsTabSwitch = false
         UserDefaults.standard.set(true, forKey: completedKey)
         // F8 owns first-run teaching. On completion OR abandonment, retire the
         // legacy one-pagers it replaced (.capture / .organizing) so they never
@@ -314,6 +362,17 @@ extension WalkthroughOrchestrator.Beat {
     var isConfirmation: Bool {
         self == .clipLanded || self == .done
     }
+
+    /// Which edge the banner pins to.
+    ///
+    /// F26 · step 3's card consumed the whole top of the screen and hid the
+    /// very thing it referenced. Its referents all live low — the "Memory
+    /// created · View" toast, a clip row, her ringed memory row — so the
+    /// step-3 beats pin to the BOTTOM (ruled 2026-08-01). Not a dismissible
+    /// variant: one less state, and moving the card near its referent closes
+    /// part of the missing-anchoring problem without inventing an anchoring
+    /// primitive (which F16 ruled out).
+    var pinsToBottom: Bool { stepNumber == 3 }
 }
 
 // MARK: - Copy (design-authority · drafted cold for Judi, F7e · no "evidence", F7g)
@@ -337,7 +396,10 @@ extension WalkthroughOrchestrator.Beat {
             // Task framing, no ontology (F13): promise the process she asked for
             // ("walk me through the whole process step by step"), name the ~minute
             // and the per-step guidance. No "part".
-            return "I'll guide you through making your first memory — you record it, then the app writes a title and summary. About a minute, and I'll point at each step."
+            // F26 · name the tab move rather than performing it silently
+            // (ruled 2026-08-01). "Clips" is a handle she can point at (J1),
+            // not an ontology lesson (F13) — it says where we're going and why.
+            return "I'll guide you through making your first memory — you record it, then the app writes a title and summary. We'll start on Clips, where your recordings land. About a minute, and I'll point at each step."
         case .record:
             // Step 1. The parts-preamble is CUT (F13) — say what to DO, not what
             // things are. The FAB illustration (see the overlay) makes "tap +,

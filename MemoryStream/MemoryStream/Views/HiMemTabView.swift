@@ -227,6 +227,14 @@ struct HiMemTabView: View {
     /// capture modality) but collectively at the CC-30 line when inline.
     private func tabRoutingObservers(_ content: some View) -> some View {
         content
+        // F26 · the walkthrough runs on Clips, because that is where the
+        // pipeline it teaches actually lands. Announced in the offer copy, so
+        // this is a stated move rather than a teleport.
+        .onChange(of: walkthrough.pendingClipsTabSwitch) { _, pending in
+            if pending, walkthrough.consumeClipsTabSwitch() {
+                selection = .clips
+            }
+        }
         .onChange(of: captureLanding.pendingReturnToClips) { _, pending in
             if pending {
                 selection = .clips
