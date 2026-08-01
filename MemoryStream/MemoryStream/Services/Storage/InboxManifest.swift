@@ -759,13 +759,27 @@ final class InboxManifest: ObservableObject {
         syncIconBadge(to: 0)
     }
 
-    /// Zeroes the home-screen icon badge unconditionally — the
-    /// numeric-badge policy is now "never," per `CLAUDE.md` §Phone
-    /// July 10 2026. Kept as a defensive zeroing call so push
-    /// payloads (which iOS still processes) can't leave a stale
-    /// number on the icon.
+    /// The number iOS is asked to put on the app icon, given how many clips
+    /// are pending. **Always zero, by product decision.**
+    ///
+    /// `CLAUDE.md` §Phone (locked July 10 2026): *"App-icon badge: none. iOS
+    /// only supports a numeric app-icon badge, and a number reintroduces
+    /// counting"* — the guilt-inbox HiMem rejects. Presence lives on the Clips
+    /// tab dot instead.
+    ///
+    /// Split out from `syncIconBadge` so the decision is assertable
+    /// (`InboxManifestBadgeSyncTests`). Restoring a real count here is a
+    /// vocabulary/principle change, not an implementation fix: it needs a
+    /// ruling, and this returning anything but 0 should fail the build's tests
+    /// rather than ship quietly (F23 T2.5).
+    static func iconBadgeCount(forPending pendingCount: Int) -> Int { 0 }
+
+    /// Zeroes the home-screen icon badge unconditionally — see
+    /// `iconBadgeCount(forPending:)`. Kept as a defensive zeroing call so push
+    /// payloads (which iOS still processes) can't leave a stale number on the
+    /// icon.
     private func syncIconBadge(to count: Int) {
-        UNUserNotificationCenter.current().setBadgeCount(0) { _ in }
+        UNUserNotificationCenter.current().setBadgeCount(Self.iconBadgeCount(forPending: count)) { _ in }
     }
 
     private func persist() {
