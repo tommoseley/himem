@@ -53,6 +53,13 @@ struct ClipEditorModal: View {
     @State private var playbackTime: TimeInterval = 0
     @State private var isRetranscribing = false
     @State private var retryStatus: String? = nil
+    /// Set when a Zone-1 commit reached no store. Drawn in the content
+    /// block, where the transcript would be — NOT reported to
+    /// `ErrorState` alone: `JournalErrorBanner` is absent from Clips and
+    /// renders beneath every sheet (F23 C1), so a banner from a modal
+    /// presented over the bench is a message nobody reads. F18's ruled
+    /// honest-failure placement: put it where the dead interface was.
+    @State private var saveError: String? = nil
 
     // Zone 2 — single-open edge accordion + inline annotation edit.
     @State private var openEdgeId: UUID? = nil
@@ -71,6 +78,13 @@ struct ClipEditorModal: View {
     /// Title of the clip EDIT surface — distinct from the read-only
     /// `ClipDetailView` ("Clip") so the two surfaces never read the same.
     static let editorTitle = "Edit Clip"
+
+    /// Shown when an edit reached no store. Parallel construction with
+    /// the approved family ("Couldn't remove this clip. Try again." /
+    /// "Couldn't create this memory. Try again." / "Couldn't add these
+    /// clips. Try again."), approved 2026-07-31. Crucible voice: names
+    /// the state, never blames the user, offers the one useful action.
+    static let saveFailedMessage = "Couldn't save your edit. Try again."
 
     // MARK: - Body
 
@@ -276,6 +290,13 @@ struct ClipEditorModal: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture { beginContentEdit() }
+                if let saveError {
+                    Text(saveError)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Crucible.Color.danger)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
                 if canRetranscribe {
                     retranscribeAction
                 }
@@ -668,19 +689,27 @@ struct ClipEditorModal: View {
         contentDraft = currentContent
     }
 
+    /// Commit Zone 1, and **check that it landed.** The writers return the
+    /// text actually stored, or nil when the edit reached no store at all
+    /// — a clip that is neither a live `MediaReference` nor a manifest row
+    /// used to lose the edit through two stacked bare `return`s, while
+    /// this modal closed as if it had saved (F24 Defect 3). A silent
+    /// failed save is worse than a wipe: the user believes it took.
     private func commitContent(_ newValue: String) {
+        let stored: String?
         switch source {
         case .inbox(let clip):
             // P0-3: a materialized bench clip is a ref — route through the
             // backing-aware writer so the edit lands (never a silent no-op).
-            lifecycle.writeBenchClipTranscript(clipId: clip.clipId, transcript: newValue)
+            stored = lifecycle.writeBenchClipTranscript(clipId: clip.clipId, transcript: newValue)
         case .managed(let ref):
             if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
-                lifecycle.updateClipDescription(refId: ref.id, description: newValue)
+                stored = lifecycle.updateClipDescription(refId: ref.id, description: newValue)
             } else {
-                lifecycle.updateClipTranscript(refId: ref.id, transcript: newValue)
+                stored = lifecycle.updateClipTranscript(refId: ref.id, transcript: newValue)
             }
         }
+        saveError = (stored == nil) ? Self.saveFailedMessage : nil
     }
 
     /// What the top-bar **Done** must do with an open draft. `nil` = no

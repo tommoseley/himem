@@ -968,12 +968,17 @@ final class EntryLifecycleService {
     /// content of every referencing memory (none, for a loose 0-edge clip).
     /// The empty-over-non-empty wipe guard lives upstream in
     /// `ClipEditorCommitDecision`; this trusts a real committed value.
-    func updateClipTranscript(refId: UUID, transcript: String) {
+    /// Returns the text actually stored, or `nil` when nothing was written
+    /// (the ref is gone, or the save threw). Both nil paths used to be
+    /// silent — a missing ref was a bare `return` — so the Clip Editor
+    /// confirmed an edit that never landed (F24 Defect 3).
+    @discardableResult
+    func updateClipTranscript(refId: UUID, transcript: String) -> String? {
         do {
             let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
             req.predicate = NSPredicate(format: "id == %@", refId as CVarArg)
             req.fetchLimit = 1
-            guard let ref = try storage.viewContext.fetch(req).first else { return }
+            guard let ref = try storage.viewContext.fetch(req).first else { return nil }
             // Arbiter: a clip can be evidence in many memories; flag if the
             // committed value is the aggregate of ANY referencing memory (the
             // "seed pulled the composed memory transcript then Done committed
@@ -992,8 +997,10 @@ final class EntryLifecycleService {
             for edge in ref.edgesArray {
                 regenerateContent(forEntryId: edge.memoryId)
             }
+            return transcript
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
+            return nil
         }
     }
 
@@ -1005,14 +1012,21 @@ final class EntryLifecycleService {
     /// must land after materialize (non-negotiable #2). Cleaning matches the
     /// manifest path so both backings normalize leading ASR noise identically.
     @MainActor
-    func writeBenchClipTranscript(clipId: UUID, transcript: String) {
+    /// Returns the text actually stored, or `nil` when the clip was in
+    /// **neither** store and the edit landed nowhere. That case was
+    /// doubly silent before F24 Defect 3 — both branches ended in a bare
+    /// `return`, so the Clip Editor closed on a confirmation it had not
+    /// earned. A silent failed save is worse than a wipe: the user
+    /// believes it took.
+    @discardableResult
+    func writeBenchClipTranscript(clipId: UUID, transcript: String) -> String? {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
         req.predicate = NSPredicate(format: "id == %@", clipId as CVarArg)
         req.fetchLimit = 1
         if (try? storage.viewContext.fetch(req).first) != nil {
-            updateClipTranscript(refId: clipId, transcript: JournalEntry.cleanedTranscript(transcript))
+            return updateClipTranscript(refId: clipId, transcript: JournalEntry.cleanedTranscript(transcript))
         } else {
-            InboxManifest.shared.recordTranscriptionAttempt(clipId: clipId, transcript: transcript)
+            return InboxManifest.shared.recordTranscriptionAttempt(clipId: clipId, transcript: transcript)
         }
     }
 
@@ -1034,12 +1048,17 @@ final class EntryLifecycleService {
 
     /// **Atom-level** description edit (photo/video) for the unified Clip
     /// Editor (Zone 1). Same atom-once semantics as `updateClipTranscript`.
-    func updateClipDescription(refId: UUID, description: String) {
+    /// Returns the text actually stored (empty string is a legitimate
+    /// stored value — clearing a description is a real edit), or `nil`
+    /// when nothing was written. Same F24 Defect 3 contract as
+    /// `updateClipTranscript`.
+    @discardableResult
+    func updateClipDescription(refId: UUID, description: String) -> String? {
         do {
             let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
             req.predicate = NSPredicate(format: "id == %@", refId as CVarArg)
             req.fetchLimit = 1
-            guard let ref = try storage.viewContext.fetch(req).first else { return }
+            guard let ref = try storage.viewContext.fetch(req).first else { return nil }
             let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
             ref.mediaDescription = trimmed.isEmpty ? nil : trimmed
             ref.lastEditedAt = Date()
@@ -1047,8 +1066,10 @@ final class EntryLifecycleService {
             for edge in ref.edgesArray {
                 regenerateContent(forEntryId: edge.memoryId)
             }
+            return trimmed
         } catch {
             ErrorState.shared.report(.saveFailed(error.localizedDescription))
+            return nil
         }
     }
 

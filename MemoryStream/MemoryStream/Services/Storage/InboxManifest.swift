@@ -410,8 +410,16 @@ final class InboxManifest: ObservableObject {
     /// failed. Either way this marks the clip as "attempted" so the UI can
     /// distinguish in-flight pending state from a confirmed no-speech
     /// result.
-    func recordTranscriptionAttempt(clipId: UUID, transcript: String) {
-        guard let idx = clips.firstIndex(where: { $0.clipId == clipId }) else { return }
+    /// Returns the text actually stored, or `nil` when the clip is not in
+    /// the manifest and nothing was written. **The nil case used to be a
+    /// bare `return`** — a hand edit routed here for a clip that had left
+    /// the manifest vanished with no error and no signal, and the editor
+    /// reported success (F24 Defect 3). The value is `@discardableResult`
+    /// so the transcription pipeline's fire-and-forget callers are
+    /// unchanged; the *user-facing* write path checks it.
+    @discardableResult
+    func recordTranscriptionAttempt(clipId: UUID, transcript: String) -> String? {
+        guard let idx = clips.firstIndex(where: { $0.clipId == clipId }) else { return nil }
         let existing = clips[idx]
         // CRITICAL: carry `rollGroupId` forward. Before 2026-05-27 this
         // init call omitted `rollGroupId:`, defaulting it to nil, which
@@ -445,6 +453,7 @@ final class InboxManifest: ObservableObject {
         var next = clips
         next[idx] = updated
         replace(with: next)
+        return updated.transcript
     }
 
     /// Flips a clip's `reviewed` to true on first open (P7-2). Per-device,
