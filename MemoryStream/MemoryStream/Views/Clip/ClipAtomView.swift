@@ -493,6 +493,9 @@ struct ClipContentSlot: View {
 
     var body: some View {
         switch content {
+        // F22 EXEMPT (all three branches): `text` is this clip's transcript —
+        // in-flight or absent process state on a clip already in hand, not a
+        // collection fetched from a store that may still be importing.
         case .transcriptFull(let text):
             if text.isEmpty && pendingTranscript {
                 Text("Transcribing…")
@@ -500,12 +503,14 @@ struct ClipContentSlot: View {
                     .italic()
                     .foregroundStyle(Crucible.Color.ink3)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            // F22 EXEMPT: this clip's own transcript, not a store collection.
             } else if text.isEmpty && accidentalTranscript {
                 Text("No speech detected · likely accidental")
                     .font(.system(size: 13))
                     .italic()
                     .foregroundStyle(Crucible.Color.ink3)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            // F22 EXEMPT: this clip's own transcript, not a store collection.
             } else if text.isEmpty, let caption = emptyTranscriptCaption {
                 Text(caption)
                     .font(.system(size: 13))

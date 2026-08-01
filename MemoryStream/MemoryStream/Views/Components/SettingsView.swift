@@ -367,6 +367,11 @@ struct SettingsView: View {
                     // nothing — proves the cleanup predicate matches a real
                     // on-device note before the destructive pass is authorized.
                     Button {
+                        // F22 EXEMPT: `hits` is the RESULT of a scan the user
+                        // just ran, reported as the outcome of that scan — the
+                        // sentence is "the predicate matched nothing", not "you
+                        // have nothing". Debug-only, and it names its own
+                        // measurement rather than the store's contents.
                         let hits = EntryLifecycleService().scanForAggregateNotes()
                         if hits.isEmpty {
                             aggregateScanResult = "No aggregate-note artifacts found. The predicate matched nothing already at rest."
@@ -478,6 +483,9 @@ struct SettingsView: View {
                     Text(aggregateScanResult)
                 }
                 .alert("Orphaned media sweep", isPresented: $showSweepAlert) {
+                    // F22 EXEMPT: `sweepPlan` is a computed maintenance plan,
+                    // not a user collection — and the sweep is disabled (F23
+                    // T1.1), so this reports on an operation, not on content.
                     if sweepPlan.isEmpty {
                         Button("OK", role: .cancel) { }
                     } else {

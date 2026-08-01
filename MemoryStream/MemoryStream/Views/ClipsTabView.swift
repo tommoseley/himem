@@ -1523,6 +1523,8 @@ struct FlatClipsListView: View {
     @State private var groupsReload = DebouncedTrigger(interval: .milliseconds(250))
     /// Single-open accordion: at most one flat row expanded at a time.
     @State private var expandedItemId: String? = nil
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -1542,7 +1544,11 @@ struct FlatClipsListView: View {
                     }
                 }
             }
-            if groups.isEmpty {
+            // F22: these rows are built from CloudKit-synced `MediaReference`s,
+            // so mid-import "Nothing here" is the false-certainty defect. A
+            // secondary surface says NOTHING while importing rather than
+            // growing a fourth "getting your…" line (Tom, 2026-07-31).
+            if groups.isEmpty, firstImport.mayAssertEmpty {
                 Text(emptyMessage)
                     .font(.system(size: 13))
                     .foregroundStyle(Crucible.Color.ink3)
@@ -1640,16 +1646,21 @@ struct UnconnectedListView: View {
     @Environment(\.managedObjectContext) private var context
     @State private var looseRefs: [MediaReference] = []
     @State private var refsReload = DebouncedTrigger(interval: .milliseconds(250))
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
 
     var body: some View {
         let items = buildItems()
         return VStack(alignment: .leading, spacing: 8) {
-            if items.isEmpty {
+            // F22: the Unconnected lens reads CloudKit-synced refs. Silence
+            // while importing — a secondary surface withholds the claim rather
+            // than adding another line of copy.
+            if items.isEmpty, firstImport.mayAssertEmpty {
                 Text(emptyMessage)
                     .font(.system(size: 13))
                     .foregroundStyle(Crucible.Color.ink3)
                     .padding(.top, 20)
-            } else {
+            } else if !items.isEmpty {
                 ForEach(items) { item in
                     VStack(alignment: .leading, spacing: 3) {
                         if selection.selecting {

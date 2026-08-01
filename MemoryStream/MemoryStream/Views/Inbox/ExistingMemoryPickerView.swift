@@ -19,6 +19,8 @@ struct ExistingMemoryPickerView: View {
 
     @State private var allEntries: [JournalEntry] = []
     @State private var searchText: String = ""
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
 
     private let storage = StorageService.shared
 
@@ -31,11 +33,20 @@ struct ExistingMemoryPickerView: View {
             searchField
             ScrollView {
                 VStack(spacing: 0) {
-                    if allEntries.isEmpty {
+                    // F22: `allEntries` is the CloudKit-synced store, so
+                    // "No memories yet" mid-import is the false-certainty
+                    // claim — and this picker is where the user is trying to
+                    // find one. Secondary surface: silent until the import has
+                    // finished looking.
+                    if allEntries.isEmpty, firstImport.mayAssertEmpty {
                         emptyState(title: "No memories yet",
                                    detail: "Memories you create will show up here.")
                             .padding(.vertical, 28)
-                    } else if visibleEntries.isEmpty {
+                    // F22 EXEMPT: a search that matches nothing is a fact about
+                    // the QUERY against the rows already loaded, not about
+                    // whether the store finished importing — and this branch is
+                    // only reachable once `allEntries` is non-empty.
+                    } else if !allEntries.isEmpty, visibleEntries.isEmpty {
                         emptyState(title: "No matches",
                                    detail: "No memory matches “\(searchText)”.")
                             .padding(.vertical, 28)

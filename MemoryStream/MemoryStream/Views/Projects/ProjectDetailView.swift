@@ -42,6 +42,8 @@ struct ProjectDetailView: View {
     /// The FAB lives at `HiMemTabView`; the search-to-add sheet lives
     /// here — this bus is the seam, mirroring `NewProjectRequestBus`.
     @ObservedObject private var addExistingBus = AddExistingMemoryRequestBus.shared
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
     @State private var shareItems: [Any] = []
     @State private var isPreparingShare = false
     @State private var showSuggestionsSheet = false
@@ -204,8 +206,12 @@ struct ProjectDetailView: View {
                         .foregroundStyle(Crucible.Color.ink3)
                 }
 
-                // Memory stack — entry cards
-                if entries.isEmpty {
+                // Memory stack — entry cards.
+                // F22: membership resolves through the CloudKit-synced store,
+                // so mid-import this reads "No memories in this project yet"
+                // about a project that has plenty. Secondary surface — silent
+                // until the import has finished looking.
+                if entries.isEmpty, firstImport.mayAssertEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "tray")
                             .font(.title)
@@ -491,6 +497,9 @@ struct ProjectDetailView: View {
         // `projectThreadSummaryCard` (which carries its own re-run
         // button "Find the thread again"). One named verb per surface
         // per `docs/design/CLAUDE.md` § button colour code.
+        // F22 EXEMPT: this reads the loaded project's OWN summary text, not a
+        // collection from the store. An unimported store yields no project to
+        // read, so this branch never renders on the false-empty path.
         if project?.lastThreadSummary == nil || project?.lastThreadSummary?.isEmpty == true {
             let enabled = ProjectAssistGate.isEnabled(memoryCount: entries.count)
             let subline = enabled

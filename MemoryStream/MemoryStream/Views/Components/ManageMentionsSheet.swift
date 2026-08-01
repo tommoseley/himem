@@ -23,6 +23,8 @@ struct ManageMentionsSheet: View {
     /// Snapshot of the whole mention library, taken at appear.
     @State private var library: [MentionChip] = []
     @State private var newDraft: String = ""
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
     @State private var newType: Mention.MentionType = .person
     @FocusState private var newFieldFocused: Bool
     @State private var libraryEditing = false
@@ -123,6 +125,9 @@ struct ManageMentionsSheet: View {
 
     private var onMemorySection: some View {
         let selected = library.filter { selectedIds.contains($0.id) }
+        // F22 EXEMPT: `selected` is this memory's own staged mention set,
+        // seeded from the memory the sheet was opened on — a statement about
+        // edges already in hand, not about an unfinished import.
         return Group {
             if selected.isEmpty {
                 Text("No mentions on this memory yet.")
@@ -198,8 +203,11 @@ struct ManageMentionsSheet: View {
     }
 
     private var librarySection: some View {
+        // F22: the mention library is CloudKit-synced, so "Your library is
+        // empty" mid-import is the false-certainty claim. Secondary surface —
+        // silent until the import has finished looking.
         Group {
-            if availableLibrary.isEmpty {
+            if availableLibrary.isEmpty, firstImport.mayAssertEmpty {
                 Text(library.isEmpty
                      ? "Your library is empty. Add a mention above to get started."
                      : "Everything in your library is on this memory.")

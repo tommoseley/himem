@@ -43,6 +43,8 @@ struct ManageTopicsSheet: View {
     @State private var paletteNames: [String] = []
     /// The "Add a new topic" field's draft value.
     @State private var newTopicDraft: String = ""
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
     @FocusState private var newFieldFocused: Bool
     /// "From your library" Edit toggle. When on, each library chip shows
     /// a red minus to **delete the vocabulary entry entirely** (not just
@@ -172,6 +174,9 @@ struct ManageTopicsSheet: View {
 
     private var onMemorySection: some View {
         let sorted = selectedNames.sorted()
+        // F22 EXEMPT: `selectedNames` is this memory's own staged topic set,
+        // seeded from the memory the sheet was opened on. It describes edges
+        // that are already in hand, not a store that may still be importing.
         return Group {
             if sorted.isEmpty {
                 Text("No topics on this memory yet.")
@@ -259,8 +264,11 @@ struct ManageTopicsSheet: View {
         // above. Empty palette gets a quiet placeholder so the section
         // header doesn't dangle.
         let available = availableLibraryNames
+        // F22: the topic library is CloudKit-synced, so "Your library is
+        // empty" mid-import is the false-certainty claim. Secondary surface —
+        // say nothing until the import has finished looking.
         return Group {
-            if available.isEmpty {
+            if available.isEmpty, firstImport.mayAssertEmpty {
                 Text(paletteNames.isEmpty
                      ? "Your library is empty. Add a topic above to get started."
                      : "Everything in your library is on this memory.")

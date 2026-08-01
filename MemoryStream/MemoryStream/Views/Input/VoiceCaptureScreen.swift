@@ -297,6 +297,8 @@ struct VoiceCaptureScreen: View {
     private var liveTranscript: some View {
         let full = speechService.transcribedText
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        // F22 EXEMPT: `full` is the in-flight transcript from SpeechService
+        // during a live recording — process state, never loaded from a store.
         if full.isEmpty {
             Text("Listening…")
                 .font(.system(size: 15, design: .serif).italic())

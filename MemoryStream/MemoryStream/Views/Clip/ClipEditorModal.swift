@@ -349,6 +349,9 @@ struct ClipEditorModal: View {
                             .font(.system(size: 12))
                             .foregroundStyle(Crucible.Color.ink3)
                         if !isOpen {
+                            // F22 EXEMPT: `annotation` is the edit field's own
+                            // draft text — what the user has typed, never loaded
+                            // from an unimported store.
                             if annotation.isEmpty {
                                 Text("Add a note")
                                     .font(.system(size: 13, weight: .semibold))
@@ -427,6 +430,8 @@ struct ClipEditorModal: View {
                     annotationDraft = nil
                 }
             )
+        // F22 EXEMPT: `current` is this edge's annotation text on a clip the
+        // user has open — edit-field contents, not a store collection.
         } else if current.isEmpty {
             Text("Add a note")
                 .font(.system(size: 14, weight: .semibold))

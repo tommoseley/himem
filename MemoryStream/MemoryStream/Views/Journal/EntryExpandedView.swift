@@ -1127,8 +1127,15 @@ struct EntryExpandedView: View {
     /// MediaReference in `.onAppear` via `migrateOrphanedContentIfNeeded`,
     /// so the user gets the full NotePanel UX without a separate
     /// inline-Text affordance.
+    // F22 EXEMPT: this is the OPENED memory's own media, reached only by
+    // navigating into a memory that has already resolved from the store. If the
+    // memory is here, its object graph is here; an unimported store yields no
+    // memory to open, so this branch cannot render the false-empty claim.
+    // (Flagged genuinely uncertain in the F22 survey — resolved here, and
+    // stated so a later reader can find it wrong rather than re-derive it.)
     @ViewBuilder
     private var bodyContent: some View {
+        // F22 EXEMPT: the opened memory's own media (see the note above).
         if entry.mediaItems.isEmpty {
             sectionRow {
                 Text(entry.content.attributedWithLinks())

@@ -19,6 +19,8 @@ import AVFoundation
 struct SessionListView: View {
     @ObservedObject var inbox: InboxManifest = .shared
     @ObservedObject var arrivals: InboxArrivalTracker = .shared
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
     @ObservedObject var viewModel: JournalViewModel
     /// New = unseen (P7-2): when true, reviewed clips are filtered out of
     /// the sessions so the New lens shows only fresh, un-eyeballed intake.
@@ -131,10 +133,14 @@ struct SessionListView: View {
         // Settings + JournalView (2026-07-09) are retired.
         ZStack {
             Crucible.Color.paper.ignoresSafeArea()
-            if inbox.isEmpty {
-                emptyState
-            } else {
+            // F22: the bench draws from the device-local manifest AND from
+            // CloudKit-synced refs materialized on arrival, so on a fresh
+            // install "Nothing new" can be the false-certainty claim. Secondary
+            // surface: say nothing until the import has finished looking.
+            if !inbox.isEmpty {
                 list
+            } else if firstImport.mayAssertEmpty {
+                emptyState
             }
         }
         .sheet(item: $bundleSession) { request in
@@ -416,6 +422,7 @@ struct SessionListView: View {
 
     // MARK: - Empty state
 
+    /// Gated by the caller on `firstImport.mayAssertEmpty` (F22).
     private var emptyState: some View {
         // Source-agnostic copy per `CLAUDE.md` §Phone (July 12 2026):
         // clips arrive from the phone FAB, the Watch, and Siri, so

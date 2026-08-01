@@ -8,6 +8,8 @@ struct JournalView: View {
     @StateObject private var cameraService = CameraService()
     @StateObject private var projectVM = ProjectViewModel()
     @ObservedObject private var errorState = ErrorState.shared
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
     /// F16 · drives the walkthrough ring on the row she just made.
     @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
     @EnvironmentObject private var quickAction: QuickActionState
@@ -534,9 +536,34 @@ struct JournalView: View {
 
     // MARK: - Empty memories state
 
+    /// F22 · one of the three surfaces that speak while the first import is
+    /// running. A count of zero here is produced identically by "she has none"
+    /// and "we haven't looked yet"; `FirstImportState` is the only thing that
+    /// can tell them apart, and on a fresh install the wrong reading says
+    /// *your memories are gone*.
     @ViewBuilder
     private var emptyMemoriesState: some View {
         if viewModel.filteredEntries.isEmpty {
+            if !firstImport.mayAssertEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.largeTitle)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                    Text(FirstImportState.Copy.memoriesTitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(FirstImportState.Copy.memoriesDetail)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            } else {
             VStack(spacing: 12) {
                 Image(systemName: "text.book.closed")
                     .font(.largeTitle)
@@ -555,6 +582,7 @@ struct JournalView: View {
             .padding(.top, 40)
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
+            }
         }
     }
 

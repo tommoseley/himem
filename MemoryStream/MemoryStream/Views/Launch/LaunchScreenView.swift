@@ -232,6 +232,15 @@ struct LaunchScreenView: View {
             StoreKitService.shared.start()
             WatchInboxNotificationCoordinator.shared.registerCategories()
         }
+        // F22: arm the first-import owner before any list can render. The
+        // phase already reads `.importing` from UserDefaults, so a surface
+        // that draws ahead of this call is still honest; what `begin` adds is
+        // the CloudKit observer that ends the phase and the 3s fallback that
+        // ends it for users who will never get an event (no account, no
+        // network, nothing to import). Cheap by design — one observer and one
+        // work item, no I/O, so the cold-launch budget is untouched.
+        FirstImportState.shared.begin(container: StorageService.shared.container)
+
         storageLoaded = true
         onStorageReady()
 

@@ -1134,6 +1134,8 @@ struct ScrWLand: View {
             // period). Filled name → "You're all set, Tom." with italic
             // ochre on the name.
             Group {
+                // F22 EXEMPT: form validation on the name field the user is
+                // typing into — not a collection from the store.
                 if name.isEmpty {
                     Text("You\u{2019}re all set.")
                         .foregroundColor(Crucible.Color.ink)
