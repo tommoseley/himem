@@ -59,14 +59,17 @@ struct SessionListView: View {
     @State private var editingClip: ClipEditorModal.Source? = nil
     // Cluster-editor single-open accordion (row/chevron tap expands-to-read).
     @State private var openClusterClipId: UUID? = nil
-    @State private var playingClipId: UUID? = nil
-    @State private var player: AVAudioPlayer? = nil
-    /// Tracks whether THIS view activated the audio session. Only
-    /// flipped true after a successful setActive(true) in playClip;
-    /// gates stopPlayback's setActive(false) so we never deactivate
-    /// a session we don't own. Per CLAUDE.md § Audio Session
-    /// Coordination — mirrors AudioPlayerService.sessionActivated.
-    @State private var sessionActivated = false
+    /// Derived from the player, never stored: `AudioPlayerService` publishes
+    /// what is playing, including when playback ends on its own. A local copy
+    /// is what stayed lit after a clip finished (F23 T2.3).
+    private var playingClipId: UUID? {
+        guard let file = audio.currentFile, audio.isPlaying else { return nil }
+        return inbox.clips.first(where: { $0.audioFilename == file })?.clipId
+    }
+    /// The one owner of phone playback and of the shared audio session's
+    /// lifecycle. This view previously mirrored its `sessionActivated` bookkeeping
+    /// alongside a second `AVAudioPlayer`; both are the owner's job (F23 T2.3).
+    @ObservedObject private var audio = AudioPlayerService.shared
     /// Per-session, per-clip selection state for the expanded card.
     /// Keyed by clip id. Defaults to "non-accidental clips selected"
     /// when the user expands a session for the first time; once they
@@ -1383,38 +1386,21 @@ struct SessionListView: View {
         return String(format: "%d:%02d", m, s)
     }
 
+    /// Bench playback runs through `AudioPlayerService` — the one owner of
+    /// phone playback and of the shared audio session's lifecycle.
+    ///
+    /// This view used to hand-roll its own `AVAudioPlayer` just to reach the
+    /// inbox store, and that copy had no `AVAudioPlayerDelegate`: a clip played
+    /// to its natural end never deactivated the `.playback` session and the row
+    /// stayed lit (F23 T2.3). The owner already solved both — `play(url:label:)`
+    /// covers the second store.
     private func playClip(_ clip: InboxClip) {
-        stopPlayback()
-        let url = InboxManifest.audioURL(for: clip.audioFilename)
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
-            try AVAudioSession.sharedInstance().setActive(true)
-            sessionActivated = true
-            let p = try AVAudioPlayer(contentsOf: url)
-            p.prepareToPlay()
-            p.play()
-            player = p
-            playingClipId = clip.clipId
-        } catch {
-            // Silent — playback isn't critical to the flow.
-        }
+        audio.play(url: InboxManifest.audioURL(for: clip.audioFilename),
+                   label: clip.audioFilename)
     }
 
-    /// Per CLAUDE.md § Audio Session Coordination: only call
-    /// setActive(false) on a session we activated. Calling it on
-    /// an already-inactive session churns the audio HAL and can
-    /// stomp on whatever other audio path (SpeechService,
-    /// AudioPlayerService) currently owns the session.
-    /// Mirrors AudioPlayerService's canonical pattern.
     private func stopPlayback() {
-        player?.stop()
-        player = nil
-        playingClipId = nil
-        if sessionActivated {
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            sessionActivated = false
-        }
+        audio.stop()
     }
 }
 
