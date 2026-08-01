@@ -592,7 +592,18 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             // IS its audio (referenced ⇒ keep); a split clip's master was
             // consumed into fragments (unreferenced ⇒ safe to reclaim, and
             // otherwise it is orphan residue in the user's iCloud container
-            // that nothing collects, since `MediaBlobOrphanSweep` is unwired).
+            // that nothing collects, because `MediaBlobOrphanSweep` is
+            // DELIBERATELY DISABLED — F23 T1.1, `fcb378b`: its keep-set unions
+            // a CloudKit-synced source with a sandbox-local manifest while the
+            // files it judges are device-shared, so on a second device a staged
+            // clip reads as an orphan and is deleted. Guarded by
+            // `OrphanSweepReachabilityTests`).
+            //
+            // Correction (2026-07-31): this said the sweep "is unwired." It WAS
+            // wired, via Settings Debug. That claim came from a grep for
+            // `.orphans(` which could not have matched the production
+            // `plan()`/`execute()` call sites — a retracted premise that
+            // propagated here and into two test comments.
             let reclaimable = Self.shouldReclaimRedeliveredMaster(
                 masterFilename: masterFilename,
                 referencedFilenames: manifest.referencedAudioFilenames

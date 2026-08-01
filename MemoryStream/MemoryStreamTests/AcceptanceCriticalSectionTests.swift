@@ -43,9 +43,16 @@ struct AcceptanceCriticalSectionTests {
     // The referencedness check the original unconditional delete should have
     // had. Removing that delete outright (the fix above) closed a data-loss
     // path but left a narrower regression: a SPLIT clip's redelivered master
-    // is unreferenced, and `MediaBlobOrphanSweep` is not wired to anything, so
-    // nothing reclaimed it. Both directions are tested so the data-loss
+    // is unreferenced, and nothing reclaims it — `MediaBlobOrphanSweep` is
+    // deliberately disabled (F23 T1.1, guarded by
+    // `OrphanSweepReachabilityTests`) because its keep-set cannot see another
+    // device's staged clips. Both directions are tested so the data-loss
     // direction is pinned by test, not by care.
+    //
+    // Correction (2026-07-31): this comment previously said the sweep "is not
+    // wired to anything." It WAS wired, via Settings Debug. The claim came
+    // from a grep for `.orphans(` that could not have matched the production
+    // `plan()`/`execute()` calls — a retracted premise, propagated here.
 
     /// THE DATA-LOSS DIRECTION. A single clip's master file *is* the clip's
     /// audio, so a manifest row references it and it must survive a rejected
@@ -123,7 +130,7 @@ struct AcceptanceCriticalSectionTests {
 
         #expect(
             !FileManager.default.fileExists(atPath: masterURL.path),
-            "Unreferenced redelivered master left on disk — orphan residue, and MediaBlobOrphanSweep is unwired"
+            "Unreferenced redelivered master left on disk — orphan residue, and MediaBlobOrphanSweep is deliberately disabled (F23 T1.1), so nothing else will collect it"
         )
     }
 
