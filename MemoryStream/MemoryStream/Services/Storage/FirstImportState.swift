@@ -14,11 +14,16 @@ import Combine
 /// `0:00` duration (F6i): a claim stated with certainty that happens to be
 /// false. On a fresh install it reads as *your memories are gone*.
 ///
-/// **Why one owner, not a flag per surface.** Seven surfaces render an empty
-/// state from a store that may not have imported (Memories, Recently Deleted,
-/// Projects, the two add-sheets, the Clips bench, the Clips filters). Making
-/// each observe the container, latch first-completion, and handle the
-/// no-iCloud fallback independently is seven copies of a three-state machine —
+/// **Why one owner, not a flag per surface.** The scanner that enforces this
+/// sees **34 empty-state sites** across `Views/`; **14** render from a store
+/// that may not have imported (Memories, Recently Deleted, Projects, the two
+/// add-sheets, the Clips bench and its filters, the manage sheets, the memory
+/// picker, project detail), and the rest carry a stated `F22 EXEMPT` reason.
+/// ("Seven" was this doc's original figure, written before the scanner could
+/// see inline empty-state renders — an undercount by more than half, corrected
+/// 2026-07-31 with the blind-spot fix.) Making each observe the container,
+/// latch first-completion, and handle the no-iCloud fallback independently is
+/// fourteen copies of a three-state machine —
 /// the exact pattern that left `.measurement` hardcoded on the phone while the
 /// watch had an owner and a test (F18), and that let a `?? 0` at one boundary
 /// defeat three correct models (F19b/F6a). Surfaces should state facts, not

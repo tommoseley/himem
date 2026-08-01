@@ -27,6 +27,11 @@ struct EntryDisplayModel: Identifiable {
     /// True when `renderedSummary` is the USER's own words rather than the
     /// AI's (F19b). Drives the summary eyebrow: AI blue + sparkle is reserved
     /// for AI moments, so wearing it over her text would claim credit for it.
+    ///
+    /// Read by `EntryExpandedView:918` off this model — the F23 audit recorded
+    /// it as having "no readers, the eyebrow reads Core Data", which is wrong:
+    /// that view's `entry` IS an `EntryDisplayModel`. Verified 2026-07-31 and
+    /// left in place; what was genuinely missing was its inclusion in `==`.
     let summaryUserEdited: Bool
     /// Active projects this memory belongs to (F2/F3). Renders as
     /// "In [project]" chips in Memory Detail. Many-to-many, so 0-N;
@@ -124,6 +129,15 @@ extension EntryDisplayModel: Equatable {
             && lhs.longitude == rhs.longitude
             && lhs.locationName == rhs.locationName
             && lhs.renderedSummary == rhs.renderedSummary
+            // Was omitted (F23 Tier 3). It is not decorative: it decides
+            // whether the summary eyebrow claims AI authorship, and
+            // `EntryExpandedView:918` reads it off THIS model. Two models
+            // differing only in authorship comparing equal is a trap — the
+            // moment anything consumes this equality (`.equatable()` on a row,
+            // a dedupe, an equality-gated publish) the eyebrow would keep
+            // wearing AI blue over the user's own words. No such consumer
+            // exists today, which is why this was latent rather than visible.
+            && lhs.summaryUserEdited == rhs.summaryUserEdited
             && lhs.projectMemberships == rhs.projectMemberships
             && lhs.mentions == rhs.mentions
     }
