@@ -17,16 +17,32 @@ enum NotificationPreference {
     }
 }
 
-/// Local notifications for HiMem. One surface only:
+/// Notification **permission and tap-routing identity** for HiMem.
 ///
-/// **Inbox arrival (Channel A)** — when a watch-recorded clip lands in
-/// the iPhone's inbox manifest, fire a **passive** notification with
-/// the live inbox count in the body ("3 voice clips ready to organize").
-/// One ping per arrival, same UNN identifier each time so the existing
-/// banner updates rather than stacking. Fires synchronously on the
-/// delegate's call thread — no Swift `Task.sleep` debounce — so the OS
-/// receives the request before the process suspends (key when the
-/// iPhone is locked and only briefly woken to handle WC delivery).
+/// **This class does not fire anything.** It has exactly two methods —
+/// `requestPermissionIfNeeded()` and `authorizationStatus()` — plus the
+/// category the app delegate matches on when routing a tap. Channel A's
+/// firing lives entirely in `WatchInboxNotificationCoordinator.postPassive`.
+/// Corrected 2026-07-31: this doc described the fire path in detail as though
+/// it were implemented here, and two of its specifics were wrong.
+///
+/// **Channel A, as actually implemented** (owner:
+/// `WatchInboxNotificationCoordinator`) — when a clip lands in the inbox
+/// manifest, post a **passive** notification (`interruptionLevel = .passive`,
+/// no sound, `badge = nil` per `CLAUDE.md` §Phone) whose body reads
+/// *"There are new clips you can review"* or *"N voice clips waiting"*. One
+/// at a time: a single stable identifier, with the prior delivered/pending
+/// request explicitly removed before the new one is added, so the banner
+/// updates rather than stacks.
+///   - The body string this doc used to quote — "3 voice clips ready to
+///     organize" — exists nowhere in the codebase.
+///   - Permission is NOT requested lazily on first arrival. It is requested
+///     from onboarding (`MemoryStreamApp:389`) and Settings
+///     (`SettingsView:862`).
+///
+/// `Identifiers.inboxArrival` below has no readers — the coordinator uses its
+/// own request id. Dead; left in place rather than removed in a comment-only
+/// pass, and flagged.
 ///
 /// **Channel B (Daily nudge / Inactivity) is retired** (2026-07-07 per
 /// `CLAUDE.md` §Notifications). Absence is a private matter; the
@@ -36,13 +52,13 @@ enum NotificationPreference {
 /// absolute. It also contradicted the App Store promise ("No streaks.
 /// No nudges.").
 ///
-/// No APNs / no server. All scheduling is local via UNN. Permission
-/// is requested lazily — first time an arrival needs a banner slot.
+/// No APNs / no server. All scheduling is local via UNN.
 @MainActor
 final class NotificationService {
     static let shared = NotificationService()
 
-    /// UNN identifier prefix for the inbox-arrival notification.
+    /// DEAD (verified 2026-07-31): no readers. The live arrival notification
+    /// is identified by `WatchInboxNotificationCoordinator.inboxRequestId`.
     private enum Identifiers {
         static let inboxArrival = "inbox-arrival"
     }

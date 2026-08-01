@@ -94,7 +94,9 @@ struct WatchHomeView: View {
 /// pinned to the top via `safeAreaInset`. Inserting it as a VStack
 /// child instead would let the TabView's vertical centering drag it
 /// down with the content on pages whose body doesn't fill the screen
-/// (Latest and Pending have small content and would otherwise center).
+/// (Pending has small content and would otherwise center). This used to name
+/// "Latest" too — the page line 11 of this same file records as retired;
+/// corrected 2026-07-31.
 struct WatchPageHeader: View {
     let pageTitle: String
 

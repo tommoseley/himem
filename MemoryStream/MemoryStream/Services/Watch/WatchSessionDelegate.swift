@@ -813,34 +813,6 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         }
     }
 
-    /// Notifies the watch that a clipId has been received and persisted.
-    /// Watch removes the row from its local pending manifest, which
-    /// updates `WatchSharedState.pendingCount` and refreshes the
-    /// complication.
-    ///
-    /// Dual-path delivery:
-    ///   1. **`sendMessage` (fast)** — when the watch session is currently
-    ///      reachable (user looking at watch / app recently active), the
-    ///      message lands immediately. This is the common path right
-    ///      after a fresh recording: user takes clip, watches the
-    ///      transfer, and the pending count clears in real time.
-    ///   2. **`transferUserInfo` (durable)** — always queued as backup so
-    ///      that if the watch goes to sleep or is out of range, the ack
-    ///      still delivers when the watch next activates. Receiving via both
-    ///      paths is harmless — but NOT for the reason this comment used to
-    ///      give. `@Published` has no equality check, so re-assigning the same
-    ///      value DOES re-fire the sink, and `WatchAckPipelineMultiClipTests`
-    ///      explicitly forbids adding `.removeDuplicates()` (it would drop
-    ///      in-flight acks for distinct clips). What makes the double delivery
-    ///      safe is the sink's work being idempotent: `pending.remove(clipId:)`
-    ///      / `removeByRollGroup` on an already-removed row is a no-op. Right
-    ///      conclusion, wrong mechanism — corrected 2026-07-31.
-    ///
-    /// Previously we used `transferUserInfo` only. Durable, but the
-    /// system delays its delivery to "when appropriate" — typically
-    /// seconds to minutes when the watch app isn't running — so the
-    /// complication's pending count stayed stale visibly long enough to
-    /// look like a bug.
     /// Asks the watch to re-attempt every clip in its pending manifest.
     /// Wired to the journal's pull-to-refresh so the user has an
     /// explicit "kick the watch" affordance for the case where the
@@ -967,6 +939,40 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         sendConfirmation(clipId: nil, rollGroupId: rollGroupId)
     }
 
+    /// Notifies the watch that a clipId (or a whole rollGroup) has been
+    /// received and persisted. The watch removes the row from its local
+    /// pending manifest, which updates `WatchSharedState.pendingCount` and
+    /// refreshes the complication.
+    ///
+    /// (This doc lived above `requestWatchPendingFlush` until 2026-07-31.
+    /// Because the two `///` blocks were contiguous, Swift merged them into
+    /// that function's documentation — where it directly contradicted the
+    /// text below it, which says the flush is deliberately NOT queued via
+    /// `transferUserInfo`. It describes THIS function; moved here.)
+    ///
+    /// Dual-path delivery:
+    ///   1. **`sendMessage` (fast)** — when the watch session is currently
+    ///      reachable (user looking at watch / app recently active), the
+    ///      message lands immediately. This is the common path right
+    ///      after a fresh recording: user takes clip, watches the
+    ///      transfer, and the pending count clears in real time.
+    ///   2. **`transferUserInfo` (durable)** — always queued as backup so
+    ///      that if the watch goes to sleep or is out of range, the ack
+    ///      still delivers when the watch next activates. Receiving via both
+    ///      paths is harmless — but NOT for the reason this comment used to
+    ///      give. `@Published` has no equality check, so re-assigning the same
+    ///      value DOES re-fire the sink, and `WatchAckPipelineMultiClipTests`
+    ///      explicitly forbids adding `.removeDuplicates()` (it would drop
+    ///      in-flight acks for distinct clips). What makes the double delivery
+    ///      safe is the sink's work being idempotent: `pending.remove(clipId:)`
+    ///      / `removeByRollGroup` on an already-removed row is a no-op. Right
+    ///      conclusion, wrong mechanism — corrected 2026-07-31.
+    ///
+    /// Previously we used `transferUserInfo` only. Durable, but the
+    /// system delays its delivery to "when appropriate" — typically
+    /// seconds to minutes when the watch app isn't running — so the
+    /// complication's pending count stayed stale visibly long enough to
+    /// look like a bug.
     private func sendConfirmation(clipId: UUID?, rollGroupId: UUID?) {
         let session = WCSession.default
         let payload = Self.confirmationPayload(clipId: clipId, rollGroupId: rollGroupId)
