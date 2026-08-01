@@ -53,12 +53,14 @@ struct DebouncedTriggerTests {
     @Test func spacedFires_produceIndividualActions() async throws {
         var callCount = 0
         let trigger = DebouncedTrigger(interval: .milliseconds(80))
-        trigger.fire { callCount += 1 }
-        try await Task.sleep(nanoseconds: 200_000_000)
-        trigger.fire { callCount += 1 }
-        try await Task.sleep(nanoseconds: 200_000_000)
-        trigger.fire { callCount += 1 }
-        try await Task.sleep(nanoseconds: 200_000_000)
+        // Deterministic wait per fire, same reason as the burst test above:
+        // a fixed 200ms sleep is a wall-clock race under full-suite load.
+        // Waiting for each action to land also GUARANTEES the spacing this
+        // test is about, rather than assuming the clock provided it.
+        for expected in 1...3 {
+            trigger.fire { callCount += 1 }
+            try await Self.waitUntil { callCount >= expected }
+        }
         #expect(callCount == 3)
     }
 
@@ -71,10 +73,34 @@ struct DebouncedTriggerTests {
         var callCount = 0
         let trigger = DebouncedTrigger(interval: .milliseconds(50))
         trigger.fire { callCount += 1 }
-        // Immediately after fire, the action must not have run.
+        // THE invariant: not synchronous inside `fire`. Deterministic — no
+        // clock involved.
         #expect(callCount == 0)
-        try await Task.sleep(nanoseconds: 150_000_000)
+        // That it eventually runs is a separate, weaker claim, and a fixed
+        // 150ms sleep made it a wall-clock race: this failed at 1195 tests
+        // and passed the same commit in isolation (F23, 2026-07-31). Same
+        // deterministic wait the burst test adopted on 2026-07-15 — the fix
+        // was applied to one instance then, not to the class.
+        try await Self.waitUntil { callCount >= 1 }
         #expect(callCount == 1)
+    }
+
+    /// Polls until `condition` holds or `timeout` elapses. Returns as soon as
+    /// it's true, so a healthy run costs ~one poll interval; a CPU-starved one
+    /// gets the slack it needs instead of failing.
+    ///
+    /// A fixed sleep asserts "the scheduler got to it within N ms," which is
+    /// not what any of these tests mean and is not something a parallel test
+    /// run can promise. `.serialized` on the suite doesn't help — the
+    /// contention is global CPU load, not intra-suite parallelism.
+    static func waitUntil(
+        timeout: TimeInterval = 3.0,
+        _ condition: () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)  // 10ms
+        }
     }
 
     /// `cancel()` between fire and window-close swallows the pending
