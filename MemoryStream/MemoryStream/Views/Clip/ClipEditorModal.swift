@@ -683,10 +683,45 @@ struct ClipEditorModal: View {
         }
     }
 
+    /// What the top-bar **Done** must do with an open draft. `nil` = no
+    /// draft is open. Otherwise the same gate every other commit path
+    /// uses, so there is still exactly one decision and no second path
+    /// to drift.
+    ///
+    /// Pure + static deliberately: the defect this closes (F24 Defect 1)
+    /// was invisible at the owner level. `ClipEditorCommitDecision` was
+    /// correct and simply **was not called** — `commitOpenEdits` nil'd
+    /// the drafts under a comment asserting "the ClipEditor coordinator
+    /// commits." It does not: closing the editor fires only
+    /// `coordinator.end(id:)`, which sets `activeEditId = nil`, so
+    /// `ClipEditorSwitchOutcome.decide` sees `switchedToOtherEditor ==
+    /// false` and returns `.stayEditing`. Typing and then tapping the
+    /// top-bar Done — the natural gesture — discarded the edit in
+    /// silence. A correct owner nobody consults is the class named in
+    /// CLAUDE.md § "Guard the Caller, Not Just the Owner"; the caller is
+    /// guarded by `ClipEditorTopBarDoneTests`.
+    static func openDraftDecision(draft: String?, current: String,
+                                  field: ClipEditorField) -> ClipEditorCommitDecision? {
+        guard let draft else { return nil }
+        return ClipEditorCommitDecision.decide(initial: current, draft: draft, field: field)
+    }
+
     private func commitOpenEdits() {
-        // Done from the top bar while a field is open commits it (never lose
-        // work), routed through the same gate via each editor's own onDone —
-        // here we simply close drafts; the ClipEditor coordinator commits.
+        // Done from the top bar while a field is open COMMITS it (never lose
+        // work) — routed through the same decision the editors' own Done
+        // uses, then the drafts close.
+        if case .commit(let trimmed)? = Self.openDraftDecision(
+            draft: contentDraft, current: currentContent, field: contentField
+        ) {
+            commitContent(trimmed)
+        }
+        if let edgeId = openEdgeId,
+           let edge = edges.first(where: { $0.id == edgeId }),
+           case .commit(let trimmed)? = Self.openDraftDecision(
+               draft: annotationDraft, current: edge.annotation ?? "", field: .description
+           ) {
+            lifecycle.updateEdgeAnnotation(edgeId: edgeId, annotation: trimmed)
+        }
         contentDraft = nil
         annotationDraft = nil
     }
