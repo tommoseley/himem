@@ -11,6 +11,16 @@ import AVFoundation
 /// 3-channel / 48 kHz / Float32 PCM the watch actually records. **A
 /// failure here IS the ~50× oversized-transfer bug** (a 59 s clip is
 /// ~33 MB raw vs ~230 KB compressed).
+///
+/// **F23 T2.6 — the gap this suite had.** CLAUDE.md designates it as enforcing
+/// *"the file handed to `transferFile` MUST be mono/16 kHz/AAC … that test
+/// failing IS the oversized-transfer bug."* Every test below exercised the
+/// transcoder and the predicate **in isolation**; nothing asserted that the
+/// transfer path actually consults the predicate. A correct predicate that
+/// `enqueueReadyTransfer` stopped calling would have left the whole suite
+/// green while raw PCM shipped — the F18 lesson (*the invariant is one owner,
+/// not merely that the owner is correct*) unapplied to the path it guards.
+/// `transferPathIsGatedOnTheFormatPredicate` closes that.
 @Suite(.serialized)
 struct WatchTransferAudioTranscoderTests {
 
@@ -192,4 +202,107 @@ struct WatchTransferAudioTranscoderTests {
         #expect(!WatchTransferAudioTranscoder.isTransferReadyAndComplete(dest, expectedSeconds: 10.0),
                 "a 1s artifact must fail the completeness gate for a 10s clip (truncated-source simulation)")
     }
+
+    // MARK: - The caller consults the predicate (F23 T2.6)
+
+    /// THE GATE. Every `transferFile` in the watch's transfer service must sit
+    /// behind `WatchTransferAudioTranscoder.isTransferReady` inside the same
+    /// function.
+    ///
+    /// Source-scanned rather than executed: `enqueueReadyTransfer` is private,
+    /// lives in the watch target, and calls `WCSession.default` — there is no
+    /// seam that lets a unit test drive a real transfer. What CAN be pinned
+    /// mechanically is that the guard is still in the path, which is precisely
+    /// the thing that would rot silently.
+    ///
+    /// It lives in the phone suite deliberately: this is the suite CLAUDE.md
+    /// names as the owner of the format invariant, and it runs on every
+    /// `MemoryStream` scheme run, so a watch-side regression fails the gate
+    /// that is actually watched.
+    @Test func transferPathIsGatedOnTheFormatPredicate() throws {
+        let src = try Self.watchTransferServiceSource()
+        let ungated = Self.ungatedTransferSites(in: src)
+        #expect(
+            ungated.isEmpty,
+            """
+            `transferFile` is reached without the mono/16k/AAC check at line(s) \
+            \(ungated.map(String.init).joined(separator: ", ")).
+
+            Raw 3-channel/48 kHz PCM is ~144x the compressed payload and takes \
+            minutes over WatchConnectivity — the ~50x sync-slowness bug \
+            (dogfood 2026-07-14). The transcoder being correct is not the \
+            invariant; the transfer path calling it is.
+            """
+        )
+    }
+
+    /// Non-vacuity: there is a transfer site to guard at all. Without this the
+    /// gate passes trivially if `transferFile` is renamed or moved.
+    @Test func thereIsExactlyOneTransferSiteToGuard() throws {
+        let src = try Self.watchTransferServiceSource()
+        let sites = src.components(separatedBy: "\n").enumerated().filter { _, l in
+            Self.isTransferSite(l)
+        }
+        #expect(sites.count == 1,
+                "expected the single `enqueueReadyTransfer` site; found \(sites.count) — a new one needs its own guard")
+    }
+
+    /// Guards the guard: the matcher must see an ungated site and clear a
+    /// gated one.
+    @Test func theGateScannerCanSeeAnUngatedTransfer() {
+        let ungated = """
+            private func enqueueReadyTransfer(clip: WatchPendingClip, fileURL: URL) {
+                let session = WCSession.default
+                let transfer = session.transferFile(fileURL, metadata: metadata)
+            }
+            """
+        #expect(Self.ungatedTransferSites(in: ungated) == [3], "an unguarded transfer must be flagged")
+
+        let gated = """
+            private func enqueueReadyTransfer(clip: WatchPendingClip, fileURL: URL) {
+                guard WatchTransferAudioTranscoder.isTransferReady(fileURL) else { return }
+                let transfer = session.transferFile(fileURL, metadata: metadata)
+            }
+            """
+        #expect(Self.ungatedTransferSites(in: gated).isEmpty)
+    }
+
+    static func isTransferSite(_ line: String) -> Bool {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        guard !t.hasPrefix("//"), !t.hasPrefix("///") else { return false }
+        return t.contains(".transferFile(")
+    }
+
+    /// 1-indexed lines where `transferFile` is reached without
+    /// `isTransferReady` appearing earlier in the same function.
+    static func ungatedTransferSites(in source: String) -> [Int] {
+        let lines = source.components(separatedBy: "\n")
+        var enclosingFunc: Int? = nil
+        var out: [Int] = []
+        for (i, line) in lines.enumerated() {
+            if line.range(of: #"\bfunc\s+\w+\("#, options: .regularExpression) != nil {
+                enclosingFunc = i
+            }
+            guard isTransferSite(line) else { continue }
+            guard let start = enclosingFunc else { out.append(i + 1); continue }
+            let body = lines[start...i].joined(separator: "\n")
+            if !body.contains("isTransferReady") { out.append(i + 1) }
+        }
+        return out
+    }
+
+    static func watchTransferServiceSource() throws -> String {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()      // MemoryStreamTests
+            .deletingLastPathComponent()      // MemoryStream (project dir)
+            .appendingPathComponent("Himem Watch Watch App/WatchTransferService.swift")
+        guard let src = try? String(contentsOf: root, encoding: .utf8), !src.isEmpty else {
+            // The `fcb378b` pattern — never conclude "no offenders" from a read
+            // that returned nothing.
+            throw GateFailure.sourceNotFound(root.path)
+        }
+        return src
+    }
+
+    enum GateFailure: Error { case sourceNotFound(String) }
 }
