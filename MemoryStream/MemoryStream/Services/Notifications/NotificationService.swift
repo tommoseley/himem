@@ -40,9 +40,9 @@ enum NotificationPreference {
 ///     from onboarding (`MemoryStreamApp:389`) and Settings
 ///     (`SettingsView:862`).
 ///
-/// `Identifiers.inboxArrival` below has no readers — the coordinator uses its
-/// own request id. Dead; left in place rather than removed in a comment-only
-/// pass, and flagged.
+/// (A dead `Identifiers.inboxArrival` constant lived here with no readers —
+/// the coordinator uses its own request id. Deleted 2026-07-31: dead code kept
+/// under a note explaining it is dead is how phantom comments start.)
 ///
 /// **Channel B (Daily nudge / Inactivity) is retired** (2026-07-07 per
 /// `CLAUDE.md` §Notifications). Absence is a private matter; the
@@ -56,12 +56,6 @@ enum NotificationPreference {
 @MainActor
 final class NotificationService {
     static let shared = NotificationService()
-
-    /// DEAD (verified 2026-07-31): no readers. The live arrival notification
-    /// is identified by `WatchInboxNotificationCoordinator.inboxRequestId`.
-    private enum Identifiers {
-        static let inboxArrival = "inbox-arrival"
-    }
 
     /// Notification category identifiers — used by the UNN delegate to
     /// route taps to the right surface.
