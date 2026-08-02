@@ -48,6 +48,27 @@ When a runtime error, exception, or incorrect behavior is observed, the followin
 
 This rule applies to all runtime defects including: exceptions, incorrect outputs, state corruption, and boundary condition failures.
 
+### Don't Go Looking for Zebras (Mandatory)
+
+**When something that used to work fails, our own recent changes are the FIRST suspects, not the last.** Open by checking the diff. Environmental theories, Apple-behaviour theories, device-state theories and user-error theories are **last resorts, reached only after the diff is cleared** — and "it worked before" is the strongest possible signal that the cause is in what we just touched.
+
+- **Bisect the surface first.** Name the commits that touched the failing path since it last worked, and read each diff before forming any other hypothesis.
+- **A change's side effects count as the change.** A fix aimed at one property can move another: `.measurement` → `.default` was a *gain* fix, and it also changed the **input node's format**, which changed the master file's format, which changed what every downstream consumer receives. The blast radius of a config change is every value derived from it.
+- **Re-check your own exonerations.** Evidence that a component "worked" must come from the *current* build on the *current* path — a log line showing an old file being read proves nothing about the code that wrote it.
+- **Then write the test that would have caught it.** Every one of these failures reached a device through a suite that was green.
+
+*Origin: 2026-08-01/02 device pass. Silent recordings on the phone. CC opened with an audio-route/Bluetooth theory while the causing change sat two days deep in the diff, and separately exonerated the compressor using a transcription of a file recorded on an earlier build. Tom's correction: "this WORKED, 100%, before the troika changes — this is something we just broke."*
+
+### Assertions Need a Ceiling, Not Just a Floor (Mandatory)
+
+**A one-sided bound exonerates the failure it was written to catch.** `AudioCompressorTests` asserted `ratio >= 10.0` under the message *"codec settings may be wrong"* — so a **780× ratio, which is what silence compresses to, passed**. The more completely the audio was destroyed, the more emphatically the test approved.
+
+- **Bound both sides of any ratio, size, count or duration** whose *too-good* direction is also a defect. Compression that is far better than physically plausible is data loss.
+- **Assert the property, not a proxy for it.** Size is a proxy for "the audio survived"; the property is signal. Where the real assertion needs an unavailable resource (a speech model, a device mic), say so — a suite whose only real guard is a leg that never runs on this machine is green as a *count*, not as coverage.
+- **A static fixture only tests the format it happens to be.** When production's format is derived from device configuration, a fixture recorded once can stop resembling what ships without anything failing.
+
+*Origin: 2026-08-02. Two independent silent captures reached a device under a fully green compressor suite.*
+
 ### Measurement Discipline (Mandatory)
 
 **Name what a measurement actually is before building on it.** Every diagnostic failure in this project has been a signal that *looked* authoritative because it was well-formed, and was in fact truncated, aggregated, or overloaded. None looked like an error at the moment it was read — which is why care alone doesn't catch them.
