@@ -152,7 +152,17 @@ extension ClipDisplayModel {
             sessionStart: sessionStart,
             placeName: nil,
             content: .transcript(clip.transcript),
-            evidence: .audio(duration: clip.duration),
+            // A duration of 0 means "not known here", never "zero seconds".
+            // `MediaReference` carries no duration attribute, so a clip
+            // captured on another device has no entry in the per-device
+            // `BenchClipDurationStore` and `syntheticClip` supplies 0. Passing
+            // that through rendered a confident "0:00" — a duration the app
+            // states and that is false (Honest-Label class, money-tested by
+            // `ClipDisplayModelTests.voice_bench_unknownDuration_*`).
+            // Absence is the honest state and needs no announcement: the
+            // projection simply omits the time. `BenchClipDurationStore.record`
+            // already refuses non-positive values for the same reason.
+            evidence: .audio(duration: clip.duration > 0 ? clip.duration : nil),
             thumbnailKey: nil,
             failed: clip.transcriptionAttempted && clip.transcript.isEmpty,
             sourceDevice: clip.source

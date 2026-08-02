@@ -146,8 +146,8 @@
 		A100000790 /* AddExistingClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000790 /* AddExistingClipsSheet.swift */; };
 		A100000802 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
 		A100000803 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
-		A100000811 /* WatchAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* WatchAudioSessionConfig.swift */; };
-		A100000812 /* WatchAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* WatchAudioSessionConfig.swift */; };
+		A100000811 /* CaptureAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* CaptureAudioSessionConfig.swift */; };
+		A100000812 /* CaptureAudioSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000810 /* CaptureAudioSessionConfig.swift */; };
 		A100000900 /* UbiquityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000900 /* UbiquityStore.swift */; };
 		A100000901 /* MediaResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000901 /* MediaResolver.swift */; };
 		A100000902 /* MediaReferenceUbiquityMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000902 /* MediaReferenceUbiquityMigration.swift */; };
@@ -171,8 +171,6 @@
 		A200000021 /* ClipsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000021 /* ClipsTabView.swift */; };
 		A200000023 /* PlaceClipSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000023 /* PlaceClipSheet.swift */; };
 		A200000024 /* ClipFateRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000024 /* ClipFateRow.swift */; };
-		A200000025 /* CoachmarkOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000025 /* CoachmarkOrchestrator.swift */; };
-		A200000026 /* CoachmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000026 /* CoachmarkView.swift */; };
 		A200000027 /* ClipsStatusSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000027 /* ClipsStatusSheet.swift */; };
 		A200000028 /* DebouncedTrigger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000028 /* DebouncedTrigger.swift */; };
 		A200000029 /* BenchHeaderTitleBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000029 /* BenchHeaderTitleBuilder.swift */; };
@@ -197,7 +195,13 @@
 		A200000091 /* ClipEditorModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000091 /* ClipEditorModal.swift */; };
 		A200000092 /* ArrivedClipMaterializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000092 /* ArrivedClipMaterializer.swift */; };
 		A200000093 /* WalkthroughOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000093 /* WalkthroughOrchestrator.swift */; };
+		A200000094 /* WalkthroughOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000094 /* WalkthroughOverlay.swift */; };
+		A200000095 /* SectionHelp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000095 /* SectionHelp.swift */; };
 		A2000000FB /* FABHandednessSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000FB /* FABHandednessSync.swift */; };
+		A200000401 /* CaptureUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000401 /* CaptureUnavailableView.swift */; };
+		A200000402 /* FirstImportState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000402 /* FirstImportState.swift */; };
+		A200000404 /* SilentCaptureBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000404 /* SilentCaptureBanner.swift */; };
+		A200000403 /* SilentCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000403 /* SilentCapture.swift */; };
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
@@ -418,7 +422,7 @@
 		B100000780 /* PermissionWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionWizardView.swift; sourceTree = "<group>"; };
 		B100000790 /* AddExistingClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddExistingClipsSheet.swift; sourceTree = "<group>"; };
 		B100000801 /* WatchTransferAudioTranscoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchTransferAudioTranscoder.swift; path = Shared/WatchTransferAudioTranscoder.swift; sourceTree = "<group>"; };
-		B100000810 /* WatchAudioSessionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchAudioSessionConfig.swift; path = Shared/WatchAudioSessionConfig.swift; sourceTree = "<group>"; };
+		B100000810 /* CaptureAudioSessionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureAudioSessionConfig.swift; path = Shared/CaptureAudioSessionConfig.swift; sourceTree = "<group>"; };
 		B100000900 /* UbiquityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UbiquityStore.swift; sourceTree = "<group>"; };
 		B100000901 /* MediaResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaResolver.swift; sourceTree = "<group>"; };
 		B100000902 /* MediaReferenceUbiquityMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReferenceUbiquityMigration.swift; sourceTree = "<group>"; };
@@ -442,8 +446,6 @@
 		B200000021 /* ClipsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipsTabView.swift; sourceTree = "<group>"; };
 		B200000023 /* PlaceClipSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceClipSheet.swift; sourceTree = "<group>"; };
 		B200000024 /* ClipFateRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipFateRow.swift; sourceTree = "<group>"; };
-		B200000025 /* CoachmarkOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CoachmarkOrchestrator.swift; path = MemoryStream/Services/Tutorials/CoachmarkOrchestrator.swift; sourceTree = SOURCE_ROOT; };
-		B200000026 /* CoachmarkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CoachmarkView.swift; path = MemoryStream/Views/Components/CoachmarkView.swift; sourceTree = SOURCE_ROOT; };
 		B200000027 /* ClipsStatusSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipsStatusSheet.swift; path = MemoryStream/Views/Clips/ClipsStatusSheet.swift; sourceTree = SOURCE_ROOT; };
 		B200000028 /* DebouncedTrigger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DebouncedTrigger.swift; path = MemoryStream/Services/DebouncedTrigger.swift; sourceTree = SOURCE_ROOT; };
 		B200000029 /* BenchHeaderTitleBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BenchHeaderTitleBuilder.swift; path = MemoryStream/Views/Inbox/BenchHeaderTitleBuilder.swift; sourceTree = SOURCE_ROOT; };
@@ -468,7 +470,13 @@
 		B200000091 /* ClipEditorModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipEditorModal.swift; path = MemoryStream/Views/Clip/ClipEditorModal.swift; sourceTree = SOURCE_ROOT; };
 		B200000092 /* ArrivedClipMaterializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ArrivedClipMaterializer.swift; path = MemoryStream/Services/Storage/ArrivedClipMaterializer.swift; sourceTree = SOURCE_ROOT; };
 		B200000093 /* WalkthroughOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOrchestrator.swift; path = MemoryStream/Services/Tutorials/WalkthroughOrchestrator.swift; sourceTree = SOURCE_ROOT; };
+		B200000094 /* WalkthroughOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalkthroughOverlay.swift; path = MemoryStream/Views/Components/WalkthroughOverlay.swift; sourceTree = SOURCE_ROOT; };
+		B200000095 /* SectionHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SectionHelp.swift; path = MemoryStream/Views/Components/SectionHelp.swift; sourceTree = SOURCE_ROOT; };
 		B2000000FB /* FABHandednessSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FABHandednessSync.swift; path = MemoryStream/Services/FABHandednessSync.swift; sourceTree = SOURCE_ROOT; };
+		B200000401 /* CaptureUnavailableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureUnavailableView.swift; path = MemoryStream/Views/Components/CaptureUnavailableView.swift; sourceTree = SOURCE_ROOT; };
+		B200000402 /* FirstImportState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FirstImportState.swift; path = MemoryStream/Services/Storage/FirstImportState.swift; sourceTree = SOURCE_ROOT; };
+		B200000404 /* SilentCaptureBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SilentCaptureBanner.swift; path = MemoryStream/Views/Components/SilentCaptureBanner.swift; sourceTree = SOURCE_ROOT; };
+		B200000403 /* SilentCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SilentCapture.swift; path = MemoryStream/Services/AI/SilentCapture.swift; sourceTree = SOURCE_ROOT; };
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
@@ -743,9 +751,13 @@
 				B100000950 /* TopicChip.swift */,
 				B100000991 /* TutorialsHubView.swift */,
 				B100000992 /* TutorialOrchestrator.swift */,
-				B200000025 /* CoachmarkOrchestrator.swift */,
 				B200000093 /* WalkthroughOrchestrator.swift */,
-				B200000026 /* CoachmarkView.swift */,
+				B200000094 /* WalkthroughOverlay.swift */,
+				B200000095 /* SectionHelp.swift */,
+				B200000402 /* FirstImportState.swift */,
+				B200000404 /* SilentCaptureBanner.swift */,
+				B200000403 /* SilentCapture.swift */,
+				B200000401 /* CaptureUnavailableView.swift */,
 				B100000993 /* QuickLookViewer.swift */,
 				B100000998 /* PhotoViewerSheet.swift */,
 				B100000994 /* BottomDeleteButton.swift */,
@@ -933,7 +945,7 @@
 			children = (
 				B100000310 /* ClipMetadata.swift */,
 				B100000801 /* WatchTransferAudioTranscoder.swift */,
-				B100000810 /* WatchAudioSessionConfig.swift */,
+				B100000810 /* CaptureAudioSessionConfig.swift */,
 				B100000320 /* WatchSharedState.swift */,
 				B100000670 /* MinClipDebouncer.swift */,
 				B100000671 /* NextClipController.swift */,
@@ -1294,7 +1306,7 @@
 			files = (
 				A100000313 /* ClipMetadata.swift in Sources */,
 				A100000803 /* WatchTransferAudioTranscoder.swift in Sources */,
-				A100000812 /* WatchAudioSessionConfig.swift in Sources */,
+				A100000812 /* CaptureAudioSessionConfig.swift in Sources */,
 				A100000320 /* WatchSharedState.swift in Sources */,
 				A100000672 /* MinClipDebouncer.swift in Sources */,
 				A100000673 /* NextClipController.swift in Sources */,
@@ -1331,7 +1343,7 @@
 				A100000001 /* MemoryStreamApp.swift in Sources */,
 				A100000310 /* ClipMetadata.swift in Sources */,
 				A100000802 /* WatchTransferAudioTranscoder.swift in Sources */,
-				A100000811 /* WatchAudioSessionConfig.swift in Sources */,
+				A100000811 /* CaptureAudioSessionConfig.swift in Sources */,
 				A100000700 /* AudioCompressor.swift in Sources */,
 				A100000730 /* BreathCaption.swift in Sources */,
 				A100000732 /* TopicColorPicker.swift in Sources */,
@@ -1463,9 +1475,13 @@
 				A100000950 /* TopicChip.swift in Sources */,
 				A100000991 /* TutorialsHubView.swift in Sources */,
 				A100000992 /* TutorialOrchestrator.swift in Sources */,
-				A200000025 /* CoachmarkOrchestrator.swift in Sources */,
 				A200000093 /* WalkthroughOrchestrator.swift in Sources */,
-				A200000026 /* CoachmarkView.swift in Sources */,
+				A200000094 /* WalkthroughOverlay.swift in Sources */,
+				A200000095 /* SectionHelp.swift in Sources */,
+				A200000402 /* FirstImportState.swift in Sources */,
+				A200000404 /* SilentCaptureBanner.swift in Sources */,
+				A200000403 /* SilentCapture.swift in Sources */,
+				A200000401 /* CaptureUnavailableView.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,
 				A100000998 /* PhotoViewerSheet.swift in Sources */,
 				A100000994 /* BottomDeleteButton.swift in Sources */,
@@ -1613,7 +1629,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MemoryStream/MemoryStream.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
@@ -1639,8 +1655,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.himem.app;
 				PRODUCT_NAME = HiMem;
-				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
-				SUPPORTS_MACCATALYST = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1654,7 +1670,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MemoryStream/MemoryStream.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MemoryStream/Info.plist;
@@ -1680,8 +1696,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.himem.app;
 				PRODUCT_NAME = HiMem;
-				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
-				SUPPORTS_MACCATALYST = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1718,7 +1734,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -1777,7 +1793,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -1837,7 +1853,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch Watch App/Himem Watch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1910,7 +1926,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch Watch App/Himem Watch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1980,7 +1996,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2040,7 +2056,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2098,7 +2114,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2157,7 +2173,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2218,7 +2234,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch WidgetsExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -2289,7 +2305,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = "Himem Watch WidgetsExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 28;
 				DEVELOPMENT_TEAM = GSZN2G9HR3;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;

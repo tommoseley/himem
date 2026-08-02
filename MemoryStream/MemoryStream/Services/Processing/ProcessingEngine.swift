@@ -262,14 +262,24 @@ final class ProcessingEngine {
 
     /// **TruthReconciler gate — runs on BOTH tiers.** Models are advisory;
     /// code is authoritative. If the summary names an entity absent from the
-    /// clips (per `strictness` — `.strict` on-device, `.relaxed` for the
-    /// frontier's legitimate paraphrase), retry the pass once via `retry`; if
+    /// clips, retry the pass once via `retry`; if
     /// it still fabricates, fall back to a constrained extractive summary drawn
     /// from the clips (cannot introduce a new name — "say less before saying
     /// false"). The guarantee is HiMem's, not any vendor's, so the cloud/Plus
-    /// path passes through too (relaxed) rather than trusting the model
-    /// unchecked. The ungrounded-mention drop is `.strict`/on-device only (the
-    /// palette-bleed guard); the summary/title gate is the both-tier guarantee.
+    /// path passes through too rather than trusting the model unchecked.
+    ///
+    /// **What `strictness` actually governs here (corrected 2026-07-31).**
+    /// Summary and title grounding run **`.relaxed` on BOTH tiers** — see the
+    /// inline note at the call, and `2026-07-24`: strict exact-substring
+    /// flagged legitimate name expansions ("Abraham Lincoln" where the clips
+    /// say "Lincoln") and discarded the whole summary for a bare-quote
+    /// extractive. The `strictness` parameter reaches exactly one decision: the
+    /// **ungrounded-mention drop** below, which is `.strict`/on-device only
+    /// (the palette-bleed guard). That drop IS the real per-tier difference.
+    ///
+    /// This header previously claimed `.strict` grounding on-device. It never
+    /// did that. Pinned now by `GroundingStrictnessWiringTests` so the claim
+    /// and the wiring cannot drift apart again in either direction.
     private func reconcileResult(
         _ result: ClaudeAPIService.AnalysisResult,
         clipText: String,

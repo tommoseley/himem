@@ -42,10 +42,9 @@ struct WatchClipArrivalTranscriptionTests {
             Issue.record("Fixture long-speech-90s.caf missing")
             return
         }
-        guard await TranscriptionService.shared.modelIsInstalled(for: .current) else {
-            print("[Test] skipping — speech model not installed")
-            return
-        }
+        guard await SpeechAssetGate.canExerciseTranscription(
+                "an arrived watch clip is transcribed by the arrival helper"
+            ) else { return }
 
         // Plant the audio in the inbox audio directory. We use a
         // unique filename so we don't collide with real inbox rows

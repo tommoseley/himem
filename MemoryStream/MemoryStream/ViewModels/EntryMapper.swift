@@ -75,6 +75,7 @@ enum EntryMapper {
             longitude: entry.longitude?.doubleValue,
             locationName: entry.locationName,
             renderedSummary: entry.renderedSummary,
+            summaryUserEdited: entry.summaryUserEdited,
             projectMemberships: entry.projectsArray.map {
                 ProjectChip(id: $0.id, name: $0.name)
             },

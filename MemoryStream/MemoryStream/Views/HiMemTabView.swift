@@ -45,7 +45,40 @@ struct HiMemTabView: View {
     @StateObject private var speechService = SpeechService()
     @ObservedObject private var captureLanding = CaptureLandingBus.shared
     @ObservedObject private var captureRequests = CaptureRequestBus.shared
-    @ObservedObject private var coachmarks = CoachmarkOrchestrator.shared
+    /// The landing intent decided when the user TAPPED the FAB, held
+    /// across the capture flow. Nil for captures that never touched the
+    /// FAB (Siri / hands-free), which fall back to a live route. See
+    /// `beginCapture` for why completion-time routing was wrong (F25).
+    @State private var pendingLanding: CaptureLandingIntent? = nil
+
+    /// **The `in_peak == 0` capture gate's message**, non-nil while it is on
+    /// screen (ruled 2026-08-02).
+    ///
+    /// Owned by the shell, deliberately. The gate has to be consulted for
+    /// every landing — bench, new memory, and memory-in-project — and only
+    /// this level sees all three. Wiring it into the Clips bench alone
+    /// (where the saved-clip confirmation slot lives) would be an owner on
+    /// one path and nothing on the other two: the `.measurement`-on-the-
+    /// watch / literal-on-the-phone shape, and the memory landings are the
+    /// more expensive loss precisely because they have no slot of their own.
+    @State private var silentCaptureMessage: String? = nil
+
+    /// **F28 · which tab, if any, currently has the Learn hub pushed.**
+    ///
+    /// Learn pushes onto each tab's own `NavigationStack` and a `TabView`
+    /// keeps every tab alive, so a tab-local flag left the hub pushed
+    /// while the user was on another tab and re-presented it on return —
+    /// "out of context", because she had mentally left it. A tab cannot
+    /// observe that the tab changed; this shell can, and clears it below.
+    ///
+    /// Deliberately a `Tab?` rather than one shared Bool: a single flag
+    /// would push Learn onto every stack at once. Deliberately NOT a new
+    /// ambient singleton either — that accumulation is exactly what F6
+    /// names as the cost of "each locally reasonable call".
+    @State private var learnOpenOn: Tab? = nil
+    // F8 · guided walkthrough (do-it-with-me first run). Replaced the per-tab
+    // coachmark cards, retired 2026-07-27 (F8 + F7c section-? cover the ground).
+    @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
     @ObservedObject private var inbox = InboxManifest.shared
     /// Reads which project (if any) the user is currently viewing —
     /// routes the Projects tab FAB per the July 10 context-aware
@@ -80,12 +113,6 @@ struct HiMemTabView: View {
     @ObservedObject private var projectOpen = ProjectOpenBus.shared
     /// Routes a mention read-chip tap to the Memories tab's mention filter.
     @ObservedObject private var mentionFilter = MentionFilterBus.shared
-    /// Set true when `pendingReturnToClips` fires; consumed by the
-    /// next Clips coachmark evaluation so guardrail #3 ("suppress the
-    /// Clips coachmark when arriving from a capture") holds. Cleared
-    /// once the coachmark decision is made — subsequent neutral
-    /// arrivals at Clips are eligible.
-    @State private var justArrivedFromCapture = false
 
     /// Custom binding that intercepts every tab tap — including taps
     /// on the already-active tab, which SwiftUI's `$selection` handles
@@ -119,19 +146,6 @@ struct HiMemTabView: View {
                     captureSource: captureSource,
                     onCaptured: handleCapturedItem
                 )
-                .fullScreenCover(item: Binding(
-                    get: { coachmarks.visible },
-                    set: { newValue in
-                        if newValue == nil, let current = coachmarks.visible {
-                            coachmarks.dismiss(current)
-                        }
-                    }
-                )) { kind in
-                    CoachmarkView(kind: kind) {
-                        coachmarks.dismiss(kind)
-                    }
-                    .presentationBackground(.clear)
-                }
                 .sheet(isPresented: Binding(
                     get: { clipsStatusSheet != nil },
                     set: { presented in if !presented { clipsStatusSheet = nil } }
@@ -146,6 +160,10 @@ struct HiMemTabView: View {
                     }
                 }
         )
+        // F8 · the guided walkthrough renders above the live tab content. Modal
+        // beats block; action beats are a non-blocking banner so the real
+        // control the user must tap stays live underneath.
+        .overlay { WalkthroughOverlay() }
     }
 
     /// The tab shell's layout — TabView + context-aware FAB + presence dot.
@@ -155,7 +173,7 @@ struct HiMemTabView: View {
         // the TabView fills. Only the FAB moves. See `FABHandedness`.
         ZStack(alignment: FABHandedness.containerAlignment(leftHanded: fabHandednessLeft)) {
             TabView(selection: selectionBinding) {
-                ClipsTabView()
+                ClipsTabView(learnPresented: Binding(get: { learnOpenOn == .clips }, set: { learnOpenOn = $0 ? .clips : nil }))
                     .tabItem { Label("Clips", systemImage: "waveform") }
                     .tag(Tab.clips)
                 // No native `.badge()` — SwiftUI TabView badges are red
@@ -165,11 +183,13 @@ struct HiMemTabView: View {
                 // in ochre as presence-not-alert. The dot is drawn as
                 // an overlay below.
 
-                JournalView(initialMode: .memories, hidesModeToggle: true)
+                JournalView(initialMode: .memories, hidesModeToggle: true,
+                            learnPresented: Binding(get: { learnOpenOn == .memories }, set: { learnOpenOn = $0 ? .memories : nil }))
                     .tabItem { Label("Memories", systemImage: "book.closed") }
                     .tag(Tab.memories)
 
-                JournalView(initialMode: .projects, hidesModeToggle: true)
+                JournalView(initialMode: .projects, hidesModeToggle: true,
+                            learnPresented: Binding(get: { learnOpenOn == .projects }, set: { learnOpenOn = $0 ? .projects : nil }))
                     .tabItem { Label("Projects", systemImage: "folder") }
                     .tag(Tab.projects)
             }
@@ -199,10 +219,7 @@ struct HiMemTabView: View {
                     // modality stack) + "Add existing memory" (the leading
                     // pill → the search-to-add sheet, via the request bus).
                     AppendFAB(
-                        onSelect: { modality in
-                            captureSource = .manual // FAB = user-initiated
-                            activeCaptureModality = modality
-                        },
+                        onSelect: { modality in beginCapture(modality) },
                         accessibilityLabel: currentFabAccessibilityLabel,
                         leadingAction: AppendFABLeadingAction(
                             label: "Add existing memory",
@@ -212,10 +229,7 @@ struct HiMemTabView: View {
                     )
                 case .dropOnBench, .createMemory:
                     AppendFAB(
-                        onSelect: { modality in
-                            captureSource = .manual // FAB = user-initiated
-                            activeCaptureModality = modality
-                        },
+                        onSelect: { modality in beginCapture(modality) },
                         accessibilityLabel: currentFabAccessibilityLabel
                     )
                 }
@@ -232,7 +246,28 @@ struct HiMemTabView: View {
                 ClipsTabPresenceDot()
                     .allowsHitTesting(false)
             }
+
+            // The capture gate's message, drawn at the shell so it reaches
+            // whichever surface the capture landed on. Ruled placement:
+            // where the saved-clip confirmation would have been — the same
+            // bottom slot `CreationToast` occupies on the bench.
+            //
+            // 108pt is not a fresh guess: it is the clearance `ClipsTabView`
+            // already reserves for "the FAB + tab pill" on its own content,
+            // so this sits on the line the bench already treats as clear.
+            // DEVICE-UNVERIFIED — the same class of constant as F26's 88pt
+            // `bottomPinClearance`, and wrong either way is visible.
+            if let message = silentCaptureMessage {
+                SilentCaptureBanner(message: message) {
+                    silentCaptureMessage = nil
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 108)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.easeOut(duration: 0.22), value: silentCaptureMessage)
     }
 
     /// The cross-tab event-bus routing observers (+ the cold-launch `onAppear`),
@@ -241,25 +276,40 @@ struct HiMemTabView: View {
     /// capture modality) but collectively at the CC-30 line when inline.
     private func tabRoutingObservers(_ content: some View) -> some View {
         content
-        .onChange(of: coachmarks.restorePending) { _, pending in
-            // F2b: "Show me around" was tapped in the Learn hub — it reset the
-            // seen flags and set this flag. Wait for the hub's navigation pop
-            // to settle before presenting the coachmark's fullScreenCover (a
-            // same-frame present races the dismiss and drops the coachmark),
-            // then re-fire the CURRENT tab's coachmark. Other tabs re-coach on
-            // their next first visit via the ordinary `tryFire` gate.
-            guard pending else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                guard coachmarks.restorePending else { return }
-                coachmarks.consumeRestore(currentTab: coachmarkKind(for: selection))
+        // F26 · the walkthrough runs on Clips, because that is where the
+        // pipeline it teaches actually lands. Announced in the offer copy, so
+        // this is a stated move rather than a teleport.
+        .onChange(of: walkthrough.pendingClipsTabSwitch) { _, pending in
+            if pending, walkthrough.consumeClipsTabSwitch() {
+                selection = .clips
             }
         }
         .onChange(of: captureLanding.pendingReturnToClips) { _, pending in
             if pending {
-                justArrivedFromCapture = true
                 selection = .clips
                 captureLanding.pendingReturnToClips = false
+                // F8 · the recorded clip returned to Clips and lands on the bench.
+                walkthrough.clipDidLand()
             }
+        }
+        // F8 · the user created a memory from their clip (Start a Memory) —
+        // advance to the organize beat and track the memory so we can watch it
+        // organize below.
+        .onChange(of: memoryNavigation.justCreatedMemoryId) { _, newId in
+            if let newId { walkthrough.memoryDidStart(id: newId) }
+        }
+        // F8 · watch the walkthrough's memory for organize completion (its
+        // title + summary appearing). `lastOrganizedAt` isn't broadcast, so we
+        // check on Core Data change. On Plus this fires ~at once; on Free after
+        // the user taps Organize.
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange)) { _ in
+            // Free only: detect the organize pass finishing → advance to done. On
+            // Plus the organize beat is a *confirmation* (organizeAlreadyDone) the
+            // user taps through, so auto-advancing would skip step 4 — the exact
+            // "I didn't see it happen" miss F10 exists to fix (Tom 2026-07-28).
+            guard walkthrough.activeBeat == .organize, !walkthrough.organizeAlreadyDone,
+                  let id = walkthrough.walkthroughMemoryId else { return }
+            if walkthroughMemoryIsOrganized(id) { walkthrough.organizeDidComplete() }
         }
         // Create-one-memory landing (`Himem · Memory Detail.html`
         // §Just created, July 12 2026): after
@@ -300,7 +350,10 @@ struct HiMemTabView: View {
             }
         }
         .onChange(of: selection) { _, newTab in
-            evaluateCoachmark(for: newTab)
+            // F28 · Learn does not survive a tab change. It is a reference
+            // surface reached from a `?`, not a place the user was working;
+            // leaving the tab is leaving it.
+            learnOpenOn = nil
             // Clear the arrival dot on Clips per `CLAUDE.md` §Phone —
             // "the dot represents new, unseen arrivals and clears when
             // the user opens Clips."
@@ -342,11 +395,10 @@ struct HiMemTabView: View {
             if selection == .clips && inbox.hasUnseenArrivals {
                 InboxManifest.shared.markAllSeen()
             }
-            // Cold-launch session bump for the coachmark's "never on
-            // first launch" guardrail (spec guardrail #4). Runs once
-            // per cold launch — SwiftUI calls `onAppear` on the root
-            // tab shell as the app boots.
-            coachmarks.armSession()
+            // F8 · offer the guided walkthrough on first run (post-onboarding —
+            // the tab shell only appears once onboarding completes). Once, then
+            // never re-offered; always retrievable from ? → Show me around.
+            walkthrough.offerIfFirstRun()
             if captureRequests.pendingVoiceRecord {
                 captureRequests.pendingVoiceRecord = false
                 captureSource = .handsFree // Siri cold-launch → ad-hoc, lands on bench
@@ -354,74 +406,30 @@ struct HiMemTabView: View {
             }
             if let modality = captureRequests.pendingModality {
                 captureRequests.pendingModality = nil
-                captureSource = .manual
-                DispatchQueue.main.async { activeCaptureModality = modality }
+                // Same decision point as a FAB tap: pin the landing now,
+                // while the navigation context is still whole (F25).
+                DispatchQueue.main.async { beginCapture(modality) }
             }
-            // Evaluate the coachmark for the cold-launch landing tab
-            // (Memories by default). No-op on session 1 with no
-            // content per the gate.
-            evaluateCoachmark(for: selection)
         }
         // Any surface (App Shortcuts, other in-app triggers) can request
         // capture by setting `pendingModality`.
         .onChange(of: captureRequests.pendingModality) { _, modality in
             if let modality {
                 captureRequests.pendingModality = nil
-                captureSource = .manual
-                activeCaptureModality = modality
+                beginCapture(modality)
             }
         }
     }
 
-    /// Coachmark trigger dispatch per `Tutorials · triggers spec.md`
-    /// §"Per-tab coachmark on first arrival." Applies the four
-    /// guardrails via `CoachmarkOrchestrator.tryFire`.
-    /// The coachmark `Kind` for a tab — the wiring symmetry the orchestrator's
-    /// `Kind` order mirrors. Shared by first-arrival firing and the "Show me
-    /// around" restore re-fire (F2b).
-    private func coachmarkKind(for tab: Tab) -> CoachmarkOrchestrator.Kind {
-        switch tab {
-        case .clips:    return .clips
-        case .memories: return .memories
-        case .projects: return .projects
-        }
-    }
-
-    private func evaluateCoachmark(for tab: Tab) {
-        let kind = coachmarkKind(for: tab)
-        let suppressed = (tab == .clips) && justArrivedFromCapture
-        coachmarks.tryFire(
-            kind,
-            tabHasContent: tabHasContent(for: tab),
-            suppressedByCaptureArrival: suppressed
-        )
-        // Consume the "just arrived from capture" flag after this
-        // evaluation — the next arrival at Clips is neutral.
-        if suppressed {
-            justArrivedFromCapture = false
-        }
-    }
-
-    /// Rough "is there anything to anchor to" check per guardrail #4.
-    /// Returns true when the tab has enough content that a tour is
-    /// meaningful. Doesn't need to be perfect — an over-shown
-    /// coachmark is only shown once ever, and Skip is instant.
-    private func tabHasContent(for tab: Tab) -> Bool {
-        switch tab {
-        case .clips:
-            return !inbox.isEmpty
-        case .memories:
-            return coreDataCount(entityName: "JournalEntry") > 0
-        case .projects:
-            return coreDataCount(entityName: "Project") > 0
-        }
-    }
-
-    private func coreDataCount(entityName: String) -> Int {
-        let ctx = StorageService.shared.viewContext
-        let req = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
-        req.resultType = .countResultType
-        return (try? ctx.count(for: req)) ?? 0
+    /// True once the walkthrough's memory has an organize pass — its title +
+    /// summary now exist. Drives the F8 `organize` → `done` advance (checked on
+    /// Core Data change since `lastOrganizedAt` isn't broadcast).
+    private func walkthroughMemoryIsOrganized(_ id: UUID) -> Bool {
+        let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        guard let entry = try? StorageService.shared.viewContext.fetch(req).first else { return false }
+        return entry.inferenceSummary != nil || entry.lastOrganizedAt != nil
     }
 
     /// Current FAB routing intent per `CaptureLandingRouter`. Reactive
@@ -463,16 +471,73 @@ struct HiMemTabView: View {
     /// voice items land as `InboxClip`s. On Memories, the composer's
     /// output turns into a `JournalEntry`. On Projects (inside a
     /// project), same but with a project association.
+    /// Begin a FAB-initiated capture. **The landing intent is decided
+    /// HERE, at tap time — not at completion.**
+    ///
+    /// F25: `handleCapturedItem` used to re-derive the destination from
+    /// `projectsNav.currentProjectId` when the capture finished, and the
+    /// capture flow itself destroys that value. The composer is hosted at
+    /// the tab shell, above the Projects `NavigationStack`, and photo and
+    /// video present as `fullScreenCover` — which removes the covered
+    /// `ProjectDetailView` and fires its `.onDisappear`, calling
+    /// `ProjectsNavigationContext.exit`. (That method's guard only
+    /// protects against a *different* project's late disappear; when the
+    /// same view is covered and uncovered the id matches and it clears.)
+    /// So by completion the context was nil, the route fell to
+    /// `.openNewProjectSheet`, and the item was dropped on the floor.
+    ///
+    /// Deciding at tap time is also what makes the fix cover attach,
+    /// photo and video together: it does not depend on which
+    /// presentation style clears what, only on reading the context while
+    /// the user is demonstrably still inside the project.
+    private func beginCapture(_ modality: CaptureModality) {
+        captureSource = .manual // FAB = user-initiated
+        pendingLanding = CaptureLandingRouter.route(
+            tab: routerTab(for: selection),
+            projectContext: projectsNav.currentProjectId,
+            source: .manual
+        )
+        activeCaptureModality = modality
+    }
+
     private func handleCapturedItem(_ item: CapturedItem) {
-        // Route by the *source-aware* intent, not the tab-only `currentIntent`
-        // (which drives the FAB affordance): a hands-free/Siri capture always
-        // lands on the bench, never a forced memory, regardless of the tab.
-        let landing = CaptureLandingRouter.route(
+        // Prefer the intent captured when the user tapped the FAB (F25).
+        // Fall back to a live route for captures that never touched the
+        // FAB — Siri / hands-free — where `source == .handsFree` already
+        // short-circuits to the bench regardless of the visible tab.
+        let landing = pendingLanding ?? CaptureLandingRouter.route(
             tab: routerTab(for: selection),
             projectContext: projectsNav.currentProjectId,
             source: captureSource
         )
-        defer { captureSource = .manual } // reset for the next capture
+        defer {
+            captureSource = .manual // reset for the next capture
+            pendingLanding = nil
+        }
+
+        // **The `in_peak == 0` capture gate, consulted BEFORE the switch —
+        // once, for every landing** (ruled 2026-08-02).
+        //
+        // Deliberately outside `switch landing`: a recording that heard
+        // nothing is the same failure whether it lands on the bench or
+        // becomes a memory, and the memory landings are where it costs
+        // more. A reference inside one case would cover one path and
+        // silently drop two, which is the shape `SilentCaptureGateTests`
+        // exists to fail on.
+        //
+        // Only a voice session can be silent; a photo, video, note or
+        // attach has no amplitude to judge — those leave any standing
+        // message alone, because it is still true of the last recording.
+        //
+        // Assigned UNCONDITIONALLY for a voice session, `nil` included: a
+        // message set on a silent capture and cleared only by hand would
+        // still be standing after a later recording that worked. That is
+        // the frozen-snapshot class (F24 D2, F25) — a correct value
+        // rendered after it stopped being true.
+        if case .voiceSession = item {
+            silentCaptureMessage = SilentCaptureDecision.bannerMessage(for: speechService.lastCaptureSilence)
+        }
+
         switch landing {
         case .dropOnBench:
             PhoneCaptureBenchDispatcher.dispatch(item)
@@ -515,9 +580,26 @@ struct HiMemTabView: View {
             // trigger, so keep the associative context in view.
 
         case .openNewProjectSheet:
-            // Unreachable: FAB variant for this intent never emits a
-            // CapturedItem; it opens the New Project sheet directly.
-            break
+            // This case previously read `break` under the comment
+            // "Unreachable: FAB variant for this intent never emits a
+            // CapturedItem." The comment was FALSE, and it is what made a
+            // silent drop look safe — F25's whole defect arrived through
+            // here. With the intent now captured at tap time it should
+            // genuinely be unreachable, but "unreachable" is precisely the
+            // claim that just cost us a P0, so it is made LOUD rather than
+            // trusted.
+            //
+            // DEBUG: fail the assertion, at the moment and place it happens.
+            // Release: land the clip on the bench rather than destroy it.
+            // Nothing is lost there — the bench IS the designed escape
+            // hatch, and the consolidation ladder exists to give an
+            // unfiled capture a home. Better than an error the user can
+            // do nothing with, and far better than silence.
+            assertionFailure(
+                "CapturedItem reached .openNewProjectSheet — the landing intent was not captured at tap time (F25)."
+            )
+            PhoneCaptureBenchDispatcher.dispatch(item)
+            CaptureLandingBus.shared.pendingReturnToClips = true
         }
     }
 

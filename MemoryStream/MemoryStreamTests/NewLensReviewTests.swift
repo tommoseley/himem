@@ -73,15 +73,69 @@ struct NewLensReviewTests {
 
     // MARK: - Bug 2 · empty state / content mutual exclusivity
 
+    /// **Updated at the `main` → `f8` merge, 2026-08-02 — the meaning moved,
+    /// not the phrasing.** A third condition arrived from the other branch:
+    /// F22's `mayAssertEmpty`, which forbids claiming empty while the first
+    /// CloudKit import is still running. That is the legitimate reason to
+    /// edit a guard — the rule genuinely gained a clause — as opposed to
+    /// updating an assertion to make a red go away.
+    ///
+    /// The original two assertions are preserved verbatim in meaning; they
+    /// simply now pass `mayAssertEmpty: true` (import finished), which is
+    /// the state they were implicitly written against.
     @Test func emptyState_suppressedWhenSiblingStackHasContent() {
         // The reported bug: no sessions, but the sibling unplaced stack has
         // rows → the empty state must NOT show.
-        #expect(SessionListView.showsEmptyState(sessionsEmpty: true, hasSiblingContent: true) == false,
+        #expect(SessionListView.showsEmptyState(
+            sessionsEmpty: true, hasSiblingContent: true, mayAssertEmpty: true) == false,
                 "no 'Nothing new' above populated sibling rows")
-        // Whole lens empty → the empty state is the only thing shown.
-        #expect(SessionListView.showsEmptyState(sessionsEmpty: true, hasSiblingContent: false) == true)
+        // Whole lens empty, import finished → the empty state is the only
+        // thing shown.
+        #expect(SessionListView.showsEmptyState(
+            sessionsEmpty: true, hasSiblingContent: false, mayAssertEmpty: true) == true)
         // Sessions present → never the empty state, regardless of siblings.
-        #expect(SessionListView.showsEmptyState(sessionsEmpty: false, hasSiblingContent: false) == false)
-        #expect(SessionListView.showsEmptyState(sessionsEmpty: false, hasSiblingContent: true) == false)
+        #expect(SessionListView.showsEmptyState(
+            sessionsEmpty: false, hasSiblingContent: false, mayAssertEmpty: true) == false)
+        #expect(SessionListView.showsEmptyState(
+            sessionsEmpty: false, hasSiblingContent: true, mayAssertEmpty: true) == false)
+    }
+
+    /// **F22's half of the same sentence.** An empty local store during the
+    /// first import is "we haven't finished looking," not "she has none" —
+    /// and on the surface whose subject is content she feared losing,
+    /// certainty is the harm. This is the condition the merge added; without
+    /// it the resolution would have silently dropped a shipped fix.
+    @Test func emptyState_suppressedWhileTheFirstImportIsStillRunning() {
+        #expect(SessionListView.showsEmptyState(
+            sessionsEmpty: true, hasSiblingContent: false, mayAssertEmpty: false) == false,
+                "'Nothing new' must not be asserted while the first import is still looking")
+    }
+
+    /// Bound the other side too: the predicate must not become "always
+    /// false", which would pass both suppression tests above while silently
+    /// retiring the empty state entirely.
+    @Test func emptyState_isStillReachable() {
+        #expect(SessionListView.showsEmptyState(
+            sessionsEmpty: true, hasSiblingContent: false, mayAssertEmpty: true) == true,
+                "the empty state is unreachable — a suppression rule has swallowed it")
+    }
+
+    /// All three conditions are load-bearing: flipping any single one away
+    /// from the showing state suppresses it. A predicate that ignored one
+    /// would pass a narrower test set.
+    @Test func everyConditionIsLoadBearing() {
+        let showing = (sessionsEmpty: true, hasSiblingContent: false, mayAssertEmpty: true)
+        #expect(SessionListView.showsEmptyState(
+            sessionsEmpty: !showing.sessionsEmpty,
+            hasSiblingContent: showing.hasSiblingContent,
+            mayAssertEmpty: showing.mayAssertEmpty) == false)
+        #expect(SessionListView.showsEmptyState(
+            sessionsEmpty: showing.sessionsEmpty,
+            hasSiblingContent: !showing.hasSiblingContent,
+            mayAssertEmpty: showing.mayAssertEmpty) == false)
+        #expect(SessionListView.showsEmptyState(
+            sessionsEmpty: showing.sessionsEmpty,
+            hasSiblingContent: showing.hasSiblingContent,
+            mayAssertEmpty: !showing.mayAssertEmpty) == false)
     }
 }

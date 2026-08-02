@@ -37,10 +37,9 @@ struct TranscriptionServiceLongFormTests {
 
         // Skip if the model isn't installed locally — asset download is
         // environment-dependent and orthogonal to what we're testing.
-        guard await TranscriptionService.shared.modelIsInstalled(for: .current) else {
-            print("[Test] skipping long-form test — speech model not installed for current locale")
-            return
-        }
+        guard await SpeechAssetGate.canExerciseTranscription(
+                "long-form transcription beyond the single-shot ceiling"
+            ) else { return }
 
         let outcome = await TranscriptionService.shared.transcribe(audioURL: url)
         guard case .transcribed(let result) = outcome else {

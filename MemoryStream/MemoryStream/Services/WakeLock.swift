@@ -39,8 +39,10 @@ final class WakeLock {
     /// Decrements the refcount and re-enables the idle timer when
     /// the count goes 1 → 0. Calling release without a matching
     /// acquire is a no-op — by design, so views with conditional
-    /// acquire paths (e.g., MediaViewerView's image vs video branch)
-    /// can call release on dismiss unconditionally without churning.
+    /// acquire paths can call release on dismiss unconditionally without
+    /// churning. (The example named `MediaViewerView`, a type that exists
+    /// nowhere in this codebase — removed 2026-07-31 rather than replaced:
+    /// the rule stands on its own without an example to go stale.)
     func release() {
         guard refCount > 0 else { return }
         refCount -= 1

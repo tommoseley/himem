@@ -182,6 +182,12 @@ extension OrganizePass {
     ) {
         switch titleChoice {
         case .new:
+            // This write is USER-INITIATED — she chose "new" in the
+            // Reorganize review sheet. It is the only shape in which an AI
+            // title reaches `entry.title`; no automatic path writes here.
+            // There is no `titleUserEdited` marker to fall back on, so
+            // `TitleAuthorshipTests` is what keeps that true. See the note
+            // on `JournalEntry.summaryUserEdited`.
             if let newTitle = suggestedTitle, !newTitle.isEmpty {
                 entry.title = newTitle
                 entry.titleSourcedFromAI = true

@@ -33,6 +33,12 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         let session = WCSession.default
         session.delegate = self
         session.activate()
+        // Cold-launch net for the delivered-awaiting-ack suppression (see
+        // `shouldEnqueue`). A fresh process starts with an empty set anyway;
+        // clearing here states the guarantee explicitly rather than relying
+        // on instantiation, so a future shared/re-used instance can't silently
+        // strand a clip whose ack never arrived.
+        deliveredAwaitingAck.removeAll()
         NSLog("[HiMem][WC] watch — session.activate() called, reachable=\(session.isReachable)")
     }
 
@@ -117,6 +123,57 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         }
     }
 
+    /// clipIds whose bytes WCSession has already delivered to the iPhone but
+    /// which the iPhone has not yet acked, mapped to the `rollGroupId` they
+    /// shipped under (nil when the clip belongs to no roll group).
+    ///
+    /// The rollGroupId is carried here — rather than looked up in
+    /// `WatchPendingManifest` at ack time — so **both** ack paths can maintain
+    /// this state from the payload alone. A manifest lookup would only work
+    /// while the rows still exist, i.e. it would depend on running before the
+    /// coordinator's sink removes them: an ordering coincidence, not an
+    /// invariant. Two ack paths where only one maintains the state is the exact
+    /// shape of the duplicate-delivery bug this whole gate exists to fix.
+    ///
+    /// Internal (not private) so the money tests can observe it directly under
+    /// `@testable import`. See `shouldEnqueue`.
+    var deliveredAwaitingAck: [UUID: UUID?] = [:]
+
+    /// The clipIds WCSession currently has in flight. Pulled out so
+    /// `shouldEnqueue` takes plain values and needs no live session.
+    private static func outstandingClipIds(in session: WCSession) -> Set<UUID> {
+        Set(session.outstandingFileTransfers.compactMap { transfer in
+            (transfer.file.metadata?["clipId"] as? String).flatMap(UUID.init)
+        })
+    }
+
+    /// Whether this clip's bytes should be handed to `transferFile`.
+    ///
+    /// **The invariant: bytes already delivered are never re-shipped.** A clip
+    /// is refused when it is either still in flight (`outstanding` — the
+    /// original §8.2 double-delivery belt) or already delivered and merely
+    /// waiting for the iPhone's ack (`deliveredAwaitingAck`). The **ack** is
+    /// what clears the manifest row; a re-ship never was.
+    ///
+    /// Both sets matter because they are different states, and conflating them
+    /// is the 4×-duplicate-delivery defect (dogfood 2026-07-29):
+    /// `outstandingFileTransfers` drops a transfer the moment it completes,
+    /// while the manifest row survives until the ack — so between those two
+    /// moments the clip looked un-sent and every `flushPendingManifest`
+    /// trigger shipped the entire file again.
+    ///
+    /// Pure and value-driven so the money tests can exercise every combination
+    /// without a real `WCSession` — same shape as
+    /// `WatchRecordingService.WaveformLevelThrottle.observe`. `nonisolated`
+    /// because no actor state is touched.
+    nonisolated static func shouldEnqueue(
+        clipId: UUID,
+        outstanding: Set<UUID>,
+        deliveredAwaitingAck: Set<UUID>
+    ) -> Bool {
+        !outstanding.contains(clipId) && !deliveredAwaitingAck.contains(clipId)
+    }
+
     /// Enqueues the actual `transferFile` for an already-verified
     /// mono/16k/AAC artifact. The `isTransferReady` guard is the **final
     /// gate** — a file that fails the assertion never ships (`Watch ·
@@ -130,15 +187,16 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         }
         let session = WCSession.default
 
-        // Belt against the double-delivery race (§ 8.2): if iOS is already
-        // queueing a transfer for this clipId, don't re-queue.
-        let alreadyQueued = session.outstandingFileTransfers.contains { transfer in
-            guard let metaClipIdStr = transfer.file.metadata?["clipId"] as? String,
-                  let metaClipId = UUID(uuidString: metaClipIdStr) else { return false }
-            return metaClipId == clip.clipId
-        }
-        if alreadyQueued {
-            NSLog("[HiMem][WC] watch — enqueue refused; clipId=\(clip.clipId) already in outstandingFileTransfers")
+        // Belt against the double-delivery race (§ 8.2). Decision extracted
+        // to `shouldEnqueue` so it's testable without a real WCSession.
+        let outstanding = Self.outstandingClipIds(in: session)
+        let delivered = Set(deliveredAwaitingAck.keys)
+        guard Self.shouldEnqueue(
+            clipId: clip.clipId,
+            outstanding: outstanding,
+            deliveredAwaitingAck: delivered
+        ) else {
+            NSLog("[HiMem][WC] watch — enqueue refused; clipId=\(clip.clipId) outstanding=\(outstanding.contains(clip.clipId)) deliveredAwaitingAck=\(delivered.contains(clip.clipId))")
             return
         }
 
@@ -215,12 +273,21 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         15_000_000_000   // 15s
     ]
 
-    /// Schedules a delayed re-attempt at `send(clip:)` for a clip
-    /// whose audio file wasn't on disk at the original call site.
-    /// Idempotent across multiple triggers: if a retry is already
-    /// scheduled at index N, a new call at the same index will be
-    /// suppressed by the retry-count map. Different clipIds are
-    /// independent.
+    /// Schedules a delayed re-attempt at `send(clip:)` for a clip whose audio
+    /// file wasn't on disk at the original call site.
+    ///
+    /// **Not idempotent across triggers.** The counter is incremented BEFORE
+    /// the Task is scheduled, so a second call doesn't collide with the first
+    /// — it reads the next index and schedules another sleeping Task. Three
+    /// triggers in the same window stack three of them. The CAP is real (the
+    /// clip can't retry forever); the de-duplication this comment used to
+    /// claim is not, and never was (corrected 2026-07-31).
+    ///
+    /// Harmless today because `send(clip:)` is itself idempotent — a clip
+    /// already ready+complete transfers without re-encoding, and
+    /// `shouldEnqueue` refuses anything outstanding or delivered-awaiting-ack.
+    /// Worth knowing before anyone relies on the suppression that isn't there.
+    /// Different clipIds are independent.
     private func scheduleFileMissingRetry(for clip: WatchPendingClip) {
         let attempt = fileMissingRetryCounts[clip.clipId] ?? 0
         guard attempt < fileMissingRetryDelays.count else {
@@ -251,6 +318,21 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
             }
         }()
         NSLog("[HiMem][WC] watch — activated state=\(stateStr) err=\(error?.localizedDescription ?? "nil") reachable=\(session.isReachable)")
+        // THE ESCAPE HATCH for the delivered-awaiting-ack suppression, and the
+        // reason that suppression is safe (see `shouldEnqueue`). Activation is
+        // when the phone presents its WC identity — including a NEW identity
+        // after a reinstall, which is exactly the case where an ack will never
+        // arrive for bytes we already delivered. Clearing here means the clip
+        // stranded by a reinstall is re-shipped by the very event that
+        // stranded it; the suppression only holds while the identity is stable
+        // and the bytes are known-landed, which is precisely when re-shipping
+        // is pure waste. Without this, fixing the duplicate storm would
+        // reintroduce the stuck-clip bug the reachability flush exists to fix.
+        Task { @MainActor [weak self] in
+            guard let self, !self.deliveredAwaitingAck.isEmpty else { return }
+            NSLog("[HiMem][WC] watch — activation cleared \(self.deliveredAwaitingAck.count) delivered-awaiting-ack clip(s); they may re-ship")
+            self.deliveredAwaitingAck.removeAll()
+        }
     }
 
     /// Pure parsing for an ack payload from the iPhone. Extracted from the
@@ -273,10 +355,28 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
             switch kind {
             case "rollGroup":
                 NSLog("[HiMem][WC] watch — handleAckPayload accepted rollGroupId=\(id)")
-                Task { @MainActor in self.lastAckedRollGroupId = id }
+                Task { @MainActor in
+                    // A rollGroup ack confirms every member clip at once
+                    // (§8.7), so it releases every member's suppression —
+                    // symmetric with the per-clip ack. Membership comes from
+                    // the state we recorded at delivery, not from a manifest
+                    // lookup, so this does not depend on running before the
+                    // coordinator's sink prunes the rows.
+                    let released = self.deliveredAwaitingAck.filter { $0.value == id }.keys
+                    for clipId in released {
+                        self.deliveredAwaitingAck.removeValue(forKey: clipId)
+                    }
+                    if !released.isEmpty {
+                        NSLog("[HiMem][WC] watch — rollGroup ack released \(released.count) delivered-awaiting-ack clip(s)")
+                    }
+                    self.lastAckedRollGroupId = id
+                }
             case "clip":
                 NSLog("[HiMem][WC] watch — handleAckPayload accepted clipId=\(id)")
-                Task { @MainActor in self.lastAckedClipId = id }
+                Task { @MainActor in
+                    self.deliveredAwaitingAck.removeValue(forKey: id)
+                    self.lastAckedClipId = id
+                }
             default:
                 NSLog("[HiMem][WC] watch — handleAckPayload unknown kind=\(kind), id=\(id)")
             }
@@ -285,7 +385,10 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         if let str = payload["confirmedClipId"] as? String,
            let clipId = UUID(uuidString: str) {
             NSLog("[HiMem][WC] watch — handleAckPayload accepted legacy clipId=\(clipId)")
-            Task { @MainActor in self.lastAckedClipId = clipId }
+            Task { @MainActor in
+                self.deliveredAwaitingAck.removeValue(forKey: clipId)
+                self.lastAckedClipId = clipId
+            }
             return
         }
         NSLog("[HiMem][WC] watch — handleAckPayload IGNORED, keys=\(Array(payload.keys))")
@@ -357,10 +460,20 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
         // so the elapsed measurement isn't polluted by scheduling delay.
         let finishedAt = Date()
         let clipId = (fileTransfer.file.metadata?["clipId"] as? String).flatMap(UUID.init)
+        let rollGroupId = (fileTransfer.file.metadata?["rollGroupId"] as? String).flatMap(UUID.init)
         if let error {
             NSLog("[HiMem][WC] watch — transferFile FAILED: \(error.localizedDescription)")
         } else {
             NSLog("[HiMem][WC] watch — transferFile delivered to iPhone")
+            // The bytes are on the phone. Suppress re-shipping until the ack
+            // lands (or activation clears it) — see `shouldEnqueue`. The
+            // manifest row deliberately stays until the ack; this only stops
+            // us sending the same file again in the meantime.
+            if let clipId {
+                Task { @MainActor [weak self] in
+                    self?.deliveredAwaitingAck[clipId] = rollGroupId
+                }
+            }
         }
         // [XferPerf] elapsed + throughput for this clip. This is THE
         // number that answers the ~50× question: high bytes but low
@@ -387,8 +500,21 @@ final class WatchTransferService: NSObject, ObservableObject, WCSessionDelegate 
     /// watch app.
     ///
     /// Hook the reachability transition (false → true) and re-queue
-    /// everything in the manifest. `transferFile` de-dupes in-flight
-    /// transfers, so this is safe to fire on any reachability change.
+    /// everything in the manifest.
+    ///
+    /// **This used to claim "`transferFile` de-dupes in-flight transfers, so
+    /// this is safe to fire on any reachability change." That guarantee does
+    /// not exist, and the comment was the bug** (dogfood 2026-07-29: one 21 s
+    /// clip delivered four times). `outstandingFileTransfers` covers only
+    /// transfers that have not yet *completed*; it says nothing about a clip
+    /// whose bytes already landed and which is merely waiting for the iPhone's
+    /// ack. Reachability flaps repeatedly in normal use, so each `true`
+    /// re-shipped the whole file.
+    ///
+    /// What actually makes this safe is the **delivered-awaiting-ack** state
+    /// (`shouldEnqueue`) — a state the code previously had no concept of.
+    /// Firing on every reachability change is fine *because* that gate exists;
+    /// it is not fine on its own.
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         let reachable = session.isReachable
         NSLog("[HiMem][WC] watch — sessionReachabilityDidChange reachable=\(reachable)")

@@ -113,6 +113,8 @@ struct RecycleBinView: View {
     /// global (see the toolbar), not scoped to this.
     @State private var filter: RecycleBinFilter = .all
     @Environment(\.dismiss) private var dismiss
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
 
     private var isEmpty: Bool {
         recycledEntries.isEmpty && recycledProjects.isEmpty
@@ -157,7 +159,30 @@ struct RecycleBinView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if isEmpty {
+                // F22 · one of the three surfaces that speak while the first
+                // import is running — and the one where the false claim costs
+                // most, because its subject is content the user already feared
+                // losing. "Still checking" was rejected: "still" implies
+                // struggling. Promising appearance beats describing absence.
+                if isEmpty, !firstImport.mayAssertEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "icloud.and.arrow.down")
+                            .font(.system(size: 40)) // design-token size
+                            .foregroundStyle(Crucible.Color.ink4)
+                            .accessibilityHidden(true)
+                        Text(FirstImportState.Copy.recycleBinTitle)
+                            .font(.subheadline)
+                            .foregroundStyle(Crucible.Color.ink3)
+                        Text(FirstImportState.Copy.recycleBinDetail)
+                            .font(.caption)
+                            .foregroundStyle(Crucible.Color.ink3)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Reached only once `firstImport.mayAssertEmpty` is true —
+                // the branch above owns the importing phase (F22).
+                } else if isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "trash")
                             .font(.system(size: 40)) // design-token size

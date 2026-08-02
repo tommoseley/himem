@@ -505,6 +505,35 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         return rollGroupIdAlreadyInUse
     }
 
+    /// Whether a **rejected redelivery's** master file may be reclaimed from
+    /// disk — the referencedness check the original unconditional delete
+    /// should have had (money: 2026-07-29).
+    ///
+    /// Two shapes reach the dedup branch and they need opposite handling:
+    ///   * **Single clip** — the master file *is* the clip's audio
+    ///     (`audioFilename` == the master filename), so a manifest row still
+    ///     references it. Deleting destroys live audio; the storage lock makes
+    ///     audio the source of truth. **Keep.**
+    ///   * **Split (on-a-roll)** — the master was legitimately consumed into N
+    ///     fragments with fresh UUIDs, so nothing references the master
+    ///     filename. A redelivery re-copies it as an unreferenced blob in the
+    ///     user's iCloud container. **Reclaim.**
+    ///
+    /// Referencedness, not the drop decision, is what distinguishes them —
+    /// which is precisely what the old code got wrong by deleting in both
+    /// cases. Pure so both directions are pinned by test rather than by care.
+    ///
+    /// Deliberately NOT used in the critical-section-rejection branch: a failed
+    /// `tryEnter` means another task is *currently* processing this clipId, so
+    /// the master may be about to be split or kept, and referencedness at that
+    /// instant says nothing about what that task needs. Never delete there.
+    static func shouldReclaimRedeliveredMaster(
+        masterFilename: String,
+        referencedFilenames: Set<String>
+    ) -> Bool {
+        !referencedFilenames.contains(masterFilename)
+    }
+
     @MainActor
     static func acceptArrivedClip(metadata: ClipMetadata, masterFilename: String) async {
         NSLog("[HiMem][WC] phone — acceptArrivedClip clipId=\(metadata.clipId) rollGroupId=\(metadata.rollGroupId?.uuidString ?? "nil") offsets=\(metadata.nextTapOffsets.count)")
@@ -519,16 +548,38 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         // and each spawn N children. See
         // `AcceptanceCriticalSection` for the full story.
         guard AcceptanceCriticalSection.tryEnter(clipId: metadata.clipId) else {
-            NSLog("[HiMem][WC] phone — acceptArrivedClip race avoided clipId=\(metadata.clipId) (already in flight); dropping redelivered master")
-            try? FileManager.default.removeItem(at: masterURL)
+            // Drop the redelivered *delivery*, never the file. See the
+            // never-delete-the-master note below.
+            NSLog("[HiMem][WC] phone — acceptArrivedClip race avoided clipId=\(metadata.clipId) (already in flight); ignoring redelivery, master left in place")
             WatchSessionDelegate.shared.sendConfirmation(clipId: metadata.clipId)
             return
         }
         defer { AcceptanceCriticalSection.exit(clipId: metadata.clipId) }
 
-        // Single consolidated dedup gate — see
-        // `shouldDropArrivedMaster`. Drop the redelivered master
-        // file so disk doesn't bloat.
+        // Single consolidated dedup gate — see `shouldDropArrivedMaster`.
+        //
+        // **Never delete the master here** (money: 2026-07-29 data-loss bug).
+        // The previous rationale — "drop the redelivered master file so disk
+        // doesn't bloat" — rested on a false premise: every delivery of a clip
+        // copies to the SAME canonical path
+        // (`InboxManifest.audioURL(for: "<clipId>.caf")`), and that copy is
+        // idempotent (`if !fileExists { copy } else { skip }` in
+        // `didReceive(file:)`). There is never a second, redundant file to
+        // reclaim, so deleting could only destroy the LIVE audio of the clip
+        // already accepted — which is exactly what happened: one clip arrived
+        // four times, delivery #2 took this path, transcription then failed
+        // with `kAudio_FileNotFoundError`, and it recovered only because
+        // delivery #4 happened to re-copy the bytes. Had that been the last
+        // delivery the recording was gone, violating the storage lock under
+        // which audio is the source of truth and the transcript derivative.
+        //
+        // The ONLY legitimate master delete is after a successful split (the
+        // `removeItem` further down), where the master's contents genuinely now
+        // live in the N fragment files. For a single clip the master IS the
+        // clip's audio.
+        //
+        // Guarded by `AcceptanceCriticalSectionTests
+        // .rejectedRedelivery_doesNotDeleteTheMasterAudio`.
         let manifest = InboxManifest.shared
         let dedupRollGroupId = metadata.rollGroupId ?? metadata.clipId
         let shouldDrop = Self.shouldDropArrivedMaster(
@@ -536,8 +587,31 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             rollGroupIdAlreadyInUse: manifest.isRollGroupKnown(dedupRollGroupId)
         )
         if shouldDrop {
-            NSLog("[HiMem][WC] phone — duplicate master ignored, clipId=\(metadata.clipId) already processed")
-            try? FileManager.default.removeItem(at: masterURL)
+            // Reclaim the re-copied master ONLY when no manifest row points at
+            // it — see `shouldReclaimRedeliveredMaster`. A single clip's master
+            // IS its audio (referenced ⇒ keep); a split clip's master was
+            // consumed into fragments (unreferenced ⇒ safe to reclaim, and
+            // otherwise it is orphan residue in the user's iCloud container
+            // that nothing collects, because `MediaBlobOrphanSweep` is
+            // DELIBERATELY DISABLED — F23 T1.1, `fcb378b`: its keep-set unions
+            // a CloudKit-synced source with a sandbox-local manifest while the
+            // files it judges are device-shared, so on a second device a staged
+            // clip reads as an orphan and is deleted. Guarded by
+            // `OrphanSweepReachabilityTests`).
+            //
+            // Correction (2026-07-31): this said the sweep "is unwired." It WAS
+            // wired, via Settings Debug. That claim came from a grep for
+            // `.orphans(` which could not have matched the production
+            // `plan()`/`execute()` call sites — a retracted premise that
+            // propagated here and into two test comments.
+            let reclaimable = Self.shouldReclaimRedeliveredMaster(
+                masterFilename: masterFilename,
+                referencedFilenames: manifest.referencedAudioFilenames
+            )
+            if reclaimable {
+                UbiquityStore.shared.removeFromStore(at: masterURL)
+            }
+            NSLog("[HiMem][WC] phone — duplicate master ignored, clipId=\(metadata.clipId) already processed; master \(reclaimable ? "reclaimed (unreferenced)" : "kept (referenced by a manifest row)")")
             // Still ack so the watch can drop the pending row.
             // `sendConfirmation` is the path the live + durable acks
             // travel; reusing it here keeps the dedup transparent
@@ -739,29 +813,6 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         }
     }
 
-    /// Notifies the watch that a clipId has been received and persisted.
-    /// Watch removes the row from its local pending manifest, which
-    /// updates `WatchSharedState.pendingCount` and refreshes the
-    /// complication.
-    ///
-    /// Dual-path delivery:
-    ///   1. **`sendMessage` (fast)** — when the watch session is currently
-    ///      reachable (user looking at watch / app recently active), the
-    ///      message lands immediately. This is the common path right
-    ///      after a fresh recording: user takes clip, watches the
-    ///      transfer, and the pending count clears in real time.
-    ///   2. **`transferUserInfo` (durable)** — always queued as backup so
-    ///      that if the watch goes to sleep or is out of range, the ack
-    ///      still delivers when the watch next activates. The watch's
-    ///      `handleAckPayload` is idempotent — re-sets of the same
-    ///      `@Published lastAckedClipId` to the same value don't re-fire
-    ///      the Combine sink, so receiving via both paths is harmless.
-    ///
-    /// Previously we used `transferUserInfo` only. Durable, but the
-    /// system delays its delivery to "when appropriate" — typically
-    /// seconds to minutes when the watch app isn't running — so the
-    /// complication's pending count stayed stale visibly long enough to
-    /// look like a bug.
     /// Asks the watch to re-attempt every clip in its pending manifest.
     /// Wired to the journal's pull-to-refresh so the user has an
     /// explicit "kick the watch" affordance for the case where the
@@ -888,6 +939,40 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         sendConfirmation(clipId: nil, rollGroupId: rollGroupId)
     }
 
+    /// Notifies the watch that a clipId (or a whole rollGroup) has been
+    /// received and persisted. The watch removes the row from its local
+    /// pending manifest, which updates `WatchSharedState.pendingCount` and
+    /// refreshes the complication.
+    ///
+    /// (This doc lived above `requestWatchPendingFlush` until 2026-07-31.
+    /// Because the two `///` blocks were contiguous, Swift merged them into
+    /// that function's documentation — where it directly contradicted the
+    /// text below it, which says the flush is deliberately NOT queued via
+    /// `transferUserInfo`. It describes THIS function; moved here.)
+    ///
+    /// Dual-path delivery:
+    ///   1. **`sendMessage` (fast)** — when the watch session is currently
+    ///      reachable (user looking at watch / app recently active), the
+    ///      message lands immediately. This is the common path right
+    ///      after a fresh recording: user takes clip, watches the
+    ///      transfer, and the pending count clears in real time.
+    ///   2. **`transferUserInfo` (durable)** — always queued as backup so
+    ///      that if the watch goes to sleep or is out of range, the ack
+    ///      still delivers when the watch next activates. Receiving via both
+    ///      paths is harmless — but NOT for the reason this comment used to
+    ///      give. `@Published` has no equality check, so re-assigning the same
+    ///      value DOES re-fire the sink, and `WatchAckPipelineMultiClipTests`
+    ///      explicitly forbids adding `.removeDuplicates()` (it would drop
+    ///      in-flight acks for distinct clips). What makes the double delivery
+    ///      safe is the sink's work being idempotent: `pending.remove(clipId:)`
+    ///      / `removeByRollGroup` on an already-removed row is a no-op. Right
+    ///      conclusion, wrong mechanism — corrected 2026-07-31.
+    ///
+    /// Previously we used `transferUserInfo` only. Durable, but the
+    /// system delays its delivery to "when appropriate" — typically
+    /// seconds to minutes when the watch app isn't running — so the
+    /// complication's pending count stayed stale visibly long enough to
+    /// look like a bug.
     private func sendConfirmation(clipId: UUID?, rollGroupId: UUID?) {
         let session = WCSession.default
         let payload = Self.confirmationPayload(clipId: clipId, rollGroupId: rollGroupId)

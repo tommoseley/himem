@@ -34,7 +34,56 @@ struct ProjectDetailView: View {
         let entryId: UUID
         let projectName: String
     }
-    @State private var entries: [EntryDisplayModel] = []
+    /// **The project's member memories, OBSERVED — never snapshotted.**
+    ///
+    /// This was `@State private var entries: [EntryDisplayModel] = []`,
+    /// filled by `loadProjectEntries()` from `.onAppear`. `EntryDisplayModel`
+    /// is a **struct**, so the view held value copies mapped once when it
+    /// appeared: a memory created into this project was written correctly and
+    /// simply never rendered until you left and came back and `onAppear` fired
+    /// again (F25, device pass 2026-08-02).
+    ///
+    /// **Second instance of this class in one week.** F24 Defect 2 was the
+    /// same mechanism one layer down — `InboxClip` (also a struct) captured at
+    /// `.sheet(item:)` presentation, rendering a correct save as unchanged.
+    /// Same shape both times: *a correct write displayed from a frozen value
+    /// snapshot.* The class is demonstrated, not theoretical, which is why
+    /// `ProjectDetailMemberObservationTests` guards it rather than this
+    /// comment.
+    ///
+    /// A `@FetchRequest` observes inserts and removals, so there is no cached
+    /// copy to go stale and nothing to remember to refresh. Deliberately NOT
+    /// an `@ObservedObject` on the `Project`: F6g's off-main publishing
+    /// question is unresolved and already exposes `NSManagedObject` at four
+    /// sites — widening that surface to a fifth this week is the wrong trade.
+    @FetchRequest private var memberEntries: FetchedResults<JournalEntry>
+
+    /// Derived per render from the observed fetch. `isRecycled` filtering
+    /// matches the previous `entriesArray` behaviour.
+    private var entries: [EntryDisplayModel] {
+        memberEntries.filter { !$0.isRecycled }.map(EntryMapper.mapToDisplayModel)
+    }
+
+    init(
+        projectId: UUID,
+        projectVM: ProjectViewModel,
+        viewModel: JournalViewModel,
+        cameraService: CameraService,
+        speechService: SpeechService
+    ) {
+        self.projectId = projectId
+        self.projectVM = projectVM
+        self.viewModel = viewModel
+        self.cameraService = cameraService
+        self.speechService = speechService
+        // Same ordering the retired `Project.entriesArray` produced, so the
+        // member list does not silently reorder with this change.
+        _memberEntries = FetchRequest(
+            sortDescriptors: [NSSortDescriptor(key: "createdAt", ascending: false)],
+            predicate: NSPredicate(format: "ANY projects.id == %@", projectId as CVarArg),
+            animation: .default
+        )
+    }
     @State private var topicFilter: String? = nil
     @State private var showShareSheet = false
     @State private var showAddMemorySheet = false
@@ -42,6 +91,8 @@ struct ProjectDetailView: View {
     /// The FAB lives at `HiMemTabView`; the search-to-add sheet lives
     /// here — this bus is the seam, mirroring `NewProjectRequestBus`.
     @ObservedObject private var addExistingBus = AddExistingMemoryRequestBus.shared
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
     @State private var shareItems: [Any] = []
     @State private var isPreparingShare = false
     @State private var showSuggestionsSheet = false
@@ -78,6 +129,17 @@ struct ProjectDetailView: View {
                     ClipEditButton(action: { editSheetFocus = .name })
                 }
 
+                // F7c · GOAL eyebrow + help ? (Project Detail help, 2026-07-27).
+                // Same small-caps eyebrow pattern as Memory Detail — every ?
+                // hangs off an eyebrow.
+                HStack(spacing: 4) {
+                    Text("GOAL")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(Crucible.Color.ink3)
+                    SectionHelpButton(topic: .projectGoal, size: 13)
+                    Spacer(minLength: 0)
+                }
                 // Goal — italic serif when present (read-only; edited via the
                 // ✎ Edit button, not tap-the-text, F4). Dashed "+ Add a goal"
                 // add-affordance when empty (dashed = add/provisional, an
@@ -108,6 +170,9 @@ struct ProjectDetailView: View {
                                 style: StrokeStyle(lineWidth: 1, dash: [3, 2])
                             )
                         )
+                        // F17 · the pill is stroked, not filled — without this the tap
+                        // region is only the drawn text. Guarded by ButtonHitRegionTests.
+                        .contentShape(Rectangle())
                         .frame(minHeight: 38)
                     }
                     .buttonStyle(.plain)
@@ -149,6 +214,16 @@ struct ProjectDetailView: View {
                     }
                 }
 
+                // F7c · FIND THE THREAD eyebrow + help ?, labeling the whole AI
+                // zone (summary card + Find-the-thread button + suggestions).
+                HStack(spacing: 4) {
+                    Text("FIND THE THREAD")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(Crucible.Color.ink3)
+                    SectionHelpButton(topic: .projectFindThread, size: 13)
+                    Spacer(minLength: 0)
+                }
                 // Project Assist summary — spec § States state 4
                 // "Summarized". Rendered above the memory list
                 // when a prior Find-the-thread run has persisted
@@ -166,14 +241,26 @@ struct ProjectDetailView: View {
                 // section's presence is its own affordance.
                 suggestionsAffordance
 
-                // Memory count
+                // F7c · MEMORIES eyebrow + help ?, with the live count trailing.
                 let displayCount = topicFilter == nil ? entries.count : entries.filter { $0.topicNames.contains(topicFilter!) }.count
-                Text("\(displayCount) memor\(displayCount == 1 ? "y" : "ies")")
-                    .font(.caption)
-                    .foregroundStyle(Crucible.Color.ink3)
+                HStack(spacing: 4) {
+                    Text("MEMORIES")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(Crucible.Color.ink3)
+                    SectionHelpButton(topic: .projectMemories, size: 13)
+                    Spacer(minLength: 0)
+                    Text("\(displayCount) memor\(displayCount == 1 ? "y" : "ies")")
+                        .font(.caption)
+                        .foregroundStyle(Crucible.Color.ink3)
+                }
 
-                // Memory stack — entry cards
-                if entries.isEmpty {
+                // Memory stack — entry cards.
+                // F22: membership resolves through the CloudKit-synced store,
+                // so mid-import this reads "No memories in this project yet"
+                // about a project that has plenty. Secondary surface — silent
+                // until the import has finished looking.
+                if entries.isEmpty, firstImport.mayAssertEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "tray")
                             .font(.title)
@@ -215,6 +302,10 @@ struct ProjectDetailView: View {
             .padding(16)
         }
         .background(Crucible.Color.paper)
+        // Pushed view (same class as Memory Detail): clear the in-project FAB
+        // AND the tab bar so the Delete Project button doesn't tuck under them
+        // (device pass 2026-07-27). Fixed clearance — device-tunable knob.
+        .contentMargins(.bottom, 140, for: .scrollContent)
         .overlay(alignment: .bottom) {
             if let toast = removalToast {
                 removalToastView(toast)
@@ -304,7 +395,6 @@ struct ProjectDetailView: View {
             ShareSheet(items: shareItems)
         }
         .sheet(isPresented: $showAddMemorySheet, onDismiss: {
-            loadProjectEntries()
             // Membership changed: a memory the user just added is
             // no longer a "may belong" candidate. Recompute so the
             // affordance row's count stays honest.
@@ -319,7 +409,6 @@ struct ProjectDetailView: View {
             // Reload after dismissal so the affordance row's count
             // reflects whatever the user just committed/skipped.
             suggestionsVM.reload(projectId: projectId)
-            loadProjectEntries()
         } content: {
             SuggestedMemoriesSheet(
                 projectName: project?.name ?? "this project",
@@ -331,7 +420,6 @@ struct ProjectDetailView: View {
         }
         .onAppear {
             loadProject()
-            loadProjectEntries()
             suggestionsVM.reload(projectId: projectId)
             attemptFindTheThreadTutorial()
             // Publish the current project id so `HiMemTabView`'s FAB
@@ -455,6 +543,9 @@ struct ProjectDetailView: View {
         // `projectThreadSummaryCard` (which carries its own re-run
         // button "Find the thread again"). One named verb per surface
         // per `docs/design/CLAUDE.md` § button colour code.
+        // F22 EXEMPT: this reads the loaded project's OWN summary text, not a
+        // collection from the store. An unimported store yields no project to
+        // read, so this branch never renders on the false-empty path.
         if project?.lastThreadSummary == nil || project?.lastThreadSummary?.isEmpty == true {
             let enabled = ProjectAssistGate.isEnabled(memoryCount: entries.count)
             let subline = enabled
@@ -615,6 +706,9 @@ struct ProjectDetailView: View {
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(Crucible.Color.aiBlue, lineWidth: 1.5)
                         )
+                        // F17 · the pill is stroked, not filled — without this the tap
+                        // region is only the drawn text. Guarded by ButtonHitRegionTests.
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(assistVM.isRunning)
@@ -741,8 +835,7 @@ struct ProjectDetailView: View {
                 },
                 onRemoveFromProject: { entryId in
                     projectVM.removeMemory(entryId: entryId, fromProjectId: projectId)
-                    loadProjectEntries()
-                    showRemovalToast(entryId: entryId)
+                            showRemovalToast(entryId: entryId)
                 },
                 projectContextName: project?.name
             )
@@ -762,11 +855,6 @@ struct ProjectDetailView: View {
         )
     }
 
-    private func loadProjectEntries() {
-        guard let project else { return }
-        let journalEntries = project.entriesArray.filter { !$0.isRecycled }
-        entries = journalEntries.map(EntryMapper.mapToDisplayModel)
-    }
 
     // MARK: - Remove-from-project toast (F2/F3)
 
@@ -784,7 +872,6 @@ struct ProjectDetailView: View {
 
     private func undoRemoval(_ toast: RemovalToast) {
         projectVM.addMemory(entryId: toast.entryId, toProjectId: projectId)
-        loadProjectEntries()
         removalToast = nil
     }
 

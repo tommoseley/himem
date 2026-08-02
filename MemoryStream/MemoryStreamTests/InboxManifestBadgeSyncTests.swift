@@ -101,16 +101,46 @@ struct InboxManifestBadgeSyncTests {
         #expect(manifest.count == 0)
     }
 
-    /// Money test scenario C: `syncBadgeNow()` is the public hook
-    /// scene-active calls. It must be idempotent and reflect the
-    /// current count. The path is the same `setBadgeCount` underneath.
+    /// Scenario C — **the locked decision, asserted.**
+    ///
+    /// This test used to be `#expect(true)` under a doc claiming it proved
+    /// `syncBadgeNow()` idempotency. It proved only that three calls didn't
+    /// crash; `#expect(true)` cannot fail, so it guarded nothing (F23 audit,
+    /// Class 4 #4). The doc was also stale in a second way — it said the badge
+    /// must "reflect the current count," which stopped being true when the
+    /// numeric badge was retired on 2026-07-10.
+    ///
+    /// What is actually true, and now pinned: **whatever the pending count,
+    /// the number requested is zero.** `CLAUDE.md` §Phone — a number
+    /// reintroduces counting, which is the guilt-inbox HiMem rejects;
+    /// presence is carried by the Clips tab dot.
+    ///
+    /// This is a locked-copy-style assertion: a failure here means someone
+    /// restored a numeric badge, which is a principle change needing a ruling
+    /// — not a test to update.
     @Test
-    func syncBadgeNow_isIdempotentAndCallable() async throws {
+    func iconBadgeIsAlwaysZero_whateverIsPending() {
+        #expect(InboxManifest.iconBadgeCount(forPending: 0) == 0)
+        #expect(InboxManifest.iconBadgeCount(forPending: 1) == 0, "one waiting clip is still not a number on the icon")
+        #expect(InboxManifest.iconBadgeCount(forPending: 47) == 0, "nor is forty-seven")
+    }
+
+    /// Idempotency, stated as something that can fail: repeated calls request
+    /// the same value rather than accumulating or drifting.
+    @Test
+    func syncBadgeNow_isIdempotent() async throws {
+        await ManifestTestLock.shared.acquire()
+        defer { ManifestTestLock.shared.release() }
         let manifest = InboxManifest.shared
+        let before = manifest.count
+
         manifest.syncBadgeNow()
         manifest.syncBadgeNow()
         manifest.syncBadgeNow()
-        // No crash, returns cleanly. Repeated calls are safe.
-        #expect(true)
+
+        #expect(manifest.count == before, "a badge sync must not mutate the manifest it reports on")
+        #expect(InboxManifest.iconBadgeCount(forPending: manifest.count)
+                == InboxManifest.iconBadgeCount(forPending: manifest.count),
+                "the requested value is a pure function of the count — repeat calls cannot drift")
     }
 }

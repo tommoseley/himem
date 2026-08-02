@@ -62,7 +62,13 @@ struct ClipsTabView: View {
     /// every tab.
     @State private var showSearch = false
     @State private var showSettings = false
-    @State private var showTutorials = false
+    /// **F28 · owned by the shell, not by this tab.** Learn pushes onto
+    /// this tab's own `NavigationStack`, and a `TabView` keeps every tab
+    /// alive — so a tab-local `@State` left the hub pushed while the user
+    /// was elsewhere, and re-presented it on return, out of context. The
+    /// tab cannot see that the tab changed; the shell can. See
+    /// `HiMemTabView.learnOpenOn`.
+    @Binding var learnPresented: Bool
     /// Signal from the Clips status sheet's quick-filter shortcuts.
     /// See `ClipsStatusSheet` — the sheet fires a pending filter and
     /// this view consumes it into its own `filter` state.
@@ -99,20 +105,26 @@ struct ClipsTabView: View {
                                 type: $type,
                                 onSearchTap: { showSearch = true },
                                 onSettingsTap: { showSettings = true },
-                                onHelpTap: { showTutorials = true }
+                                onHelpTap: { learnPresented = true }
                             )
                         }
                         content
                             .padding(.horizontal, 16)
                             .padding(.top, 6)
-                            .padding(.bottom, selection.selecting ? 84 : 12)
+                            // Clear the floating capture FAB so the last clip
+                            // rows don't run under it (device pass 2026-07-27:
+                            // 12pt let rows sit under the FAB + tab pill). The
+                            // selecting case already reserves 84pt for the
+                            // selection action bar (the FAB is hidden then).
+                            .padding(.bottom, selection.selecting ? 84 : 108)
                     }
                 }
                 .coordinateSpace(name: ClipsSelectionSpace.name)
                 .onPreferenceChange(ClipRowFramesKey.self) { selection.rowFrames = $0 }
                 if let toastMemoryId = memoryNav.justCreatedMemoryId {
-                    MemoryCreatedToast(
-                        onView: {
+                    CreationToast(
+                        kind: .memory,
+                        onOpen: {
                             // Fire the actual navigation signal that
                             // `HiMemTabView` (switches to Memories)
                             // and `JournalView` (pushes detail)
@@ -155,6 +167,12 @@ struct ClipsTabView: View {
                 // extend the visible time correctly.
                 toastAutoDismissTask?.cancel()
                 guard newValue != nil else { return }
+                // F8 · during the guided walkthrough, keep the "Memory created ·
+                // View" toast up until the user taps View — its `openMemory`
+                // beat points at this toast, and a 3.5s auto-dismiss would
+                // strand it. `isRunning` (not a specific beat) so this is robust
+                // to onChange ordering with `memoryDidStart`.
+                guard !WalkthroughOrchestrator.shared.isRunning else { return }
                 toastAutoDismissTask = Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 3_500_000_000)
                     if !Task.isCancelled {
@@ -203,7 +221,7 @@ struct ClipsTabView: View {
                     onCaptureNewWith: { _ in showSearch = false }
                 )
             }
-            .navigationDestination(isPresented: $showTutorials) {
+            .navigationDestination(isPresented: $learnPresented) {
                 TutorialsHubView()
             }
             .sheet(isPresented: $showSettings) {
@@ -495,40 +513,92 @@ struct ClipsTabView: View {
 /// made exists." Auto-dismisses via a timer on
 /// `ClipsTabView.toastAutoDismissTask`; View button routes through
 /// `MemoryNavigationBus.pendingOpenMemoryId`.
-struct MemoryCreatedToast: View {
-    let onView: () -> Void
+/// **F32 · the creation toast, generalized.**
+///
+/// It answers *"where did it go?"* at the moment the question arises,
+/// with no magic navigation: the surface does not move, and the way
+/// there is one tap.
+///
+/// **Why it supersedes the walkthrough ring for the make-the-product-
+/// visible job.** The ring failed structurally twice — once as a window
+/// that closed before she looked (F20a), once as an `onAppear` that had
+/// already fired (F20b). A toast is present at creation *by
+/// construction*: it is rendered by the code path that did the creating,
+/// so it cannot miss its moment.
+///
+/// Rules, all ruled 2026-08-01:
+///  - **The copy names the OBJECT**, not the action she performed.
+///  - **The whole toast is the tap target**, not just the trailing link
+///    (added; styling and duration unchanged).
+///  - **Never auto-navigates.** Tapping opens the thing it names; not
+///    tapping leaves her exactly where she is.
+struct CreationToast: View {
+
+    /// What was just made. Each case owns its own noun — a toast that
+    /// said "Created" would make her infer which thing.
+    enum Kind: Equatable {
+        case memory, clip, project
+
+        var label: String {
+            switch self {
+            case .memory:  return "Memory created"
+            case .clip:    return "Clip saved"
+            case .project: return "Project created"
+            }
+        }
+
+        /// VoiceOver hears the outcome AND the affordance, since the
+        /// whole row is now tappable.
+        var accessibilityHint: String {
+            switch self {
+            case .memory:  return "Opens the memory you just made"
+            case .clip:    return "Opens the clip you just saved"
+            case .project: return "Opens the project you just made"
+            }
+        }
+    }
+
+    let kind: Kind
+    let onOpen: () -> Void
 
     var body: some View {
-        HStack(spacing: 11) {
-            ZStack {
-                Circle()
-                    .fill(Crucible.Color.confirmed)
-                    .frame(width: 22, height: 22)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white)
-            }
-            Text("Memory created")
-                .font(.system(size: 14.5, weight: .semibold))
-                .foregroundStyle(Crucible.Color.accentInk)
-            Spacer(minLength: 0)
-            Button(action: onView) {
+        Button(action: onOpen) {
+            HStack(spacing: 11) {
+                ZStack {
+                    Circle()
+                        .fill(Crucible.Color.confirmed)
+                        .frame(width: 22, height: 22)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
+                Text(kind.label)
+                    .font(.system(size: 14.5, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.accentInk)
+                Spacer(minLength: 0)
                 Text("View")
                     .font(.system(size: 14.5, weight: .bold))
                     .foregroundStyle(Crucible.Color.accent)
                     .padding(.horizontal, 6)
                     .frame(minHeight: 32)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 13)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Crucible.Color.ink)
+                    .shadow(color: Color.black.opacity(0.24), radius: 12, y: 6)
+            )
+            // F29 · the fill is applied inside the label closure, so the
+            // WHOLE toast carries the tap — which is the point of this
+            // change. Shaped anyway so a future reorder cannot quietly
+            // shrink the region back to the text.
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 15)
-        .padding(.vertical, 13)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Crucible.Color.ink)
-                .shadow(color: Color.black.opacity(0.24), radius: 12, y: 6)
-        )
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(kind.label)
+        .accessibilityHint(kind.accessibilityHint)
     }
 }
 
@@ -1518,6 +1588,8 @@ struct FlatClipsListView: View {
     @State private var groupsReload = DebouncedTrigger(interval: .milliseconds(250))
     /// Single-open accordion: at most one flat row expanded at a time.
     @State private var expandedItemId: String? = nil
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -1537,7 +1609,11 @@ struct FlatClipsListView: View {
                     }
                 }
             }
-            if groups.isEmpty {
+            // F22: these rows are built from CloudKit-synced `MediaReference`s,
+            // so mid-import "Nothing here" is the false-certainty defect. A
+            // secondary surface says NOTHING while importing rather than
+            // growing a fourth "getting your…" line (Tom, 2026-07-31).
+            if groups.isEmpty, firstImport.mayAssertEmpty {
                 Text(emptyMessage)
                     .font(.system(size: 13))
                     .foregroundStyle(Crucible.Color.ink3)
@@ -1635,16 +1711,21 @@ struct UnconnectedListView: View {
     @Environment(\.managedObjectContext) private var context
     @State private var looseRefs: [MediaReference] = []
     @State private var refsReload = DebouncedTrigger(interval: .milliseconds(250))
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
 
     var body: some View {
         let items = buildItems()
         return VStack(alignment: .leading, spacing: 8) {
-            if items.isEmpty {
+            // F22: the Unconnected lens reads CloudKit-synced refs. Silence
+            // while importing — a secondary surface withholds the claim rather
+            // than adding another line of copy.
+            if items.isEmpty, firstImport.mayAssertEmpty {
                 Text(emptyMessage)
                     .font(.system(size: 13))
                     .foregroundStyle(Crucible.Color.ink3)
                     .padding(.top, 20)
-            } else {
+            } else if !items.isEmpty {
                 ForEach(items) { item in
                     VStack(alignment: .leading, spacing: 3) {
                         if selection.selecting {
@@ -1926,7 +2007,16 @@ struct DragSelectCircle: View {
     @ObservedObject var selection: ClipsSelection
     var body: some View {
         SelectCircle(checked: checked)
-            .gesture(
+            // `.highPriorityGesture`, not `.gesture` (device fix 2026-07-27):
+            // a low-priority drag on the circle LOST arbitration to the
+            // enclosing ScrollView's pan — the drag was read as a scroll and
+            // `dragChanged` never fired (worse on the New lens, where
+            // SessionListView nests its own ScrollView inside the tab's). High
+            // priority + the small 4pt threshold lets a drag that BEGINS on the
+            // circle win the run-paint; drags that start anywhere else still
+            // scroll normally, so the gesture stays anchored to the circle and
+            // never steals scroll.
+            .highPriorityGesture(
                 DragGesture(minimumDistance: 4, coordinateSpace: .named(ClipsSelectionSpace.name))
                     .onChanged { selection.dragChanged(to: $0.location.y) }
                     .onEnded { _ in selection.dragEnded() }

@@ -8,12 +8,6 @@ These rules are derived from battle-tested governance in The Combine (`~/dev/The
 
 ---
 
-## Project Root
-
-**Filesystem path:** `~/dev/himem/`
-
----
-
 ## Design Authority (read first)
 
 **The designs and specs in `docs/design/` are decisions, not suggestions.** You build what they specify. Your latitude is *how*, never *what*: view structure, state plumbing, file organization, internal naming, the mechanics of making the specified behavior work. Behavior, copy, verbs, ontology, layout intent, and interaction model are already decided.
@@ -35,8 +29,9 @@ When a runtime error, exception, or incorrect behavior is observed, the followin
 
 1. **Reproduce First** -- A failing automated test MUST be written that reproduces the observed behavior. The test must fail for the same reason the runtime behavior failed.
 2. **Verify Failure** -- The test MUST be executed and verified to fail before any code changes are made.
-3. **Fix the Code** -- Only after the failure is verified may code be modified to correct the issue.
-4. **Verify Resolution** -- The test MUST pass after the fix. No fix is considered complete unless the reproducing test passes.
+3. **Identify the Red** -- The failure MUST be confirmed to be an *assertion* failure, at the expected assertion, with the expected values. Neither a build failure nor a launch failure is a red.
+4. **Fix the Code** -- Only after the failure is verified may code be modified to correct the issue.
+5. **Verify Resolution** -- The test MUST pass after the fix. No fix is considered complete unless the reproducing test passes.
 
 #### Constraints
 
@@ -44,8 +39,82 @@ When a runtime error, exception, or incorrect behavior is observed, the followin
 - Code MUST NOT be changed before a reproducing test exists.
 - If a bug cannot be reliably reproduced in a test, the issue MUST be escalated rather than patched heuristically.
 - Vibe-based fixes are explicitly disallowed.
+- **"I saw red" is meaningless without naming *which* red.** `xcodebuild` exits **65** for at least three unrelated conditions — identical signal, completely different meanings:
+  1. **Compilation failure** — the test never ran. Detect: `grep -E "^/.*: error:"`.
+  2. **Assertion failure** — the only real red. Detect: a named failing test plus its message, read from the `.xcresult` (`xcrun xcresulttool get test-results tests --path <bundle>`); the console does not always print it.
+  3. **Launch/infrastructure failure** — e.g. `Testing failed: Simulator device failed to launch … denied by service delegate (SBMainWorkspace)`, or a run that wedges at 0% CPU with no simulator booted. **This is the sneakiest of the three: no compile error and no assertion, so it reads as a genuine test failure until you check the tail of the log.** Usually stale simulator state — `xcrun simctl shutdown all` and re-run.
+
+  A test that didn't compile, or never launched, has proven nothing. Mistaking either for a reproduction silently invalidates the whole Bug-First method: you proceed to "fix" a defect you never observed. **Always identify which of the three you have; never trust the exit code alone.** *Origin: all three hit in one session, 2026-07-29/30 — a `@MainActor`-isolation compile error read as a passing red gate; a duplicate-declaration compile error likewise; and a full suite "failing" on a simulator launch denial that passed unchanged after a simulator reset.*
 
 This rule applies to all runtime defects including: exceptions, incorrect outputs, state corruption, and boundary condition failures.
+
+### A Debugger Attachment Can Hold the Capture Hardware (Mandatory)
+
+**Any capture-path measurement taken over a Device Hub / debugger connection is suspect.** Xcode's Device Hub can hold the device's media services, which starves microphone and camera capture *for every app on the device* while leaving the app's own state perfectly plausible: the session activates, the engine starts, `isRecording` is true, the tap fires with correct frame counts, and the file is written at exactly the right size. The only visible difference is that the samples are zeros.
+
+**Device-pass protocol for anything touching capture: install, DISCONNECT, then test.** A reading taken while attached measures the attachment, not the app.
+
+- **Exact zeros are the signature.** Gain problems *attenuate* (`in_peak ≈ 0.01`); a held device gives `in_peak = 0.0000` on every buffer, indefinitely.
+- **Cross-app breakage is the tell.** If another app (Voice Memos, Camera) is also silent, stop looking at our code entirely.
+- **It survives a bisect.** An old build fails identically, because the cause is not in any build — which can read as "we never broke it, so it must be the device," and that is *almost* the right conclusion for the wrong reason.
+
+*Origin: 2026-08-02. `in_peak = 0.0000` on iPhone across 300 buffers and two builds, while iPad ran identical code at 0.02–0.06. Disconnecting the phone from Device Hub restored capture. The bisect to `4a08423^` was correct and necessary — it cleared our diff — but the diff being clear is not the same as the app being at fault, and the next hypothesis after "not our code" must be the measuring apparatus before it is the hardware. Cost the better part of a pass.*
+
+### Don't Go Looking for Zebras (Mandatory)
+
+**When something that used to work fails, our own recent changes are the FIRST suspects, not the last.** Open by checking the diff. Environmental theories, Apple-behaviour theories, device-state theories and user-error theories are **last resorts, reached only after the diff is cleared** — and "it worked before" is the strongest possible signal that the cause is in what we just touched.
+
+- **Bisect the surface first.** Name the commits that touched the failing path since it last worked, and read each diff before forming any other hypothesis.
+- **A change's side effects count as the change.** A fix aimed at one property can move another: `.measurement` → `.default` was a *gain* fix, and it also changed the **input node's format**, which changed the master file's format, which changed what every downstream consumer receives. The blast radius of a config change is every value derived from it.
+- **Re-check your own exonerations.** Evidence that a component "worked" must come from the *current* build on the *current* path — a log line showing an old file being read proves nothing about the code that wrote it.
+- **Then write the test that would have caught it.** Every one of these failures reached a device through a suite that was green.
+
+*Origin: 2026-08-01/02 device pass. Silent recordings on the phone. CC opened with an audio-route/Bluetooth theory while the causing change sat two days deep in the diff, and separately exonerated the compressor using a transcription of a file recorded on an earlier build. Tom's correction: "this WORKED, 100%, before the troika changes — this is something we just broke."*
+
+### Assertions Need a Ceiling, Not Just a Floor (Mandatory)
+
+**A one-sided bound exonerates the failure it was written to catch.** `AudioCompressorTests` asserted `ratio >= 10.0` under the message *"codec settings may be wrong"* — so a **780× ratio, which is what silence compresses to, passed**. The more completely the audio was destroyed, the more emphatically the test approved.
+
+- **Bound both sides of any ratio, size, count or duration** whose *too-good* direction is also a defect. Compression that is far better than physically plausible is data loss.
+- **Assert the property, not a proxy for it.** Size is a proxy for "the audio survived"; the property is signal. Where the real assertion needs an unavailable resource (a speech model, a device mic), say so — a suite whose only real guard is a leg that never runs on this machine is green as a *count*, not as coverage.
+- **A static fixture only tests the format it happens to be.** When production's format is derived from device configuration, a fixture recorded once can stop resembling what ships without anything failing.
+
+*Origin: 2026-08-02. Two independent silent captures reached a device under a fully green compressor suite.*
+
+### Measurement Discipline (Mandatory)
+
+**Name what a measurement actually is before building on it.** Every diagnostic failure in this project has been a signal that *looked* authoritative because it was well-formed, and was in fact truncated, aggregated, or overloaded. None looked like an error at the moment it was read — which is why care alone doesn't catch them.
+
+- **Never let `head` (or any limit) bound a completeness claim.** "No callers exist" is a statement about the whole codebase; a `head -8` that filled with matches from one test file cannot support it. If the conclusion is *"there are none"*, the command must be able to show all of them — filter the noise out (`grep -v`), don't cap the output.
+- **Count by the structure you mean.** Counting unique log *lines* is not counting test *cases*: interleaved timestamps split one result line in two, and the halves de-duplicate as distinct entries. Aggregate on the actual unit (per-suite tallies), not on incidental text.
+- **Never treat one exit code as one meaning.** See the Bug-First constraint above: `xcodebuild` returns **65** for compile failure, assertion failure, *and* launch/infrastructure failure. **A fourth 65: `ValidateEmbeddedBinary` refusing a platform mismatch on the watch scheme** — *"This target is built for iOS but contains embedded content (Himem Watch Watch App.app) built for watchOS Simulator."* It is a **build** failure, so it shares the launch failure's signature (0 compile errors, no `Test run with` line, no `Failing tests:` block) and reads as a red. Cause: the watch simulator's **paired iPhone simulator was shut down**, so no simulator destination resolved for the container app and it built for `iphoneos` instead. Remedy: `xcrun simctl list pairs`, then boot **both halves of the pair** — the watch sim's partner is not necessarily the phone scheme's canonical destination. Detect: `grep ValidateEmbeddedBinary` in the log tail. *(Hit 2026-07-31 establishing the session baseline; the re-run with the pair booted was 34/6 green, unchanged.)* **It also exits 66 when the working directory contains no Xcode project** — same family as the 65 overload, and it reads as a test failure in a scripted loop because the only difference is one line near the top of the log (`error: The directory … does not contain an Xcode project`). Pass `-project <path>` explicitly rather than relying on the shell's current directory, which does not survive a `cd` in an earlier command. *(Hit 2026-07-31 mid-F23: a `git commit` run from the repo root moved the working directory, and the next test invocation "failed" without running.)*
+- **Exit 73 is out of disk, not a test failure.** `ENOSPC`: 0 compile errors, no result bundle, and the tail carries a filesystem error rather than anything about tests. A full paired gate writes a `.xcresult` (~10MB), and repeatedly erasing simulators plus DerivedData compounds it — a long session can fill the volume and every subsequent command fails, including the ones that would clear space. **Delete result bundles between runs**, and prefer `simctl delete` over `erase` for devices that are done. *(Hit 2026-08-01 mid-F28.)*
+- **Rotating a simulator must not change the runtime.** The phone gate is pinned to an **iOS 26.4** simulator, and the known-8 `SpeechAssetGate` failures exist *because* the en_US speech asset is `unsupported` there. A 26.5 runtime may resolve that asset differently and **silently move the failure count** — a run returning 5 failures, or 0, is not good news, it is an *incomparable* measurement that destroys the baseline while looking like a fix. Simulator attrition forces rotation often on this machine (four consumed in three days), and "grab any available iPhone" is exactly how the runtime drifts inside a routine step nobody thinks of as a decision. **Erase and recreate on the same runtime rather than moving runtime;** if the runtime genuinely must move, re-cut the baseline explicitly and say so. *(Pinned 2026-07-31.)*
+- **A conclusion inherits the weakness of its weakest input.** When a finding rests on a measurement, state the measurement alongside it, so a wrong reading is visible as a wrong reading rather than propagating as fact.
+
+*Origin: three instances in one session (2026-07-29/30) — a truncated `grep` producing "P0-3 is unwired" when it was fully wired; a watch-suite count reported as 27 when it was 28; and exit 65 read as an assertion failure when it was twice a compile error and once a simulator launch denial.*
+
+### Assert the Meaning, Not the Phrasing (Mandatory)
+
+**A test that pins exact user-facing copy breaks on every approved rewording — which trains people to update tests reflexively, and a test updated reflexively has stopped guarding.**
+
+- Assert the **clause that carries the invariant**, not the sentence it currently appears in. `#expect(body.contains("only what's in them"))` survives a rewrite that keeps the Honest-Label promise and still fails if the promise is dropped. `#expect(body == "<the whole line>")` fails on a comma.
+- When copy is the *subject* of the rule (a locked label, a retired metaphor), pinning the literal is correct — e.g. asserting a destructive button says "Delete" and does **not** say "Let Go". State in the test which one it is and why, so the next reader knows whether a failure means "copy changed" or "promise broken".
+- **A failing copy test is a question, not a chore.** Before updating it, decide which happened: the wording moved (update the assertion, keep the invariant) or the meaning moved (that is a design change and needs a ruling, per Design Authority).
+- Prefer several small assertions naming each promise over one assertion pinning a paragraph — a paragraph-level match tells you *that* something changed, never *what*.
+
+*Origin: 2026-07-30, F16. Rewording the organize beat to the plural ("only what's in **them**") broke `organizeBeat_isTierAware_honestLabel`, which had pinned the singular literal. The promise was intact; only the phrasing had moved. Rewritten to assert the limit-naming clause per tier, plus the new "Nothing happens until you ask" promise — so the requirement is pinned rather than incidental.*
+
+### Guard the Caller, Not Just the Owner (Mandatory)
+
+**A test that proves an owner is correct proves nothing about whether anyone still calls it.** Every guard MUST assert that *the caller reaches the decision*, not merely that the decision is right — and every guard MUST be verified to fail.
+
+- **Test the wiring, not only the primitive.** "Does `isTransferReady` return false for raw PCM?" is a different question from "does the transfer path still ask?" Write the second one. Where the call site is private, unreachable, or bound to a system singleton, a **mechanical source-level assertion** is a legitimate guard — anchored on the real file, with a self-test proving the matcher recognizes the defect, and a walk that **throws if it reaches no source** (it must not pass by matching nothing).
+- **Mutation-verify every guard.** Break the invariant on purpose, watch the guard fail, put it back. *A guard that has never failed is a guard nobody has tested.* Record in the commit what you broke and what failed.
+- **A silent skip is not coverage.** A `print`-and-`return`, an environment-gated early exit, or a `#expect(true)` reports as **passed**. If a test cannot run, it must say so as a failure that names the cause and the remedy. Never add a local opt-out — an opt-out is how the gap hides.
+- **State the gate honestly.** When a suite is green with legs that never executed, the green is a count, not a coverage claim. Say which is which.
+
+*Origin: 2026-07-31, F23 Tier 2 — three instances in one pass, all the same failure. **T2.3**: `SessionListView` hand-rolled a second `AVAudioPlayer` while the correct `AudioPlayerService` sat unused. **T2.6**: deleting the `isTransferReady` guard from `enqueueReadyTransfer` left **all six** `WatchTransferAudioTranscoderTests` green — a suite CLAUDE.md names as the guard for "raw PCM never ships." **`:614`**: CC added `finishAppend`, tested it, and left the early `return` that bypassed it — reproducing the class one hour after closing it, with four green seam tests hiding it. Also that day: eight transcription legs silently skipped on the dev simulator, so every "1195 passed" gate that session contained zero end-to-end transcription coverage. A test style written against owners in isolation cannot see any of this.*
 
 ### Money Tests
 
@@ -92,6 +161,7 @@ Remediation path: decompose into focused sub-methods (cyclomatic complexity redu
 - Make every change as simple as possible. Find root causes, not symptoms.
 - No temporary fixes. No "we'll clean this up later" without a tech debt entry.
 - Changes should only touch what is necessary.
+- If a fix feels hacky, pause and find the elegant solution.
 
 ---
 
@@ -238,14 +308,6 @@ For any non-trivial task (3+ steps or architectural decisions):
 
 If something goes wrong during execution, **STOP and re-plan**. Do not push through a failing approach.
 
-### Simplicity First
-
-- Make every change as simple as possible.
-- Find root causes, not symptoms.
-- No temporary fixes without a tech debt entry.
-- Changes should only touch what is necessary.
-- If a fix feels hacky, pause and find the elegant solution.
-
 ### Verification Before Done
 
 - Never mark a task complete without proving it works.
@@ -339,6 +401,8 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 ### Crucible token contract
 
 The single source of truth for design tokens (colors, topic palette) is `docs/design/crucible.css`. iOS asset-catalog entries under `Assets.xcassets/Crucible/*.colorset` mirror it byte-for-byte. When the spec changes, both sides change in the same PR.
+
+**Every token is a `light-dark(<light>, <dark>)` pair — both modes are locked, not just light.** All 47 colorsets carry a Dark-Appearance variant. Dark applies to *all* surfaces (the reflective/operational split is not enforced at the token layer), designed to read as *"lamp-lit book at night," not "Netflix title card."* On dark: paper `#000000`, ink `#F0E9DC`, ochre `#EC7442`, AI blue `#5BA4D6`. **Judge a surface against its own column** — `#C64A1C` on black is the deviation. Default appearance is `.system` (`Settings → Appearance` overrides); the watch is dark-native and ignores it. Full table: `docs/design/CLAUDE.md` § Palette.
 
 **Topic-slug strings are a cross-platform contract.** The 16-swatch palette names (`ember`, `terracotta`, `clay`, … `slate`) defined in `docs/design/Crucible · topic palette spec.md` must match the asset-catalog entries (`topic-ember.colorset` etc.) AND the `Topic.paletteKey` Core Data values AND the Swift `topicSlug(for:)` hash output. Drift in any of these silently mis-renders chips. If a slug needs renaming, that's a data migration on every device.
 

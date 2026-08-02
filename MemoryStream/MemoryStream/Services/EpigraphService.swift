@@ -124,10 +124,21 @@ final class EpigraphService {
 
     // MARK: - Entry Count (lightweight)
 
-    func entryCount() -> Int {
-        let request = NSFetchRequest<NSNumber>(entityName: "JournalEntry")
+    /// Live memories only — the input to `todaysEpigraphWithSource(entryCount:)`,
+    /// which picks the epigraph stage.
+    ///
+    /// The predicate must be on the request that actually runs. This method
+    /// used to configure an `NSFetchRequest<NSNumber>` and then count a
+    /// freshly-constructed, predicate-less one two lines below, so Recently
+    /// Deleted memories were counted as live and the stage was chosen for a
+    /// library the user no longer had (F23 T2.4).
+    ///
+    /// - Parameter context: injectable for tests; production reads the shared
+    ///   view context.
+    func entryCount(in context: NSManagedObjectContext? = nil) -> Int {
+        let ctx = context ?? StorageService.shared.viewContext
+        let request = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         request.predicate = NSPredicate(format: "isRecycled == NO OR isRecycled == nil")
-        request.resultType = .countResultType
-        return (try? StorageService.shared.viewContext.count(for: NSFetchRequest<JournalEntry>(entityName: "JournalEntry"))) ?? 0
+        return (try? ctx.count(for: request)) ?? 0
     }
 }

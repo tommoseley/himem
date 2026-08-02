@@ -49,8 +49,10 @@ struct WatchPendingListView: View {
 
     /// Inline header for the deep-link route only — `PENDING · <count>`
     /// with a back chevron. Suppressed in the embedded swipe-page
-    /// context: there the shared `HIMEM · PENDING` header is provided by
-    /// the `EmbeddedHeaderModifier` via `safeAreaInset`.
+    /// context: there the shared `HIMEM · PENDING` header is provided by the
+    /// `.watchPageHeader(_:)` modifier (`WatchHomeView:131`) via
+    /// `safeAreaInset`. No `EmbeddedHeaderModifier` type exists — that name
+    /// was corrected 2026-07-31.
     @ViewBuilder
     private var header: some View {
         if !embedded {

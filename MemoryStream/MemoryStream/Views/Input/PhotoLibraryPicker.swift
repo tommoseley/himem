@@ -28,7 +28,23 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
         let mediaType: MediaReference.MediaType
     }
 
+    /// **F30 · how many items are being copied right now (0 = idle).**
+    ///
+    /// `didFinishPicking` moves every picked item into the ubiquity
+    /// container before it calls back, and `PHPickerViewController` does
+    /// NOT dismiss itself — so for a multi-second import the picker sat
+    /// frozen on screen with no signal at all. The user had tapped Add
+    /// and been given nothing to read.
+    ///
+    /// Reported outward rather than drawn here: this is a
+    /// `UIViewControllerRepresentable` around a system controller, and
+    /// `CLAUDE.md` § "UIKit Pickers in SwiftUI" is explicit that pushing
+    /// state INTO a live picker tears down its session. The owner draws
+    /// the indicator above it instead.
+    @Binding var importingCount: Int
+
     let onPick: ([Result]) -> Void
+
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration(photoLibrary: .shared())
@@ -42,14 +58,16 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onPick: onPick)
+        Coordinator(onPick: onPick, onProgress: { count in importingCount = count })
     }
 
     class Coordinator: NSObject, PHPickerViewControllerDelegate {
         let onPick: ([Result]) -> Void
+        let onProgress: (Int) -> Void
 
-        init(onPick: @escaping ([Result]) -> Void) {
+        init(onPick: @escaping ([Result]) -> Void, onProgress: @escaping (Int) -> Void) {
             self.onPick = onPick
+            self.onProgress = onProgress
         }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
@@ -57,6 +75,9 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
                 onPick([])
                 return
             }
+            // Announce the work BEFORE it starts — the whole defect was
+            // a silent gap between the tap and the callback.
+            onProgress(results.count)
             Task {
                 let imported = await withTaskGroup(of: Result?.self) { group -> [Result] in
                     for result in results {
@@ -70,7 +91,10 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
                     }
                     return collected
                 }
-                await MainActor.run { self.onPick(imported) }
+                await MainActor.run {
+                    self.onProgress(0)
+                    self.onPick(imported)
+                }
             }
         }
 

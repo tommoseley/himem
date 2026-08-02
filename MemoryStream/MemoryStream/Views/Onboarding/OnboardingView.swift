@@ -515,6 +515,8 @@ private struct LandingScreen: View {
             Spacer().frame(height: 100)
 
             // Ask for name if Apple didn't provide it
+            // F22 EXEMPT: form validation on a field the user is filling in.
+            // Onboarding runs before there is anything to import.
             if needsName && displayName.isEmpty {
                 Text("One quick thing \u{2014}")
                     .font(.custom("Georgia-Italic", size: 24))

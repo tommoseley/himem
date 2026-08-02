@@ -60,11 +60,25 @@ struct EntryExpandedView: View {
     /// `PreferenceKey`s emitted from inside a `List`, which don't
     /// propagate to ancestor `onPreferenceChange`.
     @State private var letGoOnScreen = false
+    /// D5 · true while the Organize card is on screen. The append FAB steps
+    /// aside for it exactly as it does for Let Go, so a scrolled-to Organize
+    /// button isn't covered by the floating FAB (device pass 2026-07-27). Gated
+    /// by `topAnchorVisible` too — a short memory keeps the FAB (see below).
+    @State private var organizeOnScreen = false
     /// True while the zero-height top anchor is on screen — i.e. the body
-    /// is at its resting top, not scrolled. Paired with `letGoOnScreen`
-    /// so the FAB only hides after a deliberate scroll: a short memory
-    /// shows both anchor and Delete at once (`letGoOnScreen && !scrolled`
-    /// → keep the FAB), so the only add affordance is never stranded.
+    /// is at its resting top, not scrolled. Paired with `letGoOnScreen` /
+    /// `organizeOnScreen` so the FAB only hides after a deliberate scroll.
+    ///
+    /// **Deliberate tradeoff — do NOT "fix" this into a hidden FAB (ruling
+    /// 2026-07-27).** On a memory too short to scroll, the top anchor stays
+    /// visible, so the FAB is KEPT even while Let Go / Organize are on screen.
+    /// That accepts a corner overlap of the floating FAB over the bottom card
+    /// on a tiny (one-short-clip) memory — the strictly lesser evil, because
+    /// the FAB is the only add-clips affordance and hiding it here would strand
+    /// it. The section reorder (clips above Organize) makes any memory with a
+    /// real transcript scrollable, shrinking this to almost nothing. A future
+    /// pass that hides the FAB on short memories to kill the overlap would
+    /// re-strand the append path — that's a regression, not a fix.
     @State private var topAnchorVisible = true
     /// P8 Let Go split disclosure, computed once on appear (nil → the static
     /// footnote shows until it's ready).
@@ -272,16 +286,28 @@ struct EntryExpandedView: View {
                     .foregroundStyle(Crucible.Color.ink3)
             }
             headerRow { summarySection }
-            headerRow(top: -3) { topicChipsRow }
-            // Project-context row (F2/F3): "In [project]" membership chips
-            // + a dashed "Edit" affordance. Always shown (like the topic
-            // row) so a memory can always be filed; unified associations
-            // read model (2026-07-17).
-            headerRow(top: -3) { projectSection }
-            // Transcript Full ⇄ Compact toggle sits between the topic
-            // chips row and the chronological body. Hidden for short
-            // memories — the section header itself disappears, the
-            // body still renders fine without any eyebrow.
+            // **Section order (ruling 2026-07-31, F19a):**
+            //   title → summary → PARTS (clips) → TOPICS → PROJECTS →
+            //   MENTIONS → Organize → Delete.
+            //
+            // This deliberately REVERSES the 2026-07-27 ordering
+            // (summary → TOPICS → PROJECTS → MENTIONS → PARTS). That ruling
+            // predated seeing a real memory on device: with three empty
+            // "+ Edit" rows stacked under the summary, the only actual content
+            // — her recording — was pushed to a second screen. The metadata
+            // rows are cheap to scroll past; the content is what she opened the
+            // memory for, so it now sits directly under the summary.
+            //
+            // The `AI Organize · spec.md` summary→topics adjacency (the derived
+            // layer reading as one block) is knowingly given up: adjacency is
+            // worth less than the content being visible without scrolling.
+            // Sequenced BEFORE F16's `detailTour`, whose copy describes this
+            // order.
+            // Transcript Full ⇄ Compact toggle heads the clip body (PARTS).
+            // Hidden for short memories — the header disappears, the body still
+            // renders fine without any eyebrow. D1: the clip body carries no
+            // eyebrow and no `?` — it's the memory's content, self-evident, and
+            // clip help lives one ✎-tap away in Edit Clip.
             if transcriptHeaderShown {
                 sectionRow {
                     TranscriptHeaderControl(
@@ -302,12 +328,26 @@ struct EntryExpandedView: View {
                 }
             }
             bodyContent
-            // Mentions promoted out of the previous bottom expander
-            // (was after OrganizeMemorySection / inferenceCardSection)
-            // and rendered as an always-visible row between the
-            // chronological capture stream and the Organized · review
-            // card. Spec: `docs/Memory Detail/screens-memory-detail.jsx`.
-            sectionRow { mentionsSection }
+            // **F33 · the page is a PROGRESSION, not a form (ruled 2026-08-01).**
+            //
+            // Unorganized:  title → (summary, if any) → parts → Organize → Delete
+            // Organized:    the full F19a order returns, and every section keeps
+            //               rendering even if she later empties it.
+            //
+            // It reads "here's what you recorded → want it organized? → now
+            // refine the result", instead of asking someone to edit three empty
+            // fields before any work has been done. F19a's reorder was the same
+            // instinct one step earlier — it moved the empty rows below the
+            // content; this removes them until they mean something.
+            if hasBeenOrganized {
+                headerRow(top: -3) { topicChipsRow }
+            // Project-context row (F2/F3): "In [project]" membership chips
+            // + a dashed "Edit" affordance. Always shown (like the topic
+            // row) so a memory can always be filed; unified associations
+            // read model (2026-07-17).
+                headerRow(top: -3) { projectSection }
+                sectionRow { mentionsSection }
+            }
             sectionRow {
                 // Memory Detail AI zone — routes to Idle (no pass yet)
                 // / Draft (unreviewed pass, B1 review sheet on tap) /
@@ -329,6 +369,9 @@ struct EntryExpandedView: View {
                 // next presentation attempt. Pinning identity makes
                 // SwiftUI preserve the view across body re-evals.
                 .id(entry.id)
+                // D5 · tell the FAB to step aside for the Organize card.
+                .onAppear { organizeOnScreen = true }
+                .onDisappear { organizeOnScreen = false }
             }
             sectionRow { inferenceCardSection }
             // Bottom Delete memory — the sole memory-delete path per
@@ -370,10 +413,15 @@ struct EntryExpandedView: View {
                 }
                 .padding(.top, 24)
             }
-            // Bottom inset so the floating Contribute FAB doesn't cover the
-            // last row.
+            // Bottom inset so neither the floating append FAB NOR the tab bar
+            // covers the last row (the Let Go footer). Two obstructions:
+            //   • FAB — 60pt circle + 28pt bottom padding = 88pt, +20pt gap
+            //     = 108pt (device pass 2026-07-26).
+            //   • Tab bar — the append FAB is dropped onto the tab-bar edge via
+            //     `-tabBarInset`, so the same measured height must be added or
+            //     the footer clips under the tab pill (device pass 2026-07-27).
             Color.clear
-                .frame(height: 80)
+                .frame(height: 108 + tabBarInset)
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
@@ -381,6 +429,9 @@ struct EntryExpandedView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Crucible.Color.paper)
+        // D4 · the one-time section-`?` coachmark, pinned below the nav bar;
+        // non-blocking so the `?` glyphs underneath stay tappable.
+        .overlay(alignment: .top) { CoachmarkBanner(coachmark: .sectionHelp) }
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) { leadingToolbar }
@@ -395,6 +446,21 @@ struct EntryExpandedView: View {
             // the shell FAB stacks above Memory Detail's own append
             // FAB — the "two RABs" bug (July 11 2026).
             MemoryDetailPresentationContext.shared.enter(memoryId: entry.id)
+            // F8 · if this is the walkthrough's memory, arm the organize/done
+            // beats now that Organize + the title/summary are on screen. On
+            // Plus the auto-organize (processEntry) has usually already run, so
+            // pass whether it's organized — the orchestrator skips straight to
+            // the "that's a memory" beat rather than pointing at an Organize
+            // control that isn't there.
+            if WalkthroughOrchestrator.shared.walkthroughMemoryId == entry.id {
+                // `inferenceSummary` is the display model's organized signal —
+                // the AI-written title/summary. Non-nil ⇒ Plus already
+                // auto-organized ⇒ skip the organize beat.
+                WalkthroughOrchestrator.shared.memoryDidOpen(alreadyOrganized: entry.inferenceSummary != nil)
+            }
+            // D4 · introduce the section-`?` affordance once, after the
+            // walkthrough (the guard no-ops during it and on later visits).
+            OneShotCoachmark.sectionHelp.armIfEligible()
         }
         .onDisappear {
             MemoryDetailPresentationContext.shared.exit(memoryId: entry.id)
@@ -509,7 +575,16 @@ struct EntryExpandedView: View {
             // `editCoordinator` flips on any title/summary/transcript
             // edit; the FAB disappears until the edit commits or
             // cancels.
-            if !editCoordinator.isAnyEditing && !(letGoOnScreen && !topAnchorVisible) {
+            // F33 · `organizeOnScreen` now suppresses the FAB on its own.
+            // The `!topAnchorVisible` qualifier meant "only step aside after a
+            // deliberate scroll" — but a SHORT memory shows the top anchor AND
+            // the Organize card at once, so the FAB sat on top of the card.
+            // F33 makes unorganized memories shorter, which is what surfaced
+            // it. Let-Go keeps the scroll qualifier: it lives at the very
+            // bottom and can only be reached by scrolling.
+            if !editCoordinator.isAnyEditing
+                && !organizeOnScreen
+                && !(letGoOnScreen && !topAnchorVisible) {
                 AppendFAB(
                     onSelect: { modality in
                         appendCoordinator.activeCaptureModality = modality
@@ -541,6 +616,7 @@ struct EntryExpandedView: View {
         // (see `letGoOnScreen` / `topAnchorVisible`), which List fires
         // reliably; the FAB `if` above drops it from the hierarchy.
         .animation(.easeInOut(duration: 0.18), value: letGoOnScreen)
+        .animation(.easeInOut(duration: 0.18), value: organizeOnScreen)
         .animation(.easeInOut(duration: 0.18), value: topAnchorVisible)
     }
 
@@ -562,10 +638,14 @@ struct EntryExpandedView: View {
     /// — it's orthogonal to topics and shouldn't squat the topic row.
     private var topicChipsRow: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("TOPICS")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.6)
-                .foregroundStyle(Crucible.Color.ink3)
+            HStack(spacing: 4) {
+                Text("TOPICS")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(Crucible.Color.ink3)
+                SectionHelpButton(topic: .memoryTopics, size: 13)  // F7c
+                Spacer(minLength: 0)
+            }
 
             // Chips size to their content (no text wrapping) and
             // flow-wrap to a new row when the available width runs
@@ -595,13 +675,11 @@ struct EntryExpandedView: View {
                 addTopicAffordance
             }
 
-            if let status = entry.displayStatus, entry.inferenceSummary == nil {
-                HStack {
-                    StatusBadge(text: status.text, style: status.style)
-                    Spacer()
-                }
-                .padding(.top, 2)
-            }
+            // F33 · the green "Processed" pill is REMOVED. It rendered only
+            // while `inferenceSummary == nil` — i.e. on exactly the
+            // unorganized page this ruling is clearing — and it announced a
+            // pipeline state she never asked about. Green is semantic
+            // (confirmed/success) and nothing had succeeded yet.
         }
         // Hairline separator between Summary and TOPICS. 4pt
         // breathing room above the line (the summary sits closer
@@ -656,10 +734,14 @@ struct EntryExpandedView: View {
     /// one contextual exception to routing through the sheet.
     private var projectSection: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("PROJECTS")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.6)
-                .foregroundStyle(Crucible.Color.ink3)
+            HStack(spacing: 4) {
+                Text("PROJECTS")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(Crucible.Color.ink3)
+                SectionHelpButton(topic: .memoryProjects, size: 13)  // F7c
+                Spacer(minLength: 0)
+            }
 
             FlowLayout(spacing: 10) {
                 ForEach(entry.projectMemberships) { membership in
@@ -786,6 +868,26 @@ struct EntryExpandedView: View {
     /// `summaryUserEdited` to true. Empty content on commit clears
     /// the summary back to nil; the section then renders an empty
     /// placeholder until the next organize pass or another edit.
+    /// **The summary slot always exists** (F19b, 2026-07-31), in one of three
+    /// states. It used to render nothing at all when there was no summary — the
+    /// doc comment claimed "an empty placeholder" that was never built — so an
+    /// un-organized memory showed a truncated transcript as its title and
+    /// simply *no* summary. That reads as broken rather than as not-yet-written,
+    /// and it silently made Organize the only route to a summary, which
+    /// contradicts J2/J5: meaning belongs to the human, the AI observes.
+    ///
+    /// Two doors to one field. She can write her own; Organize can write one.
+    /// Neither is the only way, and the slot never auto-fills from the
+    /// transcript — an excerpt masquerading as a summary is a confident wrong
+    /// proposal, the same lie class as F6i's "0:00".
+    @ViewBuilder
+    /// **F33 · has an organize pass run on this memory?**
+    ///
+    /// `inferenceSummary` is the display model's organized signal — the
+    /// same one `memoryDidOpen(alreadyOrganized:)` reads, so the
+    /// walkthrough and the page agree about what state she is in.
+    private var hasBeenOrganized: Bool { entry.inferenceSummary != nil }
+
     @ViewBuilder
     private var summarySection: some View {
         if summaryIsEditing {
@@ -793,24 +895,60 @@ struct EntryExpandedView: View {
         } else if let summary = entry.renderedSummary {
             summaryReadable(summary)
         }
+        // F33 (2026-08-01) · the empty invite is REMOVED, superseding
+        // F19b's "the slot always exists". F19b was right that a phantom
+        // placeholder had to become real; it was wrong about *when*. On an
+        // unorganized memory the invite asked her to edit an empty field
+        // before any work had been done. Summary now renders only when
+        // there is one — Organize is how it gets filled, and the page says
+        // so by offering Organize instead of a blank.
     }
 
-    private var summaryEyebrow: some View {
+    /// Provenance decides the eyebrow, because the eyebrow is a claim about
+    /// *who wrote this*.
+    ///
+    /// AI blue + sparkle is reserved for AI moments (`Crucible`), so wearing it
+    /// over her own words would be the app taking credit for them — the exact
+    /// mirror of the Honest-Label sweep that stopped Organize claiming the AI's
+    /// output was hers. Neutral whenever the text is the user's, or when there
+    /// is no text yet: an AI-blue invite would imply Organize is how you fill
+    /// it, which is the opposite of what this slot exists for.
+    private func summaryEyebrow(aiAuthored: Bool) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 9, weight: .semibold))
+            if aiAuthored {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 9, weight: .semibold))
+            }
             Text("SUMMARY")
                 .font(.caption2)
                 .fontWeight(.bold)
                 .tracking(0.5)
         }
-        .foregroundStyle(Crucible.Color.aiBlue)
+        .foregroundStyle(aiAuthored ? Crucible.Color.aiBlue : Crucible.Color.ink3)
+    }
+
+    /// Empty state — a quiet invite, not a placeholder pretending to be content.
+    /// Taps into the same inline editor every other text field uses.
+    @ViewBuilder
+    private var summaryEmptyInvite: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            summaryEyebrow(aiAuthored: false)
+            Text("Add a summary")
+                .font(.body)
+                .foregroundStyle(Crucible.Color.ink3)
+        }
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { beginEditingSummary() }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Write your own summary for this memory")
     }
 
     @ViewBuilder
     private func summaryReadable(_ summary: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            summaryEyebrow
+            summaryEyebrow(aiAuthored: !entry.summaryUserEdited)
             Text(summary)
                 .font(.body)
                 .foregroundStyle(Crucible.Color.ink)
@@ -825,7 +963,9 @@ struct EntryExpandedView: View {
     @ViewBuilder
     private var summaryEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            summaryEyebrow
+            // Editing IS the user authoring — neutral while she types, whatever
+            // the text was before.
+            summaryEyebrow(aiAuthored: false)
             // `TextField(axis: .vertical)` matches the read view's
             // metrics 1:1 and auto-grows to fit the entire content —
             // a 6-line summary edits in a 6-line field, no internal
@@ -1020,8 +1160,15 @@ struct EntryExpandedView: View {
     /// MediaReference in `.onAppear` via `migrateOrphanedContentIfNeeded`,
     /// so the user gets the full NotePanel UX without a separate
     /// inline-Text affordance.
+    // F22 EXEMPT: this is the OPENED memory's own media, reached only by
+    // navigating into a memory that has already resolved from the store. If the
+    // memory is here, its object graph is here; an unimported store yields no
+    // memory to open, so this branch cannot render the false-empty claim.
+    // (Flagged genuinely uncertain in the F22 survey — resolved here, and
+    // stated so a later reader can find it wrong rather than re-derive it.)
     @ViewBuilder
     private var bodyContent: some View {
+        // F22 EXEMPT: the opened memory's own media (see the note above).
         if entry.mediaItems.isEmpty {
             sectionRow {
                 Text(entry.content.attributedWithLinks())
@@ -1182,11 +1329,15 @@ struct EntryExpandedView: View {
     @ViewBuilder
     private var mentionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("MENTIONS")
-                .font(.caption2)
-                .fontWeight(.bold)
-                .tracking(1.6)
-                .foregroundStyle(Crucible.Color.ink3)
+            HStack(spacing: 4) {
+                Text("MENTIONS")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .tracking(1.6)
+                    .foregroundStyle(Crucible.Color.ink3)
+                SectionHelpButton(topic: .memoryMentions, size: 13)  // F7c
+                Spacer(minLength: 0)
+            }
 
             FlowLayout(spacing: 10) {
                 ForEach(entry.mentions) { mention in

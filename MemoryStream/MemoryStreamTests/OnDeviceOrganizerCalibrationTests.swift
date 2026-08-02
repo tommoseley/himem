@@ -147,7 +147,9 @@ struct OnDeviceOrganizerCalibrationTests {
 
         for f in Self.fixtures {
             // Mirror production END-TO-END (2026-07-23): palette removed from
-            // the prompt (fix #2), then TruthReconciler (`.strict` on-device) —
+            // the prompt (fix #2), then TruthReconciler (summary grounding is
+            // `.relaxed` on BOTH tiers — the "`.strict` on-device" claim was
+            // corrected 2026-07-31; `.strict` governs only the mention drop) —
             // verify the summary → retry once → constrained extractive
             // fallback. The GATED summary is what ships, so that is what the
             // rubric grades.

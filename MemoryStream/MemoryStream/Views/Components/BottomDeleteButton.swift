@@ -26,12 +26,16 @@ struct BottomDeleteButton: View {
         var label: String {
             switch self {
             case .delete(let noun):
-                // July 13 2026 lock — the label names what's destroyed
-                // (clips are the atoms, everything else is association):
-                // a memory dissolves its derived layer but its clips SURVIVE;
-                // a clip destroys the atom across every memory.
+                // The label names what's destroyed (clips are the atoms,
+                // everything else is association): a memory removes its derived
+                // layer, its clips handled by the last-reference rule; a clip
+                // destroys the atom across every memory. "Delete this Memory"
+                // (not the old "Let Go" metaphor) — at the destructive moment a
+                // metaphor reads as ambiguity about whether the thing survives;
+                // the footnote below carries the nuance (locked Voice principle,
+                // 2026-07-28). The disclosure line is what keeps "Delete" honest.
                 switch noun {
-                case "memory":  return "Let Go of this Memory"
+                case "memory":  return "Delete this Memory"
                 case "clip":    return "Delete this Clip"
                 case "project": return "Delete Project"   // title-case, spec §Deleting
                 default:        return "Delete \(noun)"   // session
@@ -55,10 +59,13 @@ struct BottomDeleteButton: View {
             switch self {
             case .delete(let noun):
                 if noun == "memory" {
-                    // July 13 lock: "Let Go" must reassure that the clips
-                    // survive — the spec's exact wording (unified editing
-                    // model). This is what makes "Let Go" honest vs "Delete".
-                    return "The clips stay — they'll be available to start other memories. Moves to Recently Deleted · kept for 30 days."
+                    // The footnote reassures that the parts survive — the
+                    // disclosure line is what makes the literal "Delete this
+                    // Memory" honest (locked Voice principle, 2026-07-28). The
+                    // user-facing noun is "parts" (F7g); a delete-moment
+                    // disclosure is the worst place for a vocabulary
+                    // inconsistency (Tom 2026-07-28). Code identifiers stay clip.
+                    return "The parts stay — they'll be available to start other memories. Moves to Recently Deleted · kept for 30 days."
                 }
                 if noun == "project" {
                     // Projects · MVP spec §Deleting: deleting the container
@@ -110,24 +117,25 @@ struct BottomDeleteButton: View {
         }
     }
 
-    /// Builds the Let Go split-disclosure footnote (P8). `stayCount` = clips
-    /// used elsewhere (edge count > 1); `moveCount` = clips only in this
-    /// memory (single edge → move to Recently Deleted). Discloses, never
-    /// asks. If nothing moves, it says only that the clips stay; if there
-    /// are no clips at all, it falls back to the memory's own 30-day net.
+    /// Builds the memory-deletion split-disclosure footnote (P8). `stayCount` =
+    /// parts used elsewhere (edge count > 1); `moveCount` = parts only in this
+    /// memory (single edge → move to Recently Deleted). Discloses, never asks.
+    /// The user-facing noun is "parts" (F7g) — the worst place for a
+    /// clip/parts inconsistency is a delete-moment disclosure (Tom 2026-07-28);
+    /// the `letGo` identifier and `clip` code terms are unchanged.
     static func letGoFootnote(stayCount: Int, moveCount: Int) -> String {
         switch (stayCount, moveCount) {
         case (0, 0):
             return "Moves to Recently Deleted · kept for 30 days."
         case (let s, 0):
-            let n = s == 1 ? "clip is" : "clips are"
+            let n = s == 1 ? "part is" : "parts are"
             return "The \(n) also used elsewhere and will stay."
         case (0, let m):
-            let subj = m == 1 ? "1 clip is" : "\(m) clips are"
+            let subj = m == 1 ? "1 part is" : "\(m) parts are"
             let verb = m == 1 ? "moves" : "move"
             return "\(subj) only here and \(verb) to Recently Deleted for 30 days."
         case (let s, let m):
-            let stay = s == 1 ? "1 clip is" : "\(s) clips are"
+            let stay = s == 1 ? "1 part is" : "\(s) parts are"
             let moveVerb = m == 1 ? "moves" : "move"
             return "\(stay) also used elsewhere and will stay · \(m) \(m == 1 ? "is" : "are") only here and \(moveVerb) to Recently Deleted for 30 days."
         }

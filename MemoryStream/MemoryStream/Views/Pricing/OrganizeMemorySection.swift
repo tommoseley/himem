@@ -124,17 +124,28 @@ struct OrganizeMemorySection: View {
 
     var body: some View {
         Group {
-            switch aiState {
-            case .missing:
+            if case .missing = aiState {
                 EmptyView()
-            case .idle:
-                OrganizeMemoryCard(state: .idle, onOrganize: onOrganize, isProcessing: isProcessing)
-            case .failed(let offline):
-                OrganizeMemoryCard(state: .failed(offline: offline), onOrganize: onOrganize, isProcessing: isProcessing)
-            case .draftReviewing(let pass, _, _):
-                organizedRow(pass: pass)
-            case .organized(let pass, let entry, let stale):
-                organizedRow(pass: pass, entry: entry, stale: stale)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    // F7c/D2 · ORGANIZE eyebrow + help ?, matching TOPICS /
+                    // PROJECTS / MENTIONS — one consistent pattern (every ?
+                    // hangs off an eyebrow), which is what makes D4's "each
+                    // section has a ?" coachmark honest. The eyebrow WRAPS the
+                    // state switch so the ? never relocates when the card flips
+                    // idle↔organized (Tom's fixed-position constraint). Replaces
+                    // the earlier bare card-chrome ?, which read as orphaned
+                    // (device pass 2026-07-27).
+                    HStack(spacing: 4) {
+                        Text("ORGANIZE")
+                            .font(.system(size: 10, weight: .bold))
+                            .tracking(1.6)
+                            .foregroundStyle(Crucible.Color.ink3)
+                        SectionHelpButton(topic: .memoryOrganize, size: 13)
+                        Spacer(minLength: 0)
+                    }
+                    stateCard
+                }
             }
         }
         // NO `.fullScreenCover(item:)` or `.sheet(item:)` here —
@@ -144,6 +155,24 @@ struct OrganizeMemorySection: View {
         // go through manual UIKit via `presentInitialReview()`,
         // `presentReorganizeReview()`, and `presentPricing()`.
         .onAppear { attemptOrganizingTutorial() }
+    }
+
+    /// The state-dependent card body — extracted so `body` can wrap it with the
+    /// fixed F7c help header without the `?` living inside any one state.
+    @ViewBuilder
+    private var stateCard: some View {
+        switch aiState {
+        case .missing:
+            EmptyView()
+        case .idle:
+            OrganizeMemoryCard(state: .idle, onOrganize: onOrganize, isProcessing: isProcessing)
+        case .failed(let offline):
+            OrganizeMemoryCard(state: .failed(offline: offline), onOrganize: onOrganize, isProcessing: isProcessing)
+        case .draftReviewing(let pass, _, _):
+            organizedRow(pass: pass)
+        case .organized(let pass, let entry, let stale):
+            organizedRow(pass: pass, entry: entry, stale: stale)
+        }
     }
 
     // MARK: - Organized row (chip + action button + nudge + stale)
@@ -327,6 +356,9 @@ struct OrganizeMemorySection: View {
                 RoundedRectangle(cornerRadius: 22)
                     .strokeBorder(Crucible.Color.aiBlue, lineWidth: 1.5)
             )
+            // F17 · the pill is stroked, not filled — without this the tap
+            // region is only the drawn text. Guarded by ButtonHitRegionTests.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isReorganizing)

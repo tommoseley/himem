@@ -19,6 +19,8 @@ struct AddMemoryToProjectSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var searchText: String = ""
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
     @State private var filterToProjectTopics: Bool = true
     @State private var entries: [EntryDisplayModel] = []
     /// Membership at the moment the sheet opened. Read-only after load.
@@ -108,9 +110,12 @@ struct AddMemoryToProjectSheet: View {
     private var memoryList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                if filteredEntries.isEmpty {
+                // F22: the memory list is the CloudKit-synced store. Secondary
+                // surface — say nothing while the first import is running
+                // rather than reporting "No memories yet."
+                if filteredEntries.isEmpty, firstImport.mayAssertEmpty {
                     emptyState
-                } else {
+                } else if !filteredEntries.isEmpty {
                     ForEach(filteredEntries) { entry in
                         memoryRow(entry: entry)
                     }
@@ -185,6 +190,8 @@ struct AddMemoryToProjectSheet: View {
         }
     }
 
+    /// Gated by `memoryList` on `firstImport.mayAssertEmpty` (F22) — every
+    /// branch of `emptyStateText` states a fact about the imported store.
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "tray")
@@ -201,6 +208,8 @@ struct AddMemoryToProjectSheet: View {
         .padding(.horizontal, 24)
     }
 
+    /// Only rendered behind `emptyState`, which the caller gates on
+    /// `firstImport.mayAssertEmpty` (F22).
     private var emptyStateText: String {
         if !searchText.isEmpty {
             return "No memories match \"\(searchText)\"."
@@ -335,6 +344,8 @@ struct ManageProjectsSheet: View {
     /// Membership at open, for the commit diff.
     @State private var initialProjectIds: Set<UUID> = []
     @State private var newProjectDraft: String = ""
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
     @FocusState private var newFieldFocused: Bool
     /// True after a create was blocked by the Free 3-project cap.
     @State private var atCap = false
@@ -422,6 +433,10 @@ struct ManageProjectsSheet: View {
 
     private var onMemorySection: some View {
         let selected = projectVM.projects.filter { selectedProjectIds.contains($0.id) }
+        // F22 EXEMPT: `selected` is the sheet's own staged membership,
+        // seeded from the already-loaded memory. It is a statement about this
+        // memory's edges, not about whether the project store has finished
+        // importing — an unimported store cannot produce a wrong answer here.
         return Group {
             if selected.isEmpty {
                 Text("Not in any project yet.")
@@ -477,8 +492,10 @@ struct ManageProjectsSheet: View {
 
     private var librarySection: some View {
         let available = projectVM.projects.filter { !selectedProjectIds.contains($0.id) }
+        // F22: `available` is derived from the CloudKit-synced project store,
+        // so "No projects yet" mid-import is the false-certainty claim.
         return Group {
-            if available.isEmpty {
+            if available.isEmpty, firstImport.mayAssertEmpty {
                 Text(projectVM.projects.isEmpty
                      ? "No projects yet. Start one above."
                      : "This memory is in all your projects.")

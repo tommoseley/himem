@@ -411,8 +411,16 @@ final class InboxManifest: ObservableObject {
     /// failed. Either way this marks the clip as "attempted" so the UI can
     /// distinguish in-flight pending state from a confirmed no-speech
     /// result.
-    func recordTranscriptionAttempt(clipId: UUID, transcript: String) {
-        guard let idx = clips.firstIndex(where: { $0.clipId == clipId }) else { return }
+    /// Returns the text actually stored, or `nil` when the clip is not in
+    /// the manifest and nothing was written. **The nil case used to be a
+    /// bare `return`** — a hand edit routed here for a clip that had left
+    /// the manifest vanished with no error and no signal, and the editor
+    /// reported success (F24 Defect 3). The value is `@discardableResult`
+    /// so the transcription pipeline's fire-and-forget callers are
+    /// unchanged; the *user-facing* write path checks it.
+    @discardableResult
+    func recordTranscriptionAttempt(clipId: UUID, transcript: String) -> String? {
+        guard let idx = clips.firstIndex(where: { $0.clipId == clipId }) else { return nil }
         let existing = clips[idx]
         // CRITICAL: carry `rollGroupId` forward. Before 2026-05-27 this
         // init call omitted `rollGroupId:`, defaulting it to nil, which
@@ -446,6 +454,7 @@ final class InboxManifest: ObservableObject {
         var next = clips
         next[idx] = updated
         replace(with: next)
+        return updated.transcript
     }
 
     /// Flips a clip's `reviewed` to true on first open (P7-2). Per-device,
@@ -760,16 +769,38 @@ final class InboxManifest: ObservableObject {
         syncIconBadge(to: 0)
     }
 
-    /// Zeroes the home-screen icon badge unconditionally — the
-    /// numeric-badge policy is now "never," per `CLAUDE.md` §Phone
-    /// July 10 2026. Kept as a defensive zeroing call so push
-    /// payloads (which iOS still processes) can't leave a stale
-    /// number on the icon.
+    /// The number iOS is asked to put on the app icon, given how many clips
+    /// are pending. **Always zero, by product decision.**
+    ///
+    /// `CLAUDE.md` §Phone (locked July 10 2026): *"App-icon badge: none. iOS
+    /// only supports a numeric app-icon badge, and a number reintroduces
+    /// counting"* — the guilt-inbox HiMem rejects. Presence lives on the Clips
+    /// tab dot instead.
+    ///
+    /// Split out from `syncIconBadge` so the decision is assertable
+    /// (`InboxManifestBadgeSyncTests`). Restoring a real count here is a
+    /// vocabulary/principle change, not an implementation fix: it needs a
+    /// ruling, and this returning anything but 0 should fail the build's tests
+    /// rather than ship quietly (F23 T2.5).
+    static func iconBadgeCount(forPending pendingCount: Int) -> Int { 0 }
+
+    /// Zeroes the home-screen icon badge unconditionally — see
+    /// `iconBadgeCount(forPending:)`. Kept as a defensive zeroing call so push
+    /// payloads (which iOS still processes) can't leave a stale number on the
+    /// icon.
     private func syncIconBadge(to count: Int) {
-        UNUserNotificationCenter.current().setBadgeCount(0) { _ in }
+        UNUserNotificationCenter.current().setBadgeCount(Self.iconBadgeCount(forPending: count)) { _ in }
     }
 
     private func persist() {
+        guard !manifestIsUnreadable else {
+            // The file on disk could not be read and could not be moved aside,
+            // so the in-memory array is known NOT to describe it. Writing here
+            // would discard rows we can still see the bytes of (F23 T1.4).
+            ErrorState.shared.report(.saveFailed("Inbox manifest not persisted: the existing file is unreadable and could not be moved aside; refusing to overwrite it."))
+            persistDismissedClusters()
+            return
+        }
         let url = Self.manifestURL
         let tmp = url.appendingPathExtension("tmp")
         do {
@@ -1021,10 +1052,78 @@ final class InboxManifest: ObservableObject {
             }
             recycledClips = stillRecycled.sorted { ($0.recycledAt ?? .distantPast) > ($1.recycledAt ?? .distantPast) }
         } catch {
-            // Corrupt manifest — start fresh rather than block the user.
+            // Corrupt manifest — start fresh rather than block the user, but
+            // NEVER at the cost of the rows.
+            //
+            // The old code reset `clips` and stopped there. The next mutation
+            // calls `persist()`, which writes the whole in-memory array over
+            // `manifest.json` — turning an unreadable file into an empty one
+            // and permanently discarding every pending clip's transcript,
+            // capturedAt, lat/lon and rollGroup. Those bytes are the only copy
+            // of that metadata: `backupManifestIfNeeded` is gated on *any*
+            // `manifest.backup.*` existing, so it is a one-shot lifetime
+            // snapshot, not a recovery point at the moment of corruption. And
+            // the audio then has no manifest row referencing it, which is
+            // precisely what made it sweep-eligible (F23 T1.1).
+            //
+            // "Start fresh rather than block the user" stays true. What was
+            // never established is that the rows are worthless — so they are
+            // moved aside first, intact, and only then do we start fresh
+            // (F23 T1.4, audit 2026-07-31).
+            manifestIsUnreadable = (Self.quarantineUnreadableManifest(at: url) == nil)
             clips = []
         }
     }
+
+    /// Set when `load()` could not read `manifest.json` **and** could not move
+    /// the unreadable bytes aside. While it is set, `persist()` refuses to
+    /// write — the in-memory state is known not to describe what is on disk,
+    /// and overwriting is the one outcome that cannot be undone.
+    private var manifestIsUnreadable = false
+
+    /// Moves an unreadable `manifest.json` to
+    /// `manifest.unreadable-<yyyyMMdd-HHmmss>.json` so the reset that follows
+    /// cannot overwrite it. A **move**, not a copy: the same bytes must not be
+    /// re-read (and re-quarantined) on every subsequent launch.
+    ///
+    /// Returns the quarantine URL, or `nil` when the bytes are still sitting at
+    /// `url` — i.e. the caller must not persist over them.
+    @discardableResult
+    static func quarantineUnreadableManifest(
+        at url: URL,
+        now: Date = Date(),
+        fileManager fm: FileManager = .default
+    ) -> URL? {
+        guard fm.fileExists(atPath: url.path) else {
+            // Nothing on disk to lose — decoding empty/absent data. Persisting
+            // is safe.
+            return url
+        }
+        let stamp = Self.quarantineStampFormatter.string(from: now)
+        let root = url.deletingLastPathComponent()
+        var dest = root.appendingPathComponent("manifest.unreadable-\(stamp).json")
+        var suffix = 2
+        while fm.fileExists(atPath: dest.path) {
+            dest = root.appendingPathComponent("manifest.unreadable-\(stamp)-\(suffix).json")
+            suffix += 1
+        }
+        do {
+            try fm.moveItem(at: url, to: dest)
+            NSLog("[HiMem][Inbox] manifest.json was unreadable — moved to \(dest.lastPathComponent); its rows are recoverable from there")
+            return dest
+        } catch {
+            NSLog("[HiMem][Inbox] manifest.json was unreadable AND could not be moved aside (\(error.localizedDescription)) — refusing to persist over it")
+            return nil
+        }
+    }
+
+    private static let quarantineStampFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyyMMdd-HHmmss"
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
 
     /// Runs the heavy migration steps that must not race with
     /// CloudKit's initial-import window:

@@ -22,6 +22,8 @@ struct ProjectListView: View {
     /// Consumes a project read-chip tap routed from a memory's Projects
     /// read section (unified associations, 2026-07-17).
     @ObservedObject private var projectOpenBus = ProjectOpenBus.shared
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
 
     private var filteredProjects: [ProjectDisplayModel] {
         guard let topic = selectedTopic else { return projectVM.projects }
@@ -30,7 +32,23 @@ struct ProjectListView: View {
 
     var body: some View {
         Group {
-            if filteredProjects.isEmpty {
+            // F22 · one of the three surfaces that speak while the first
+            // import is running. Projects sync from the private DB like
+            // everything else, so "No projects yet" mid-import is the same
+            // false certainty the Memories list showed on the iPad reinstall.
+            if filteredProjects.isEmpty, !firstImport.mayAssertEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.system(size: 40)) // design-token size
+                        .foregroundStyle(Crucible.Color.ink4)
+                        .accessibilityHidden(true)
+                    Text(FirstImportState.Copy.projectsTitle)
+                        .font(.subheadline)
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, 40)
+            } else if filteredProjects.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "folder")
                         .font(.system(size: 40)) // design-token size
@@ -105,6 +123,11 @@ struct ProjectListView: View {
                 .scrollContentBackground(.hidden)
             }
         }
+        // Item 2 · teach what a project IS on first arrival — the walkthrough
+        // covers clips→memories, not projects. One card, non-blocking, once
+        // per device; re-armed with the walkthrough from Settings → Learn.
+        .onAppear { OneShotCoachmark.projectsConcept.armIfEligible() }
+        .overlay(alignment: .top) { CoachmarkBanner(coachmark: .projectsConcept) }
         .sheet(isPresented: $showNewProject) {
             NewProjectSheet(
                 name: $newProjectName,

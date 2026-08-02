@@ -19,22 +19,35 @@ struct CameraPickerView: UIViewControllerRepresentable {
     var onDismiss: () -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
-        // Two-layer portrait lock:
-        //   1. PortraitImagePickerController declares its own preferred
-        //      orientation as .portrait.
-        //   2. OrientationLock.shared.portraitOnly = true so the AppDelegate
-        //      clamps the whole window to portrait while the picker is up.
-        //      Without (2) SwiftUI's .fullScreenCover host VC overrides
-        //      any orientation a child VC requests; the picker ends up
-        //      adapted to landscape with a portrait-shaped camera viewport
-        //      and the user sees the broken-preview behavior Apple's docs
-        //      acknowledge.
-        // Plus an iOS-16 geometry request to force-rotate now if the
-        // device was already in landscape when the picker opened.
-        OrientationLock.shared.portraitOnly = true
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
-        }
+        // **No runtime orientation clamp. Deleted unconditionally
+        // (2026-08-02), widening F18's iPad-only removal.**
+        //
+        // F18 removed the clamp on iPad after it produced a black preview
+        // there, and kept it on iPhone. The device pass settled which half
+        // was right: **iPad — the platform that LOST the clamp — works;
+        // iPhone — the platform that KEPT it — fails.** F18 was right about
+        // the symptom and too narrow about the cause. The ruling was
+        // "iPad-only" because iPad was where the failure was observed, not
+        // because iPhone was known good.
+        //
+        // The mechanism the clamp depended on is gone on this OS. The log
+        // shows `-[UIApplication statusBarOrientation]`,
+        // `isStatusBarHidden` and `setStatusBarHidden:` all reporting
+        // "deprecated and is a no-op on 27.0 and later", immediately
+        // followed by `Attempted to change to mode Portrait with an
+        // unsupported device (BackTriple)` and
+        // `CMVideoFormatDescriptionGetDimensions … err=-12710 (Invalid
+        // desc)` — the capture device failing to configure, which is what
+        // a black preview is. We were fighting a system that had stopped
+        // honouring the request.
+        //
+        // `PortraitImagePickerController` keeps declaring its own preferred
+        // orientation — that is the supported way to express the
+        // preference, and it is retained deliberately. What is retired is
+        // the app-wide runtime clamp (`OrientationLock` +
+        // `requestGeometryUpdate`) wrapped around the picker.
+        //
+        // Guarded by `CameraPickerOrientationTests`.
         let picker = PortraitImagePickerController()
         picker.sourceType = .camera
         picker.cameraDevice = .rear
@@ -67,10 +80,10 @@ struct CameraPickerView: UIViewControllerRepresentable {
     // SwiftUI re-renders of the parent must not propagate to it.
     func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
 
-    /// Release the portrait lock when the picker is torn down so the rest
-    /// of the app gets its `allButUpsideDown` orientations back.
+    /// Teardown. The portrait-lock release that used to live here went with
+    /// the clamp itself (2026-08-02) — releasing a lock nobody sets is dead
+    /// code, and leaving it would imply the clamp still exists.
     static func dismantleUIViewController(_ uiViewController: UIImagePickerController, coordinator: Coordinator) {
-        OrientationLock.shared.portraitOnly = false
         // Symmetric release of the wake lock acquired in
         // `makeUIViewController`. SwiftUI guarantees dismantle fires
         // on every dismissal path (commit, cancel, scene change), so

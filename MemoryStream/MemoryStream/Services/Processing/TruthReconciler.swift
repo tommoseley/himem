@@ -30,16 +30,30 @@ import Foundation
 /// (retry, fallback) lives in `ProcessingEngine.reconcileResult`; this type is
 /// the deterministic library it calls.
 ///
-/// **Strictness is the only per-tier difference.**
-/// - `.strict` (Apple on-device) — exact substring grounding. The 3B model is
-///   a platform-controlled moving target (regressed under iOS 27, fabricates
-///   proper names) so it gets the tightest check.
-/// - `.relaxed` (Anthropic frontier) — grounding also passes when the entity
+/// **Strictness — what each mode is, and who actually asks for it.**
+///
+/// The modes below describe this library. They do NOT describe a per-tier
+/// split in the organize pipeline: `ProcessingEngine` grounds summary and
+/// title at `.relaxed` on **both** tiers, and passes `strictness` through to
+/// one decision only — the ungrounded-mention drop, which is on-device only.
+/// The one production caller that grounds at `.strict` is
+/// `ProjectAssistViewModel.deriveShortSummary`, correctly: its source text is
+/// the long summary itself, so exact substring is the right test and
+/// paraphrase-expansion cannot arise. Wiring pinned by
+/// `GroundingStrictnessWiringTests` (corrected 2026-07-31 — this header used
+/// to say strictness was "the only per-tier difference," which sent readers
+/// looking for a strict grounding path that has not existed since 2026-07-24).
+///
+/// - `.strict` — exact substring grounding. The tightest check; correct when
+///   the source text is authoritative and complete (deriving a short summary
+///   from a long one).
+/// - `.relaxed` — grounding also passes when the entity
 ///   shares a distinctive token with the clips (a variant/paraphrase: the
 ///   model expanding "Lincoln" the clips contain to "Abraham Lincoln", or the
 ///   reverse). A true fabrication — no token in common with the source —
-///   still fails and falls back. This keeps Plus's beautiful paraphrase from
-///   being needlessly downgraded while holding the same guarantee.
+///   still fails and falls back. This is what the organize pipeline uses on
+///   both tiers: it keeps a legitimate paraphrase from being needlessly
+///   downgraded while still catching a wholly invented name.
 ///
 /// **Modules.** `MentionReconciler` is TruthReconciler's first module
 /// (mentions dedup/variant-collapse); `reconcileMentions` and `reconcileTopics`

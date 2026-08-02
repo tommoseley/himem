@@ -27,6 +27,8 @@ struct AddExistingClipsSheet: View {
     /// Tap order preserved — clips attach after the memory's existing
     /// clips in the order the user selected them.
     @State private var selected: [UUID] = []
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
 
     init(onAdd: @escaping ([UUID]) -> Void) {
         self.onAdd = onAdd
@@ -41,10 +43,14 @@ struct AddExistingClipsSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                if looseClips.isEmpty {
-                    emptyState
-                } else {
+                // F22: `looseClips` is a live fetch over CloudKit-synced
+                // `MediaReference`s, so on a fresh install it is empty until
+                // the import lands. Secondary surface — say nothing while
+                // importing rather than claiming every clip is already placed.
+                if !looseClips.isEmpty {
                     clipList
+                } else if firstImport.mayAssertEmpty {
+                    emptyState
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -106,6 +112,9 @@ struct AddExistingClipsSheet: View {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
+    /// Gated by the caller on `firstImport.mayAssertEmpty` — this claim
+    /// ("every clip is already in a memory") is only true once the import has
+    /// finished looking.
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "tray")

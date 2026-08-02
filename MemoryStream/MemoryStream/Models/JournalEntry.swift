@@ -59,6 +59,28 @@ public class JournalEntry: NSManagedObject, Identifiable {
     /// not an un-organizing. See spec §"Locked decisions" + §"AI never
     /// silently overwrites a user-edited field."
     @NSManaged public var summaryUserEdited: Bool
+
+    // MARK: - Title authorship — an asymmetry, on purpose and on the record
+    //
+    // **There is deliberately NO `titleUserEdited`.** The no-clobber
+    // guarantee holds for the title exactly as it does for the summary —
+    // no automatic path writes `entry.title`; every write is a user
+    // acceptance (`OrganizePass.commitReorganize` under `.new`,
+    // `DraftReviewSheet`, her tap-to-edit, the creation sheets,
+    // `SortBatchCommit`). Auto-organize creates an `OrganizePass`
+    // awaiting review and writes nothing.
+    //
+    // But the summary can FALL BACK on `summaryUserEdited`: a future
+    // automatic path could consult it and refuse to clobber. The title
+    // has no such marker, so nothing at runtime protects it —
+    // **`TitleAuthorshipTests` is the entire guarantee.** That makes the
+    // scanner load-bearing, not belt-and-braces.
+    //
+    // If you are here to "simplify" by deleting that test as redundant
+    // with `SummaryAuthorshipTests`: it is not redundant, and removing it
+    // silently removes the only thing standing between a user-authored
+    // title and an automatic overwrite. Add a marker first, or leave the
+    // guard alone. (Recorded 2026-08-01 with F33.)
     /// True when the current `title` originated from an AI Organize
     /// pass that the user accepted (via the Title row of the
     /// AISuggestionsCard or via Accept all). Drives the small `✦ AI`

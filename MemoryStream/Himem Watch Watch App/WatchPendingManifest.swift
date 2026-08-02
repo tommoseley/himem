@@ -405,9 +405,12 @@ final class WatchPendingManifest: ObservableObject {
 
     /// Force-syncs the App Group's `pendingCount` to match `clips.count`
     /// and kicks the complication's timeline. Required after `load()`
-    /// because both the audio-missing filter on load AND the
-    /// decode-failure fallback (`clips = []`) bypass `replace(with:)`,
-    /// the normal mutation funnel. Without this, the complication can
+    /// because the audio-missing filter on load bypasses `replace(with:)`,
+    /// the normal mutation funnel. (It also used to name a decode-failure
+    /// fallback of `clips = []`. That was retired on 2026-06-18 — the catch
+    /// now rescues best-effort rows by scanning the audio directory, because
+    /// zeroing `clips` orphaned every surviving `.caf` forever. Corrected
+    /// 2026-07-31.) Without this, the complication can
     /// read a stale count from a prior session — symptom: watch app
     /// says "all caught up" while the complication still shows
     /// "1 pending." Money-tested in

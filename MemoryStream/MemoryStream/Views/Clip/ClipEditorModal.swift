@@ -53,6 +53,23 @@ struct ClipEditorModal: View {
     @State private var playbackTime: TimeInterval = 0
     @State private var isRetranscribing = false
     @State private var retryStatus: String? = nil
+    /// Set when a Zone-1 commit reached no store. Drawn in the content
+    /// block, where the transcript would be — NOT reported to
+    /// `ErrorState` alone: `JournalErrorBanner` is absent from Clips and
+    /// renders beneath every sheet (F23 C1), so a banner from a modal
+    /// presented over the bench is a message nobody reads. F18's ruled
+    /// honest-failure placement: put it where the dead interface was.
+    @State private var saveError: String? = nil
+    /// The last value this modal committed AND confirmed stored. Set
+    /// only from a write that reported success, so it can never assert
+    /// an edit that did not land. See `backingContent` for why a bench
+    /// clip cannot simply be re-read.
+    @State private var committedContent: String? = nil
+    /// This session's re-transcription returned `.transcribed` with no
+    /// text — the run succeeded and there was nothing to hear. Distinct
+    /// from "not yet transcribed" (see `EmptyContentState`) and from a
+    /// deferral, which is what `retryStatus` carries.
+    @State private var heardNothing = false
 
     // Zone 2 — single-open edge accordion + inline annotation edit.
     @State private var openEdgeId: UUID? = nil
@@ -71,6 +88,32 @@ struct ClipEditorModal: View {
     /// Title of the clip EDIT surface — distinct from the read-only
     /// `ClipDetailView` ("Clip") so the two surfaces never read the same.
     static let editorTitle = "Edit Clip"
+
+    /// Shown when an edit reached no store. Parallel construction with
+    /// the approved family ("Couldn't remove this clip. Try again." /
+    /// "Couldn't create this memory. Try again." / "Couldn't add these
+    /// clips. Try again."), approved 2026-07-31. Crucible voice: names
+    /// the state, never blames the user, offers the one useful action.
+    static let saveFailedMessage = "Couldn't save your edit. Try again."
+
+    /// The AI action's label. **"again" is a claim about history and
+    /// must be true**: with no transcript nothing is being repeated, and
+    /// her model is "please transcribe this," not "retry" (F21).
+    ///
+    /// Offering it on an empty transcript is not a re-roll. F21 reasoned
+    /// that re-transcribe is a *retry* — same audio, same model, same
+    /// output — and the one thing that legitimately justifies a re-run
+    /// is a genuine condition change. There is one: `4a08423` fixed the
+    /// `.measurement` gain suppression, so every clip recorded before it
+    /// was captured under-gained, and a re-run on those can now succeed
+    /// where it previously heard nothing. That is exactly the population
+    /// this state describes.
+    ///
+    /// Crucible: blue AI buttons name the AI with a trailing sparkle
+    /// (the glyph is applied in `retranscribeAction`).
+    static func transcribeActionLabel(hasTranscript: Bool) -> String {
+        hasTranscript ? "Transcribe again with AI" : "Transcribe with AI"
+    }
 
     // MARK: - Body
 
@@ -138,6 +181,7 @@ struct ClipEditorModal: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Crucible.Color.ink)
             Spacer()
+            SectionHelpButton(topic: .editClip, size: 17)  // F7c — one ? for the sheet
             Button("Done") { commitOpenEdits(); player.stop(); dismiss() }
                 .font(.system(size: 15.5, weight: .semibold))
                 .foregroundStyle(Crucible.Color.accent)
@@ -254,19 +298,30 @@ struct ClipEditorModal: View {
                     draft: Binding(get: { contentDraft ?? "" }, set: { contentDraft = $0 }),
                     initialValue: currentContent,
                     editId: "clip-atom-\(source.id.uuidString)",
-                    evidence: media == .voice ? .audio(duration: audioDuration) : nil,
+                    // Device pass 2026-08-01: "Original recording · 0:14"
+                    // rendered TWICE — once in this modal's own Zone-1 header
+                    // (`Text("Original recording\(durationSuffix)")`) and again
+                    // in the editor's evidence row. Suppressed HERE rather than
+                    // removed from `ClipEditor`, because the other call sites
+                    // (`CompactTranscriptViews`, `ChronologicalCaptureStream`)
+                    // have no such header and the evidence row is their only
+                    // render of it.
+                    evidence: nil,
                     fateActions: ClipEditorFateActions(onDelete: {}, onRelocate: nil),
                     showLabel: false,
                     showFates: false,
                     onCancel: { contentDraft = nil },
                     onDone: { newValue in commitContent(newValue); contentDraft = nil }
                 )
-                // Blue AI consequence line — the edit is true everywhere.
-                Label("This is the clip itself — your edit shows in every memory that uses it.",
-                      systemImage: "sparkles")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Crucible.Color.aiBlue)
-                    .padding(.top, 2)
+                // F21/B4 · the blue sparkle consequence line is DELETED, and
+                // replaced with nothing. Three faults: it dressed STATUS as an
+                // AI action (AI-blue + sparkle is reserved for *invoking* AI —
+                // Buttons & Actions); it taught the many-to-many model unasked
+                // (F13 curriculum); and it read as actively confusing on
+                // device. The information already appears in context below —
+                // "Not in any memory yet" / "In N memories" / the delete
+                // warning — which is the correct place: shown where it is
+                // true, not asserted as a preamble.
             } else {
                 Text(displayContent)
                     .font(.system(size: 15))
@@ -275,6 +330,13 @@ struct ClipEditorModal: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture { beginContentEdit() }
+                if let saveError {
+                    Text(saveError)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Crucible.Color.danger)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
                 if canRetranscribe {
                     retranscribeAction
                 }
@@ -290,7 +352,7 @@ struct ClipEditorModal: View {
                     if isRetranscribing {
                         ProgressView().controlSize(.small)
                     }
-                    Text(isRetranscribing ? "Transcribing…" : "Transcribe again with AI")
+                    Text(isRetranscribing ? "Transcribing…" : Self.transcribeActionLabel(hasTranscript: !currentContent.isEmpty))
                     if !isRetranscribing { Image(systemName: "sparkles").font(.system(size: 12)) }
                 }
                 .font(.system(size: 14, weight: .semibold))
@@ -298,6 +360,9 @@ struct ClipEditorModal: View {
                 .frame(minHeight: 38)
                 .padding(.horizontal, 15)
                 .overlay(RoundedRectangle(cornerRadius: 11).stroke(Crucible.Color.aiBlue, lineWidth: 1))
+                // F17 · the pill is stroked, not filled — without this the tap
+                // region is only the drawn text. Guarded by ButtonHitRegionTests.
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(isRetranscribing)
@@ -345,6 +410,9 @@ struct ClipEditorModal: View {
                             .font(.system(size: 12))
                             .foregroundStyle(Crucible.Color.ink3)
                         if !isOpen {
+                            // F22 EXEMPT: `annotation` is the edit field's own
+                            // draft text — what the user has typed, never loaded
+                            // from an unimported store.
                             if annotation.isEmpty {
                                 Text("Add a note")
                                     .font(.system(size: 13, weight: .semibold))
@@ -423,6 +491,8 @@ struct ClipEditorModal: View {
                     annotationDraft = nil
                 }
             )
+        // F22 EXEMPT: `current` is this edge's annotation text on a clip the
+        // user has open — edit-field contents, not a store collection.
         } else if current.isEmpty {
             Text("Add a note")
                 .font(.system(size: 14, weight: .semibold))
@@ -515,7 +585,29 @@ struct ClipEditorModal: View {
         }
     }
 
+    /// What Zone 1 must display: the value we last committed **and
+    /// confirmed stored**, else the backing's own value.
+    ///
+    /// `nil` committed → read the backing. Pure + static so the
+    /// invariant is red-able without a SwiftUI runtime.
+    static func resolvedContent(committed: String?, backing: String) -> String {
+        committed ?? backing
+    }
+
     private var currentContent: String {
+        Self.resolvedContent(committed: committedContent, backing: backingContent)
+    }
+
+    /// The backing store's own value. For `.managed` this is a live
+    /// `NSManagedObject` read. For `.inbox` it is a **frozen snapshot**:
+    /// `InboxClip` is a struct, captured when `.sheet(item:)` presented
+    /// this modal, and nothing here ever re-reads the manifest. So a
+    /// successful bench edit displayed the PRE-EDIT text — the save had
+    /// worked and the screen said otherwise (F24 Defect 2).
+    /// `committedContent` is what closes that, and it is only ever set
+    /// from a write that reported success (Defect 3), so the display
+    /// cannot claim an edit that did not land.
+    private var backingContent: String {
         switch source {
         case .inbox(let clip): return clip.transcript
         case .managed(let ref):
@@ -527,15 +619,103 @@ struct ClipEditorModal: View {
         }
     }
 
+    /// Why an empty Zone 1 is three facts, not one.
+    ///
+    /// "We haven't transcribed this yet" and "we transcribed it and
+    /// there were no words" are **different facts and must never share
+    /// a string** (ruled 2026-07-31). Before F24 Defect 4 they shared
+    /// `"(no transcript)"`, and the transcribed-to-silence case had no
+    /// voice at all: `retranscribe` set `retryStatus` from
+    /// `userFacingDeferralMessage`, which returns nil for `.transcribed`
+    /// — so a run that succeeded and heard nothing showed a spinner
+    /// that returned to idle and said nothing. Indistinguishable from a
+    /// dead button.
+    ///
+    /// "No words in this recording." is the honest state: the
+    /// transcription ran and heard nothing. Not a failure, not a
+    /// deferral, no blame, and it promises no retry that won't help.
+    enum EmptyContentState: Equatable {
+        /// Photo/video with no description — an invitation, not a report.
+        case needsDescription
+        /// Never transcribed, or the attempt failed and will be retried.
+        case notYetTranscribed
+        /// Transcribed successfully; the recording contained no speech.
+        case transcribedToSilence
+
+        var message: String {
+            switch self {
+            case .needsDescription:     return "Add a description"
+            case .notYetTranscribed:    return "(no transcript)"
+            case .transcribedToSilence: return "No words in this recording."
+            }
+        }
+    }
+
+    /// Pure resolution of the three empty states, so each fact is
+    /// red-able independently of the SwiftUI runtime.
+    ///
+    /// - Parameter heardNothing: this session's re-transcription
+    ///   returned `.transcribed` with empty text.
+    /// - Parameter attemptedAndEmpty: the *stored* signal — the clip
+    ///   records a completed transcription attempt and has no text.
+    static func emptyContentState(isDescriptionField: Bool,
+                                  heardNothing: Bool,
+                                  attemptedAndEmpty: Bool) -> EmptyContentState {
+        if isDescriptionField { return .needsDescription }
+        return (heardNothing || attemptedAndEmpty) ? .transcribedToSilence : .notYetTranscribed
+    }
+
+    /// The stored "we transcribed it and it was empty" signal. Only
+    /// `.inbox` carries it (`InboxClip.transcriptionAttempted`);
+    /// `MediaReference` has no equivalent field, so a *managed* clip
+    /// that transcribed to silence reads as `.notYetTranscribed` until
+    /// she re-runs it in this session. Stated rather than papered over:
+    /// closing it needs a schema attribute and a CloudKit deploy
+    /// (the F6i option-C trade), which is not a nine-days-out change.
+    private var attemptedAndEmpty: Bool {
+        guard currentContent.isEmpty else { return false }
+        if case .inbox(let clip) = source { return clip.transcriptionAttempted }
+        return false
+    }
+
     private var displayContent: String {
-        currentContent.isEmpty
-            ? (media == .photo || media == .video ? "Add a description" : "(no transcript)")
-            : currentContent
+        guard currentContent.isEmpty else { return currentContent }
+        return Self.emptyContentState(
+            isDescriptionField: media == .photo || media == .video,
+            heardNothing: heardNothing,
+            attemptedAndEmpty: attemptedAndEmpty
+        ).message
     }
 
     private var contentLabel: String { (media == .photo || media == .video) ? "Description" : "Transcript" }
     private var contentField: ClipEditorField { (media == .photo || media == .video) ? .description : .transcript }
-    private var canRetranscribe: Bool { contentDraft == nil && (media == .voice || media == .video) }
+    /// **F21 state 2, finally built (2026-08-02).** The AI action renders
+    /// ONLY when there is no transcript.
+    ///
+    /// F21 ruled three states: *no transcript / failed* → offer
+    /// **Transcribe**; *transcript exists* → edit + "Add to a memory",
+    /// **no AI button competing** with the action she almost always wants
+    /// next; *no third affordance*. F24 only changed the LABEL and left the
+    /// button rendering in every state, so on device Tom tapped a control
+    /// that F21 says should not be there — and it no-opped, because
+    /// re-transcribing the same audio yields the same nothing.
+    ///
+    /// Re-transcribe is a **retry**, not an improve: same audio, same model,
+    /// same output. Offering it against existing text is a promise we cannot
+    /// keep.
+    ///
+    /// **This is also what makes the heard-nothing message reachable.**
+    /// `displayContent` only surfaces "No words in this recording." while
+    /// `currentContent.isEmpty`. Gating the button on the SAME condition
+    /// means every state that can set `heardNothing` is a state that can
+    /// show it — the two are pinned together by
+    /// `ClipEditorHeardNothingTests.theHeardNothingStateIsAlwaysReachable`.
+    /// Before this, `heardNothing` could be set and never rendered: the
+    /// silent no-op class reintroduced one state over from where F24
+    /// removed it.
+    private var canRetranscribe: Bool {
+        contentDraft == nil && (media == .voice || media == .video) && currentContent.isEmpty
+    }
 
     private var edges: [MemoryClipEdge] {
         if case .managed(let ref) = source { return ref.edgesArray }
@@ -659,25 +839,70 @@ struct ClipEditorModal: View {
         contentDraft = currentContent
     }
 
+    /// Commit Zone 1, and **check that it landed.** The writers return the
+    /// text actually stored, or nil when the edit reached no store at all
+    /// — a clip that is neither a live `MediaReference` nor a manifest row
+    /// used to lose the edit through two stacked bare `return`s, while
+    /// this modal closed as if it had saved (F24 Defect 3). A silent
+    /// failed save is worse than a wipe: the user believes it took.
     private func commitContent(_ newValue: String) {
+        let stored: String?
         switch source {
         case .inbox(let clip):
             // P0-3: a materialized bench clip is a ref — route through the
             // backing-aware writer so the edit lands (never a silent no-op).
-            lifecycle.writeBenchClipTranscript(clipId: clip.clipId, transcript: newValue)
+            stored = lifecycle.writeBenchClipTranscript(clipId: clip.clipId, transcript: newValue)
         case .managed(let ref):
             if ref.mediaTypeEnum == .image || ref.mediaTypeEnum == .video {
-                lifecycle.updateClipDescription(refId: ref.id, description: newValue)
+                stored = lifecycle.updateClipDescription(refId: ref.id, description: newValue)
             } else {
-                lifecycle.updateClipTranscript(refId: ref.id, transcript: newValue)
+                stored = lifecycle.updateClipTranscript(refId: ref.id, transcript: newValue)
             }
         }
+        saveError = (stored == nil) ? Self.saveFailedMessage : nil
+        // Only on a confirmed write — never display what we could not store.
+        if let stored { committedContent = stored }
+    }
+
+    /// What the top-bar **Done** must do with an open draft. `nil` = no
+    /// draft is open. Otherwise the same gate every other commit path
+    /// uses, so there is still exactly one decision and no second path
+    /// to drift.
+    ///
+    /// Pure + static deliberately: the defect this closes (F24 Defect 1)
+    /// was invisible at the owner level. `ClipEditorCommitDecision` was
+    /// correct and simply **was not called** — `commitOpenEdits` nil'd
+    /// the drafts under a comment asserting "the ClipEditor coordinator
+    /// commits." It does not: closing the editor fires only
+    /// `coordinator.end(id:)`, which sets `activeEditId = nil`, so
+    /// `ClipEditorSwitchOutcome.decide` sees `switchedToOtherEditor ==
+    /// false` and returns `.stayEditing`. Typing and then tapping the
+    /// top-bar Done — the natural gesture — discarded the edit in
+    /// silence. A correct owner nobody consults is the class named in
+    /// CLAUDE.md § "Guard the Caller, Not Just the Owner"; the caller is
+    /// guarded by `ClipEditorTopBarDoneTests`.
+    static func openDraftDecision(draft: String?, current: String,
+                                  field: ClipEditorField) -> ClipEditorCommitDecision? {
+        guard let draft else { return nil }
+        return ClipEditorCommitDecision.decide(initial: current, draft: draft, field: field)
     }
 
     private func commitOpenEdits() {
-        // Done from the top bar while a field is open commits it (never lose
-        // work), routed through the same gate via each editor's own onDone —
-        // here we simply close drafts; the ClipEditor coordinator commits.
+        // Done from the top bar while a field is open COMMITS it (never lose
+        // work) — routed through the same decision the editors' own Done
+        // uses, then the drafts close.
+        if case .commit(let trimmed)? = Self.openDraftDecision(
+            draft: contentDraft, current: currentContent, field: contentField
+        ) {
+            commitContent(trimmed)
+        }
+        if let edgeId = openEdgeId,
+           let edge = edges.first(where: { $0.id == edgeId }),
+           case .commit(let trimmed)? = Self.openDraftDecision(
+               draft: annotationDraft, current: edge.annotation ?? "", field: .description
+           ) {
+            lifecycle.updateEdgeAnnotation(edgeId: edgeId, annotation: trimmed)
+        }
         contentDraft = nil
         annotationDraft = nil
     }
@@ -738,10 +963,24 @@ struct ClipEditorModal: View {
                 isRetranscribing = false
                 let text = outcome.textOrEmpty.trimmingCharacters(in: .whitespacesAndNewlines)
                 if text.isEmpty {
-                    retryStatus = outcome.userFacingDeferralMessage
+                    // Two very different empty results, and conflating them is
+                    // what made this button read as dead (F24 Defect 4).
+                    // `.transcribed` with no text means the run SUCCEEDED and
+                    // heard nothing — `userFacingDeferralMessage` is nil for
+                    // that case by design, so the old code showed nothing at
+                    // all. Say the honest thing instead, in the transcript's
+                    // own slot. Everything else is a genuine deferral.
+                    if case .transcribed = outcome {
+                        heardNothing = true
+                        retryStatus = nil
+                    } else {
+                        heardNothing = false
+                        retryStatus = outcome.userFacingDeferralMessage
+                    }
                 } else {
                     // Reseed the edit field with the fresh transcript; the user
                     // still commits via Done (one commit path).
+                    heardNothing = false
                     contentDraft = text
                 }
             }

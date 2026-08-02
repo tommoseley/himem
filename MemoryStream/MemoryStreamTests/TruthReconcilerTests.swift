@@ -6,7 +6,15 @@ import Foundation
 /// organize output, tier-independent (supersedes `HonestLabelGate`,
 /// 2026-07-23). The gate catches a proper name in the summary the clips don't
 /// contain — deterministic, so it holds no matter how Apple's (or Anthropic's)
-/// model drifts. `.strict` on-device, `.relaxed` on the frontier path.
+/// model drifts.
+///
+/// The modes below are exercised as a LIBRARY. They are not a per-tier split
+/// in the organize pipeline: summary/title grounding runs `.relaxed` on BOTH
+/// tiers, and `.strict` governs only the ungrounded-mention drop. This header
+/// said "`.strict` on-device, `.relaxed` on the frontier path" — the same
+/// false claim corrected in three production docs on 2026-07-31, and missed
+/// here by that sweep because it only scanned production. Wiring pinned by
+/// `GroundingStrictnessWiringTests`.
 @Suite
 struct TruthReconcilerTests {
 

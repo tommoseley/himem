@@ -568,24 +568,62 @@ struct CreateMemoryFromClipsSheet: View {
             }
         }
 
-        // Belt: any manifest rows are already demoted to tombstones by
-        // `materialize` (which the loop above ran on every clip) — this is a
-        // harmless no-op for materialized clips, and a safety net for any that
-        // somehow weren't.
-        InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
-        // Post-create acceptance criteria per `Clip model · spec.md`
-        // §Start a Memory (July 12 2026): the sheet dismisses,
-        // the session is consumed (the manifest publish above
-        // triggers `OpenedSessionView` to auto-dismiss back to the
-        // calm Clips list), and a **"Memory created" toast** with a
-        // View action confirms it worked. NO auto-navigation to
-        // Memories — the user asked to make a memory, not to be
-        // teleported. The toast provides the opt-in View path.
-        if let newId {
-            MemoryNavigationBus.shared.justCreatedMemoryId = newId
+        Self.finishCreate(
+            newMemoryId: newId,
+            clipIds: clips.map(\.clipId),
+            // Belt: any manifest rows are already demoted to tombstones by
+            // `materialize` (which the loop above ran on every clip) — this is
+            // a harmless no-op for materialized clips, and a safety net for any
+            // that somehow weren't.
+            consumeSession: { InboxManifest.shared.removeBatch(clipIds: $0) },
+            announce: { MemoryNavigationBus.shared.justCreatedMemoryId = $0 },
+            report: { ErrorState.shared.report(.saveFailed($0)) },
+            dismiss: { dismiss() }
+        )
+    }
+
+    /// The tail of `createMemory()` — the part that decides the **session's**
+    /// fate. `consumeSession` drops the manifest rows; `dismiss` closes the
+    /// sheet on a job reported done.
+    ///
+    /// Neither may run without a memory to hold the clips.
+    /// `createMemoryFromExistingClips` returns nil when no ref resolved and
+    /// rolls its entry back (`EntryLifecycleService:786-791`) — on that path
+    /// the old code skipped the `if let newId` block but consumed the session
+    /// and dismissed anyway. The session vanished from the bench, no memory
+    /// existed, and nothing was said (F23 T1.3, audit 2026-07-31).
+    ///
+    /// The steps are injected so the money test can prove the session survives
+    /// without reaching the `InboxManifest` singleton's real on-disk rows.
+    ///
+    /// Post-create acceptance criteria per `Clip model · spec.md` §Start a
+    /// Memory (July 12 2026): the sheet dismisses, the session is consumed
+    /// (the manifest publish triggers `OpenedSessionView` to auto-dismiss back
+    /// to the calm Clips list), and a **"Memory created" toast** with a View
+    /// action confirms it worked. NO auto-navigation to Memories — the user
+    /// asked to make a memory, not to be teleported.
+    @MainActor
+    static func finishCreate(
+        newMemoryId: UUID?,
+        clipIds: [UUID],
+        consumeSession: ([UUID]) -> Void,
+        announce: (UUID) -> Void,
+        report: (String) -> Void,
+        dismiss: () -> Void
+    ) {
+        guard let newMemoryId else {
+            report(creationFailedMessage)
+            return
         }
+        consumeSession(clipIds)
+        announce(newMemoryId)
         dismiss()
     }
+
+    /// Shown when no memory was created. The sheet stays open with the
+    /// session's clips still listed and still on the bench, so "try again" is
+    /// literally what's available.
+    static let creationFailedMessage = "Couldn't create this memory. Try again."
 
     /// Captured Clips · session-first spec § Bundle confirm sheet ·
     /// Add-to-existing-memory mode. Moves each selected clip's audio
@@ -611,7 +649,12 @@ struct CreateMemoryFromClipsSheet: View {
             entryId: entryId,
             clipIds: clips.map(\.clipId)
         )
-        guard written > 0 else { return }
+        // SINGLE EXIT: no early return here. The old `guard written > 0 else
+        // { return }` skipped straight past the end of the function, so "Add"
+        // did nothing and said nothing. Everything below is gated on the
+        // attach having happened, and EVERY path reaches `finishAppend`, which
+        // is the one place that decides what the user is told (F23).
+        if written > 0 {
 
         // Stamp per-clip lat/lon onto the refs so the clip-row header in Memory
         // Detail shows the same "Bishop St, Bluffton" line as the new-memory
@@ -649,7 +692,48 @@ struct CreateMemoryFromClipsSheet: View {
             }
         }
 
-        InboxManifest.shared.removeBatch(clipIds: clips.map { $0.clipId })
+        }  // end `if written > 0`
+
+        Self.finishAppend(
+            written: written,
+            clipIds: clips.map(\.clipId),
+            consumeSession: { InboxManifest.shared.removeBatch(clipIds: $0) },
+            report: { ErrorState.shared.report(.saveFailed($0)) },
+            dismiss: { dismiss() }
+        )
+    }
+
+    /// The tail of `appendToExistingMemory()`. Mirrors `finishCreate`: the
+    /// session is consumed and the sheet dismissed only when clips actually
+    /// attached.
+    ///
+    /// `attachExistingClips` returns 0 when no ref resolved. The old code
+    /// `guard written > 0 else { return }`-ed there and said nothing, so "Add"
+    /// looked dead: the sheet stayed open, unchanged, with no explanation
+    /// (F23 audit finding #4). The session surviving was right; the silence
+    /// was not — Non-negotiable #2, every action works, is absent, or explains
+    /// itself.
+    @MainActor
+    static func finishAppend(
+        written: Int,
+        clipIds: [UUID],
+        consumeSession: ([UUID]) -> Void,
+        report: (String) -> Void,
+        dismiss: () -> Void
+    ) {
+        guard written > 0 else {
+            report(appendFailedMessage(clipCount: clipIds.count))
+            return
+        }
+        consumeSession(clipIds)
         dismiss()
+    }
+
+    /// Shown when nothing attached. Singular reuses the sibling's approved
+    /// line verbatim; the plural is the same construction.
+    static func appendFailedMessage(clipCount: Int) -> String {
+        clipCount == 1
+            ? "Couldn't add this clip. Try again."
+            : "Couldn't add these clips. Try again."
     }
 }

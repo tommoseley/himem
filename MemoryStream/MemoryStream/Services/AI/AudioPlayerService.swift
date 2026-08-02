@@ -21,14 +21,33 @@ final class AudioPlayerService: ObservableObject {
     /// reference — control surface remains `play(filename:)` / `stop()`.
     var currentAVPlayer: AVAudioPlayer? { player }
 
+    /// Plays a clip from the **memory store** (`Documents/VoiceEntries`).
     func play(filename: String) {
+        play(url: SpeechService.audioURL(for: filename), label: filename)
+    }
+
+    /// Plays a clip from an explicit URL — the entry point for audio that does
+    /// not live in the memory store, notably a bench clip staged in the inbox
+    /// (`InboxManifest.audioURL(for:)`).
+    ///
+    /// This exists because `SessionListView` used to hand-roll its own
+    /// `AVAudioPlayer` purely to reach the other store, and that copy omitted
+    /// the `AVAudioPlayerDelegate` — so a bench clip played to its natural end
+    /// never deactivated the `.playback` session (F23 T2.3; verbatim the bug
+    /// the `play(filename:)` path documents having already fixed). One owner,
+    /// two stores.
+    ///
+    /// - Parameter label: what `currentFile` reports while this plays. Callers
+    ///   pass the clip's filename so a view can derive "is this row playing?"
+    ///   from the service rather than keeping its own copy of the answer.
+    func play(url: URL, label: String) {
         stop()
 
-        let url = SpeechService.audioURL(for: filename)
         guard FileManager.default.fileExists(atPath: url.path) else {
             print("Audio file not found: \(url.path)")
             return
         }
+        let filename = label
 
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)

@@ -289,6 +289,86 @@ struct ClipDisplayModelTests {
         #expect(model.failed == false)
     }
 
+    // MARK: - Money test · unknown duration is absent, never "0:00"
+    //
+    // A `MediaReference` carries no duration attribute, so a clip captured on
+    // one device and read on another (Judi's case — iPhone + iPad + Watch) has
+    // no cached duration in the per-device `BenchClipDurationStore`.
+    // `syntheticClip` must supply *something* for `InboxClip.duration`
+    // (non-optional), and supplied `0` — which the card then rendered as a
+    // confident **"0:00"**. That is a duration the app states and that is
+    // simply false: Honest-Label class, the same as an invented name.
+    //
+    // The rule: **prefer no claim over a wrong claim.** Absence is honest and
+    // needs no announcement — no marker, no placeholder, no chrome explaining
+    // an implementation detail the user never asked about.
+    //
+    // The type system already modelled this correctly in three places —
+    // `Evidence.audio(duration:)` is Optional, `durationForOffset` returns nil,
+    // and `BenchClipDurationStore.record` refuses non-positive values. One
+    // `?? 0` at the adapter boundary defeated all three.
+
+    /// THE MONEY ASSERTION. A bench clip whose duration is unknown carries no
+    /// duration evidence — so nothing downstream can render a time.
+    @Test func voice_bench_unknownDuration_carriesNoDurationEvidence() {
+        let capturedAt = Date()
+        let inboxClip = InboxClip(
+            clipId: UUID(),
+            capturedAt: capturedAt,
+            duration: 0,                     // syntheticClip's `?? 0` on a receive-only device
+            transcript: "hello",
+            latitude: nil,
+            longitude: nil,
+            source: "watch",
+            audioFilename: "unknown-duration.m4a"
+        )
+        let model = ClipDisplayModel(inboxClip: inboxClip, sessionStart: capturedAt)
+        #expect(
+            model.evidence == .audio(duration: nil),
+            "Unknown duration must be absent, not 0 — a rendered 0:00 is a false claim"
+        )
+    }
+
+    /// The projection layer's half of the same invariant: no duration in, no
+    /// duration string out. Guards the render seam as well as the model.
+    @Test func voice_bench_unknownDuration_rendersNoDurationString() {
+        let capturedAt = Date()
+        let inboxClip = InboxClip(
+            clipId: UUID(),
+            capturedAt: capturedAt,
+            duration: 0,
+            transcript: "hello",
+            latitude: nil,
+            longitude: nil,
+            source: "watch",
+            audioFilename: "unknown-duration.m4a"
+        )
+        let model = ClipDisplayModel(inboxClip: inboxClip, sessionStart: capturedAt)
+        let projection = ClipEvidenceProjection.project(model: model, register: .operational)
+        #expect(
+            projection == .compactPlay(durationString: nil),
+            "Rendered a duration for a clip whose length we do not know"
+        )
+    }
+
+    /// The other direction — a KNOWN duration still renders. Without this, a
+    /// guard that suppressed every duration would pass the two tests above.
+    @Test func voice_bench_knownDuration_stillRenders() {
+        let capturedAt = Date()
+        let inboxClip = InboxClip(
+            clipId: UUID(),
+            capturedAt: capturedAt,
+            duration: 21.6,
+            transcript: "hello",
+            latitude: nil,
+            longitude: nil,
+            source: "watch",
+            audioFilename: "known-duration.m4a"
+        )
+        let model = ClipDisplayModel(inboxClip: inboxClip, sessionStart: capturedAt)
+        #expect(model.evidence == .audio(duration: 21.6))
+    }
+
     // MARK: - Helpers
 
     private func makeInMemoryContext() throws -> NSManagedObjectContext {

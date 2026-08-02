@@ -212,7 +212,16 @@ struct DraftReviewSheet: View {
     /// - both lists non-empty → "X and Y from your library. Z new — tap to drop…"
     /// - existing only → "X and Y from your library."
     /// - kept new only → "Z new — tap to drop if you'd rather not start a topic."
-    /// - both empty → empty string (caller hides the row).
+    /// - both empty → empty string.
+    ///
+    /// **The caller does not hide on "both empty".** `topicsExplainer` is
+    /// gated on `!partition.new.isEmpty` (`:180`), i.e. on there being any NEW
+    /// topic at all — not on this caption being non-empty. So when new topics
+    /// exist but the user has dropped every one of them AND there are no
+    /// existing topics, the row still renders: an AI-blue sparkles glyph above
+    /// an empty `Text`. `DraftReviewSheetCaptionTests` pins this function's
+    /// return value; nothing tests the hiding. Corrected 2026-07-31 — the
+    /// wording promised a guard the caller doesn't implement.
     static func captionText(existing: [String], kept: [String]) -> String {
         let existingPhrase = humanList(existing)
         let keptPhrase = humanList(kept)

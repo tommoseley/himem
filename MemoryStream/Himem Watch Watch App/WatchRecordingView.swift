@@ -6,7 +6,8 @@ import WatchConnectivity
 /// Layout, top to bottom:
 ///   ✕ corner   ·   ● REC pulse   ·   big tabular timer   ·
 ///   persistent `Clip N · on a roll` (when N>1)   ·
-///   live waveform (34 rolling bars)   ·
+///   live waveform (24 rolling bars — `waveBarCount`; "34" was wrong here
+///   since the value was set, corrected 2026-07-31)   ·
 ///   Stop & save pill   +   Next 52×52 ochre disc
 ///
 /// Supersedes the V0 "mic disc with counter inside, Next below the

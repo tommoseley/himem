@@ -8,6 +8,10 @@ struct JournalView: View {
     @StateObject private var cameraService = CameraService()
     @StateObject private var projectVM = ProjectViewModel()
     @ObservedObject private var errorState = ErrorState.shared
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
+    /// F16 · drives the walkthrough ring on the row she just made.
+    @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
     @EnvironmentObject private var quickAction: QuickActionState
     @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @State private var viewMode: ViewMode
@@ -18,9 +22,40 @@ struct JournalView: View {
     /// callsite still shows the picker.
     private let hidesModeToggle: Bool
 
-    init(initialMode: ViewMode = .memories, hidesModeToggle: Bool = false) {
+    init(initialMode: ViewMode = .memories,
+         hidesModeToggle: Bool = false,
+         learnPresented: Binding<Bool> = .constant(false)) {
         self._viewMode = State(initialValue: initialMode)
         self.hidesModeToggle = hidesModeToggle
+        // F28 · defaulted so previews and any non-shell call site compile
+        // unchanged; the shell always passes its own per-tab slot.
+        self._learnPresented = learnPresented
+    }
+
+    /// The memory the walkthrough is pointing at, or nil.
+    ///
+    /// **Window = from creation to the end of the walkthrough** (F20a,
+    /// 2026-07-31). It was originally scoped to step 3 only, which made the
+    /// ring unreachable on the path people actually take: the View toast sends
+    /// her from creation straight to Memory Detail, so she first sees the
+    /// Memories list *after* `done`, by which point a step-scoped ring is long
+    /// gone. Observed on device — "not highlighted at any point".
+    ///
+    /// The pointing was anchored to the step rather than to the moment she
+    /// needs it. `walkthroughMemoryId` is set at creation and cleared in
+    /// `finish()`, so keying off it gives exactly the right window and matches
+    /// the promise `done` already makes: "You'll find it under Memories
+    /// anytime."
+    /// Tells the walkthrough its memory is visible in the list, so step 3 can
+    /// re-anchor from the View toast to her ringed row. Guarded inside the
+    /// orchestrator; safe to call repeatedly.
+    private func announceIfWalkthroughRow(_ entry: EntryDisplayModel) {
+        guard entry.id == walkthrough.walkthroughMemoryId else { return }
+        walkthrough.memoriesListDidShowWalkthroughMemory()
+    }
+
+    private var walkthroughTargetId: UUID? {
+        walkthrough.isRunning ? walkthrough.walkthroughMemoryId : nil
     }
 
     enum ViewMode: String, CaseIterable {
@@ -33,7 +68,10 @@ struct JournalView: View {
     /// glyph. Same `NavigationStack`, so the hub pushes; back-chevron
     /// returns to the journal. Spec: `docs/design/screens-settings.jsx`
     /// → `ScrTutorialsHub`.
-    @State private var showTutorials = false
+    /// **F28 · owned by the shell** — see `HiMemTabView.learnOpenOn`. A
+    /// tab-local flag survived a tab round-trip and re-presented the hub
+    /// out of context.
+    @Binding var learnPresented: Bool
     @ObservedObject private var inbox = InboxManifest.shared
     /// Set by `StartVoiceRecordingIntent` when Siri ("Record in
     /// HiMem") fires. Observed below to present the voice composer
@@ -62,7 +100,7 @@ struct JournalView: View {
                 hidesModeToggle: hidesModeToggle,
                 onSearchTap: { showSearch = true },
                 onSettingsTap: { showSettings = true },
-                onHelpTap: { showTutorials = true }
+                onHelpTap: { learnPresented = true }
             )
 
             // Arrival banner retired 2026-07-10 per `CLAUDE.md` §Phone:
@@ -109,7 +147,7 @@ struct JournalView: View {
         JournalErrorBanner()
 
         } // ZStack
-        .navigationDestination(isPresented: $showTutorials) {
+        .navigationDestination(isPresented: $learnPresented) {
             TutorialsHubView()
         }
         .navigationDestination(isPresented: $showSearch) {
@@ -407,6 +445,41 @@ struct JournalView: View {
                     Section {
                         ForEach(group.entries) { entry in
                             EntryCardView(entry: entry)
+                            // F16 · she reached the list rather than the View
+                            // toast. Swap step 3's anchor from the toast to her
+                            // row. Per-row `onAppear` rather than a list-level
+                            // one because a PreferenceKey does not propagate out
+                            // of a `List` (device-only bug, 2026-07) — the row
+                            // appearing IS the signal that it is on screen.
+                            // F20b · `onAppear` fires when the row mounts. If the
+                            // Memories list was already rendered behind the flow
+                            // — the normal case — it fired long before the beat
+                            // armed and never fires again, so the list-side
+                            // anchor could not engage. Watch the beat as well:
+                            // whichever happens second is the one that matters.
+                            // `memoriesListDidShowWalkthroughMemory` no-ops
+                            // unless step 3 is open, so both calls are safe.
+                            .onAppear { announceIfWalkthroughRow(entry) }
+                            .onChange(of: walkthrough.activeBeat) { _, _ in
+                                announceIfWalkthroughRow(entry)
+                            }
+                            // F16 · the target identifies itself. The walkthrough
+                            // overlay has no anchoring primitive (no
+                            // anchorPreference / GeometryReader / spotlight), so
+                            // rather than have a floating banner claim "your
+                            // memory is in the list" and leave her guessing which
+                            // row, the row she just made wears a ring while the
+                            // walkthrough is pointing at it. Reuses the locked
+                            // "selection = ring" affordance (`Crucible`
+                            // accessibility rules) — no new vocabulary, no new UI.
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(
+                                        Crucible.Color.accent,
+                                        lineWidth: walkthroughTargetId == entry.id ? 2 : 0
+                                    )
+                                    .allowsHitTesting(false)
+                            )
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -452,6 +525,10 @@ struct JournalView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        // Clear the floating capture FAB so the last row (Memories and Projects
+        // tab lists) doesn't run under it (device pass 2026-07-27). Matches the
+        // 108pt FAB footprint clearance used on the Clips scroll + Memory Detail.
+        .contentMargins(.bottom, 108, for: .scrollContent)
         .refreshable {
             // Reload journal, nudge the watch to re-send any pending
             // clips (covers "watch was out of range"), AND re-broadcast
@@ -467,9 +544,34 @@ struct JournalView: View {
 
     // MARK: - Empty memories state
 
+    /// F22 · one of the three surfaces that speak while the first import is
+    /// running. A count of zero here is produced identically by "she has none"
+    /// and "we haven't looked yet"; `FirstImportState` is the only thing that
+    /// can tell them apart, and on a fresh install the wrong reading says
+    /// *your memories are gone*.
     @ViewBuilder
     private var emptyMemoriesState: some View {
         if viewModel.filteredEntries.isEmpty {
+            if !firstImport.mayAssertEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.largeTitle)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                    Text(FirstImportState.Copy.memoriesTitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(FirstImportState.Copy.memoriesDetail)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            } else {
             VStack(spacing: 12) {
                 Image(systemName: "text.book.closed")
                     .font(.largeTitle)
@@ -488,6 +590,7 @@ struct JournalView: View {
             .padding(.top, 40)
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
+            }
         }
     }
 

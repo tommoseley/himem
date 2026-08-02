@@ -94,10 +94,9 @@ struct TranscriptionPipelineOutcomeTests {
             Issue.record("Fixture long-speech-90s.caf missing from test bundle")
             return
         }
-        guard await TranscriptionService.shared.modelIsInstalled(for: .current) else {
-            print("[Test] skipped — model not installed in this simulator")
-            return
-        }
+        guard await SpeechAssetGate.canExerciseTranscription(
+                "transcribe a real speech fixture and return .transcribed with text"
+            ) else { return }
         let outcome = await TranscriptionService.shared.transcribe(audioURL: fixture)
         guard case .transcribed(let result) = outcome else {
             Issue.record("Expected .transcribed, got \(outcome)")
@@ -115,10 +114,9 @@ struct TranscriptionPipelineOutcomeTests {
         // We only assert the model-installed path; if the model
         // isn't installed we'd get .modelNotInstalled before the
         // file-open attempt. Skip in that case.
-        guard await TranscriptionService.shared.modelIsInstalled(for: .current) else {
-            print("[Test] skipped — model not installed in this simulator")
-            return
-        }
+        guard await SpeechAssetGate.canExerciseTranscription(
+                "a missing audio file returns .fileUnreadable rather than a false transcript"
+            ) else { return }
         let bogus = FileManager.default.temporaryDirectory
             .appendingPathComponent("does-not-exist-\(UUID().uuidString).caf")
         let outcome = await TranscriptionService.shared.transcribe(audioURL: bogus)
@@ -132,10 +130,9 @@ struct TranscriptionPipelineOutcomeTests {
     /// nothing.
     @available(iOS 26.0, *)
     @Test func transcribe_silenceFixture_returnsTranscribedWithEmptyText() async throws {
-        guard await TranscriptionService.shared.modelIsInstalled(for: .current) else {
-            print("[Test] skipped — model not installed in this simulator")
-            return
-        }
+        guard await SpeechAssetGate.canExerciseTranscription(
+                "a silence fixture returns .transcribed with EMPTY text (heard silence, not failed)"
+            ) else { return }
         let silenceURL = try makeSilenceFile(seconds: 3)
         defer { try? FileManager.default.removeItem(at: silenceURL) }
 

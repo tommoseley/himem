@@ -35,8 +35,17 @@ final class SpeechService: ObservableObject {
     @Published var transcribedText = ""
     @Published var lastRecordingPath: String?
     @Published var error: SpeechError?
-    /// True once the SpeechTranscriber model is installed AND the
-    /// analyzer is prepared. UI gates the record button on this.
+    /// True once the SpeechTranscriber model is installed AND the analyzer is
+    /// prepared.
+    ///
+    /// **No UI reads this.** It is written once (`:257`) and read only inside
+    /// an `NSLog` in `startRecording`. The comment claiming "UI gates the
+    /// record button on this" described a gate that was never built
+    /// (corrected 2026-07-31) — the record button is always live, which is
+    /// consistent with the perishability rule: capture is one action from
+    /// anywhere, and a model that isn't ready degrades the transcript, not
+    /// the recording. Kept as a diagnostic; if a gate is ever wanted, that is
+    /// a design decision, not a wiring fix.
     @Published var isModelReady = false
     /// Normalised mic input level in 0...1 for the voice composer's
     /// live waveform. Sampled in the audio tap (peak amplitude →
@@ -50,6 +59,22 @@ final class SpeechService: ObservableObject {
     /// buffer. Guarded by `levelLock`.
     private nonisolated(unsafe) var lastLevelPublishedAt: CFTimeInterval = 0
     private let levelLock = NSLock()
+    /// Counts published level samples so `[Meter]` can log at 2 Hz rather
+    /// than 10. D10 instrumentation; see `publishAudioLevelIfDue`.
+    private let levelPublishCounter = AtomicCounter()
+
+    /// **The `in_peak == 0` capture gate** (ruled 2026-08-02). Amplitude is
+    /// the only thing that separates a working recording from a dead one at
+    /// any layer we log — see `SilentCapture.swift` for why. Fed from the
+    /// tap on EVERY buffer (not from `[Amp]`'s sampled window, which is an
+    /// instrument, not a gate), reset per recording, read at
+    /// `stopRecording` where the session's peak becomes a fact.
+    let silenceObserver = SilentCaptureObserver()
+
+    /// The gate's verdict on the recording that just finished. Published so
+    /// the shell can consult it for every landing — bench, new memory, and
+    /// memory-in-project alike. `.notMeasured` until a recording completes.
+    @Published private(set) var lastCaptureSilence: SilentCaptureOutcome = .notMeasured
 
     // MARK: - Persistent (across recordings)
 
@@ -93,7 +118,9 @@ final class SpeechService: ObservableObject {
             case .notAvailable:
                 return "Speech recognition isn't available on this device."
             case .audioSessionFailed:
-                return "Couldn't start recording. Try again in a moment."
+                // F18 · ruled copy (Tom, 2026-07-31). Crucible voice: describes
+                // the state, never blames, no jargon.
+                return CaptureUnavailableView.audioMessage
             case .recognitionFailed:
                 return "Speech recognition stopped unexpectedly. Try again."
             case .modelNotReady:
@@ -175,9 +202,26 @@ final class SpeechService: ObservableObject {
                 )
             )
 
-            // Install the model if it isn't already on this device. Same
-            // path used by `TranscriptionService.ensureModelReady`.
-            try await TranscriptionService.shared.ensureModelReady(for: locale)
+            // Install the model if it isn't already on this device.
+            //
+            // Caught HERE, around this call alone, and deliberately non-fatal:
+            // live capture must proceed even when no model can be installed.
+            // The real pre-flight for live analysis is `prepareToAnalyze`
+            // below — if the analyzer genuinely can't run, that is what fails.
+            // Letting a model-install failure abort this `do` block instead
+            // would leave `analyzer`/`transcriber`/`bestFormat` unset and stop
+            // live capture from being configured at all, on exactly the
+            // configurations where the locale's asset is unsupported.
+            //
+            // Until B10 (2026-07-31) `ensureModelReady` returned silently on
+            // those paths, so this behaviour was real but accidental — an
+            // undocumented side effect of a false success. It is now a stated
+            // decision, and the behaviour at this call site is unchanged.
+            do {
+                try await TranscriptionService.shared.ensureModelReady(for: locale)
+            } catch {
+                NSLog("[HiMem][Speech] model not installed for \(locale.identifier): \(error.localizedDescription) — continuing; live analysis is gated by prepareToAnalyze")
+            }
 
             // Best format = what the analyzer's modules want. We convert
             // engine buffers to this in the live-input bridge.
@@ -263,12 +307,25 @@ final class SpeechService: ObservableObject {
 
         finalizedTranscript = ""
         transcribedText = ""
+        // A fresh session must not inherit the previous one's peak. Note
+        // this runs AFTER the `stopRecording()` above, so the outcome that
+        // stop published has already been read by the shell.
+        silenceObserver.reset()
+        lastCaptureSilence = .notMeasured
 
         let session = AVAudioSession.sharedInstance()
         do {
+            // Mode comes from the ONE owner, never a literal (F18,
+            // 2026-07-31). `.measurement` suppresses input gain: it killed the
+            // watch mic in July, and the phone kept this literal behind a
+            // comment claiming "the phone tolerates .measurement because its
+            // mic is hotter". It does not — iPad voice capture was dead (the
+            // waveform never moved) and every iPhone recording was quieter
+            // than it should be, which is the last thing you want in a noisy
+            // car. Guarded by `CaptureAudioSessionConfigTests`.
             try session.setCategory(
                 .record,
-                mode: .measurement,
+                mode: CaptureAudioSessionConfig.recordMode,
                 options: [.duckOthers, .allowBluetoothHFP]
             )
             try session.setActive(true, options: .notifyOthersOnDeactivation)
@@ -322,8 +379,41 @@ final class SpeechService: ObservableObject {
         let bufferCounter = AtomicCounter()
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             let n = bufferCounter.increment()
-            if n <= 3 {
-                NSLog("[HiMem][Speech] tap buffer #\(n) frames=\(buffer.frameLength)")
+            // The capture gate, fed UNCONDITIONALLY — every buffer, every
+            // channel. It deliberately sits above `[Amp]`'s sampled window
+            // rather than inside it: a gate that reads only buffers 1-3 and
+            // every 50th measures the instrument's samples, not the
+            // recording. `SilentCaptureGateTests` asserts this call is
+            // outside that window, because moving it inside would be the
+            // easy, invisible regression.
+            self?.silenceObserver.observe(buffer)
+            // **[Amp] · the instrument the watch has had since July, and the
+            // phone never got.** Read-only: `buffer` is already in hand, no
+            // reordering, no behaviour change.
+            //
+            // A silent capture is indistinguishable from a working one at
+            // every layer we log: the engine starts, `isRecording` is true,
+            // buffers arrive with plausible frame counts, and the file is
+            // written at exactly the right size for its duration. The ONLY
+            // thing that separates them is sample amplitude — which is what
+            // proved the `.measurement` diagnosis on the watch (`in_peak`
+            // pinned ~0.01 regardless of how loud the user spoke), and what
+            // we could not answer on the phone during the 2026-08-01/02
+            // device pass.
+            //
+            // Logged on the first three buffers (immediate answer) and every
+            // 50th (~5s) so a long recording shows whether signal dies
+            // partway rather than only at the start.
+            if n <= 3 || n % 50 == 0 {
+                var peak: Float = 0
+                if let ch = buffer.floatChannelData {
+                    let frames = Int(buffer.frameLength)
+                    for c in 0..<Int(buffer.format.channelCount) {
+                        let samples = ch[c]
+                        for i in 0..<frames { peak = max(peak, abs(samples[i])) }
+                    }
+                }
+                NSLog("[HiMem][Speech][Amp] tap #\(n) frames=\(buffer.frameLength) in_peak=\(String(format: "%.4f", peak))")
             }
             self?.streamBuffer(buffer)
             try? self?.audioFile?.write(from: buffer)
@@ -456,6 +546,27 @@ final class SpeechService: ObservableObject {
         }
         currentRecordingURL = nil
 
+        // **The capture gate's verdict** (ruled 2026-08-02). Read here,
+        // beside `lastRecordingPath`, because this is where the session's
+        // peak stops changing and becomes a fact.
+        //
+        // The debugger question is asked at THIS moment rather than cached:
+        // Xcode can attach or detach between captures, which is exactly the
+        // situation the B10 protocol is about.
+        //
+        // Detection and this log run unconditionally. Only the banner is
+        // ever withheld, and the withholding says so — the distinction from
+        // a forbidden silent opt-out is that nothing here stops looking.
+        //
+        // Nothing here deletes, truncates, or declines to save the
+        // recording — the file written above stands exactly as it is. We
+        // report; the user decides.
+        let outcome = silenceObserver.outcome(debuggerAttached: DebuggerAttachment.isAttached)
+        lastCaptureSilence = outcome
+        if let line = SilentCaptureDecision.logLine(for: outcome) {
+            NSLog("\(line) buffers=\(silenceObserver.buffersMeasured)")
+        }
+
         isRecording = false
         audioLevel = 0
     }
@@ -490,6 +601,54 @@ final class SpeechService: ObservableObject {
             if s > peak { peak = s }
         }
         let normalized = Self.normalisedLevel(forPeakAmplitude: peak)
+
+        // **[Meter] · D10 instrumentation — measure before tuning.**
+        //
+        // The waveform is wrong at BOTH ends (iPad: speech and room tone
+        // drawing identical near-full bars; earlier: real audio at
+        // `in_peak` 0.02–0.06 drawing nothing), and the two symptoms have
+        // already cost a two-day misdiagnosis in both directions. The
+        // mapping constants must come from measured values, not from
+        // reasoning about them — which is what put -18 dBFS there in the
+        // first place.
+        //
+        // `ch0_peak` vs `all_peak` is the load-bearing comparison. This
+        // meter reads `floatChannelData[0]` ONLY, while `[Amp]` and the
+        // silent-capture gate read every channel. On a multichannel route
+        // — documented on VPIO, where ch0 is the downlink reference and
+        // the mic is elsewhere — those two numbers diverge, and that
+        // divergence is the only mechanism in the current code that lets
+        // `[Amp]` report real audio while the meter sits at its floor.
+        // If ch0_peak << all_peak on device, that is the answer.
+        //
+        // Read-only, no behaviour change. 2 Hz (every 5th publish) plus
+        // the first three, so a 16 s recording is ~35 lines rather than
+        // 160.
+        let publishIndex = levelPublishCounter.increment()
+        if publishIndex <= 3 || publishIndex % 5 == 0 {
+            var allChannelPeak: Float = 0
+            if let channels = buffer.floatChannelData {
+                for c in 0..<Int(buffer.format.channelCount) {
+                    let samples = channels[c]
+                    for i in 0..<frameLength {
+                        let s = abs(samples[i])
+                        if s > allChannelPeak { allChannelPeak = s }
+                    }
+                }
+            }
+            let db = peak > 0 ? 20 * log10f(peak) : -.infinity
+            NSLog(String(
+                format: "[HiMem][Speech][Meter] #%d ch=%d frames=%d ch0_peak=%.5f all_peak=%.5f db=%.1f level=%.3f",
+                publishIndex,
+                Int(buffer.format.channelCount),
+                frameLength,
+                peak,
+                allChannelPeak,
+                db,
+                Float(normalized)
+            ))
+        }
+
         Task { @MainActor [weak self] in
             self?.audioLevel = normalized
         }

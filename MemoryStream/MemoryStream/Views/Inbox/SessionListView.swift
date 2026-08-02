@@ -19,6 +19,8 @@ import AVFoundation
 struct SessionListView: View {
     @ObservedObject var inbox: InboxManifest = .shared
     @ObservedObject var arrivals: InboxArrivalTracker = .shared
+    /// F22 · the one fact this view reads before it claims to be empty.
+    @ObservedObject private var firstImport = FirstImportState.shared
     @ObservedObject var viewModel: JournalViewModel
     /// New = unseen (P7-2): when true, reviewed clips are filtered out of
     /// the sessions so the New lens shows only fresh, un-eyeballed intake.
@@ -63,14 +65,17 @@ struct SessionListView: View {
     @State private var editingClip: ClipEditorModal.Source? = nil
     // Cluster-editor single-open accordion (row/chevron tap expands-to-read).
     @State private var openClusterClipId: UUID? = nil
-    @State private var playingClipId: UUID? = nil
-    @State private var player: AVAudioPlayer? = nil
-    /// Tracks whether THIS view activated the audio session. Only
-    /// flipped true after a successful setActive(true) in playClip;
-    /// gates stopPlayback's setActive(false) so we never deactivate
-    /// a session we don't own. Per CLAUDE.md § Audio Session
-    /// Coordination — mirrors AudioPlayerService.sessionActivated.
-    @State private var sessionActivated = false
+    /// Derived from the player, never stored: `AudioPlayerService` publishes
+    /// what is playing, including when playback ends on its own. A local copy
+    /// is what stayed lit after a clip finished (F23 T2.3).
+    private var playingClipId: UUID? {
+        guard let file = audio.currentFile, audio.isPlaying else { return nil }
+        return inbox.clips.first(where: { $0.audioFilename == file })?.clipId
+    }
+    /// The one owner of phone playback and of the shared audio session's
+    /// lifecycle. This view previously mirrored its `sessionActivated` bookkeeping
+    /// alongside a second `AVAudioPlayer`; both are the owner's job (F23 T2.3).
+    @ObservedObject private var audio = AudioPlayerService.shared
     /// Per-session, per-clip selection state for the expanded card.
     /// Keyed by clip id. Defaults to "non-accidental clips selected"
     /// when the user expands a session for the first time; once they
@@ -137,19 +142,36 @@ struct SessionListView: View {
         // Settings + JournalView (2026-07-09) are retired.
         ZStack {
             Crucible.Color.paper.ignoresSafeArea()
-            // Gate on the VISIBLE sessions (hideReviewed-filtered), not
-            // `inbox.isEmpty` (the raw manifest) — the New lens also draws
-            // materialized/loose refs the manifest doesn't know about. And show
-            // the empty state only when the whole lens is empty: not while a
-            // sibling stack has content (device pass 2026-07-27).
-            if sessions.isEmpty {
-                if Self.showsEmptyState(sessionsEmpty: true, hasSiblingContent: hasSiblingContent) {
-                    emptyState
-                }
-                // else: a sibling (unplaced stack) is rendering — draw nothing.
-            } else {
+            // **"Nothing new" needs THREE conditions, and each was found
+            // separately** (merge of `main` into `f8`, 2026-08-02). Both
+            // branches fixed a different half of the same sentence, so the
+            // resolution is the conjunction — dropping either side reopens a
+            // shipped defect:
+            //
+            //  - Gate on the VISIBLE sessions (hideReviewed-filtered), not
+            //    `inbox.isEmpty` (the raw manifest) — the New lens also draws
+            //    materialized/loose refs the manifest doesn't know about.
+            //  - Not while a SIBLING stack has content (device pass
+            //    2026-07-27: "Nothing new" rendered above eight populated
+            //    loose-ref rows).
+            //  - Not while the first CloudKit import is STILL LOOKING (F22) —
+            //    on a fresh install an empty local store means "we haven't
+            //    finished", not "she has none", and on the surface whose
+            //    subject is content she feared losing, certainty is the harm.
+            //
+            // All three live in one pure predicate so the rule is money-tested
+            // in a single place rather than re-derived at each call site.
+            if !sessions.isEmpty {
                 list
+            } else if Self.showsEmptyState(
+                sessionsEmpty: true,
+                hasSiblingContent: hasSiblingContent,
+                mayAssertEmpty: firstImport.mayAssertEmpty
+            ) {
+                emptyState
             }
+            // else: a sibling stack is rendering, or the import is still
+            // running — draw nothing rather than assert emptiness.
         }
         .sheet(item: $bundleSession) { request in
             CreateMemoryFromClipsSheet(
@@ -430,12 +452,36 @@ struct SessionListView: View {
 
     // MARK: - Empty state
 
-    /// The empty state is shown iff this view has no visible sessions AND no
-    /// sibling lens content — pure so the mutual-exclusivity rule is money-
-    /// tested (device pass 2026-07-27: "Nothing new" rendered above eight
-    /// populated loose-ref rows because the gate ignored the sibling stack).
-    static func showsEmptyState(sessionsEmpty: Bool, hasSiblingContent: Bool) -> Bool {
-        sessionsEmpty && !hasSiblingContent
+    /// **May we say "Nothing new"?** True only when all three hold — no
+    /// visible sessions, no sibling lens content, and the first CloudKit
+    /// import has finished looking.
+    ///
+    /// Pure, so the rule is money-tested in one place rather than re-derived
+    /// at each call site. Each condition is a separately-found defect and
+    /// each is load-bearing:
+    ///
+    ///  - `sessionsEmpty` — the visible, hideReviewed-filtered sessions, not
+    ///    the raw manifest (which doesn't know about materialized refs).
+    ///  - `hasSiblingContent` — device pass 2026-07-27: "Nothing new"
+    ///    rendered directly above eight populated loose-ref rows, because
+    ///    the gate ignored a sibling stack rendering in the same lens.
+    ///  - `mayAssertEmpty` — F22: on a fresh install an empty local store
+    ///    means "we haven't finished looking," not "she has none." Passed in
+    ///    as an argument rather than read inside, so this stays pure AND the
+    ///    call site remains a real production read of `mayAssertEmpty` —
+    ///    `FirstImportStateTests` counts those and explicitly rejects a
+    ///    comment as a read.
+    ///
+    /// The three arrived from two branches (`main`'s device-pass fixes and
+    /// `f8`'s F22 work) and were merged as a conjunction 2026-08-02:
+    /// they are different halves of one sentence, and dropping either half
+    /// reopens a shipped defect.
+    static func showsEmptyState(
+        sessionsEmpty: Bool,
+        hasSiblingContent: Bool,
+        mayAssertEmpty: Bool
+    ) -> Bool {
+        sessionsEmpty && !hasSiblingContent && mayAssertEmpty
     }
 
     private var emptyState: some View {
@@ -1398,38 +1444,21 @@ struct SessionListView: View {
         return String(format: "%d:%02d", m, s)
     }
 
+    /// Bench playback runs through `AudioPlayerService` — the one owner of
+    /// phone playback and of the shared audio session's lifecycle.
+    ///
+    /// This view used to hand-roll its own `AVAudioPlayer` just to reach the
+    /// inbox store, and that copy had no `AVAudioPlayerDelegate`: a clip played
+    /// to its natural end never deactivated the `.playback` session and the row
+    /// stayed lit (F23 T2.3). The owner already solved both — `play(url:label:)`
+    /// covers the second store.
     private func playClip(_ clip: InboxClip) {
-        stopPlayback()
-        let url = InboxManifest.audioURL(for: clip.audioFilename)
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
-            try AVAudioSession.sharedInstance().setActive(true)
-            sessionActivated = true
-            let p = try AVAudioPlayer(contentsOf: url)
-            p.prepareToPlay()
-            p.play()
-            player = p
-            playingClipId = clip.clipId
-        } catch {
-            // Silent — playback isn't critical to the flow.
-        }
+        audio.play(url: InboxManifest.audioURL(for: clip.audioFilename),
+                   label: clip.audioFilename)
     }
 
-    /// Per CLAUDE.md § Audio Session Coordination: only call
-    /// setActive(false) on a session we activated. Calling it on
-    /// an already-inactive session churns the audio HAL and can
-    /// stomp on whatever other audio path (SpeechService,
-    /// AudioPlayerService) currently owns the session.
-    /// Mirrors AudioPlayerService's canonical pattern.
     private func stopPlayback() {
-        player?.stop()
-        player = nil
-        playingClipId = nil
-        if sessionActivated {
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            sessionActivated = false
-        }
+        audio.stop()
     }
 }
 

@@ -18,7 +18,7 @@ import AVFoundation
 ///
 /// **Explicit mono downmix (defensive).** Under `.measurement` session mode
 /// the watch input was 3-channel (dogfood 2026-07-14); the capture-gain P0
-/// fix (`WatchAudioSessionConfig.recordMode = .default`, 2026-07-15) now
+/// fix (`CaptureAudioSessionConfig.recordMode = .default`, 2026-07-15) now
 /// yields mono on device, so N is normally 1. But we still downmix N→1
 /// ourselves by **extracting the hottest channel** — retained as tested
 /// defense for any future multichannel route. (Pick-hottest, not average:
@@ -63,8 +63,20 @@ enum WatchTransferAudioTranscoder {
     }
 
     /// Transcodes `source` (any PCM `.caf`) → mono 16 kHz AAC `.m4a` at
-    /// `destination`. Throws on failure so the caller keeps `source` and
-    /// ships raw rather than losing audio (audio-is-truth > speed).
+    /// `destination`.
+    ///
+    /// Throws on failure. **The caller does not then "ship raw" — it cannot.**
+    /// The single `transferFile` site (`WatchTransferService.enqueueReadyTransfer`)
+    /// is hard-gated on `isTransferReady`, which requires AAC + mono + 16 kHz,
+    /// so a raw PCM source can never pass it. Raw audio leaving the watch is
+    /// an architectural impossibility, not a fallback (`Watch · spec.md` §2),
+    /// and this doc used to say the opposite (corrected 2026-07-31).
+    ///
+    /// What actually happens on a throw: `transcodeFinished` schedules a
+    /// capped retry; when those are exhausted the clip simply stays in the
+    /// pending manifest, and the next reachability / scenePhase / flush
+    /// trigger re-enters `send(clip:)` and tries again. Nothing is deleted and
+    /// nothing degraded ships — the clip waits (audio-is-truth > speed).
     nonisolated static func transcodeToTransferFormat(source: URL, destination: URL) throws {
         let src: AVAudioFile
         do { src = try AVAudioFile(forReading: source) }

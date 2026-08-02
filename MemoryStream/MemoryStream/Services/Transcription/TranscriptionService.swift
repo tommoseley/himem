@@ -94,20 +94,59 @@ final class TranscriptionService {
 
     // MARK: - Asset / model management
 
-    /// Ensures the speech model for `locale` is installed locally. If the
-    /// asset is missing, this triggers a download from Apple's system
-    /// asset catalog (network required on first call per locale; cached
-    /// permanently after). Best-effort — throws on download failure but
-    /// callers typically log and move on; a missing model causes
-    /// `transcribe(...)` to return an empty result.
     /// Returns `true` when the SpeechTranscriber model for `locale` is
-    /// already installed. Cheap; tests use it to gracefully skip when
-    /// run on a fresh simulator without the asset cached.
+    /// already installed. Cheap, non-mutating, never throws.
+    ///
+    /// (A doc block describing `ensureModelReady` — "best-effort, throws on
+    /// download failure" — used to sit here, above the wrong method and
+    /// describing behaviour that method did not have. Removed with B10; the
+    /// accurate contract now lives on `ensureModelReady` itself.)
     func modelIsInstalled(for locale: Locale) async -> Bool {
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         return await AssetInventory.status(forModules: [transcriber]) == .installed
     }
 
+    /// Why `ensureModelReady` can fail without the download failing.
+    ///
+    /// The method used to return normally on all three — reporting success
+    /// while the model was not, and in the `.unsupported` case could never
+    /// be, ready (F23 B10). A method whose name is a promise must throw when
+    /// it cannot keep it.
+    enum ModelReadinessError: LocalizedError {
+        /// This runtime has no speech model for the locale. Not a download
+        /// failure and not fixable by retrying — the asset does not exist here.
+        case localeUnsupported(String)
+        /// The asset is supported but the system returned no installation
+        /// request, so nothing was downloaded and nothing was installed.
+        case installationUnavailable(String)
+        /// `AssetInventory` reported a status this build doesn't know.
+        case unknownStatus(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .localeUnsupported(let l):
+                return "No on-device speech model exists for \(l) on this system."
+            case .installationUnavailable(let l):
+                return "The system returned no installation request for the \(l) speech model; nothing was installed."
+            case .unknownStatus(let l):
+                return "Unrecognized asset status for the \(l) speech model."
+            }
+        }
+    }
+
+    /// Installs the speech model for `locale` if it isn't already present.
+    ///
+    /// **Throws whenever the model is not ready on return** — including the
+    /// cases that used to return silently: an unsupported locale, and a
+    /// `.supported` status for which the system yields no installation
+    /// request. Callers that legitimately proceed without a model must say so
+    /// explicitly (both do); what they may not do is read a silent return as
+    /// success.
+    ///
+    /// Not a behaviour change at either call site: `MemoryStreamApp`'s
+    /// pre-warm already caught and logged, and `SpeechService` now catches
+    /// around this call alone so live capture proceeds exactly as before —
+    /// see its comment for why that is correct rather than incidental.
     func ensureModelReady(for locale: Locale) async throws {
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         let status = await AssetInventory.status(forModules: [transcriber])
@@ -116,15 +155,18 @@ final class TranscriptionService {
             return
         case .unsupported:
             NSLog("[HiMem][Transcribe] locale unsupported: \(locale.identifier)")
-            return
+            throw ModelReadinessError.localeUnsupported(locale.identifier)
         case .supported, .downloading:
             NSLog("[HiMem][Transcribe] requesting model install for \(locale.identifier)")
-            if let req = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-                try await req.downloadAndInstall()
-                NSLog("[HiMem][Transcribe] model installed for \(locale.identifier)")
+            guard let req = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) else {
+                NSLog("[HiMem][Transcribe] no installation request available for \(locale.identifier)")
+                throw ModelReadinessError.installationUnavailable(locale.identifier)
             }
+            try await req.downloadAndInstall()
+            NSLog("[HiMem][Transcribe] model installed for \(locale.identifier)")
         @unknown default:
-            return
+            NSLog("[HiMem][Transcribe] unknown asset status for \(locale.identifier)")
+            throw ModelReadinessError.unknownStatus(locale.identifier)
         }
     }
 
