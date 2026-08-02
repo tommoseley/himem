@@ -59,6 +59,9 @@ final class SpeechService: ObservableObject {
     /// buffer. Guarded by `levelLock`.
     private nonisolated(unsafe) var lastLevelPublishedAt: CFTimeInterval = 0
     private let levelLock = NSLock()
+    /// Counts published level samples so `[Meter]` can log at 2 Hz rather
+    /// than 10. D10 instrumentation; see `publishAudioLevelIfDue`.
+    private let levelPublishCounter = AtomicCounter()
 
     /// **The `in_peak == 0` capture gate** (ruled 2026-08-02). Amplitude is
     /// the only thing that separates a working recording from a dead one at
@@ -598,6 +601,54 @@ final class SpeechService: ObservableObject {
             if s > peak { peak = s }
         }
         let normalized = Self.normalisedLevel(forPeakAmplitude: peak)
+
+        // **[Meter] · D10 instrumentation — measure before tuning.**
+        //
+        // The waveform is wrong at BOTH ends (iPad: speech and room tone
+        // drawing identical near-full bars; earlier: real audio at
+        // `in_peak` 0.02–0.06 drawing nothing), and the two symptoms have
+        // already cost a two-day misdiagnosis in both directions. The
+        // mapping constants must come from measured values, not from
+        // reasoning about them — which is what put -18 dBFS there in the
+        // first place.
+        //
+        // `ch0_peak` vs `all_peak` is the load-bearing comparison. This
+        // meter reads `floatChannelData[0]` ONLY, while `[Amp]` and the
+        // silent-capture gate read every channel. On a multichannel route
+        // — documented on VPIO, where ch0 is the downlink reference and
+        // the mic is elsewhere — those two numbers diverge, and that
+        // divergence is the only mechanism in the current code that lets
+        // `[Amp]` report real audio while the meter sits at its floor.
+        // If ch0_peak << all_peak on device, that is the answer.
+        //
+        // Read-only, no behaviour change. 2 Hz (every 5th publish) plus
+        // the first three, so a 16 s recording is ~35 lines rather than
+        // 160.
+        let publishIndex = levelPublishCounter.increment()
+        if publishIndex <= 3 || publishIndex % 5 == 0 {
+            var allChannelPeak: Float = 0
+            if let channels = buffer.floatChannelData {
+                for c in 0..<Int(buffer.format.channelCount) {
+                    let samples = channels[c]
+                    for i in 0..<frameLength {
+                        let s = abs(samples[i])
+                        if s > allChannelPeak { allChannelPeak = s }
+                    }
+                }
+            }
+            let db = peak > 0 ? 20 * log10f(peak) : -.infinity
+            NSLog(String(
+                format: "[HiMem][Speech][Meter] #%d ch=%d frames=%d ch0_peak=%.5f all_peak=%.5f db=%.1f level=%.3f",
+                publishIndex,
+                Int(buffer.format.channelCount),
+                frameLength,
+                peak,
+                allChannelPeak,
+                db,
+                Float(normalized)
+            ))
+        }
+
         Task { @MainActor [weak self] in
             self?.audioLevel = normalized
         }
