@@ -23,8 +23,36 @@ final class OrientationLock {
     private init() {}
 }
 
+/// **Which build is this?** — logged first thing at launch.
+///
+/// A whole diagnostic pass (2026-08-01/02) was spent on a device failure
+/// where the leading hypothesis was "the running build isn't the code we
+/// think it is", and nothing in the console could confirm or deny it.
+/// This retires that question for ten seconds of work.
+///
+/// The executable's modification date is the load-bearing field: version
+/// and build number often DON'T change between dogfood installs, so they
+/// cannot distinguish "I just installed this" from "this is yesterday's
+/// build". The binary's mtime always moves.
+enum BuildStamp {
+    static func log() {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        var built = "unknown"
+        if let exe = Bundle.main.executableURL,
+           let date = (try? FileManager.default.attributesOfItem(atPath: exe.path))?[.modificationDate] as? Date {
+            let f = DateFormatter()
+            f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            built = f.string(from: date)
+        }
+        NSLog("[HiMem][Build] v\(version) (\(build)) · binary built \(built)")
+    }
+}
+
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        BuildStamp.log()
         application.registerForRemoteNotifications()
         // Adopt the UNN delegate so foreground deliveries still show banners
         // and so notification taps can be routed to the right surface.
