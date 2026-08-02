@@ -358,8 +358,33 @@ final class SpeechService: ObservableObject {
         let bufferCounter = AtomicCounter()
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             let n = bufferCounter.increment()
-            if n <= 3 {
-                NSLog("[HiMem][Speech] tap buffer #\(n) frames=\(buffer.frameLength)")
+            // **[Amp] · the instrument the watch has had since July, and the
+            // phone never got.** Read-only: `buffer` is already in hand, no
+            // reordering, no behaviour change.
+            //
+            // A silent capture is indistinguishable from a working one at
+            // every layer we log: the engine starts, `isRecording` is true,
+            // buffers arrive with plausible frame counts, and the file is
+            // written at exactly the right size for its duration. The ONLY
+            // thing that separates them is sample amplitude — which is what
+            // proved the `.measurement` diagnosis on the watch (`in_peak`
+            // pinned ~0.01 regardless of how loud the user spoke), and what
+            // we could not answer on the phone during the 2026-08-01/02
+            // device pass.
+            //
+            // Logged on the first three buffers (immediate answer) and every
+            // 50th (~5s) so a long recording shows whether signal dies
+            // partway rather than only at the start.
+            if n <= 3 || n % 50 == 0 {
+                var peak: Float = 0
+                if let ch = buffer.floatChannelData {
+                    let frames = Int(buffer.frameLength)
+                    for c in 0..<Int(buffer.format.channelCount) {
+                        let samples = ch[c]
+                        for i in 0..<frames { peak = max(peak, abs(samples[i])) }
+                    }
+                }
+                NSLog("[HiMem][Speech][Amp] tap #\(n) frames=\(buffer.frameLength) in_peak=\(String(format: "%.4f", peak))")
             }
             self?.streamBuffer(buffer)
             try? self?.audioFile?.write(from: buffer)
