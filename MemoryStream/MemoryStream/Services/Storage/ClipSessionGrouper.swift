@@ -225,3 +225,30 @@ enum CollapsedBodyVariant: Equatable {
     case transcribing
     case allAccidental
 }
+
+/// **Which bench clips does the current lens actually show?** (F35, ruled
+/// 2026-08-02.)
+///
+/// One definition, read by the header, the grouper, and the body — so the
+/// three cannot describe different sets. On device the header read
+/// *"19 new clips · 1 session · Apr 28 – today"* above a single rendered
+/// clip: the count and the time range came from the raw bench while the
+/// session count came from the filtered set. Each number was true of a
+/// different set; together they claimed a three-month session.
+///
+/// **The word "new" was lying independently of the arithmetic.** The header
+/// sits under the New chip, where New means *unseen* (P7-2), so a count that
+/// includes reviewed clips is an Honest-Label failure and not a rounding
+/// error. The ruling is that the header describes the lens.
+///
+/// Note what this is NOT: the idle-gap grouper was never at fault. It
+/// applies its threshold correctly and simply never saw the reviewed clips,
+/// because this filter runs first.
+enum BenchLensClips {
+
+    /// - Parameter hideReviewed: true on the **New** lens (unseen only);
+    ///   false on **All**, which shows everything.
+    static func forLens(benchClips: [InboxClip], hideReviewed: Bool) -> [InboxClip] {
+        hideReviewed ? benchClips.filter { !$0.reviewed } : benchClips
+    }
+}

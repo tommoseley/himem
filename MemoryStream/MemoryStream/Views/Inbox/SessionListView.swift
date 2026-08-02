@@ -333,13 +333,26 @@ struct SessionListView: View {
     /// you're inside a session, marking its clips reviewed (P7-2) must
     /// not make the session vanish out from under you (the New-filtered
     /// derivation would drop every just-marked clip → AutoDismiss).
+    /// **The clips this lens actually shows** (F35, ruled 2026-08-02) — the
+    /// ONE set the header, the grouper and the body all read.
+    ///
+    /// Before this existed, `headerTitle` counted `benchClips` and
+    /// `headerSubtitle` ranged over `benchClips`, while the session count in
+    /// that same subtitle came from the filtered `sessions`. On device that
+    /// read *"19 new clips · 1 session · Apr 28 – today"* above one rendered
+    /// clip: three numbers, two sets, and a three-month "session" that never
+    /// happened.
+    private var lensClips: [InboxClip] {
+        BenchLensClips.forLens(benchClips: benchClips, hideReviewed: hideReviewed)
+    }
+
     private func computeSessions(applyFilter: Bool = true) -> [ClipGroup] {
         let inFlight = arrivals.clipsInFlight.keys
         let solo = inbox.soloClipIds
         // New = unseen: drop reviewed clips so a session the user has
         // already eyeballed leaves the New lens (P7-2). All shows
         // everything (hideReviewed == false).
-        let base = (applyFilter && hideReviewed) ? benchClips.filter { !$0.reviewed } : benchClips
+        let base = applyFilter ? lensClips : benchClips
         guard !inFlight.isEmpty else {
             return ClipSessionGrouper.group(base, soloClipIds: solo)
         }
@@ -625,15 +638,18 @@ struct SessionListView: View {
         // line 142 corollary): the bench takes clips from Watch AND
         // from the phone Clips-FAB, so the headline never names a
         // source. Source lives per-clip on the card, not here.
+        // F35: `lensClips`, not `benchClips` — on the New lens the two
+        // differ by every already-reviewed clip, and the header sits under
+        // the New chip where "new" means unseen.
         let inFlightOnly = arrivals.clipsInFlight.keys.filter { id in
-            !benchClips.contains(where: { $0.clipId == id })
+            !lensClips.contains(where: { $0.clipId == id })
         }.count
         // Include absorbed photo/video items (July 11 media-agnostic
         // lock) so the count is honest across media types — a mixed
         // sitting reads "3 new clips," not "2" with a stray photo
         // row inside the card.
         let absorbedMediaCount = absorbedMediaBySessionId.values.reduce(0) { $0 + $1.count }
-        let n = benchClips.count + inFlightOnly + absorbedMediaCount
+        let n = lensClips.count + inFlightOnly + absorbedMediaCount
         return BenchHeaderTitleBuilder.title(clipCount: n)
     }
 
@@ -642,7 +658,10 @@ struct SessionListView: View {
         // rows AND in-flight tracker entries. Pre-announced but
         // not-yet-landed clips carry their `capturedAt` from the
         // wire payload.
-        let manifestCapturedAts = benchClips.map(\.capturedAt)
+        // F35: the span must cover the SAME set the session count below
+        // describes. Ranging over `benchClips` here is what produced
+        // "Apr 28 – today" beside "1 session".
+        let manifestCapturedAts = lensClips.map(\.capturedAt)
         let inFlightCapturedAts = arrivals.clipsInFlight.values.map(\.capturedAt)
         let all = manifestCapturedAts + inFlightCapturedAts
         guard let first = all.min(), let last = all.max() else { return "" }

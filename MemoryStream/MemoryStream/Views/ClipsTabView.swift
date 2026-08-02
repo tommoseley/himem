@@ -483,7 +483,34 @@ struct ClipsTabView: View {
     private func loadUnplaced() {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
         // P8: exclude recycled clips (in Recently Deleted) from the bench.
-        req.predicate = NSPredicate(format: "edges.@count == 0 AND recycledAt == nil")
+        //
+        // **F35: voice is excluded — `SessionListView` already owns it.**
+        // That view fetches zero-edge voice refs into its session cards
+        // (`fetchZeroEdgeVoiceRefs`, the same predicate inverted). This
+        // fetch previously took every media type, so an unreviewed
+        // zero-edge voice ref rendered in BOTH stacks — the session card
+        // above and this stack below — putting one transcript on screen
+        // twice, three times once its row was expanded.
+        //
+        // This is P0-3's risk-1 resurfacing. "A clip is only ever in ONE
+        // store at read time" was built for manifest-vs-ref and holds there
+        // (`composeBenchClips` dedupes); it says nothing about ref-vs-ref
+        // across two independent fetches in two sibling views. The review
+        // backfill migration is what made it visible.
+        //
+        // **Scope, confirmed rather than assumed** (the ruling required it):
+        // `unplacedRefs` has exactly one consumer, `newFilterContent`. The
+        // Unconnected lens renders `UnconnectedListView` and All renders
+        // `FlatClipsListView`, both from independent sources — so excluding
+        // voice here cannot hide an unconnected voice clip from the lens
+        // whose whole job is cleanup. The fetch is New-lens-scoped already.
+        //
+        // The structural answer is one owner for "what is on the bench" —
+        // logged against C2, not attempted here.
+        req.predicate = NSPredicate(
+            format: "edges.@count == 0 AND recycledAt == nil AND mediaType != %@",
+            MediaReference.MediaType.voice.rawValue
+        )
         req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         unplacedRefs = (try? context.fetch(req)) ?? []
     }
