@@ -60,6 +60,19 @@ final class SpeechService: ObservableObject {
     private nonisolated(unsafe) var lastLevelPublishedAt: CFTimeInterval = 0
     private let levelLock = NSLock()
 
+    /// **The `in_peak == 0` capture gate** (ruled 2026-08-02). Amplitude is
+    /// the only thing that separates a working recording from a dead one at
+    /// any layer we log — see `SilentCapture.swift` for why. Fed from the
+    /// tap on EVERY buffer (not from `[Amp]`'s sampled window, which is an
+    /// instrument, not a gate), reset per recording, read at
+    /// `stopRecording` where the session's peak becomes a fact.
+    let silenceObserver = SilentCaptureObserver()
+
+    /// The gate's verdict on the recording that just finished. Published so
+    /// the shell can consult it for every landing — bench, new memory, and
+    /// memory-in-project alike. `.notMeasured` until a recording completes.
+    @Published private(set) var lastCaptureSilence: SilentCaptureOutcome = .notMeasured
+
     // MARK: - Persistent (across recordings)
 
     private var transcriber: SpeechTranscriber?
@@ -291,6 +304,11 @@ final class SpeechService: ObservableObject {
 
         finalizedTranscript = ""
         transcribedText = ""
+        // A fresh session must not inherit the previous one's peak. Note
+        // this runs AFTER the `stopRecording()` above, so the outcome that
+        // stop published has already been read by the shell.
+        silenceObserver.reset()
+        lastCaptureSilence = .notMeasured
 
         let session = AVAudioSession.sharedInstance()
         do {
@@ -358,6 +376,14 @@ final class SpeechService: ObservableObject {
         let bufferCounter = AtomicCounter()
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             let n = bufferCounter.increment()
+            // The capture gate, fed UNCONDITIONALLY — every buffer, every
+            // channel. It deliberately sits above `[Amp]`'s sampled window
+            // rather than inside it: a gate that reads only buffers 1-3 and
+            // every 50th measures the instrument's samples, not the
+            // recording. `SilentCaptureGateTests` asserts this call is
+            // outside that window, because moving it inside would be the
+            // easy, invisible regression.
+            self?.silenceObserver.observe(buffer)
             // **[Amp] · the instrument the watch has had since July, and the
             // phone never got.** Read-only: `buffer` is already in hand, no
             // reordering, no behaviour change.
@@ -516,6 +542,27 @@ final class SpeechService: ObservableObject {
             lastRecordingPath = nil
         }
         currentRecordingURL = nil
+
+        // **The capture gate's verdict** (ruled 2026-08-02). Read here,
+        // beside `lastRecordingPath`, because this is where the session's
+        // peak stops changing and becomes a fact.
+        //
+        // The debugger question is asked at THIS moment rather than cached:
+        // Xcode can attach or detach between captures, which is exactly the
+        // situation the B10 protocol is about.
+        //
+        // Detection and this log run unconditionally. Only the banner is
+        // ever withheld, and the withholding says so — the distinction from
+        // a forbidden silent opt-out is that nothing here stops looking.
+        //
+        // Nothing here deletes, truncates, or declines to save the
+        // recording — the file written above stands exactly as it is. We
+        // report; the user decides.
+        let outcome = silenceObserver.outcome(debuggerAttached: DebuggerAttachment.isAttached)
+        lastCaptureSilence = outcome
+        if let line = SilentCaptureDecision.logLine(for: outcome) {
+            NSLog("\(line) buffers=\(silenceObserver.buffersMeasured)")
+        }
 
         isRecording = false
         audioLevel = 0

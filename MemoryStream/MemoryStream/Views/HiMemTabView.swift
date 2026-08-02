@@ -51,6 +51,18 @@ struct HiMemTabView: View {
     /// `beginCapture` for why completion-time routing was wrong (F25).
     @State private var pendingLanding: CaptureLandingIntent? = nil
 
+    /// **The `in_peak == 0` capture gate's message**, non-nil while it is on
+    /// screen (ruled 2026-08-02).
+    ///
+    /// Owned by the shell, deliberately. The gate has to be consulted for
+    /// every landing — bench, new memory, and memory-in-project — and only
+    /// this level sees all three. Wiring it into the Clips bench alone
+    /// (where the saved-clip confirmation slot lives) would be an owner on
+    /// one path and nothing on the other two: the `.measurement`-on-the-
+    /// watch / literal-on-the-phone shape, and the memory landings are the
+    /// more expensive loss precisely because they have no slot of their own.
+    @State private var silentCaptureMessage: String? = nil
+
     /// **F28 · which tab, if any, currently has the Learn hub pushed.**
     ///
     /// Learn pushes onto each tab's own `NavigationStack` and a `TabView`
@@ -234,7 +246,28 @@ struct HiMemTabView: View {
                 ClipsTabPresenceDot()
                     .allowsHitTesting(false)
             }
+
+            // The capture gate's message, drawn at the shell so it reaches
+            // whichever surface the capture landed on. Ruled placement:
+            // where the saved-clip confirmation would have been — the same
+            // bottom slot `CreationToast` occupies on the bench.
+            //
+            // 108pt is not a fresh guess: it is the clearance `ClipsTabView`
+            // already reserves for "the FAB + tab pill" on its own content,
+            // so this sits on the line the bench already treats as clear.
+            // DEVICE-UNVERIFIED — the same class of constant as F26's 88pt
+            // `bottomPinClearance`, and wrong either way is visible.
+            if let message = silentCaptureMessage {
+                SilentCaptureBanner(message: message) {
+                    silentCaptureMessage = nil
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 108)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.easeOut(duration: 0.22), value: silentCaptureMessage)
     }
 
     /// The cross-tab event-bus routing observers (+ the cold-launch `onAppear`),
@@ -481,6 +514,30 @@ struct HiMemTabView: View {
             captureSource = .manual // reset for the next capture
             pendingLanding = nil
         }
+
+        // **The `in_peak == 0` capture gate, consulted BEFORE the switch —
+        // once, for every landing** (ruled 2026-08-02).
+        //
+        // Deliberately outside `switch landing`: a recording that heard
+        // nothing is the same failure whether it lands on the bench or
+        // becomes a memory, and the memory landings are where it costs
+        // more. A reference inside one case would cover one path and
+        // silently drop two, which is the shape `SilentCaptureGateTests`
+        // exists to fail on.
+        //
+        // Only a voice session can be silent; a photo, video, note or
+        // attach has no amplitude to judge — those leave any standing
+        // message alone, because it is still true of the last recording.
+        //
+        // Assigned UNCONDITIONALLY for a voice session, `nil` included: a
+        // message set on a silent capture and cleared only by hand would
+        // still be standing after a later recording that worked. That is
+        // the frozen-snapshot class (F24 D2, F25) — a correct value
+        // rendered after it stopped being true.
+        if case .voiceSession = item {
+            silentCaptureMessage = SilentCaptureDecision.bannerMessage(for: speechService.lastCaptureSilence)
+        }
+
         switch landing {
         case .dropOnBench:
             PhoneCaptureBenchDispatcher.dispatch(item)

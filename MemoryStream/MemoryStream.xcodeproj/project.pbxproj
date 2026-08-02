@@ -200,6 +200,8 @@
 		A2000000FB /* FABHandednessSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000FB /* FABHandednessSync.swift */; };
 		A200000401 /* CaptureUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000401 /* CaptureUnavailableView.swift */; };
 		A200000402 /* FirstImportState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000402 /* FirstImportState.swift */; };
+		A200000404 /* SilentCaptureBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000404 /* SilentCaptureBanner.swift */; };
+		A200000403 /* SilentCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000403 /* SilentCapture.swift */; };
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
@@ -473,6 +475,8 @@
 		B2000000FB /* FABHandednessSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FABHandednessSync.swift; path = MemoryStream/Services/FABHandednessSync.swift; sourceTree = SOURCE_ROOT; };
 		B200000401 /* CaptureUnavailableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureUnavailableView.swift; path = MemoryStream/Views/Components/CaptureUnavailableView.swift; sourceTree = SOURCE_ROOT; };
 		B200000402 /* FirstImportState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FirstImportState.swift; path = MemoryStream/Services/Storage/FirstImportState.swift; sourceTree = SOURCE_ROOT; };
+		B200000404 /* SilentCaptureBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SilentCaptureBanner.swift; path = MemoryStream/Views/Components/SilentCaptureBanner.swift; sourceTree = SOURCE_ROOT; };
+		B200000403 /* SilentCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SilentCapture.swift; path = MemoryStream/Services/AI/SilentCapture.swift; sourceTree = SOURCE_ROOT; };
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
@@ -751,6 +755,8 @@
 				B200000094 /* WalkthroughOverlay.swift */,
 				B200000095 /* SectionHelp.swift */,
 				B200000402 /* FirstImportState.swift */,
+				B200000404 /* SilentCaptureBanner.swift */,
+				B200000403 /* SilentCapture.swift */,
 				B200000401 /* CaptureUnavailableView.swift */,
 				B100000993 /* QuickLookViewer.swift */,
 				B100000998 /* PhotoViewerSheet.swift */,
@@ -1473,6 +1479,8 @@
 				A200000094 /* WalkthroughOverlay.swift in Sources */,
 				A200000095 /* SectionHelp.swift in Sources */,
 				A200000402 /* FirstImportState.swift in Sources */,
+				A200000404 /* SilentCaptureBanner.swift in Sources */,
+				A200000403 /* SilentCapture.swift in Sources */,
 				A200000401 /* CaptureUnavailableView.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,
 				A100000998 /* PhotoViewerSheet.swift in Sources */,
