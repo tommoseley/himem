@@ -328,13 +328,26 @@ struct EntryExpandedView: View {
                 }
             }
             bodyContent
-            headerRow(top: -3) { topicChipsRow }
+            // **F33 · the page is a PROGRESSION, not a form (ruled 2026-08-01).**
+            //
+            // Unorganized:  title → (summary, if any) → parts → Organize → Delete
+            // Organized:    the full F19a order returns, and every section keeps
+            //               rendering even if she later empties it.
+            //
+            // It reads "here's what you recorded → want it organized? → now
+            // refine the result", instead of asking someone to edit three empty
+            // fields before any work has been done. F19a's reorder was the same
+            // instinct one step earlier — it moved the empty rows below the
+            // content; this removes them until they mean something.
+            if hasBeenOrganized {
+                headerRow(top: -3) { topicChipsRow }
             // Project-context row (F2/F3): "In [project]" membership chips
             // + a dashed "Edit" affordance. Always shown (like the topic
             // row) so a memory can always be filed; unified associations
             // read model (2026-07-17).
-            headerRow(top: -3) { projectSection }
-            sectionRow { mentionsSection }
+                headerRow(top: -3) { projectSection }
+                sectionRow { mentionsSection }
+            }
             sectionRow {
                 // Memory Detail AI zone — routes to Idle (no pass yet)
                 // / Draft (unreviewed pass, B1 review sheet on tap) /
@@ -562,7 +575,16 @@ struct EntryExpandedView: View {
             // `editCoordinator` flips on any title/summary/transcript
             // edit; the FAB disappears until the edit commits or
             // cancels.
-            if !editCoordinator.isAnyEditing && !((letGoOnScreen || organizeOnScreen) && !topAnchorVisible) {
+            // F33 · `organizeOnScreen` now suppresses the FAB on its own.
+            // The `!topAnchorVisible` qualifier meant "only step aside after a
+            // deliberate scroll" — but a SHORT memory shows the top anchor AND
+            // the Organize card at once, so the FAB sat on top of the card.
+            // F33 makes unorganized memories shorter, which is what surfaced
+            // it. Let-Go keeps the scroll qualifier: it lives at the very
+            // bottom and can only be reached by scrolling.
+            if !editCoordinator.isAnyEditing
+                && !organizeOnScreen
+                && !(letGoOnScreen && !topAnchorVisible) {
                 AppendFAB(
                     onSelect: { modality in
                         appendCoordinator.activeCaptureModality = modality
@@ -653,13 +675,11 @@ struct EntryExpandedView: View {
                 addTopicAffordance
             }
 
-            if let status = entry.displayStatus, entry.inferenceSummary == nil {
-                HStack {
-                    StatusBadge(text: status.text, style: status.style)
-                    Spacer()
-                }
-                .padding(.top, 2)
-            }
+            // F33 · the green "Processed" pill is REMOVED. It rendered only
+            // while `inferenceSummary == nil` — i.e. on exactly the
+            // unorganized page this ruling is clearing — and it announced a
+            // pipeline state she never asked about. Green is semantic
+            // (confirmed/success) and nothing had succeeded yet.
         }
         // Hairline separator between Summary and TOPICS. 4pt
         // breathing room above the line (the summary sits closer
@@ -861,14 +881,27 @@ struct EntryExpandedView: View {
     /// transcript — an excerpt masquerading as a summary is a confident wrong
     /// proposal, the same lie class as F6i's "0:00".
     @ViewBuilder
+    /// **F33 · has an organize pass run on this memory?**
+    ///
+    /// `inferenceSummary` is the display model's organized signal — the
+    /// same one `memoryDidOpen(alreadyOrganized:)` reads, so the
+    /// walkthrough and the page agree about what state she is in.
+    private var hasBeenOrganized: Bool { entry.inferenceSummary != nil }
+
+    @ViewBuilder
     private var summarySection: some View {
         if summaryIsEditing {
             summaryEditor
         } else if let summary = entry.renderedSummary {
             summaryReadable(summary)
-        } else {
-            summaryEmptyInvite
         }
+        // F33 (2026-08-01) · the empty invite is REMOVED, superseding
+        // F19b's "the slot always exists". F19b was right that a phantom
+        // placeholder had to become real; it was wrong about *when*. On an
+        // unorganized memory the invite asked her to edit an empty field
+        // before any work had been done. Summary now renders only when
+        // there is one — Organize is how it gets filled, and the page says
+        // so by offering Organize instead of a blank.
     }
 
     /// Provenance decides the eyebrow, because the eyebrow is a claim about
