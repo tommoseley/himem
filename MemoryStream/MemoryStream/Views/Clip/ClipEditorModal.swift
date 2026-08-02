@@ -298,19 +298,30 @@ struct ClipEditorModal: View {
                     draft: Binding(get: { contentDraft ?? "" }, set: { contentDraft = $0 }),
                     initialValue: currentContent,
                     editId: "clip-atom-\(source.id.uuidString)",
-                    evidence: media == .voice ? .audio(duration: audioDuration) : nil,
+                    // Device pass 2026-08-01: "Original recording · 0:14"
+                    // rendered TWICE — once in this modal's own Zone-1 header
+                    // (`Text("Original recording\(durationSuffix)")`) and again
+                    // in the editor's evidence row. Suppressed HERE rather than
+                    // removed from `ClipEditor`, because the other call sites
+                    // (`CompactTranscriptViews`, `ChronologicalCaptureStream`)
+                    // have no such header and the evidence row is their only
+                    // render of it.
+                    evidence: nil,
                     fateActions: ClipEditorFateActions(onDelete: {}, onRelocate: nil),
                     showLabel: false,
                     showFates: false,
                     onCancel: { contentDraft = nil },
                     onDone: { newValue in commitContent(newValue); contentDraft = nil }
                 )
-                // Blue AI consequence line — the edit is true everywhere.
-                Label("This is the clip itself — your edit shows in every memory that uses it.",
-                      systemImage: "sparkles")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Crucible.Color.aiBlue)
-                    .padding(.top, 2)
+                // F21/B4 · the blue sparkle consequence line is DELETED, and
+                // replaced with nothing. Three faults: it dressed STATUS as an
+                // AI action (AI-blue + sparkle is reserved for *invoking* AI —
+                // Buttons & Actions); it taught the many-to-many model unasked
+                // (F13 curriculum); and it read as actively confusing on
+                // device. The information already appears in context below —
+                // "Not in any memory yet" / "In N memories" / the delete
+                // warning — which is the correct place: shown where it is
+                // true, not asserted as a preamble.
             } else {
                 Text(displayContent)
                     .font(.system(size: 15))
