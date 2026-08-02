@@ -34,7 +34,56 @@ struct ProjectDetailView: View {
         let entryId: UUID
         let projectName: String
     }
-    @State private var entries: [EntryDisplayModel] = []
+    /// **The project's member memories, OBSERVED — never snapshotted.**
+    ///
+    /// This was `@State private var entries: [EntryDisplayModel] = []`,
+    /// filled by `loadProjectEntries()` from `.onAppear`. `EntryDisplayModel`
+    /// is a **struct**, so the view held value copies mapped once when it
+    /// appeared: a memory created into this project was written correctly and
+    /// simply never rendered until you left and came back and `onAppear` fired
+    /// again (F25, device pass 2026-08-02).
+    ///
+    /// **Second instance of this class in one week.** F24 Defect 2 was the
+    /// same mechanism one layer down — `InboxClip` (also a struct) captured at
+    /// `.sheet(item:)` presentation, rendering a correct save as unchanged.
+    /// Same shape both times: *a correct write displayed from a frozen value
+    /// snapshot.* The class is demonstrated, not theoretical, which is why
+    /// `ProjectDetailMemberObservationTests` guards it rather than this
+    /// comment.
+    ///
+    /// A `@FetchRequest` observes inserts and removals, so there is no cached
+    /// copy to go stale and nothing to remember to refresh. Deliberately NOT
+    /// an `@ObservedObject` on the `Project`: F6g's off-main publishing
+    /// question is unresolved and already exposes `NSManagedObject` at four
+    /// sites — widening that surface to a fifth this week is the wrong trade.
+    @FetchRequest private var memberEntries: FetchedResults<JournalEntry>
+
+    /// Derived per render from the observed fetch. `isRecycled` filtering
+    /// matches the previous `entriesArray` behaviour.
+    private var entries: [EntryDisplayModel] {
+        memberEntries.filter { !$0.isRecycled }.map(EntryMapper.mapToDisplayModel)
+    }
+
+    init(
+        projectId: UUID,
+        projectVM: ProjectViewModel,
+        viewModel: JournalViewModel,
+        cameraService: CameraService,
+        speechService: SpeechService
+    ) {
+        self.projectId = projectId
+        self.projectVM = projectVM
+        self.viewModel = viewModel
+        self.cameraService = cameraService
+        self.speechService = speechService
+        // Same ordering the retired `Project.entriesArray` produced, so the
+        // member list does not silently reorder with this change.
+        _memberEntries = FetchRequest(
+            sortDescriptors: [NSSortDescriptor(key: "createdAt", ascending: false)],
+            predicate: NSPredicate(format: "ANY projects.id == %@", projectId as CVarArg),
+            animation: .default
+        )
+    }
     @State private var topicFilter: String? = nil
     @State private var showShareSheet = false
     @State private var showAddMemorySheet = false
@@ -346,7 +395,6 @@ struct ProjectDetailView: View {
             ShareSheet(items: shareItems)
         }
         .sheet(isPresented: $showAddMemorySheet, onDismiss: {
-            loadProjectEntries()
             // Membership changed: a memory the user just added is
             // no longer a "may belong" candidate. Recompute so the
             // affordance row's count stays honest.
@@ -361,7 +409,6 @@ struct ProjectDetailView: View {
             // Reload after dismissal so the affordance row's count
             // reflects whatever the user just committed/skipped.
             suggestionsVM.reload(projectId: projectId)
-            loadProjectEntries()
         } content: {
             SuggestedMemoriesSheet(
                 projectName: project?.name ?? "this project",
@@ -373,7 +420,6 @@ struct ProjectDetailView: View {
         }
         .onAppear {
             loadProject()
-            loadProjectEntries()
             suggestionsVM.reload(projectId: projectId)
             attemptFindTheThreadTutorial()
             // Publish the current project id so `HiMemTabView`'s FAB
@@ -789,8 +835,7 @@ struct ProjectDetailView: View {
                 },
                 onRemoveFromProject: { entryId in
                     projectVM.removeMemory(entryId: entryId, fromProjectId: projectId)
-                    loadProjectEntries()
-                    showRemovalToast(entryId: entryId)
+                            showRemovalToast(entryId: entryId)
                 },
                 projectContextName: project?.name
             )
@@ -810,11 +855,6 @@ struct ProjectDetailView: View {
         )
     }
 
-    private func loadProjectEntries() {
-        guard let project else { return }
-        let journalEntries = project.entriesArray.filter { !$0.isRecycled }
-        entries = journalEntries.map(EntryMapper.mapToDisplayModel)
-    }
 
     // MARK: - Remove-from-project toast (F2/F3)
 
@@ -832,7 +872,6 @@ struct ProjectDetailView: View {
 
     private func undoRemoval(_ toast: RemovalToast) {
         projectVM.addMemory(entryId: toast.entryId, toProjectId: projectId)
-        loadProjectEntries()
         removalToast = nil
     }
 
