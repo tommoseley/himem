@@ -99,6 +99,55 @@ import Foundation
         #expect(ClipEditorModal.transcribeActionLabel(hasTranscript: false).contains("with AI"))
     }
 
+    // MARK: - The coupling that closes the unreachable branch
+
+    /// **The invariant, and the reason this suite grew.**
+    ///
+    /// `heardNothing` is set when a re-transcription returns `.transcribed`
+    /// with no text. The message only renders while `currentContent.isEmpty`
+    /// (`displayContent` returns early otherwise). So if the button that
+    /// TRIGGERS a re-transcription could render while a transcript exists,
+    /// the state could be set and never shown — a spinner that runs, returns
+    /// to idle, and changes nothing.
+    ///
+    /// That is exactly what shipped: F24 changed the label but left
+    /// `canRetranscribe` ungated, **reintroducing the silent-no-op class one
+    /// state over from where F24 removed it.** Third self-reproduction of a
+    /// class inside its own fix this stretch (`:614`,
+    /// `pendingClipsTabSwitch`, this).
+    ///
+    /// The fix is a coupling, not a second message: gate the button on the
+    /// same emptiness the message needs. This test pins the two together so
+    /// they cannot drift apart again — changing either condition alone fails
+    /// here.
+    @Test func theHeardNothingStateIsAlwaysReachable() throws {
+        let src = try Self.modalSource()
+
+        let gate = try Self.functionBody(named: "private var canRetranscribe: Bool", in: src)
+        #expect(gate.contains("currentContent.isEmpty"),
+                """
+                The re-transcribe button can render while a transcript exists.                 `heardNothing` would then be set and never rendered — the                 silent no-op F24 Defect 4 exists to remove.
+                Body was:
+                \(gate)
+                """)
+
+        let display = try Self.functionBody(named: "private var displayContent: String", in: src)
+        #expect(display.contains("currentContent.isEmpty"),
+                "`displayContent` no longer keys the empty states off `currentContent.isEmpty` — re-check the coupling with `canRetranscribe`.\n\(display)")
+    }
+
+    /// F21 state 2: with a transcript present the AI action is ABSENT — it
+    /// must not merely be relabelled. Re-transcribe is a retry, not an
+    /// improve; offering it against existing text promises what the same
+    /// audio through the same model cannot deliver.
+    @Test func noAiActionCompetesWithAnExistingTranscript() throws {
+        let gate = try Self.functionBody(named: "private var canRetranscribe: Bool", in: try Self.modalSource())
+        #expect(gate.contains("media == .voice || media == .video"),
+                "The modality condition was dropped from the AI action's gate.")
+        #expect(gate.contains("contentDraft == nil"),
+                "The AI action can now render while an edit is open, competing with the editor.")
+    }
+
     // MARK: - Caller guard
 
     /// The reproduction: `retranscribe` must branch on the OUTCOME, not

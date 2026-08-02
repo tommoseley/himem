@@ -689,7 +689,33 @@ struct ClipEditorModal: View {
 
     private var contentLabel: String { (media == .photo || media == .video) ? "Description" : "Transcript" }
     private var contentField: ClipEditorField { (media == .photo || media == .video) ? .description : .transcript }
-    private var canRetranscribe: Bool { contentDraft == nil && (media == .voice || media == .video) }
+    /// **F21 state 2, finally built (2026-08-02).** The AI action renders
+    /// ONLY when there is no transcript.
+    ///
+    /// F21 ruled three states: *no transcript / failed* → offer
+    /// **Transcribe**; *transcript exists* → edit + "Add to a memory",
+    /// **no AI button competing** with the action she almost always wants
+    /// next; *no third affordance*. F24 only changed the LABEL and left the
+    /// button rendering in every state, so on device Tom tapped a control
+    /// that F21 says should not be there — and it no-opped, because
+    /// re-transcribing the same audio yields the same nothing.
+    ///
+    /// Re-transcribe is a **retry**, not an improve: same audio, same model,
+    /// same output. Offering it against existing text is a promise we cannot
+    /// keep.
+    ///
+    /// **This is also what makes the heard-nothing message reachable.**
+    /// `displayContent` only surfaces "No words in this recording." while
+    /// `currentContent.isEmpty`. Gating the button on the SAME condition
+    /// means every state that can set `heardNothing` is a state that can
+    /// show it — the two are pinned together by
+    /// `ClipEditorHeardNothingTests.theHeardNothingStateIsAlwaysReachable`.
+    /// Before this, `heardNothing` could be set and never rendered: the
+    /// silent no-op class reintroduced one state over from where F24
+    /// removed it.
+    private var canRetranscribe: Bool {
+        contentDraft == nil && (media == .voice || media == .video) && currentContent.isEmpty
+    }
 
     private var edges: [MemoryClipEdge] {
         if case .managed(let ref) = source { return ref.edgesArray }
