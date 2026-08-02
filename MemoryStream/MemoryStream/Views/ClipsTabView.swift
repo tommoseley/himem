@@ -433,7 +433,13 @@ struct ClipsTabView: View {
         // May 19." Whatever is surfaced as "to look at" leads the screen.
         let unplacedIds = visibleUnplaced.map(\.id)
         VStack(alignment: .leading, spacing: 12) {
-            SessionListView(viewModel: viewModel, hideReviewed: true, selection: selection)
+            // hasSiblingContent: the unplaced stack below is a sibling in this
+            // lens — SessionListView must suppress its "Nothing new" empty state
+            // when the stack has rows, so the two are mutually exclusive
+            // (device pass 2026-07-27).
+            SessionListView(viewModel: viewModel, hideReviewed: true,
+                            hasSiblingContent: !visibleUnplaced.isEmpty,
+                            selection: selection)
             if !visibleUnplaced.isEmpty {
                 unplacedDayGroupedStack(refs: visibleUnplaced)
             }

@@ -322,6 +322,11 @@ struct LaunchScreenView: View {
         // rewrite happens off the main queue and re-runs next launch
         // if interrupted. See `MediaReferenceUbiquityMigration`.
         MediaReferenceUbiquityMigration.scheduleIfNeeded(in: StorageService.shared)
+        // One-time: mark the pre-existing bench library reviewed so months-old,
+        // already-handled clips stop flooding the New lens when they return
+        // from a memory as loose refs (device pass 2026-07-27). Post-settle so
+        // historical refs are present; own flag, idempotent no-op once done.
+        BenchReviewBackfillMigration.runIfNeeded(in: StorageService.shared)
         // Run both Core Data migrations on the same background context.
         // Each has its own UserDefaults-backed completion flag and is a
         // cheap no-op when its flag is set, so we don't need an outer

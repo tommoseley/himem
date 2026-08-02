@@ -26,6 +26,12 @@ struct SessionListView: View {
     /// the sessions so the New lens shows only fresh, un-eyeballed intake.
     /// Default false (All shows everything).
     var hideReviewed: Bool = false
+    /// True when a SIBLING view in the same lens (the New lens's unplaced
+    /// day-grouped ref stack) has content. The empty state must be mutually
+    /// exclusive with ALL lens content, not just this view's sessions — else
+    /// "Nothing new" renders directly above the sibling's populated rows
+    /// (device pass 2026-07-27). See `showsEmptyState`.
+    var hasSiblingContent: Bool = false
     /// P7-4 multi-select (shared Clips-tab selection). Selecting a session
     /// card batch-selects every clip in it (matches the "opening a session
     /// marks all its clips" orthogonality); Sort cluster proposals are NOT
@@ -136,15 +142,36 @@ struct SessionListView: View {
         // Settings + JournalView (2026-07-09) are retired.
         ZStack {
             Crucible.Color.paper.ignoresSafeArea()
-            // F22: the bench draws from the device-local manifest AND from
-            // CloudKit-synced refs materialized on arrival, so on a fresh
-            // install "Nothing new" can be the false-certainty claim. Secondary
-            // surface: say nothing until the import has finished looking.
-            if !inbox.isEmpty {
+            // **"Nothing new" needs THREE conditions, and each was found
+            // separately** (merge of `main` into `f8`, 2026-08-02). Both
+            // branches fixed a different half of the same sentence, so the
+            // resolution is the conjunction — dropping either side reopens a
+            // shipped defect:
+            //
+            //  - Gate on the VISIBLE sessions (hideReviewed-filtered), not
+            //    `inbox.isEmpty` (the raw manifest) — the New lens also draws
+            //    materialized/loose refs the manifest doesn't know about.
+            //  - Not while a SIBLING stack has content (device pass
+            //    2026-07-27: "Nothing new" rendered above eight populated
+            //    loose-ref rows).
+            //  - Not while the first CloudKit import is STILL LOOKING (F22) —
+            //    on a fresh install an empty local store means "we haven't
+            //    finished", not "she has none", and on the surface whose
+            //    subject is content she feared losing, certainty is the harm.
+            //
+            // All three live in one pure predicate so the rule is money-tested
+            // in a single place rather than re-derived at each call site.
+            if !sessions.isEmpty {
                 list
-            } else if firstImport.mayAssertEmpty {
+            } else if Self.showsEmptyState(
+                sessionsEmpty: true,
+                hasSiblingContent: hasSiblingContent,
+                mayAssertEmpty: firstImport.mayAssertEmpty
+            ) {
                 emptyState
             }
+            // else: a sibling stack is rendering, or the import is still
+            // running — draw nothing rather than assert emptiness.
         }
         .sheet(item: $bundleSession) { request in
             CreateMemoryFromClipsSheet(
@@ -425,7 +452,38 @@ struct SessionListView: View {
 
     // MARK: - Empty state
 
-    /// Gated by the caller on `firstImport.mayAssertEmpty` (F22).
+    /// **May we say "Nothing new"?** True only when all three hold — no
+    /// visible sessions, no sibling lens content, and the first CloudKit
+    /// import has finished looking.
+    ///
+    /// Pure, so the rule is money-tested in one place rather than re-derived
+    /// at each call site. Each condition is a separately-found defect and
+    /// each is load-bearing:
+    ///
+    ///  - `sessionsEmpty` — the visible, hideReviewed-filtered sessions, not
+    ///    the raw manifest (which doesn't know about materialized refs).
+    ///  - `hasSiblingContent` — device pass 2026-07-27: "Nothing new"
+    ///    rendered directly above eight populated loose-ref rows, because
+    ///    the gate ignored a sibling stack rendering in the same lens.
+    ///  - `mayAssertEmpty` — F22: on a fresh install an empty local store
+    ///    means "we haven't finished looking," not "she has none." Passed in
+    ///    as an argument rather than read inside, so this stays pure AND the
+    ///    call site remains a real production read of `mayAssertEmpty` —
+    ///    `FirstImportStateTests` counts those and explicitly rejects a
+    ///    comment as a read.
+    ///
+    /// The three arrived from two branches (`main`'s device-pass fixes and
+    /// `f8`'s F22 work) and were merged as a conjunction 2026-08-02:
+    /// they are different halves of one sentence, and dropping either half
+    /// reopens a shipped defect.
+    static func showsEmptyState(
+        sessionsEmpty: Bool,
+        hasSiblingContent: Bool,
+        mayAssertEmpty: Bool
+    ) -> Bool {
+        sessionsEmpty && !hasSiblingContent && mayAssertEmpty
+    }
+
     private var emptyState: some View {
         // Source-agnostic copy per `CLAUDE.md` §Phone (July 12 2026):
         // clips arrive from the phone FAB, the Watch, and Siri, so
