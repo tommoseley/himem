@@ -122,8 +122,9 @@ struct ClipsTabView: View {
                 .coordinateSpace(name: ClipsSelectionSpace.name)
                 .onPreferenceChange(ClipRowFramesKey.self) { selection.rowFrames = $0 }
                 if let toastMemoryId = memoryNav.justCreatedMemoryId {
-                    MemoryCreatedToast(
-                        onView: {
+                    CreationToast(
+                        kind: .memory,
+                        onOpen: {
                             // Fire the actual navigation signal that
                             // `HiMemTabView` (switches to Memories)
                             // and `JournalView` (pushes detail)
@@ -506,40 +507,92 @@ struct ClipsTabView: View {
 /// made exists." Auto-dismisses via a timer on
 /// `ClipsTabView.toastAutoDismissTask`; View button routes through
 /// `MemoryNavigationBus.pendingOpenMemoryId`.
-struct MemoryCreatedToast: View {
-    let onView: () -> Void
+/// **F32 · the creation toast, generalized.**
+///
+/// It answers *"where did it go?"* at the moment the question arises,
+/// with no magic navigation: the surface does not move, and the way
+/// there is one tap.
+///
+/// **Why it supersedes the walkthrough ring for the make-the-product-
+/// visible job.** The ring failed structurally twice — once as a window
+/// that closed before she looked (F20a), once as an `onAppear` that had
+/// already fired (F20b). A toast is present at creation *by
+/// construction*: it is rendered by the code path that did the creating,
+/// so it cannot miss its moment.
+///
+/// Rules, all ruled 2026-08-01:
+///  - **The copy names the OBJECT**, not the action she performed.
+///  - **The whole toast is the tap target**, not just the trailing link
+///    (added; styling and duration unchanged).
+///  - **Never auto-navigates.** Tapping opens the thing it names; not
+///    tapping leaves her exactly where she is.
+struct CreationToast: View {
+
+    /// What was just made. Each case owns its own noun — a toast that
+    /// said "Created" would make her infer which thing.
+    enum Kind: Equatable {
+        case memory, clip, project
+
+        var label: String {
+            switch self {
+            case .memory:  return "Memory created"
+            case .clip:    return "Clip saved"
+            case .project: return "Project created"
+            }
+        }
+
+        /// VoiceOver hears the outcome AND the affordance, since the
+        /// whole row is now tappable.
+        var accessibilityHint: String {
+            switch self {
+            case .memory:  return "Opens the memory you just made"
+            case .clip:    return "Opens the clip you just saved"
+            case .project: return "Opens the project you just made"
+            }
+        }
+    }
+
+    let kind: Kind
+    let onOpen: () -> Void
 
     var body: some View {
-        HStack(spacing: 11) {
-            ZStack {
-                Circle()
-                    .fill(Crucible.Color.confirmed)
-                    .frame(width: 22, height: 22)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white)
-            }
-            Text("Memory created")
-                .font(.system(size: 14.5, weight: .semibold))
-                .foregroundStyle(Crucible.Color.accentInk)
-            Spacer(minLength: 0)
-            Button(action: onView) {
+        Button(action: onOpen) {
+            HStack(spacing: 11) {
+                ZStack {
+                    Circle()
+                        .fill(Crucible.Color.confirmed)
+                        .frame(width: 22, height: 22)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
+                Text(kind.label)
+                    .font(.system(size: 14.5, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.accentInk)
+                Spacer(minLength: 0)
                 Text("View")
                     .font(.system(size: 14.5, weight: .bold))
                     .foregroundStyle(Crucible.Color.accent)
                     .padding(.horizontal, 6)
                     .frame(minHeight: 32)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 13)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Crucible.Color.ink)
+                    .shadow(color: Color.black.opacity(0.24), radius: 12, y: 6)
+            )
+            // F29 · the fill is applied inside the label closure, so the
+            // WHOLE toast carries the tap — which is the point of this
+            // change. Shaped anyway so a future reorder cannot quietly
+            // shrink the region back to the text.
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 15)
-        .padding(.vertical, 13)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Crucible.Color.ink)
-                .shadow(color: Color.black.opacity(0.24), radius: 12, y: 6)
-        )
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(kind.label)
+        .accessibilityHint(kind.accessibilityHint)
     }
 }
 
