@@ -48,6 +48,18 @@ When a runtime error, exception, or incorrect behavior is observed, the followin
 
 This rule applies to all runtime defects including: exceptions, incorrect outputs, state corruption, and boundary condition failures.
 
+### A Debugger Attachment Can Hold the Capture Hardware (Mandatory)
+
+**Any capture-path measurement taken over a Device Hub / debugger connection is suspect.** Xcode's Device Hub can hold the device's media services, which starves microphone and camera capture *for every app on the device* while leaving the app's own state perfectly plausible: the session activates, the engine starts, `isRecording` is true, the tap fires with correct frame counts, and the file is written at exactly the right size. The only visible difference is that the samples are zeros.
+
+**Device-pass protocol for anything touching capture: install, DISCONNECT, then test.** A reading taken while attached measures the attachment, not the app.
+
+- **Exact zeros are the signature.** Gain problems *attenuate* (`in_peak ≈ 0.01`); a held device gives `in_peak = 0.0000` on every buffer, indefinitely.
+- **Cross-app breakage is the tell.** If another app (Voice Memos, Camera) is also silent, stop looking at our code entirely.
+- **It survives a bisect.** An old build fails identically, because the cause is not in any build — which can read as "we never broke it, so it must be the device," and that is *almost* the right conclusion for the wrong reason.
+
+*Origin: 2026-08-02. `in_peak = 0.0000` on iPhone across 300 buffers and two builds, while iPad ran identical code at 0.02–0.06. Disconnecting the phone from Device Hub restored capture. The bisect to `4a08423^` was correct and necessary — it cleared our diff — but the diff being clear is not the same as the app being at fault, and the next hypothesis after "not our code" must be the measuring apparatus before it is the hardware. Cost the better part of a pass.*
+
 ### Don't Go Looking for Zebras (Mandatory)
 
 **When something that used to work fails, our own recent changes are the FIRST suspects, not the last.** Open by checking the diff. Environmental theories, Apple-behaviour theories, device-state theories and user-error theories are **last resorts, reached only after the diff is cleared** — and "it worked before" is the strongest possible signal that the cause is in what we just touched.
