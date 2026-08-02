@@ -62,7 +62,13 @@ struct ClipsTabView: View {
     /// every tab.
     @State private var showSearch = false
     @State private var showSettings = false
-    @State private var showTutorials = false
+    /// **F28 · owned by the shell, not by this tab.** Learn pushes onto
+    /// this tab's own `NavigationStack`, and a `TabView` keeps every tab
+    /// alive — so a tab-local `@State` left the hub pushed while the user
+    /// was elsewhere, and re-presented it on return, out of context. The
+    /// tab cannot see that the tab changed; the shell can. See
+    /// `HiMemTabView.learnOpenOn`.
+    @Binding var learnPresented: Bool
     /// Signal from the Clips status sheet's quick-filter shortcuts.
     /// See `ClipsStatusSheet` — the sheet fires a pending filter and
     /// this view consumes it into its own `filter` state.
@@ -99,7 +105,7 @@ struct ClipsTabView: View {
                                 type: $type,
                                 onSearchTap: { showSearch = true },
                                 onSettingsTap: { showSettings = true },
-                                onHelpTap: { showTutorials = true }
+                                onHelpTap: { learnPresented = true }
                             )
                         }
                         content
@@ -214,7 +220,7 @@ struct ClipsTabView: View {
                     onCaptureNewWith: { _ in showSearch = false }
                 )
             }
-            .navigationDestination(isPresented: $showTutorials) {
+            .navigationDestination(isPresented: $learnPresented) {
                 TutorialsHubView()
             }
             .sheet(isPresented: $showSettings) {

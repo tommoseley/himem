@@ -22,9 +22,14 @@ struct JournalView: View {
     /// callsite still shows the picker.
     private let hidesModeToggle: Bool
 
-    init(initialMode: ViewMode = .memories, hidesModeToggle: Bool = false) {
+    init(initialMode: ViewMode = .memories,
+         hidesModeToggle: Bool = false,
+         learnPresented: Binding<Bool> = .constant(false)) {
         self._viewMode = State(initialValue: initialMode)
         self.hidesModeToggle = hidesModeToggle
+        // F28 · defaulted so previews and any non-shell call site compile
+        // unchanged; the shell always passes its own per-tab slot.
+        self._learnPresented = learnPresented
     }
 
     /// The memory the walkthrough is pointing at, or nil.
@@ -63,7 +68,10 @@ struct JournalView: View {
     /// glyph. Same `NavigationStack`, so the hub pushes; back-chevron
     /// returns to the journal. Spec: `docs/design/screens-settings.jsx`
     /// → `ScrTutorialsHub`.
-    @State private var showTutorials = false
+    /// **F28 · owned by the shell** — see `HiMemTabView.learnOpenOn`. A
+    /// tab-local flag survived a tab round-trip and re-presented the hub
+    /// out of context.
+    @Binding var learnPresented: Bool
     @ObservedObject private var inbox = InboxManifest.shared
     /// Set by `StartVoiceRecordingIntent` when Siri ("Record in
     /// HiMem") fires. Observed below to present the voice composer
@@ -92,7 +100,7 @@ struct JournalView: View {
                 hidesModeToggle: hidesModeToggle,
                 onSearchTap: { showSearch = true },
                 onSettingsTap: { showSettings = true },
-                onHelpTap: { showTutorials = true }
+                onHelpTap: { learnPresented = true }
             )
 
             // Arrival banner retired 2026-07-10 per `CLAUDE.md` §Phone:
@@ -139,7 +147,7 @@ struct JournalView: View {
         JournalErrorBanner()
 
         } // ZStack
-        .navigationDestination(isPresented: $showTutorials) {
+        .navigationDestination(isPresented: $learnPresented) {
             TutorialsHubView()
         }
         .navigationDestination(isPresented: $showSearch) {

@@ -50,6 +50,20 @@ struct HiMemTabView: View {
     /// FAB (Siri / hands-free), which fall back to a live route. See
     /// `beginCapture` for why completion-time routing was wrong (F25).
     @State private var pendingLanding: CaptureLandingIntent? = nil
+
+    /// **F28 · which tab, if any, currently has the Learn hub pushed.**
+    ///
+    /// Learn pushes onto each tab's own `NavigationStack` and a `TabView`
+    /// keeps every tab alive, so a tab-local flag left the hub pushed
+    /// while the user was on another tab and re-presented it on return —
+    /// "out of context", because she had mentally left it. A tab cannot
+    /// observe that the tab changed; this shell can, and clears it below.
+    ///
+    /// Deliberately a `Tab?` rather than one shared Bool: a single flag
+    /// would push Learn onto every stack at once. Deliberately NOT a new
+    /// ambient singleton either — that accumulation is exactly what F6
+    /// names as the cost of "each locally reasonable call".
+    @State private var learnOpenOn: Tab? = nil
     // F8 · guided walkthrough (do-it-with-me first run). Replaced the per-tab
     // coachmark cards, retired 2026-07-27 (F8 + F7c section-? cover the ground).
     @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
@@ -147,7 +161,7 @@ struct HiMemTabView: View {
         // the TabView fills. Only the FAB moves. See `FABHandedness`.
         ZStack(alignment: FABHandedness.containerAlignment(leftHanded: fabHandednessLeft)) {
             TabView(selection: selectionBinding) {
-                ClipsTabView()
+                ClipsTabView(learnPresented: Binding(get: { learnOpenOn == .clips }, set: { learnOpenOn = $0 ? .clips : nil }))
                     .tabItem { Label("Clips", systemImage: "waveform") }
                     .tag(Tab.clips)
                 // No native `.badge()` — SwiftUI TabView badges are red
@@ -157,11 +171,13 @@ struct HiMemTabView: View {
                 // in ochre as presence-not-alert. The dot is drawn as
                 // an overlay below.
 
-                JournalView(initialMode: .memories, hidesModeToggle: true)
+                JournalView(initialMode: .memories, hidesModeToggle: true,
+                            learnPresented: Binding(get: { learnOpenOn == .memories }, set: { learnOpenOn = $0 ? .memories : nil }))
                     .tabItem { Label("Memories", systemImage: "book.closed") }
                     .tag(Tab.memories)
 
-                JournalView(initialMode: .projects, hidesModeToggle: true)
+                JournalView(initialMode: .projects, hidesModeToggle: true,
+                            learnPresented: Binding(get: { learnOpenOn == .projects }, set: { learnOpenOn = $0 ? .projects : nil }))
                     .tabItem { Label("Projects", systemImage: "folder") }
                     .tag(Tab.projects)
             }
@@ -301,6 +317,10 @@ struct HiMemTabView: View {
             }
         }
         .onChange(of: selection) { _, newTab in
+            // F28 · Learn does not survive a tab change. It is a reference
+            // surface reached from a `?`, not a place the user was working;
+            // leaving the tab is leaving it.
+            learnOpenOn = nil
             // Clear the arrival dot on Clips per `CLAUDE.md` §Phone —
             // "the dot represents new, unseen arrivals and clears when
             // the user opens Clips."
