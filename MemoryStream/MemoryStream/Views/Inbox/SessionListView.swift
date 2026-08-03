@@ -201,8 +201,7 @@ struct SessionListView: View {
             // clip is only ever in ONE store at read time (risk-1).
             ArrivedClipMaterializer.materializeAll(in: context)
             recomputeBenchClips()
-            sessions = computeSessions()
-            recomputeAbsorbedMedia()
+            regroupSessions()
             registerSessionIds()
             // Tutorial #4 (Captured Clips · the Watch story). Spec
             // gate: opened **non-empty** — clips have actually
@@ -215,8 +214,7 @@ struct SessionListView: View {
         }
         .onChange(of: inbox.clips) { _, _ in
             recomputeBenchClips()
-            sessions = computeSessions()
-            recomputeAbsorbedMedia()
+            regroupSessions()
             registerSessionIds()
         }
         .onChange(of: arrivals.clipsInFlight) { _, _ in
@@ -226,8 +224,7 @@ struct SessionListView: View {
             // phase) the sessions need to be re-grouped without
             // those clipIds to avoid double-rendering.
             recomputeBenchClips()
-            sessions = computeSessions()
-            recomputeAbsorbedMedia()
+            regroupSessions()
             registerSessionIds()
         }
         .onChange(of: inbox.soloClipIds) { _, _ in
@@ -236,7 +233,7 @@ struct SessionListView: View {
             // publish fires here even though `clips` didn't change;
             // re-group so the removed clip snaps into its own
             // single-clip card without waiting for another mutation.
-            sessions = computeSessions()
+            regroupSessions()
             registerSessionIds()
         }
         .onReceive(NotificationCenter.default.publisher(
@@ -248,8 +245,7 @@ struct SessionListView: View {
             // re-groups. Also media refs land as unplaced refs; re-absorb so
             // a photo captured now appears inside its sitting's session card.
             recomputeBenchClips()
-            sessions = computeSessions()
-            recomputeAbsorbedMedia()
+            regroupSessions()
             registerSessionIds()
         }
         .onDisappear {
@@ -272,6 +268,23 @@ struct SessionListView: View {
     /// Runs `SessionMediaAbsorber` against the current sessions and
     /// unplaced media refs. Publishes the absorbed id set for
     /// `ClipsTabView` to consume.
+    /// **The ONE place `sessions` is regrouped** (F38, 2026-08-02).
+    ///
+    /// Regrouping and refreshing the absorbed-media map must happen
+    /// together: the map is keyed by `ClipGroup.id` and the header now counts
+    /// only media whose key is among the rendered sessions, so a regroup that
+    /// left the map behind produced entries nothing could draw.
+    ///
+    /// Four of the five original call sites remembered to pair them and one
+    /// did not (`:239`, the remove-clip-from-session regroup). That is an
+    /// invariant carried by memory; this makes it structural, and
+    /// `BenchCountAndProposalCopyTests` asserts there is exactly one
+    /// assignment site so a sixth cannot quietly appear.
+    private func regroupSessions() {
+        sessions = computeSessions()
+        recomputeAbsorbedMedia()
+    }
+
     private func recomputeAbsorbedMedia() {
         let unplaced = fetchUnplacedNonVoiceRefs()
         let result = SessionMediaAbsorber.absorb(
@@ -657,7 +670,15 @@ struct SessionListView: View {
         // lock) so the count is honest across media types — a mixed
         // sitting reads "3 new clips," not "2" with a stray photo
         // row inside the card.
-        let absorbedMediaCount = absorbedMediaBySessionId.values.reduce(0) { $0 + $1.count }
+        // F38: count only media attached to the sessions this header
+        // DESCRIBES. `.values` summed every entry regardless of key, while a
+        // card *looks up* `absorbedMediaBySessionId[session.id]` — so media
+        // keyed to a session outside the lens was counted and undrawable.
+        // Ruled: one set, one source (third instance of the F35(a) shape).
+        // Accepted consequence: the count drops when a photo is absorbed by
+        // a session the lens does not show. A count including clips nothing
+        // can draw is the dishonest alternative.
+        let absorbedMediaCount = sessions.reduce(0) { $0 + (absorbedMediaBySessionId[$1.id]?.count ?? 0) }
         let n = lensClips.count + inFlightOnly + absorbedMediaCount
         return BenchHeaderTitleBuilder.title(clipCount: n)
     }

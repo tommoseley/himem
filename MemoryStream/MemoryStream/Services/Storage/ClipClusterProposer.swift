@@ -340,9 +340,21 @@ enum ClipClusterProposer {
             let minutes = Int((latest.timeIntervalSince(earliest) / 60).rounded())
             return max(1, minutes)
         }()
+        // F39 · "51-minute stretch" read as ONE CONTINUOUS THING, which is
+        // precisely what made a cross-session proposal look like a broken
+        // session. A cluster spans sittings, and the gap between them is the
+        // reason a human might disagree — so name the sittings and call the
+        // number a gap ("apart"), not a duration ("stretch").
+        //
+        // Still an observation, never a conclusion (J5): it reports how many
+        // clips, how many sittings, and how far apart. It does not say they
+        // belong together.
         let whyText: String = {
             let clipsWord = allClips.count == 1 ? "clip" : "clips"
-            return "\(allClips.count) \(clipsWord) · \(stretchMinutes)-minute stretch, same place"
+            let sittingsWord = sessions.count == 1 ? "sitting" : "sittings"
+            let minutesWord = stretchMinutes == 1 ? "minute" : "minutes"
+            return "\(allClips.count) \(clipsWord) from \(sessions.count) \(sittingsWord)"
+                + " · \(stretchMinutes) \(minutesWord) apart"
         }()
         // Provisional cluster name — spec § 74 says the cluster's
         // proposed name becomes the draft-Memory title. For the

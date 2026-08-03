@@ -23,6 +23,20 @@ import SwiftUI
 /// Stateless over its inputs — `SessionListView` owns the trim state
 /// (`removedByFingerprint`, `expandedFingerprints`) + all wiring; this
 /// view renders and calls back on tap.
+/// Copy for the cluster proposal card. Design authority; the wording IS
+/// the promise, so `BenchCountAndProposalCopyTests` pins it.
+enum ClusterCardCopy {
+    /// **Ruled 2026-08-02 (F39).** The weakest honest framing: it observes
+    /// that these *might* go together and never asserts that they do.
+    ///
+    /// "These may **belong** together" was rejected — J5 forbids the
+    /// interpretive verb. The AI may say what it measured (same place,
+    /// minutes apart); it may not say what that means. A wrong grouping is
+    /// not a neutral miss, it asserts a relationship the user cannot cheaply
+    /// verify.
+    static let mightGoTogether = "Might go together"
+}
+
 struct ClusterCardStack: View {
 
     /// The clusters to render, one card each. Ordered
@@ -136,6 +150,16 @@ struct ClusterCardStack: View {
             reasonBand(proposal)
 
             VStack(alignment: .leading, spacing: 8) {
+                // F39 · the card must say it is a PROPOSAL. Without this it
+                // is indistinguishable from a session card — the designer who
+                // wrote the spec read one as a grouping error. An eyebrow is
+                // the smallest cue that changes what the card claims; the
+                // session card has none, so its presence is itself the tell.
+                Text(ClusterCardCopy.mightGoTogether)
+                    .font(.system(size: 11, weight: .semibold))
+                    .textCase(.uppercase)
+                    .kerning(0.6)
+                    .foregroundStyle(Crucible.Color.ink3)
                 // Name row — a card-body tap toggles the editor (§87). When
                 // expanded, the Compact/Full toggle (§90) sits right-aligned
                 // on the title row (reused from Memory Detail, not minted).
