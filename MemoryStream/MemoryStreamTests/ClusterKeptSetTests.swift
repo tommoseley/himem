@@ -156,6 +156,68 @@ import Foundation
         }
     }
 
+
+    // MARK: - F44 · the card's THREE numbers come from ONE kept-set value
+
+    /// **The guard the previous five could not have caught.** Each earlier
+    /// guard pinned one term against one set. This pins that the card's
+    /// subtitle, composition glyphs and expander label all read the SAME
+    /// kept-set source — so a seventh term cannot quietly describe a sixth
+    /// set.
+    @Test func allThreeCardNumbersReadTheKeptSet() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/ClusterCardStack.swift")
+        let code = Self.codeOnly(src)
+
+        // Glyphs: kept media, not every absorbed ref.
+        #expect(code.contains("clusterMediaRow(keptMedia(proposal))"),
+                "The composition glyphs count set-aside media — a second set on the same card.")
+        #expect(code.contains("clusterMediaRow(mediaFor(proposal))") == false,
+                "The glyph row still reads the untrimmed media.")
+
+        // Expander: kept clips + kept media, not the frozen original.
+        #expect(code.contains("Show all \\(keptTotal(proposal))"),
+                """
+                "Show all N" still counts `proposal.clipIds` — voice only, original \
+                membership — while the subtitle counts the kept set including media.
+                """)
+        #expect(code.contains("proposal.clipIds.count") == false,
+                "The expander label reads the proposal's original membership.")
+
+        // And the subtitle keeps reading kept (F43), so all three agree.
+        #expect(code.contains("subtitleFor(proposal, keptClips(proposal))"))
+    }
+
+    /// The three numbers must be *derivable from each other* — the expander
+    /// total is exactly kept clips plus kept media, which is what the
+    /// subtitle counts. Pins the arithmetic relationship, not just the
+    /// call sites.
+    @Test func theExpanderTotalIsTheSubtitleTotal() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/ClusterCardStack.swift")
+        let body = try Self.blockBody(startingAtLineContaining: "private func keptTotal(", in: src)
+        let code = Self.codeOnly(body)
+        #expect(code.contains("keptClips(proposal).count + keptMedia(proposal).count"),
+                "The expander total is not kept clips + kept media, so it cannot match the subtitle.")
+    }
+
+    /// **A set-aside clip is still hers.** It is new, unconnected, and must
+    /// return to the loose list rather than disappearing from the bench —
+    /// hiding it is the subtractive posture J2 retired.
+    @Test func setAsideReturnsTheClipToTheLooseList() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
+        let body = try Self.blockBody(startingAtLineContaining: "private var looseSessions:", in: src)
+        let code = Self.codeOnly(body)
+        #expect(code.contains("proposals.flatMap(\\.clipIds)") == false,
+                """
+                `looseSessions` treats the proposal's ORIGINAL membership as clustered, so a \
+                clip removed from the proposal vanishes from the bench as well. Body was:
+                \(body)
+                """)
+        #expect(code.contains("removedByFingerprint"),
+                "`looseSessions` does not consult the trim, so set-aside clips stay hidden.")
+        #expect(code.contains("ClipGroup(clips: remaining)"),
+                "A partially-kept session is not rendered with its remaining clips.")
+    }
+
     // MARK: - Source access
 
     static func codeOnly(_ source: String) -> String {

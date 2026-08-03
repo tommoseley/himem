@@ -244,8 +244,8 @@ struct ClusterCardStack: View {
                 // Without this the photos are invisible whenever a cluster
                 // takes the whole bench — the user captured them and they
                 // appear nowhere.
-                if !mediaFor(proposal).isEmpty {
-                    clusterMediaRow(mediaFor(proposal))
+                if !keptMedia(proposal).isEmpty {
+                    clusterMediaRow(keptMedia(proposal))
                 }
 
                 if expanded {
@@ -323,6 +323,28 @@ struct ClusterCardStack: View {
     private func keptClips(_ proposal: ClusterProposal) -> [InboxClip] {
         let removed = removedSet(proposal)
         return clipsFor(proposal).filter { !removed.contains($0.clipId) }
+    }
+
+    /// Media still in the proposal after the trim.
+    private func keptMedia(_ proposal: ClusterProposal) -> [MediaReference] {
+        let removed = removedSet(proposal)
+        return mediaFor(proposal).filter { !removed.contains($0.id) }
+    }
+
+    /// **ONE kept-set value, read by all three of the card's numbers** (F44).
+    ///
+    /// The subtitle, the composition glyphs and the expander label each used
+    /// to compute their own: the subtitle from the kept set (fixed in F43),
+    /// the glyphs from ALL media including set-aside, and "Show all N" from
+    /// `proposal.clipIds.count` — voice only, original membership. Three
+    /// numbers on one card describing three different sets, inside the card
+    /// F43 had just fixed. Sixth instance of the shape.
+    ///
+    /// This is the local answer. The structural one is C2: the bench has no
+    /// single owner for "what is on screen and what does it consist of," and
+    /// six scope fixes in one day is what that costs.
+    private func keptTotal(_ proposal: ClusterProposal) -> Int {
+        keptClips(proposal).count + keptMedia(proposal).count
     }
 
     /// A photo/video row inside the cluster editor, with the same ⊖ / ⊕
@@ -491,7 +513,7 @@ struct ClusterCardStack: View {
                 // "Done" = collapse, NOT commit — the ochre "Keep these · N"
                 // is the only commit.
                 HStack(spacing: 3) {
-                    Text(expanded ? "Done" : "Show all \(proposal.clipIds.count)")
+                    Text(expanded ? "Done" : "Show all \(keptTotal(proposal))")
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                 }

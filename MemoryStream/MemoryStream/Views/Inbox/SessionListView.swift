@@ -405,10 +405,37 @@ struct SessionListView: View {
     /// never bury the rest": the loose pile is always in plain
     /// sight, not subtracted or hidden by the Sort layer.
     private var looseSessions: [ClipGroup] {
-        let clusteredClipIds = Set(proposals.flatMap(\.clipIds))
-        guard !clusteredClipIds.isEmpty else { return sessions }
-        return sessions.filter { session in
-            !session.clips.contains(where: { clusteredClipIds.contains($0.clipId) })
+        // **F44 · a set-aside clip comes BACK to the loose list.**
+        //
+        // Only the KEPT ids count as clustered. Previously this read
+        // `proposals.flatMap(\.clipIds)` — the original membership — so
+        // setting a clip aside removed it from the proposal AND from the
+        // bench entirely. It is still new, still unconnected, and still
+        // hers; hiding it is the subtractive posture J2 retired.
+        //
+        // A correction to F40's reasoning, recorded because it was stated
+        // the other way: partially-clustered sessions are unreachable FROM
+        // THE PROPOSER (proposals consume whole sessions) but the USER
+        // creates them the moment she sets one clip aside. So the subset
+        // rendering declined then is required now.
+        //
+        // Subset groups carry only the non-kept clips. Their absorbed media
+        // is deliberately not looked up: `ClipGroup.id` derives from its
+        // first clip, so a subset's id may differ from the full session's —
+        // and that is the correct outcome here, because the cluster card now
+        // owns this session's media (kept ones in its glyphs, set-aside ones
+        // in its own set-aside block). Rendering it twice would be the
+        // duplication class F35(b) closed.
+        let keptClusteredIds = Set(proposals.flatMap { proposal -> [UUID] in
+            let removed = removedByFingerprint[proposal.fingerprint.rawValue] ?? []
+            return proposal.clipIds.filter { !removed.contains($0) }
+        })
+        guard !keptClusteredIds.isEmpty else { return sessions }
+        return sessions.compactMap { session in
+            let remaining = session.clips.filter { !keptClusteredIds.contains($0.clipId) }
+            if remaining.isEmpty { return nil }
+            if remaining.count == session.clips.count { return session }
+            return ClipGroup(clips: remaining)
         }
     }
 

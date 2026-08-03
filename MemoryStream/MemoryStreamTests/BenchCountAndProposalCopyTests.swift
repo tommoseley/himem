@@ -129,8 +129,17 @@ import Foundation
         // parameter satisfies: the guard-the-caller shape one layer out, in
         // the guard itself. Confirmed empirically — deleting only the render
         // call left the suite GREEN. Redone against the render.
-        #expect(code.contains("clusterMediaRow(mediaFor(proposal))"),
-                "The cluster card declares a media source and never draws from it.")
+        // **Assert the invariant, not the expression** (updated at F44,
+        // 2026-08-02). This previously pinned the literal
+        // `clusterMediaRow(mediaFor(proposal))` and broke when F44 correctly
+        // changed the argument to the KEPT media — the promise ("the card
+        // draws its media") was intact while the expression moved. That is
+        // the mirror of this guard's earlier fault: it was strengthened from
+        // accepting a mere declaration, and over-corrected into pinning one
+        // exact call. What is durable is that `clusterMediaRow` is both
+        // DEFINED and CALLED; which set it is given is F44's guard to own.
+        #expect(code.components(separatedBy: "clusterMediaRow(").count - 1 >= 2,
+                "`clusterMediaRow` is defined but never called — the card draws no media.")
         #expect(code.contains("MediaReference"),
                 "The cluster card has no media type in scope, so it cannot be drawing any.")
     }
