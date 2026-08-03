@@ -343,7 +343,16 @@ struct SessionListView: View {
     /// clip: three numbers, two sets, and a three-month "session" that never
     /// happened.
     private var lensClips: [InboxClip] {
-        BenchLensClips.forLens(benchClips: benchClips, hideReviewed: hideReviewed)
+        // F36: `now` and `soloClipIds` so the lens asks the SAME question
+        // the grouper answers — a clip stays New while its session could
+        // still gain a neighbour, rather than leaving the instant it is
+        // opened.
+        BenchLensClips.forLens(
+            benchClips: benchClips,
+            hideReviewed: hideReviewed,
+            now: Date(),
+            soloClipIds: inbox.soloClipIds
+        )
     }
 
     private func computeSessions(applyFilter: Bool = true) -> [ClipGroup] {

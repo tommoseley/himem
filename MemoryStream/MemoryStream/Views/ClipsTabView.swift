@@ -372,7 +372,17 @@ struct ClipsTabView: View {
             // UNIFIED list across backing types (P7-3, July 19 2026):
             // unpromoted InboxClips + detached/loose MediaReferences.
             VStack(alignment: .leading, spacing: 10) {
-                selectCaption("Clips not connected to any memory.")
+                // F36 · the state has to be legible, not just labelled.
+                // Previously this copy rode `selectCaption` — 12.5pt ink3
+                // sharing a row with the Select button — so it read as a
+                // filter label while a clip was silently changing category
+                // with no explanation. Its own line, at body weight.
+                Text(ClipsLensCopy.unconnectedExplanation)
+                    .font(.footnote)
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                selectCaption(nil)
                 UnconnectedListView(type: type, onOpen: { editingClip = $0 }, selection: selection)
             }
         }
@@ -655,6 +665,21 @@ enum ClipsStatus: String, CaseIterable, Identifiable, Hashable {
         case .unconnected: return "Unconnected"
         }
     }
+}
+
+/// Lens-level explanations. Copy is design authority.
+enum ClipsLensCopy {
+    /// **Ruled 2026-08-02 (F36).** A clip leaving New changes category with
+    /// no explanation, which is the vocabulary-failure class — the user is
+    /// left to infer what happened to something they made.
+    ///
+    /// The wording IS the promise here, so `ClipsStillInPlayTests` pins the
+    /// literal. Two clauses, both load-bearing: the first names the state in
+    /// her words ("connected" is our architecture word, retired per F7g);
+    /// the second answers the question a silent move actually raises — *is
+    /// this being thrown away?* Without the reassurance clause a category
+    /// change reads as a loss.
+    static let unconnectedExplanation = "Not part of any memory yet. They stay here until you add them to one."
 }
 
 /// The **type** filter axis on the Clips tab — media kind, per the

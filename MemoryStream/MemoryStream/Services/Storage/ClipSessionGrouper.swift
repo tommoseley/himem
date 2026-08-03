@@ -32,6 +32,13 @@ enum ClipSessionGrouper {
     /// across a very long lull) against the frequent under-merge
     /// (every 4-minute pause splits a real sitting) — the latter
     /// was the dogfood pain.
+    /// **Coupling, added 2026-08-02 (F36) — this constant now has a second
+    /// visible effect.** The New lens reads it to decide how long a clip
+    /// stays "still in play" after being opened, so retuning the grouping
+    /// threshold also retunes how long clips linger in New. That is
+    /// deliberate — one notion of "still in play" for the lens and the
+    /// grouper — but it means a future tuning changes two behaviours, and
+    /// this value has already moved once (3 min → 10 min, July 4).
     static let sessionTimeWindowSeconds: TimeInterval = 10 * 60
 
     /// Groups newest-first.
@@ -246,9 +253,54 @@ enum CollapsedBodyVariant: Equatable {
 /// because this filter runs first.
 enum BenchLensClips {
 
-    /// - Parameter hideReviewed: true on the **New** lens (unseen only);
-    ///   false on **All**, which shows everything.
-    static func forLens(benchClips: [InboxClip], hideReviewed: Bool) -> [InboxClip] {
-        hideReviewed ? benchClips.filter { !$0.reviewed } : benchClips
+    /// - Parameters:
+    ///   - hideReviewed: true on the **New** lens (unseen only); false on
+    ///     **All**, which shows everything.
+    ///   - now: injected so the window is testable without a wall clock.
+    ///   - soloClipIds: passed through to the grouper so the sessions this
+    ///     reads are the same sessions the bench renders.
+    ///
+    /// **F36 · New admits `!reviewed || stillInPlay`.** `reviewed` still
+    /// records "opened by you" — that fact is unchanged. What changed is
+    /// that opening a clip no longer ejects it from New while it could
+    /// still gain a neighbour, because the lens and the grouper now share
+    /// one notion of "still in play".
+    ///
+    /// **Session-relative, not clip-relative — the distinction is the fix.**
+    /// A clip-relative window splits a real session: clip A at T and clip B
+    /// at T+9 are one session, but at T+11 A has aged out while B has not,
+    /// so they land in different lenses. That IS the reported symptom. A
+    /// session extends as clips join it, so measuring from the session's
+    /// latest clip keeps its members together.
+    ///
+    /// **This is a LENS-level fix, which is why it covers every trigger.**
+    /// Four sites write review state — the clip editor on open, the
+    /// per-session bulk mark, the one-time backfill migration, and the
+    /// materializer mirroring into the ref store — and all four land in
+    /// `benchClips[].reviewed` (refs via `composeBenchClips`, which reads
+    /// `BenchClipReviewStore`). Softening one trigger would have left the
+    /// others doing the thing the ruling forbids; reading leniently here
+    /// covers them by construction.
+    static func forLens(
+        benchClips: [InboxClip],
+        hideReviewed: Bool,
+        now: Date,
+        soloClipIds: Set<UUID> = []
+    ) -> [InboxClip] {
+        guard hideReviewed else { return benchClips }
+
+        // Group the FULL bench, not the filtered set: a session's window is
+        // a property of the session, and a reviewed clip is still one of its
+        // members. Grouping the filtered set would shrink the very sessions
+        // this is asking about.
+        let sessions = ClipSessionGrouper.group(benchClips, soloClipIds: soloClipIds)
+        var stillInPlay: Set<UUID> = []
+        for session in sessions {
+            guard let latest = session.clips.map(\.capturedAt).max() else { continue }
+            if now.timeIntervalSince(latest) < ClipSessionGrouper.sessionTimeWindowSeconds {
+                stillInPlay.formUnion(session.clips.map(\.clipId))
+            }
+        }
+        return benchClips.filter { !$0.reviewed || stillInPlay.contains($0.clipId) }
     }
 }

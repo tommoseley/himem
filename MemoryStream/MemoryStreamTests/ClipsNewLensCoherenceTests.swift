@@ -52,10 +52,18 @@ import Foundation
     // MARK: - (a) The lens set is one set (behavioural)
 
     /// The pure helper the header and the grouper must both read.
+    ///
+    /// **Updated at F36 (2026-08-02) — the meaning moved, not the phrasing.**
+    /// `forLens` gained a `now`, because a reviewed clip is now admitted
+    /// while its session is still open. These assertions still pin what they
+    /// always pinned — that a reviewed clip is dropped — so they pass a
+    /// `now` past the window, which is the state they were implicitly
+    /// written against.
     @Test func lensClips_onNewLens_dropsReviewed() {
         let reviewed = Self.clip(reviewed: true)
         let unseen = Self.clip(reviewed: false)
-        let lens = BenchLensClips.forLens(benchClips: [reviewed, unseen], hideReviewed: true)
+        let lens = BenchLensClips.forLens(benchClips: [reviewed, unseen], hideReviewed: true,
+                                          now: Self.afterTheWindow)
         #expect(lens.count == 1)
         #expect(lens.first?.clipId == unseen.clipId)
     }
@@ -64,7 +72,8 @@ import Foundation
     /// is one definition of "what this lens shows" rather than two.
     @Test func lensClips_onAllLens_keepsEverything() {
         let clips = [Self.clip(reviewed: true), Self.clip(reviewed: false)]
-        #expect(BenchLensClips.forLens(benchClips: clips, hideReviewed: false).count == 2)
+        #expect(BenchLensClips.forLens(benchClips: clips, hideReviewed: false,
+                                       now: Self.afterTheWindow).count == 2)
     }
 
     /// **The device case, as data.** 19 bench clips, 18 already reviewed,
@@ -78,7 +87,7 @@ import Foundation
         }
         clips.append(Self.clip(reviewed: false, capturedAt: today))
 
-        let lens = BenchLensClips.forLens(benchClips: clips, hideReviewed: true)
+        let lens = BenchLensClips.forLens(benchClips: clips, hideReviewed: true, now: today)
         #expect(lens.count == 1, "the lens renders one clip; the header counted \(clips.count)")
 
         let span = lens.map(\.capturedAt)
@@ -90,7 +99,8 @@ import Foundation
     /// filtering tests above while emptying the lens entirely.
     @Test func lensClips_keepsEveryUnseenClip() {
         let unseen = (0..<5).map { _ in Self.clip(reviewed: false) }
-        #expect(BenchLensClips.forLens(benchClips: unseen, hideReviewed: true).count == 5)
+        #expect(BenchLensClips.forLens(benchClips: unseen, hideReviewed: true,
+                                       now: Self.afterTheWindow).count == 5)
     }
 
     // MARK: - (a) Caller guard — the header must not reach past the lens
@@ -160,6 +170,11 @@ import Foundation
 
 
     // MARK: - Fixtures
+
+    /// Far enough past every fixture's `capturedAt` that no session is still
+    /// open — the F35 assertions are about filtering, not about F36's window.
+    static let afterTheWindow = Date(timeIntervalSince1970: 1_785_000_000)
+        .addingTimeInterval(365 * 24 * 3600)
 
     static func clip(reviewed: Bool, capturedAt: Date = Date(timeIntervalSince1970: 1_785_000_000)) -> InboxClip {
         InboxClip(
