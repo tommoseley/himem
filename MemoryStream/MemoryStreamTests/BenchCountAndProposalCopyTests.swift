@@ -106,6 +106,69 @@ import Foundation
         #expect(ClusterCardCopy.mightGoTogether.hasPrefix("Might"))
     }
 
+
+    // MARK: - F40 / F41 / F42
+
+    /// **F40 · every session's absorbed media must have somewhere to render.**
+    ///
+    /// This is the INVARIANT, not the symptom. The F38 guard forbade
+    /// `.values` and passed happily while the count was scoped to `sessions`
+    /// rather than to what actually renders — so media belonging to a
+    /// clustered session was still counted and drawn by nothing. A proposal
+    /// consumes whole sessions, so if the cluster card cannot draw media,
+    /// clustering the whole bench makes real photos vanish.
+    @Test func theClusterCardCanDrawItsSessionsMedia() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/ClusterCardStack.swift")
+        let code = Self.codeOnly(src)
+        #expect(code.contains("mediaFor"),
+                """
+                The cluster card cannot render absorbed media. Proposals consume WHOLE                 sessions, so with no media path here a clustered bench counts photos in                 the header that nothing draws.
+                """)
+        // Declaring the parameter is not drawing with it. The first version
+        // of this guard accepted the declaration alone — which an UNUSED
+        // parameter satisfies: the guard-the-caller shape one layer out, in
+        // the guard itself. Confirmed empirically — deleting only the render
+        // call left the suite GREEN. Redone against the render.
+        #expect(code.contains("clusterMediaRow(mediaFor(proposal))"),
+                "The cluster card declares a media source and never draws from it.")
+        #expect(code.contains("MediaReference"),
+                "The cluster card has no media type in scope, so it cannot be drawing any.")
+    }
+
+    /// The caller must actually supply it — an unused parameter is the
+    /// guard-the-caller shape one layer out.
+    @Test func theBenchSuppliesTheClusterItsMedia() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
+        #expect(Self.codeOnly(src).contains("mediaFor: media(forCluster:)"),
+                "`ClusterCardStack` is constructed without media, so the parameter draws nothing.")
+    }
+
+    /// **F41 · the prune must read the same stores the proposer does.**
+    /// Reading only the manifest deleted dismissals for ref-backed clips on
+    /// the next write, which is why "Not together" did not stick.
+    @Test func theDismissalPruneReadsBothStores() throws {
+        let src = try Self.source("MemoryStream/Services/Storage/InboxManifest.swift")
+        let body = try Self.blockBody(startingAtLineContaining: "private func pruneDeadDismissedClusters()", in: src)
+        let code = Self.codeOnly(body)
+        #expect(code.contains("materializedBenchClipIds"),
+                """
+                `pruneDeadDismissedClusters` judges liveness from the manifest alone, but                 the bench composes from manifest rows AND materialized refs. A dismissal                 naming a ref-backed clip is pruned on the next write. Body was:
+                \(body)
+                """)
+    }
+
+    /// **F42 · the interpretive verb must be absent from the whole file, not
+    /// just from the constant I happened to guard.** F39 asserted the eyebrow
+    /// existed and never checked the louder heading above it.
+    @Test func noInterpretiveVerbAnywhereOnTheClusterSurface() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/ClusterCardStack.swift")
+        #expect(Self.codeOnly(src).lowercased().contains("belong") == false,
+                """
+                "belong" still appears in cluster-surface CODE. J5: the AI may observe,                 never conclude. F39 guarded the eyebrow constant and missed the section                 heading — the same guard-the-caller shape it was written to prevent.
+                """)
+        #expect(ClusterCardCopy.sectionHeading == "A few of these might go together")
+    }
+
     // MARK: - Source access
 
     static func codeOnly(_ source: String) -> String {

@@ -35,6 +35,13 @@ enum ClusterCardCopy {
     /// not a neutral miss, it asserts a relationship the user cannot cheaply
     /// verify.
     static let mightGoTogether = "Might go together"
+
+    /// **F42, ruled 2026-08-02.** The section heading above the cards, which
+    /// is the louder of the two lines and said "seem to **belong** together"
+    /// until now. Same observation-not-conclusion rule as the eyebrow: the
+    /// AI may report that these were near each other; it may not say they
+    /// belong.
+    static let sectionHeading = "A few of these might go together"
 }
 
 struct ClusterCardStack: View {
@@ -46,6 +53,17 @@ struct ClusterCardStack: View {
     /// Resolves a proposal's member clips (kept + removed) for the
     /// expanded editor rows. Ordered by the proposal's `clipIds`.
     let clipsFor: (ClusterProposal) -> [InboxClip]
+
+    /// **F40 · the absorbed photos/videos of the sessions this proposal
+    /// consumed** (2026-08-02).
+    ///
+    /// A proposal is built from WHOLE sessions (`makeTimePlaceProposal`
+    /// flatMaps `sessions.flatMap(\.clips)`), and absorbed media used to
+    /// render only inside session cards. So when a cluster consumed every
+    /// session, its photos had nowhere to appear at all — counted in the
+    /// header, drawn by nothing. Mirrors `clipsFor`, deliberately, rather
+    /// than minting a second lookup shape.
+    let mediaFor: (ClusterProposal) -> [MediaReference]
 
     /// Fingerprint `rawValue`s whose cards are expanded into the editor.
     let expandedFingerprints: Set<String>
@@ -119,11 +137,37 @@ struct ClusterCardStack: View {
         }
     }
 
+    /// Per-media glyphs + counts for media absorbed by this proposal's
+    /// sessions — the same composition vocabulary the session card uses
+    /// (`mic 2 · camera 1`), never a flat "N clips".
+    private func clusterMediaRow(_ media: [MediaReference]) -> some View {
+        let photos = media.filter { $0.mediaTypeEnum == .image }.count
+        let videos = media.filter { $0.mediaTypeEnum == .video }.count
+        return HStack(spacing: 10) {
+            if photos > 0 {
+                Label("\(photos)", systemImage: "camera")
+                    .labelStyle(.titleAndIcon)
+            }
+            if videos > 0 {
+                Label("\(videos)", systemImage: "video")
+                    .labelStyle(.titleAndIcon)
+            }
+            Spacer()
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(Crucible.Color.ink2)
+    }
+
     // MARK: - Section header
 
     private var sectionHeader: some View {
         HStack(spacing: 8) {
-            Text("A few of these seem to belong together")
+            // F42 · "belong" is J5's forbidden interpretive verb, and it
+            // survived F39 on the LOUDER line. F39 guarded the card's
+            // eyebrow — the owner — and never checked the caller's own
+            // heading. Fourth self-reproduction of guard-the-caller on this
+            // branch, committed inside the fix for the rule it violates.
+            Text(ClusterCardCopy.sectionHeading)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Crucible.Color.ink)
             Spacer()
@@ -177,6 +221,14 @@ struct ClusterCardStack: View {
                     if expanded {
                         TranscriptModeToggle(mode: modeBinding(for: proposal))
                     }
+                }
+
+                // F40 · the media of the sessions this proposal consumed.
+                // Without this the photos are invisible whenever a cluster
+                // takes the whole bench — the user captured them and they
+                // appear nowhere.
+                if !mediaFor(proposal).isEmpty {
+                    clusterMediaRow(mediaFor(proposal))
                 }
 
                 if expanded {

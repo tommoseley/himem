@@ -923,8 +923,36 @@ final class InboxManifest: ObservableObject {
     /// weight — the proposer only ever produces fingerprints from
     /// current clipIds, so the record can never match a future
     /// proposal.
+    /// Bench clip ids that live as materialized `MediaReference`s rather
+    /// than manifest rows — the second store the bench composes from.
+    /// Overridable so the prune can be exercised without Core Data.
+    nonisolated(unsafe) static var materializedBenchClipIds: () -> Set<UUID> = {
+        let ctx = StorageService.shared.viewContext
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        req.predicate = NSPredicate(
+            format: "edges.@count == 0 AND recycledAt == nil AND mediaType == %@",
+            MediaReference.MediaType.voice.rawValue
+        )
+        return Set(((try? ctx.fetch(req)) ?? []).map(\.id))
+    }
+
     private func pruneDeadDismissedClusters() {
-        let liveIds = Set(clips.map(\.clipId))
+        // **F41 · the prune must read the same set the PROPOSER reads.**
+        //
+        // The comment above ("the proposer only ever produces fingerprints
+        // from current clipIds") was true when the bench read one store. P0-3
+        // made the bench read TWO — `composeBenchClips(manifestClips:refs:)`
+        // unions manifest rows with materialized zero-edge voice refs — and
+        // the prune was never updated. So dismissing a cluster containing any
+        // ref-backed clip wrote the record and then deleted it on the very
+        // next manifest write, because that clipId is not in `clips`. The
+        // cluster re-proposed immediately: "Not together" did not stick.
+        //
+        // Pruning is an optimisation; a stale record is harmless dead weight,
+        // while a wrongly-pruned one destroys the user's stated intent. So
+        // the union is taken, and if the ref side is unavailable the prune
+        // keeps the record rather than guessing.
+        let liveIds = Set(clips.map(\.clipId)).union(Self.materializedBenchClipIds())
         let filtered = dismissedClusters.filter { record in
             record.clipIds.isSubset(of: liveIds)
         }

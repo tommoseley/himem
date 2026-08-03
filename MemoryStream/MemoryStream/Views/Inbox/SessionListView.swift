@@ -427,6 +427,31 @@ struct SessionListView: View {
         return proposal.clipIds.compactMap { byId[$0] }
     }
 
+    /// **F40 · the absorbed media of every session this proposal consumed.**
+    ///
+    /// A proposal is built from WHOLE sessions, and absorbed media rendered
+    /// only inside session cards — so when a cluster took every session on
+    /// the bench, its photos appeared nowhere while still being counted.
+    /// Ruled 2026-08-02: the photos are bench items the user captured, and
+    /// they appear wherever their clips appear.
+    ///
+    /// A session belongs to this proposal when any of its clips is in it;
+    /// proposals consume whole sessions, so "any" and "all" coincide here.
+    /// Deduped by ref id — a session cannot contribute the same media twice,
+    /// but the union is taken defensively rather than assumed.
+    private func media(forCluster proposal: ClusterProposal) -> [MediaReference] {
+        let clusterIds = Set(proposal.clipIds)
+        var seen: Set<UUID> = []
+        var out: [MediaReference] = []
+        for session in sessions where session.clips.contains(where: { clusterIds.contains($0.clipId) }) {
+            for ref in absorbedMediaBySessionId[session.id] ?? [] where !seen.contains(ref.id) {
+                seen.insert(ref.id)
+                out.append(ref)
+            }
+        }
+        return out
+    }
+
     /// `Add to a memory…` on a cluster — routes the cluster's KEPT clips
     /// (set-aside excluded) into the shared placement sheet
     /// (`CreateMemoryFromClipsSheet` via `bundleSession`): Start a new memory
@@ -570,6 +595,7 @@ struct SessionListView: View {
                 ClusterCardStack(
                     proposals: proposals,
                     clipsFor: clips(forCluster:),
+                    mediaFor: media(forCluster:),
                     expandedFingerprints: expandedClusterFingerprints,
                     removedByFingerprint: removedByFingerprint,
                     onToggleExpand: toggleClusterExpanded,
