@@ -42,6 +42,16 @@ enum ClusterCardCopy {
     /// AI may report that these were near each other; it may not say they
     /// belong.
     static let sectionHeading = "A few of these might go together"
+
+    /// **F43, ruled 2026-08-02.** Was "Not in this memory" — memory-detail
+    /// vocabulary on a bench cluster where no memory exists, and "this
+    /// memory" implies one has been created, which is exactly the decision
+    /// the user has not made yet.
+    ///
+    /// Names what she did rather than what the clips aren't, mints no
+    /// container noun, and surfaces the spec's own §87 term rather than new
+    /// vocabulary. The trailing ⊕ already carries "put it back".
+    static let setAside = "Set aside"
 }
 
 struct ClusterCardStack: View {
@@ -64,6 +74,13 @@ struct ClusterCardStack: View {
     /// header, drawn by nothing. Mirrors `clipsFor`, deliberately, rather
     /// than minting a second lookup shape.
     let mediaFor: (ClusterProposal) -> [MediaReference]
+
+    /// **The card's subtitle, built from the KEPT clips** (F43). Supplied by
+    /// the bench because "how many sittings" needs the grouper, which the
+    /// card has no business owning. Replaces rendering `proposal.whyText`,
+    /// which is fixed at construction and therefore describes the original
+    /// membership no matter what the user removes.
+    let subtitleFor: (ClusterProposal, [InboxClip]) -> String
 
     /// Fingerprint `rawValue`s whose cards are expanded into the editor.
     let expandedFingerprints: Set<String>
@@ -264,7 +281,10 @@ struct ClusterCardStack: View {
         HStack(spacing: 6) {
             Image(systemName: "sparkles")
                 .font(.system(size: 11, weight: .semibold))
-            Text(proposal.whyText)
+            // F43 · derived from what is KEPT, not from the proposal's own
+            // frozen description. Two of the three numbers used to be right
+            // only because the kept set retained both extremes.
+            Text(subtitleFor(proposal, keptClips(proposal)))
                 .font(.system(size: 11.5, weight: .semibold))
             Spacer()
         }
@@ -298,6 +318,48 @@ struct ClusterCardStack: View {
 
     // MARK: - Expanded editor (§87 · subtractive, expand-in-place)
 
+    /// Clips still in the proposal after the user's trim — what the header
+    /// must describe (F43).
+    private func keptClips(_ proposal: ClusterProposal) -> [InboxClip] {
+        let removed = removedSet(proposal)
+        return clipsFor(proposal).filter { !removed.contains($0.clipId) }
+    }
+
+    /// A photo/video row inside the cluster editor, with the same ⊖ / ⊕
+    /// affordance the voice rows carry — so media can be set aside, and the
+    /// commit takes only what is kept (F43). Read-only otherwise: no
+    /// transcript, no edit pencil.
+    private func mediaEditorRow(proposal: ClusterProposal, ref: MediaReference, isRemoved: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: ref.mediaTypeEnum == .video ? "video" : "camera")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Crucible.Color.accent)
+            Text(Self.timeLabel(ref.createdAt))
+                .font(.system(size: 13))
+                .foregroundStyle(Crucible.Color.ink2)
+            Spacer()
+            Button {
+                isRemoved ? onReAddClip(proposal, ref.id) : onRemoveClip(proposal, ref.id)
+            } label: {
+                Image(systemName: isRemoved ? "plus.circle" : "minus.circle")
+                    .font(.system(size: 17))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isRemoved ? "Put back" : "Set aside")
+        }
+        .opacity(isRemoved ? 0.55 : 1)
+        .padding(.vertical, 4)
+    }
+
+    private static func timeLabel(_ date: Date?) -> String {
+        guard let date else { return "" }
+        let f = DateFormatter(); f.dateFormat = "h:mm a"
+        return f.string(from: date)
+    }
+
     @ViewBuilder
     private func editorRows(_ proposal: ClusterProposal, mode: TranscriptMode) -> some View {
         let clips = clipsFor(proposal)
@@ -305,24 +367,39 @@ struct ClusterCardStack: View {
         let anchor = clips.map(\.capturedAt).min() ?? Date()
         let kept = clips.filter { !removed.contains($0.clipId) }
         let gone = clips.filter { removed.contains($0.clipId) }
+        // F43 · media is trimmable too. `removedByFingerprint` is a
+        // `Set<UUID>` and the handlers never look the id up, so ref ids ride
+        // the same store — no parallel store, no key change. Without this a
+        // photo could not be excluded, and the commit takes what is kept.
+        let media = mediaFor(proposal)
+        let keptMedia = media.filter { !removed.contains($0.id) }
+        let goneMedia = media.filter { removed.contains($0.id) }
 
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(kept.enumerated()), id: \.element.clipId) { idx, clip in
                 if idx > 0 { rowDivider }
                 clipEditorRow(proposal: proposal, clip: clip, anchor: anchor, isRemoved: false, mode: mode)
             }
-            if !gone.isEmpty {
+            ForEach(keptMedia, id: \.id) { ref in
+                rowDivider
+                mediaEditorRow(proposal: proposal, ref: ref, isRemoved: false)
+            }
+            if !gone.isEmpty || !goneMedia.isEmpty {
                 Rectangle()
                     .fill(Crucible.Color.hairline)
                     .frame(height: 0.5)
                     .padding(.vertical, 8)
-                Text("Not in this memory")
+                Text(ClusterCardCopy.setAside)
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(Crucible.Color.ink3)
                     .padding(.bottom, 2)
                 ForEach(Array(gone.enumerated()), id: \.element.clipId) { idx, clip in
                     if idx > 0 { rowDivider }
                     clipEditorRow(proposal: proposal, clip: clip, anchor: anchor, isRemoved: true, mode: mode)
+                }
+                ForEach(goneMedia, id: \.id) { ref in
+                    rowDivider
+                    mediaEditorRow(proposal: proposal, ref: ref, isRemoved: true)
                 }
             }
         }

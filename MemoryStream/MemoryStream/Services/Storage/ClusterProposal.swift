@@ -165,3 +165,33 @@ enum ClusterTrim {
         keptForCommit(proposals: proposals, removedByFingerprint: removedByFingerprint).count
     }
 }
+
+/// **The cluster card's one-line description** (F43, 2026-08-02).
+///
+/// One definition, called twice: by `ClipClusterProposer` for the proposal's
+/// own `whyText`, and by the card for the KEPT set after a trim. The card
+/// previously rendered the stored `whyText`, which is fixed at construction
+/// — so it kept describing the original membership while the user removed
+/// clips from it.
+///
+/// **The span is computed from the clips passed in, not from the proposal.**
+/// On device the header read "125 minutes apart" and was correct only
+/// because the kept set retained both endpoints; setting aside the last clip
+/// would have left the number plausible and wrong. Two of three numbers
+/// accidentally right is more dangerous than all three visibly broken.
+///
+/// Observation, never conclusion (J5): how many clips, how many sittings,
+/// how far apart. Never that they belong together.
+enum ClusterSubtitleBuilder {
+    static func subtitle(clipCount: Int, sittingCount: Int, capturedAts: [Date]) -> String {
+        let clipsWord = clipCount == 1 ? "clip" : "clips"
+        let sittingsWord = sittingCount == 1 ? "sitting" : "sittings"
+        let minutes: Int = {
+            guard let first = capturedAts.min(), let last = capturedAts.max() else { return 1 }
+            return max(1, Int((last.timeIntervalSince(first) / 60).rounded()))
+        }()
+        let minutesWord = minutes == 1 ? "minute" : "minutes"
+        return "\(clipCount) \(clipsWord) from \(sittingCount) \(sittingsWord)"
+            + " · \(minutes) \(minutesWord) apart"
+    }
+}

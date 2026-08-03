@@ -452,6 +452,37 @@ struct SessionListView: View {
         return out
     }
 
+    /// The proposal's media MINUS anything the user set aside (F43).
+    /// `removedByFingerprint` is a `Set<UUID>` and the handlers never look
+    /// the id up, so it carries `MediaReference.id` alongside clip ids
+    /// without a parallel store or a key change.
+    private func includedClusterMedia(_ proposal: ClusterProposal) -> [MediaReference] {
+        let removed = removedByFingerprint[proposal.fingerprint.rawValue] ?? []
+        return media(forCluster: proposal).filter { !removed.contains($0.id) }
+    }
+
+    /// **The card's subtitle, computed from what is KEPT** (F43).
+    ///
+    /// `ClusterProposal.whyText` is a stored `let` fixed at construction, so
+    /// it describes the ORIGINAL membership forever. On device that read
+    /// "7 clips from 3 sittings · 125 minutes apart" above 3 kept clips —
+    /// and two of those three numbers were right ONLY because the kept set
+    /// happened to retain both extremes. Setting aside an endpoint makes the
+    /// span silently wrong while still looking plausible.
+    ///
+    /// Sittings are recomputed by regrouping the kept clips through the same
+    /// grouper the bench uses, so the lens, the card and this line cannot
+    /// disagree about what a sitting is.
+    private func clusterSubtitle(_ proposal: ClusterProposal, _ kept: [InboxClip]) -> String {
+        let keptMedia = includedClusterMedia(proposal)
+        let sittings = ClipSessionGrouper.group(kept, soloClipIds: inbox.soloClipIds).count
+        return ClusterSubtitleBuilder.subtitle(
+            clipCount: kept.count + keptMedia.count,
+            sittingCount: sittings,
+            capturedAts: kept.map(\.capturedAt)
+        )
+    }
+
     /// `Add to a memory…` on a cluster — routes the cluster's KEPT clips
     /// (set-aside excluded) into the shared placement sheet
     /// (`CreateMemoryFromClipsSheet` via `bundleSession`): Start a new memory
@@ -469,10 +500,20 @@ struct SessionListView: View {
         let byId = Dictionary(benchClips.map { ($0.clipId, $0) }, uniquingKeysWith: { first, _ in first })
         let kept = trimmed.keptClipIds.compactMap { byId[$0] }
         guard !kept.isEmpty else { return }
+        // **F43 · the cluster commit used to pass `absorbedMediaRefs: []`**
+        // while BOTH session paths pass `includedAbsorbedMedia(in:)`. So no
+        // photo was ever committed from a cluster: bundling stranded them on
+        // the bench while the voice clips moved into the memory. F40 made the
+        // card count and show them, which turned a consistent absence into a
+        // confident display over a path that disagreed.
+        //
+        // Respects the same set-aside store the voice rows use, so a photo
+        // the user excluded is excluded here too.
+        let keptMedia = includedClusterMedia(proposal)
         bundleSession = BundleRequest(
             session: ClipGroup(clips: kept),
             clipsToBundle: kept,
-            absorbedMediaRefs: [],
+            absorbedMediaRefs: keptMedia,
             prefillTitle: proposal.proposedName
         )
     }
@@ -596,6 +637,7 @@ struct SessionListView: View {
                     proposals: proposals,
                     clipsFor: clips(forCluster:),
                     mediaFor: media(forCluster:),
+                    subtitleFor: clusterSubtitle,
                     expandedFingerprints: expandedClusterFingerprints,
                     removedByFingerprint: removedByFingerprint,
                     onToggleExpand: toggleClusterExpanded,

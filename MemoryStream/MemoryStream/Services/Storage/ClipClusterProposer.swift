@@ -349,13 +349,16 @@ enum ClipClusterProposer {
         // Still an observation, never a conclusion (J5): it reports how many
         // clips, how many sittings, and how far apart. It does not say they
         // belong together.
-        let whyText: String = {
-            let clipsWord = allClips.count == 1 ? "clip" : "clips"
-            let sittingsWord = sessions.count == 1 ? "sitting" : "sittings"
-            let minutesWord = stretchMinutes == 1 ? "minute" : "minutes"
-            return "\(allClips.count) \(clipsWord) from \(sessions.count) \(sittingsWord)"
-                + " · \(stretchMinutes) \(minutesWord) apart"
-        }()
+        // F43 · ONE definition, shared with the card. The proposal's own
+        // `whyText` describes its original membership; the card recomputes
+        // the same sentence from the KEPT set. Same string builder both
+        // times, so the two can never disagree about phrasing — only about
+        // the set, which is the point.
+        let whyText = ClusterSubtitleBuilder.subtitle(
+            clipCount: allClips.count,
+            sittingCount: sessions.count,
+            capturedAts: allClips.map(\.capturedAt)
+        )
         // Provisional cluster name — spec § 74 says the cluster's
         // proposed name becomes the draft-Memory title. For the
         // time+place rule with no NLP naming yet, use a friendly
