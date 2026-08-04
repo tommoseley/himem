@@ -1376,12 +1376,45 @@ private extension JSONDecoder {
 enum BenchClipReviewStore {
     private static let key = "com.himem.bench.reviewedRefIds"
 
+    /// **This store has concurrent writers, and until 2026-08-03 it had no
+    /// owner.** Every mutation below is a read-modify-write — read the whole
+    /// array, insert, write the whole array back — and two of them run on
+    /// different threads in production:
+    ///
+    ///  - `BenchReviewBackfillMigration.apply` → `markReviewed([UUID])`, called
+    ///    inside `ctx.perform` on a **background** context from
+    ///    `LaunchScreenView.runMigration`;
+    ///  - `ClipEditorModal.onAppear` → `markReviewed(UUID)`, on the main actor,
+    ///    every time she opens a clip.
+    ///
+    /// Interleaved, one write silently discards the other's inserts. The
+    /// damaging direction is not symmetric: `apply` sets its `doneKey`
+    /// regardless, so a clobbered backfill **never runs again** and the whole
+    /// pre-existing library floods the New lens permanently — the exact
+    /// symptom the backfill was written to prevent, on a one-shot upgrade path
+    /// with no recovery. Measured before the lock:
+    /// **300/300 backfilled ids lost** under the production shape
+    /// (`benchReviewStore_backfillConcurrentWithUiMarks_losesNeither`).
+    ///
+    /// Found by reading the code, not by a bug report — no user has been
+    /// observed hitting it — and then reproduced by that test before the fix.
+    ///
+    /// `UserDefaults` is individually thread-safe; that is precisely what made
+    /// this invisible, because no single call is wrong. The compound operation
+    /// is the unit that needs to be atomic, so the lock wraps the whole
+    /// read-modify-write rather than any one access.
+    private static let lock = NSLock()
+
     static func isReviewed(_ id: UUID) -> Bool {
-        reviewedIds().contains(id.uuidString)
+        lock.lock()
+        defer { lock.unlock() }
+        return reviewedIds().contains(id.uuidString)
     }
 
     /// Idempotent — a no-op (no write) when the id is already recorded.
     static func markReviewed(_ id: UUID) {
+        lock.lock()
+        defer { lock.unlock() }
         var ids = reviewedIds()
         guard ids.insert(id.uuidString).inserted else { return }
         UserDefaults.standard.set(Array(ids), forKey: key)
@@ -1390,6 +1423,8 @@ enum BenchClipReviewStore {
     /// Batch variant — one write for the whole set (used by the backfill
     /// migration). Idempotent; no write when nothing new is added.
     static func markReviewed(_ ids: [UUID]) {
+        lock.lock()
+        defer { lock.unlock() }
         guard !ids.isEmpty else { return }
         var set = reviewedIds()
         var changed = false

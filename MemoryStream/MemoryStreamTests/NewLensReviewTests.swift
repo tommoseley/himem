@@ -18,11 +18,26 @@ import Foundation
 @Suite(.serialized)
 struct NewLensReviewTests {
 
-    private let reviewedKey = "com.himem.bench.reviewedRefIds"
+    // No `reviewedKey` here any more, deliberately: this suite has no business
+    // holding the shared store's key, because it no longer writes to it.
     private let doneKey = "com.himem.bench.reviewBackfill.v1.done"
 
+    /// **Clears only the flag this suite owns — never the shared id set.**
+    ///
+    /// This used to `removeObject` `reviewedKey` as well. That key is a
+    /// process-global store three suites read and write, and `.serialized`
+    /// (above) orders tests *within* this suite only — it does not prevent
+    /// another suite running concurrently. So this wipe deleted ids that
+    /// `ClipReviewStateTests` had just written and was about to read, which is
+    /// what failed the 2026-08-03 gate. The store's lock does not help: a wipe
+    /// is a complete, correctly-locked operation, not a torn one.
+    ///
+    /// Nothing here needs an empty id set — every test below mints fresh
+    /// `UUID`s and asserts only about those. `doneKey` stays because
+    /// `BenchReviewBackfillMigration.hasRun` is a single global flag this is
+    /// the only suite to touch, and the `hasRun` assertions genuinely need it
+    /// false first.
     private func reset() {
-        UserDefaults.standard.removeObject(forKey: reviewedKey)
         UserDefaults.standard.removeObject(forKey: doneKey)
     }
 
