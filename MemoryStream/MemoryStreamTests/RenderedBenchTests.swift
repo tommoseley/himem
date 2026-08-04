@@ -27,9 +27,10 @@ import Foundation
 
     // MARK: - The invariant
 
-    /// **THE assertion.** Everything the bench draws is either in a loose
-    /// session or claimed by the cluster; the header counts the union. Seven
-    /// defects violated this and none of them could be expressed as a test.
+    /// **THE assertion.** Everything the bench draws is in exactly one of the
+    /// three drawn regions — arriving, claimed by a cluster, or loose — and
+    /// the header counts the union. Seven defects violated this and none of
+    /// them could be expressed as a test.
     @Test func theHeaderCountIsWhatIsDrawn() {
         let t = Date(timeIntervalSince1970: 1_785_000_000)
         let bench = RenderedBench.compose(
@@ -41,10 +42,46 @@ import Foundation
             ],
             reviewedIds: [], hideReviewed: true, now: t.addingTimeInterval(60)
         )
-        let drawn = bench.loose.flatMap(\.items).count + bench.clustered.count
+        let drawn = bench.loose.flatMap(\.items).count + bench.clustered.count + bench.inFlight.count
         #expect(bench.count == drawn,
                 "header says \(bench.count), bench draws \(drawn) — the defect class, as one assertion")
         #expect(bench.count == 4)
+    }
+
+    /// The identity above, stated as the partition it actually is, with all
+    /// three regions non-empty at once and a trim in play. Two of the four
+    /// three-numbers-two-sets defects were caused *while fixing* the previous
+    /// one, because each guard tested the symptom rather than this.
+    @Test func itemsPartitionIntoTheThreeDrawnRegions() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let arriving = Self.item(.voice, t.addingTimeInterval(7 * 3600))
+        let clusterA = Self.item(.voice, t)
+        let clusterPhoto = Self.item(.image, t.addingTimeInterval(60))
+        let setAside = Self.item(.voice, t.addingTimeInterval(120))
+        let elsewhere = Self.item(.note, t.addingTimeInterval(4 * 3600))
+        let proposal = Self.proposal(claiming: [clusterA.id])
+        let bench = RenderedBench.compose(
+            allItems: [arriving, clusterA, clusterPhoto, setAside, elsewhere],
+            reviewedIds: [], hideReviewed: true, now: t.addingTimeInterval(7 * 3600),
+            inFlightIds: [arriving.id],
+            proposals: [proposal],
+            trim: [proposal.fingerprint.rawValue: [setAside.id]]
+        )
+        let looseIds = Set(bench.loose.flatMap(\.items).map(\.id))
+        let flightIds = Set(bench.inFlight.map(\.id))
+
+        // Every region is genuinely populated — a partition check over an
+        // empty region proves nothing about the region.
+        #expect(!looseIds.isEmpty && !bench.clustered.isEmpty && !flightIds.isEmpty)
+        // Covering: nothing on the bench is undrawn.
+        #expect(looseIds.union(bench.clustered).union(flightIds) == Set(bench.items.map(\.id)),
+                "an item is on the bench and in none of the three drawn regions")
+        // Disjoint: nothing is drawn twice — the F35(b) duplication class.
+        #expect(looseIds.isDisjoint(with: bench.clustered))
+        #expect(flightIds.isDisjoint(with: bench.clustered))
+        #expect(flightIds.isDisjoint(with: looseIds))
+        // And the set-aside item came back to the loose region, not the void.
+        #expect(looseIds.contains(setAside.id))
     }
 
     /// The same identity with a cluster in play — the case F40/F43/F44 each
@@ -222,11 +259,125 @@ import Foundation
         #expect(a.sessions.count == b.sessions.count)
     }
 
+    // MARK: - Still arriving (C2 step 2b-i, 2026-08-03)
+    //
+    // Replaces `headerTitle`'s `inFlightOnly` term. That term existed
+    // because `computeSessions` filtered in-flight ids out of the grouping
+    // and the header then had to add them back — two scopes, one number,
+    // the exact shape of F35(a) and F38. Here one input produces both.
+    //
+    // Mutation-verified: dropping the `inFlightIds` filter before grouping
+    // fails `anArrivingItemIsCountedButNeverGrouped`.
+
+    /// An arriving clip is already a manifest row, so without the partition
+    /// it renders twice — once as an `IncomingCard`, once as a session card
+    /// showing the legitimate-but-confusing "Transcribing…" body.
+    @Test func anArrivingItemIsCountedButNeverGrouped() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let arriving = Self.item(.voice, t)
+        let bench = RenderedBench.compose(
+            allItems: [arriving], reviewedIds: [], hideReviewed: true, now: t,
+            inFlightIds: [arriving.id]
+        )
+        #expect(bench.count == 1, "an arriving clip is on the bench and must be counted")
+        #expect(bench.inFlight.map(\.id) == [arriving.id])
+        #expect(bench.sessions.isEmpty, "the arriving clip was grouped into a session card")
+        #expect(bench.loose.isEmpty)
+    }
+
+    /// Holding one item out must not pull its neighbours out with it — the
+    /// rest of the sitting still groups, and still groups *together*.
+    @Test func anArrivingItemDoesNotDisbandTheRestOfItsSitting() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let arriving = Self.item(.voice, t)
+        let landed = Self.item(.voice, t.addingTimeInterval(60))
+        let photo = Self.item(.image, t.addingTimeInterval(120))
+        let bench = RenderedBench.compose(
+            allItems: [arriving, landed, photo], reviewedIds: [], hideReviewed: true, now: t,
+            inFlightIds: [arriving.id]
+        )
+        #expect(bench.count == 3)
+        #expect(bench.sessions.count == 1)
+        #expect(Set(bench.sessions[0].items.map(\.id)) == [landed.id, photo.id])
+    }
+
+    /// The lens measures the window over ALL items including the arriving
+    /// one — a session that is still *receiving* is self-evidently still in
+    /// play, so a reviewed sibling must not age out from under it.
+    @Test func anArrivingItemKeepsItsReviewedSiblingInTheNewLens() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let seen = Self.item(.voice, t)
+        let arriving = Self.item(.voice, t.addingTimeInterval(9 * 60))
+        let bench = RenderedBench.compose(
+            allItems: [seen, arriving], reviewedIds: [seen.id], hideReviewed: true,
+            now: t.addingTimeInterval(11 * 60),
+            inFlightIds: [arriving.id]
+        )
+        #expect(bench.count == 2, "the reviewed sibling aged out while its session was still arriving")
+    }
+
+    // MARK: - Removed from session, threaded through composition
+
+    /// The July 12 triage survives the rebuild end-to-end, not just in the
+    /// grouper: a solo item is its own session here too. Mixed-kind, so a
+    /// voice-only path cannot satisfy it.
+    @Test func aRemovedItemIsItsOwnSessionOnTheComposedBench() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let voice = Self.item(.voice, t)
+        let photo = Self.item(.image, t.addingTimeInterval(60))
+        let bench = RenderedBench.compose(
+            allItems: [voice, photo], reviewedIds: [], hideReviewed: false, now: t,
+            soloIds: [photo.id]
+        )
+        #expect(bench.sessions.count == 2, "the removed item was re-absorbed by its old sitting")
+        #expect(bench.count == 2)
+    }
+
+    /// All three new inputs at once, with a reviewed item and a non-empty
+    /// trim — the combination, because each of these has been correct alone
+    /// and wrong together before.
+    @Test func theRegionsHoldWithSoloArrivingReviewedAndATrimTogether() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let clusterA = Self.item(.voice, t)
+        let setAside = Self.item(.image, t.addingTimeInterval(60))
+        let removed = Self.item(.note, t.addingTimeInterval(120))
+        let arriving = Self.item(.voice, t.addingTimeInterval(180))
+        let staleSeen = Self.item(.voice, t.addingTimeInterval(-5 * 3600))
+        let proposal = Self.proposal(claiming: [clusterA.id])
+        let bench = RenderedBench.compose(
+            allItems: [clusterA, setAside, removed, arriving, staleSeen],
+            reviewedIds: [staleSeen.id], hideReviewed: true, now: t.addingTimeInterval(180),
+            inFlightIds: [arriving.id],
+            soloIds: [removed.id],
+            proposals: [proposal],
+            trim: [proposal.fingerprint.rawValue: [setAside.id]]
+        )
+        // The stale reviewed item is gone from the New lens; the other four stay.
+        #expect(bench.count == 4)
+        #expect(bench.items.contains { $0.id == staleSeen.id } == false)
+        // Still a partition, with every region populated.
+        let looseIds = Set(bench.loose.flatMap(\.items).map(\.id))
+        let flightIds = Set(bench.inFlight.map(\.id))
+        #expect(looseIds.union(bench.clustered).union(flightIds) == Set(bench.items.map(\.id)))
+        #expect(looseIds.isDisjoint(with: bench.clustered))
+        #expect(flightIds.isDisjoint(with: looseIds))
+        // Added because a mutation walked through the gap: with in-flight items
+        // grouped, `arriving` joined the claimed session and was drawn BOTH as
+        // an IncomingCard and inside the cluster, and this test stayed green
+        // while `itemsPartitionIntoTheThreeDrawnRegions` caught it. Two of the
+        // three pairs is not disjointness.
+        #expect(flightIds.isDisjoint(with: bench.clustered))
+        // The set-aside photo is loose, the removed note is its own session.
+        #expect(looseIds.contains(setAside.id))
+        #expect(bench.loose.contains { $0.items.map(\.id) == [removed.id] })
+    }
+
     @Test func anEmptyBenchIsEmptyEverywhere() {
         let bench = RenderedBench.compose(
             allItems: [], reviewedIds: [], hideReviewed: true, now: Date()
         )
-        #expect(bench.count == 0 && bench.sessions.isEmpty && bench.loose.isEmpty && bench.clustered.isEmpty)
+        #expect(bench.count == 0 && bench.sessions.isEmpty && bench.loose.isEmpty
+                && bench.clustered.isEmpty && bench.inFlight.isEmpty)
     }
 
     // MARK: - Fixtures

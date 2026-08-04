@@ -75,6 +75,9 @@ struct UnifiedSession: Identifiable, Hashable {
 ///   `ClipSessionGrouper.sessionTimeWindowSeconds` (default 10 min)
 ///   are the same session; a longer gap closes it. Silence is the
 ///   boundary. Media type is irrelevant to the boundary.
+/// - An id in `soloIds` overrides **both** of the above — the user
+///   said "not with these" and that beats a declared roll as well as
+///   the clock (`group`'s parameter doc carries the reasoning).
 ///
 /// Sessions are returned **newest-first** at the top level (matching
 /// the reverse-chronological bench list), but items *within* each
@@ -82,14 +85,36 @@ struct UnifiedSession: Identifiable, Hashable {
 /// it happened).
 enum UnifiedBenchGrouper {
 
-    static func group(_ items: [BenchClipItem]) -> [UnifiedSession] {
+    /// - Parameter soloIds: item ids the user has *Removed from session*
+    ///   (`Clip model · spec.md` § "Clip triage", July 12 2026). Each becomes
+    ///   its own single-item session regardless of neighbours in the idle
+    ///   window, and the remaining items still session together *across* the
+    ///   removed one — so a stray can be pulled out of the middle of a
+    ///   three-item sitting without splitting the surviving pair. Empty
+    ///   (the default) preserves the pre-C2 behaviour exactly.
+    ///
+    ///   **Added 2026-08-03 for C2 step 2b, and it is not cosmetic parity.**
+    ///   `ClipSessionGrouper` has carried this since July 12 and the bench
+    ///   threads `inbox.soloClipIds` through three live call sites; this
+    ///   grouper replaces it there. Without the parameter the rebuild would
+    ///   have retired the triage silently. `InboxManifest.markSolo` currently
+    ///   has **zero callers**, so no shipping UI writes the set — but it is
+    ///   loaded from a persisted companion file, so a device upgrading from a
+    ///   build that *did* write it carries a non-empty set, and the grouping
+    ///   it produced would have changed with nothing on screen to say why.
+    static func group(_ items: [BenchClipItem], soloIds: Set<UUID> = []) -> [UnifiedSession] {
         guard !items.isEmpty else { return [] }
         // Chronological input drives the boundary decision — walk the
         // list oldest-to-newest so `sameSession` gates against the
         // most recently added item in the growing session.
         let ascending = items.sorted { $0.capturedAt < $1.capturedAt }
         var buckets: [[BenchClipItem]] = []
+        var soloBuckets: [[BenchClipItem]] = []
         for item in ascending {
+            if soloIds.contains(item.id) {
+                soloBuckets.append([item])
+                continue
+            }
             if let lastBucket = buckets.last,
                let lastItem = lastBucket.last,
                sameSession(lastItem, item) {
@@ -98,10 +123,18 @@ enum UnifiedBenchGrouper {
                 buckets.append([item])
             }
         }
-        // Buckets already carry items in oldest-first order (as
-        // required). Reverse the *bucket* order so the resulting
-        // list of sessions is newest-first.
-        return buckets.reversed().map { UnifiedSession(items: $0) }
+        // Buckets carry items in oldest-first order (as required). Order the
+        // *sessions* newest-first by their latest item, which is what makes a
+        // solo pulled from the middle of a sitting land at its own time
+        // position rather than at the end of the list. With no solos this is
+        // exactly `buckets.reversed()` — sequential non-overlapping buckets
+        // ascend by their latest item — so the default path is unchanged.
+        return (buckets + soloBuckets)
+            .map { UnifiedSession(items: $0) }
+            .sorted { lhs, rhs in
+                (lhs.items.last?.capturedAt ?? .distantPast)
+                    > (rhs.items.last?.capturedAt ?? .distantPast)
+            }
     }
 
     /// True when two items belong to the same capture session.

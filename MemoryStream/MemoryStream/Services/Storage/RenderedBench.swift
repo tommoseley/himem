@@ -32,15 +32,16 @@ import Foundation
 /// returns a value, so the invariant is now one assertion.
 struct RenderedBench: Equatable {
 
-    /// **The union actually on screen** — loose sessions and clustered items
-    /// together. Every count, span and glyph derives from this or from a
-    /// subset of it that is named here, never from a set reconstructed at the
-    /// call site.
+    /// **The union actually on screen** — in-flight items, clustered items
+    /// and loose sessions together. Those three are a *partition* of this
+    /// (`itemsPartitionIntoTheThreeDrawnRegions` pins it), so every count,
+    /// span and glyph derives from this or from a subset of it that is named
+    /// here, never from a set reconstructed at the call site.
     let items: [BenchClipItem]
 
-    /// `items`, grouped media-agnostically. A photo captured inside a voice
-    /// clip's idle window is *in that session*, not absorbed into it by a
-    /// separate pass.
+    /// The groupable items (`items` minus `inFlight`), grouped
+    /// media-agnostically. A photo captured inside a voice clip's idle window
+    /// is *in that session*, not absorbed into it by a separate pass.
     let sessions: [UnifiedSession]
 
     /// Item ids claimed by a cluster proposal **after the user's trim** —
@@ -53,6 +54,21 @@ struct RenderedBench: Equatable {
     /// does not appear; a partially-claimed one appears with the remainder,
     /// which is what returns a set-aside item to the bench.
     let loose: [UnifiedSession]
+
+    /// Items still arriving — drawn as `IncomingCard` rows above the cluster
+    /// stack, and never grouped into a session (a clip in the `.transcribing`
+    /// phase is already a manifest row, so without this it would render twice:
+    /// once as an IncomingCard and once as a session card carrying the
+    /// legitimate-but-confusing "Transcribing…" body).
+    ///
+    /// **This is a third REGION, not a third SET.** It is a partition of
+    /// `items` alongside `clustered` and `loose`, computed here from one
+    /// input — which is the whole difference from the term it replaces.
+    /// `headerTitle` used to read `lensClips.count + inFlightOnly +
+    /// absorbedMediaCount`: three counts over three separately-scoped sets,
+    /// two of which were wrong at different times (F35(a), F38). The header
+    /// now reads `count`.
+    let inFlight: [BenchClipItem]
 
     /// What the header must say. Deliberately not a separate computation:
     /// this is the identity that seven defects violated.
@@ -80,12 +96,18 @@ struct RenderedBench: Equatable {
     ///     has.
     ///   - hideReviewed: true on the **New** lens.
     ///   - now: injected; the F36 still-in-play window is measured against it.
+    ///   - inFlightIds: ids still arriving. They stay in `items` — they are
+    ///     on the bench and they are drawn — but they are held out of the
+    ///     grouping, so they render only as `IncomingCard`s.
+    ///   - soloIds: ids the user removed from their session (July 12 triage).
     ///   - proposals / trim: cluster membership and the user's set-asides.
     static func compose(
         allItems: [BenchClipItem],
         reviewedIds: Set<UUID>,
         hideReviewed: Bool,
         now: Date,
+        inFlightIds: Set<UUID> = [],
+        soloIds: Set<UUID> = [],
         proposals: [ClusterProposal] = [],
         trim: [String: Set<UUID>] = [:]
     ) -> RenderedBench {
@@ -93,9 +115,14 @@ struct RenderedBench: Equatable {
         // 1 · The lens. F36: a reviewed item stays while its SESSION could
         // still gain a neighbour — session-relative, because a clip-relative
         // window splits a real sitting across two lenses.
+        //
+        // Grouped over ALL items, in-flight included: a session's window is a
+        // property of the session, and an arriving clip is one of its members.
+        // Matches `BenchLensClips.forLens`, which groups the full bench for
+        // the same reason and likewise passes the solo set through.
         let lensItems: [BenchClipItem]
         if hideReviewed {
-            let allSessions = UnifiedBenchGrouper.group(allItems)
+            let allSessions = UnifiedBenchGrouper.group(allItems, soloIds: soloIds)
             var stillInPlay: Set<UUID> = []
             for session in allSessions {
                 guard let latest = session.items.map(\.capturedAt).max() else { continue }
@@ -108,9 +135,14 @@ struct RenderedBench: Equatable {
             lensItems = allItems
         }
 
-        let sessions = UnifiedBenchGrouper.group(lensItems)
+        // 2 · In-flight items are partitioned off before grouping, never
+        // subtracted from a count afterwards.
+        let inFlight = lensItems.filter { inFlightIds.contains($0.id) }
+        let groupable = lensItems.filter { !inFlightIds.contains($0.id) }
 
-        // 2 · Clustered, once. A proposal claims whole SESSIONS (the proposer
+        let sessions = UnifiedBenchGrouper.group(groupable, soloIds: soloIds)
+
+        // 3 · Clustered, once. A proposal claims whole SESSIONS (the proposer
         // flatMaps them), so everything in a claimed session is clustered —
         // including its media, which is why the cluster card can draw photos
         // without a second lookup. Minus the trim.
@@ -124,7 +156,7 @@ struct RenderedBench: Equatable {
             }
         }
 
-        // 3 · Loose = what the cluster did not keep. A set-aside item lands
+        // 4 · Loose = what the cluster did not keep. A set-aside item lands
         // here rather than vanishing: it is still new, still unconnected, and
         // still hers.
         let loose: [UnifiedSession] = sessions.compactMap { session in
@@ -138,7 +170,8 @@ struct RenderedBench: Equatable {
             items: lensItems,
             sessions: sessions,
             clustered: clustered,
-            loose: loose
+            loose: loose,
+            inFlight: inFlight
         )
     }
 
