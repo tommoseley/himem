@@ -199,24 +199,30 @@ import Foundation
                 "The expander total is not kept clips + kept media, so it cannot match the subtitle.")
     }
 
-    /// **A set-aside clip is still hers.** It is new, unconnected, and must
-    /// return to the loose list rather than disappearing from the bench —
-    /// hiding it is the subtractive posture J2 retired.
-    @Test func setAsideReturnsTheClipToTheLooseList() throws {
-        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
-        let body = try Self.blockBody(startingAtLineContaining: "private var looseSessions:", in: src)
-        let code = Self.codeOnly(body)
-        #expect(code.contains("proposals.flatMap(\\.clipIds)") == false,
-                """
-                `looseSessions` treats the proposal's ORIGINAL membership as clustered, so a \
-                clip removed from the proposal vanishes from the bench as well. Body was:
-                \(body)
-                """)
-        #expect(code.contains("removedByFingerprint"),
-                "`looseSessions` does not consult the trim, so set-aside clips stay hidden.")
-        #expect(code.contains("ClipGroup(clips: remaining)"),
-                "A partially-kept session is not rendered with its remaining clips.")
-    }
+    /// **RETIRED IN C2 STEP 2b — the invariant moved somewhere it can be
+    /// asserted, which is the point of the rebuild.**
+    ///
+    /// This pinned `ClipGroup(clips: remaining)` and the absence of
+    /// `proposals.flatMap(\.clipIds)` inside `SessionListView.looseSessions`.
+    /// That function no longer exists: the clustered/loose split is now
+    /// `RenderedBench.compose`, a pure function over explicit inputs.
+    ///
+    /// F44's defect — a set-aside clip vanishing from the bench instead of
+    /// returning to the loose list — is therefore pinned BEHAVIOURALLY, and
+    /// from both directions, by:
+    ///
+    ///   - `RenderedBenchTests.aSetAsideItemLandsInLooseRatherThanVanishing`
+    ///     (it comes back, and is still counted)
+    ///   - `RenderedBenchTests.aFullyClaimedSessionIsNotDrawnTwice`
+    ///     (the other bound, so "everything is loose" cannot pass)
+    ///   - `RenderedBenchTests.itemsPartitionIntoTheThreeDrawnRegions`
+    ///     (covering AND disjoint, with a non-empty trim in play)
+    ///
+    /// Those hold under a behaviour-preserving rename, which this could not:
+    /// the mutation harness showed the source scans staying green while four
+    /// fixed defects were fully restored, and FAILING on a rename. Blind to
+    /// wrong sets, hostile to right ones. **This is a case where the gate
+    /// count drops and coverage improves.**
 
     // MARK: - Source access
 

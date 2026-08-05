@@ -27,8 +27,9 @@ enum ClipsUnplacedFilter {
     ///
     /// - Skips refs whose Core Data row has been deleted or invalidated
     ///   (guards `EXC_BREAKPOINT` on `.id` access).
-    /// - Filters out refs the SessionMediaAbsorber has folded into a
-    ///   voice session card (per the July 11 media-agnostic lock).
+    /// - Filters out refs `SessionListView` is already drawing inside a
+    ///   session card (per the July 11 media-agnostic lock; the set now comes
+    ///   from the unified bench composition rather than a separate absorber).
     static func visible(
         refs: [MediaReference],
         absorbed: Set<UUID>

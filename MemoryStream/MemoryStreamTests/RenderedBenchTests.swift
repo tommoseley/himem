@@ -396,3 +396,57 @@ import Foundation
         )
     }
 }
+
+/// **What `SessionListView` draws, versus what is on the bench** (C2 step 2b).
+///
+/// The bench composes every item of every kind. Until step 3 retires
+/// `ClipsTabView`'s sibling unplaced stack, a session with no voice item is
+/// that stack's to draw — so this view scopes to sessions that have voice.
+///
+/// Pinned because the scope is easy to get wrong in both directions: drop it
+/// and every photo renders twice (the F35(b) class); apply it to the wrong
+/// unit and a mixed sitting loses its photos. It is a pure function precisely
+/// so those can be asserted instead of inspected.
+@Suite struct BenchDrawnScopeTests {
+
+    @Test func aMixedSessionIsDrawnHereWithItsMedia() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let bench = RenderedBench.compose(
+            allItems: [RenderedBenchTests.item(.voice, t),
+                       RenderedBenchTests.item(.image, t.addingTimeInterval(60))],
+            reviewedIds: [], hideReviewed: false, now: t
+        )
+        let drawn = SessionListView.drawnHere(bench.loose)
+        #expect(drawn.count == 1)
+        #expect(drawn[0].items.count == 2, "the sitting lost its photo to the scope")
+    }
+
+    /// A photo captured on its own is the sibling stack's row, not a
+    /// voice-shaped card reading "Transcribing…" over 1970.
+    @Test func aMediaOnlySessionIsLeftToTheSiblingStack() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let bench = RenderedBench.compose(
+            allItems: [RenderedBenchTests.item(.image, t),
+                       RenderedBenchTests.item(.note, t.addingTimeInterval(30))],
+            reviewedIds: [], hideReviewed: false, now: t
+        )
+        #expect(bench.sessions.count == 1, "precondition: it IS on the bench")
+        #expect(SessionListView.drawnHere(bench.loose).isEmpty,
+                "a media-only session drawn here renders a voice card with no clips")
+    }
+
+    /// Both directions in one bench, so a scope that returns everything or
+    /// nothing cannot pass.
+    @Test func theScopeSeparatesTheTwoKindsOfSession() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let voice = RenderedBenchTests.item(.voice, t)
+        let photoAlone = RenderedBenchTests.item(.image, t.addingTimeInterval(5 * 3600))
+        let bench = RenderedBench.compose(
+            allItems: [voice, photoAlone], reviewedIds: [], hideReviewed: false, now: t
+        )
+        #expect(bench.sessions.count == 2)
+        let drawn = SessionListView.drawnHere(bench.loose)
+        #expect(drawn.count == 1)
+        #expect(drawn[0].items.map(\.id) == [voice.id])
+    }
+}

@@ -37,36 +37,70 @@ import Foundation
 
     // MARK: - F38 · one set, one source
 
+    /// **F38's invariant, now carried by construction** (C2 step 2b).
+    ///
+    /// The original guard forbade `absorbedMediaBySessionId.values` — the
+    /// symptom, not the rule — and required the string "sessions", which any
+    /// scoping would satisfy. It could not state the actual requirement,
+    /// because the header's count and the drawn set were both private view
+    /// state and the union had no name.
+    ///
+    /// Now `render(now:)` gathers the drawn items ONCE and the header reads
+    /// `drawnCount` off that value, so "counted" and "drawn" are the same
+    /// array rather than two computations that must agree. What survives here
+    /// is the caller half — that the header reads the composed value and does
+    /// not rebuild a set of its own. The arithmetic half is behavioural now,
+    /// in `RenderedBenchTests.itemsPartitionIntoTheThreeDrawnRegions`.
     @Test func headerCountsOnlyMediaItCanDraw() throws {
         let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
-        let body = try Self.blockBody(startingAtLineContaining: "private var headerTitle: String {", in: src)
+        let body = try Self.blockBody(startingAtLineContaining: "private func header(_ render: BenchRender)", in: src)
         let code = Self.codeOnly(body)
-        #expect(code.contains("absorbedMediaBySessionId.values") == false,
+        #expect(code.contains("render.drawnCount"),
                 """
-                `headerTitle` sums every absorbed-media entry regardless of whether a \
-                session with that key renders. A card looks the media up by session id, \
-                so anything keyed to a session outside the lens is counted and undrawable. \
+                The header does not read the composed count. Every version of this defect \
+                (F35(a), F38, F40, F44) was a number the header computed for itself. \
                 Body was:
                 \(body)
                 """)
-        #expect(code.contains("sessions"),
-                "`headerTitle` does not scope the absorbed-media count to the sessions it describes.")
+        #expect(code.contains("benchItems") == false && code.contains("+ ") == false,
+                """
+                The header is assembling a count from parts again — that is the \
+                three-numbers-two-sets shape, whatever the parts happen to be. Body was:
+                \(body)
+                """)
     }
 
-    /// **Mechanism, not memory.** If `sessions` and the absorbed-media map
-    /// must always move together, one function moves them — rather than five
-    /// call sites each remembering to.
+    /// **Mechanism, not memory** — and the mechanism changed shape in C2
+    /// step 2b, so this now guards the new one.
+    ///
+    /// The old form counted the literal `sessions = computeSessions()`, which
+    /// the troika showed was defeatable by a second writer spelled differently
+    /// (`computeSessions(applyFilter: false)` left it green). What it was
+    /// reaching for is that bench state has exactly one writer.
+    ///
+    /// Grouping itself is no longer state — it is a pure function of
+    /// `benchItems`, and `RenderedBenchTests.composingTwiceFromTheSameInputs\
+    /// YieldsTheSameValue` covers that half behaviourally. What remains
+    /// assignable, and therefore ownable, is `benchItems` itself.
     @Test func regroupingHasExactlyOneOwner() throws {
         let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
         let code = Self.codeOnly(src)
-        let assignments = code.components(separatedBy: "sessions = computeSessions()").count - 1
-        #expect(assignments == 1,
+        // Count assignments, not mentions. The `@State` declaration reads
+        // `benchItems: [BenchClipItem] = []`, which this pattern deliberately
+        // does not match — so the expected count is exactly the one real
+        // writer. (Written as 2 first, on the assumption the declaration would
+        // match; the guard failed and corrected the assumption, which is the
+        // only way a guard earns trust.)
+        let writes = code.components(separatedBy: "benchItems = ").count - 1
+        #expect(writes == 1,
                 """
-                `sessions` is assigned from \(assignments) places. Four of the five original \
-                sites also refreshed the absorbed-media map and one did not (:239, the \
-                remove-clip-from-session regroup), which is how the map went stale. \
-                Regrouping needs one owner.
+                `benchItems` is written from \(writes) places, expected 1 \
+                (`recomposeBench()`). A second writer is how the absorbed-media map went \
+                stale in the first place — four of five sites remembered to pair the \
+                update and one did not.
                 """)
+        #expect(code.contains("private func recomposeBench()"),
+                "The single owner is gone or renamed; this guard is now pinned to nothing.")
     }
 
     // MARK: - F39 · a proposal must not read as a session

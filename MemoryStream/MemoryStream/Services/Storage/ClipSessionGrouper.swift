@@ -251,6 +251,14 @@ enum CollapsedBodyVariant: Equatable {
 /// Note what this is NOT: the idle-gap grouper was never at fault. It
 /// applies its threshold correctly and simply never saw the reviewed clips,
 /// because this filter runs first.
+/// **NO PRODUCTION CALLER AS OF C2 STEP 2b (2026-08-03).** The bench's lens is
+/// now `RenderedBench.compose`, which applies the same F36 session-relative
+/// rule over items of every kind rather than voice-only `InboxClip`s. This is
+/// kept, with its behavioural tests, until step 5 retires the source-scan
+/// assertions that read alongside it — and it is labelled here because a
+/// complete, tested, unreachable type is exactly what this rebuild exists to
+/// stop happening silently (`UnifiedBenchGrouper` sat that way since July;
+/// `MediaBlobOrphanSweep` before it).
 enum BenchLensClips {
 
     /// - Parameters:

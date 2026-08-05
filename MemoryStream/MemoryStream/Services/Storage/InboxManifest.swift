@@ -630,9 +630,9 @@ final class InboxManifest: ObservableObject {
     }
 
     /// Restore a recycled clip to the bench — clears `recycledAt` and moves
-    /// it back into `clips`, where `ClipSessionGrouper`/`computeSessions`
-    /// re-groups it into its sitting (the ruling's "re-enters session
-    /// grouping"). No-op if the id isn't recycled.
+    /// it back into `clips`, where the bench's composition re-groups it into
+    /// its sitting (the ruling's "re-enters session grouping"). No-op if the
+    /// id isn't recycled.
     func restoreClip(clipId: UUID) {
         guard let clip = recycledClips.first(where: { $0.clipId == clipId }) else { return }
         recycledClips.removeAll { $0.clipId == clipId }

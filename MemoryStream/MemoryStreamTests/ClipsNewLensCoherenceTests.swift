@@ -105,23 +105,31 @@ import Foundation
 
     // MARK: - (a) Caller guard — the header must not reach past the lens
 
-    /// The helper being right says nothing about whether the header reads
-    /// it. This is the defect: both header properties bound `benchClips`
+    /// The helper being right says nothing about whether the header reads it.
+    /// That was the defect: both header properties bound `benchClips`
     /// directly while the session count came from the filtered set.
+    ///
+    /// **The wording moved in C2 step 2b; the promise did not.** There is no
+    /// `lensClips` any more — the lens is applied inside `RenderedBench.compose`
+    /// and the header reads the composed value's drawn items. So this now pins
+    /// the same requirement against the current names, and additionally forbids
+    /// the header touching the RAW item list, which is `benchClips`' successor
+    /// and the thing it must not reach past.
     @Test func headerReadsTheLensSetNotTheRawBench() throws {
         let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
-        for property in ["private var headerTitle: String {", "private var headerSubtitle: String {"] {
+        for property in ["private func header(_ render: BenchRender)",
+                         "private func headerSubtitle(_ render: BenchRender)"] {
             let body = try Self.blockBody(startingAtLineContaining: property, in: src)
             let code = Self.codeOnly(body)
-            #expect(code.contains("benchClips") == false,
+            #expect(code.contains("benchItems") == false,
                     """
-                    \(property) reads `benchClips` directly, which is unfiltered — so on the \
+                    \(property) reads `benchItems` directly, which is unfiltered — so on the \
                     New lens it describes a different set than the one rendered. It must read \
-                    the lens set. Body was:
+                    the composed render. Body was:
                     \(body)
                     """)
-            #expect(code.contains("lensClips"),
-                    "\(property) does not read the lens set.")
+            #expect(code.contains("render.drawn"),
+                    "\(property) does not read the composed drawn set.")
         }
     }
 
