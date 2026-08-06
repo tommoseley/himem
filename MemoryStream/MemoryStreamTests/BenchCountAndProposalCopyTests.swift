@@ -180,10 +180,32 @@ import Foundation
 
     /// The caller must actually supply it — an unused parameter is the
     /// guard-the-caller shape one layer out.
+    ///
+    /// **Wrong in both directions three times now, so it pins the INVARIANT.**
+    /// F40's form accepted a mere declaration (an unused parameter satisfied
+    /// it); F44's form pinned one exact call expression and broke on a correct
+    /// change; this form pinned `mediaFor: media(forCluster:)` and broke again
+    /// on 2026-08-05, when the argument correctly became a closure over the
+    /// composed bench. The promise — *the card is supplied its media, from the
+    /// bench* — has been intact every time. Assert that, not the spelling.
     @Test func theBenchSuppliesTheClusterItsMedia() throws {
         let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
-        #expect(Self.codeOnly(src).contains("mediaFor: media(forCluster:)"),
+        let code = try Self.callArguments(ofCallStartingAtLineContaining: "ClusterCardStack(", in: src)
+        let construction = code
+        // Self-test: the extractor must span the whole argument list, not one
+        // line. `subtitleFor:` sits on a different line from `mediaFor:`, so
+        // requiring both proves the window is wide — the exact failure that
+        // let the brace-based version pass while seeing a single line.
+        #expect(code.contains("subtitleFor:"),
+                "The construction window collapsed — `callArguments` is not spanning the call.")
+        #expect(code.contains("mediaFor:"),
                 "`ClusterCardStack` is constructed without media, so the parameter draws nothing.")
+        #expect(code.contains("media(forCluster:"),
+                """
+                `mediaFor:` is supplied but does not reach `media(forCluster:)`, so the \
+                card draws whatever that argument happens to be. Construction was:
+                \(construction)
+                """)
     }
 
     /// **F41 · the prune must read the same stores the proposer does.**
@@ -212,6 +234,53 @@ import Foundation
         #expect(ClusterCardCopy.sectionHeading == "A few of these might go together")
     }
 
+    /// **The composed render is THREADED DOWN, never recomputed per call site**
+    /// (device, 2026-08-05 — Clips locked the phone and did not recover).
+    ///
+    /// `render(now:)` is not a cheap accessor. It performs *two*
+    /// `RenderedBench.compose` passes plus `ClipClusterProposer.propose`, and
+    /// `propose` reaches `LocalEntityExtractor.shared` — a live **NLTagger
+    /// named-entity pass over every session's full transcript**, synchronously,
+    /// on the main thread.
+    ///
+    /// C2 step 2b-ii handed `media(forCluster:)` to `ClusterCardStack` as a
+    /// *function reference*, and the card calls it ~4× per card (`:247`, `:248`,
+    /// `keptTotal` at `:347`, `"Show all N"` at `:516`), with `clusterSubtitle`
+    /// reaching it a fifth time. Each call recomposed the whole bench. A frame
+    /// with K clusters therefore ran **1 + ~4K** NLP passes inside `body`, and
+    /// the `onChange`/`onReceive` handlers each scheduled another via
+    /// `registerSessionIds()`. That is a **livelock, not slowness**: no lock is
+    /// held, so nothing deadlocks, but forward progress never completes and it
+    /// does not recover.
+    ///
+    /// The file's own comment at `:146` already promised this — *"Composed ONCE
+    /// per render and threaded down… nothing recomputes a set of its own"* —
+    /// while four functions recomputed it. Guard-the-caller, inside the rebuild
+    /// written to end that class.
+    @Test func theComposedRenderIsThreadedDownNotRecomputedPerCallSite() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
+        // `blockBody` throws when a needle is absent, so a rename fails this
+        // guard loudly rather than letting it pass by matching nothing.
+        let mustNotRecompose = [
+            "private func media(forCluster proposal: ClusterProposal",
+            "private func includedClusterMedia(",
+            "private func clusterSubtitle(",
+            "private func registerSessionIds(",
+        ]
+        for needle in mustNotRecompose {
+            let body = try Self.blockBody(startingAtLineContaining: needle, in: src)
+            #expect(Self.codeOnly(body).contains("render()") == false,
+                    """
+                    `\(needle)` calls `render()`, recomposing the entire bench — two \
+                    compose passes plus an NLTagger named-entity sweep over every \
+                    transcript — for one lookup. Called from `body` per cluster card \
+                    this is the 2026-08-05 livelock. Take the already-composed value \
+                    as a parameter instead. Body was:
+                    \(body)
+                    """)
+        }
+    }
+
     // MARK: - Source access
 
     static func codeOnly(_ source: String) -> String {
@@ -222,6 +291,37 @@ import Foundation
                 return String(line[line.startIndex..<marker.lowerBound])
             }
             .joined(separator: "\n")
+    }
+
+    /// The ARGUMENT LIST of a parenthesised call, delimited by **paren** depth.
+    ///
+    /// `blockBody` counts BRACES, so on a call whose argument is a closure that
+    /// opens and closes on one line, depth goes 0→1→0 and it terminates after
+    /// that single line. On 2026-08-05 that made
+    /// `theBenchSuppliesTheClusterItsMedia` pass while seeing exactly one line
+    /// of a fourteen-line construction — it happened to be the line carrying
+    /// both strings the guard checked. **Green for the wrong reason**, the
+    /// `loudPeakThenSilence` shape, in a guard written to catch that shape.
+    ///
+    /// Runs over comment-stripped source so a paren inside a comment cannot
+    /// unbalance the scan.
+    static func callArguments(ofCallStartingAtLineContaining needle: String, in source: String) throws -> String {
+        let lines = codeOnly(source)
+            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let start = lines.firstIndex(where: { $0.contains(needle) }) else {
+            throw Failure.blockNotFound(needle)
+        }
+        var depth = 0, started = false
+        var out: [String] = []
+        for line in lines[start...] {
+            out.append(line)
+            for ch in line {
+                if ch == "(" { depth += 1; started = true }
+                if ch == ")" { depth -= 1 }
+            }
+            if started && depth <= 0 { break }
+        }
+        return out.joined(separator: "\n")
     }
 
     static func blockBody(startingAtLineContaining needle: String, in source: String) throws -> String {

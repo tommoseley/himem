@@ -206,8 +206,7 @@ struct SessionListView: View {
             // read) is the structural guarantee against double-render: a
             // clip is only ever in ONE store at read time (risk-1).
             ArrivedClipMaterializer.materializeAll(in: context)
-            recomposeBench()
-            registerSessionIds()
+            recomposeAndRegister()
             // Tutorial #4 (Captured Clips · the Watch story). Spec
             // gate: opened **non-empty** — clips have actually
             // arrived. Empty-state is intentionally NOT a trigger
@@ -218,16 +217,14 @@ struct SessionListView: View {
             }
         }
         .onChange(of: inbox.clips) { _, _ in
-            recomposeBench()
-            registerSessionIds()
+            recomposeAndRegister()
         }
         .onChange(of: arrivals.clipsInFlight) { _, _ in
             // In-flight clips render as IncomingCard, never as a session card.
             // `RenderedBench` partitions them off before grouping, but the
             // announced-but-not-yet-delivered ones only exist in the tracker —
             // so a change here has to re-read it.
-            recomposeBench()
-            registerSessionIds()
+            recomposeAndRegister()
         }
         .onChange(of: inbox.soloClipIds) { _, _ in
             // The user *Removed a clip from session* on Clip Detail
@@ -235,8 +232,7 @@ struct SessionListView: View {
             // publish fires here even though `clips` didn't change;
             // re-publish so the removed clip snaps into its own
             // single-clip card without waiting for another mutation.
-            recomposeBench()
-            registerSessionIds()
+            recomposeAndRegister()
         }
         .onReceive(NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
@@ -245,8 +241,7 @@ struct SessionListView: View {
             // P0-3: a materialized voice ref (this device) or a ref synced in
             // from another device lands here — recompose so it re-groups. Media
             // refs land the same way and now need no separate absorption pass.
-            recomposeBench()
-            registerSessionIds()
+            recomposeAndRegister()
         }
         .onDisappear {
             stopPlayback()
@@ -261,9 +256,26 @@ struct SessionListView: View {
     /// (P7-4) — only loose sessions, since Sort clusters are excluded from
     /// multi-select. The unplaced stack registers its own ids under
     /// "unplaced" from `ClipsTabView`.
-    private func registerSessionIds() {
+    /// Takes the composed render rather than composing one (2026-08-05). Six
+    /// handlers call this; composing here meant each `onChange`/`onReceive`
+    /// scheduled another full NLTagger pass, which is what turned the per-card
+    /// recomposition into a livelock the screen never escaped.
+    /// Every handler's whole body: recompose the bench, then republish the
+    /// selectable ids from **one** composition.
+    ///
+    /// Named rather than inlined for two reasons. It keeps `body`'s modifier
+    /// chain small enough for the type-checker (inlining `registerSessionIds(render())`
+    /// into five closures tipped it into *"unable to type-check this expression
+    /// in reasonable time"*), and it makes "one composition per event" a thing
+    /// with a name instead of a pattern five call sites have to remember.
+    private func recomposeAndRegister() {
+        recomposeBench()
+        registerSessionIds(render())
+    }
+
+    private func registerSessionIds(_ render: BenchRender) {
         selection.registerVisible(
-            render().loose.flatMap { sessionSelectableIds($0) },
+            render.loose.flatMap { sessionSelectableIds($0) },
             source: "sessions"
         )
     }
@@ -517,9 +529,14 @@ struct SessionListView: View {
     /// `absorbedMediaBySessionId` side channel by key — two scopes, which is
     /// how F38 counted media no card could draw. A claimed session now simply
     /// *contains* its media, so this reads the same value everything else does.
-    private func media(forCluster proposal: ClusterProposal) -> [MediaReference] {
-        let bench = render().bench
-        return RenderedBench.claimedSessions(for: proposal, in: bench.sessions)
+    /// **Takes the already-composed bench; it must never compose its own**
+    /// (2026-08-05). This read `render().bench`, and `body` hands this function
+    /// to `ClusterCardStack` as a reference that the card calls ~4× per card —
+    /// so every cluster re-ran two compose passes plus `ClipClusterProposer`'s
+    /// NLTagger sweep over every transcript, on the main thread. Guarded by
+    /// `theComposedRenderIsThreadedDownNotRecomputedPerCallSite`.
+    private func media(forCluster proposal: ClusterProposal, in bench: RenderedBench) -> [MediaReference] {
+        RenderedBench.claimedSessions(for: proposal, in: bench.sessions)
             .flatMap(\.items)
             .filter { $0.kind != .voice }
             .compactMap { refsById[$0.id] }
@@ -532,9 +549,9 @@ struct SessionListView: View {
     /// `removedByFingerprint` is a `Set<UUID>` and the handlers never look
     /// the id up, so it carries `MediaReference.id` alongside clip ids
     /// without a parallel store or a key change.
-    private func includedClusterMedia(_ proposal: ClusterProposal) -> [MediaReference] {
+    private func includedClusterMedia(_ proposal: ClusterProposal, in bench: RenderedBench) -> [MediaReference] {
         let removed = removedByFingerprint[proposal.fingerprint.rawValue] ?? []
-        return media(forCluster: proposal).filter { !removed.contains($0.id) }
+        return media(forCluster: proposal, in: bench).filter { !removed.contains($0.id) }
     }
 
     /// **The card's subtitle, computed from what is KEPT** (F43).
@@ -549,8 +566,8 @@ struct SessionListView: View {
     /// Sittings are recomputed by regrouping the kept clips through the same
     /// grouper the bench uses, so the lens, the card and this line cannot
     /// disagree about what a sitting is.
-    private func clusterSubtitle(_ proposal: ClusterProposal, _ kept: [InboxClip]) -> String {
-        let keptMedia = includedClusterMedia(proposal)
+    private func clusterSubtitle(_ proposal: ClusterProposal, _ kept: [InboxClip], in bench: RenderedBench) -> String {
+        let keptMedia = includedClusterMedia(proposal, in: bench)
         let sittings = ClipSessionGrouper.group(kept, soloClipIds: inbox.soloClipIds).count
         return ClusterSubtitleBuilder.subtitle(
             clipCount: kept.count + keptMedia.count,
@@ -584,7 +601,9 @@ struct SessionListView: View {
         //
         // Respects the same set-aside store the voice rows use, so a photo
         // the user excluded is excluded here too.
-        let keptMedia = includedClusterMedia(proposal)
+        // One composition per tap, not per render — this is a user action, not
+        // a draw, so the cost is bounded and paid once (2026-08-05).
+        let keptMedia = includedClusterMedia(proposal, in: render().bench)
         bundleSession = BundleRequest(
             session: ClipGroup(clips: kept),
             clipsToBundle: kept,
@@ -711,8 +730,11 @@ struct SessionListView: View {
                 ClusterCardStack(
                     proposals: render.proposals,
                     clipsFor: clips(forCluster:),
-                    mediaFor: media(forCluster:),
-                    subtitleFor: clusterSubtitle,
+                    // Both close over the ONE `render` composed at `:148`, so a
+                    // card asking ~4× per card is ~4 dictionary-cheap lookups
+                    // rather than ~4 full recompositions (2026-08-05 livelock).
+                    mediaFor: { media(forCluster: $0, in: render.bench) },
+                    subtitleFor: { clusterSubtitle($0, $1, in: render.bench) },
                     expandedFingerprints: expandedClusterFingerprints,
                     removedByFingerprint: removedByFingerprint,
                     onToggleExpand: toggleClusterExpanded,

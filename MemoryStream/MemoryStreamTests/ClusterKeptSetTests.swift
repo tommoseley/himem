@@ -69,10 +69,32 @@ import Foundation
 
     /// The caller must supply it — an unused parameter is the shape that
     /// slipped past the F40 guard.
+    ///
+    /// **Pins the invariant, not the spelling** (2026-08-05). This asserted the
+    /// literal `"subtitleFor: clusterSubtitle"` and broke when the argument
+    /// correctly became a closure over the composed bench, to stop the card
+    /// recomposing the whole bench — NLTagger sweep included — once per call
+    /// site. The promise, *the card is supplied a kept-set subtitle source*,
+    /// was intact. Sibling of `theBenchSuppliesTheClusterItsMedia`, which broke
+    /// the same way in the same change; both are now invariant-shaped.
     @Test func theBenchSuppliesTheKeptSetSubtitle() throws {
         let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
-        #expect(Self.codeOnly(src).contains("subtitleFor: clusterSubtitle"),
+        let code = try Self.callArguments(ofCallStartingAtLineContaining: "ClusterCardStack(", in: src)
+        let construction = code
+        // Self-test: `mediaFor:` is on a different line from `subtitleFor:`, so
+        // requiring it proves the extractor spans the argument list rather than
+        // stopping at the first one-line closure (2026-08-05).
+        #expect(code.contains("mediaFor:"),
+                "The construction window collapsed — `callArguments` is not spanning the call.")
+        #expect(code.contains("subtitleFor:"),
                 "`ClusterCardStack` is constructed without a kept-set subtitle source.")
+        #expect(code.contains("clusterSubtitle("),
+                """
+                `subtitleFor:` is supplied but does not reach `clusterSubtitle`, so the \
+                card's subtitle is whatever that argument happens to be — not the kept \
+                set. Construction was:
+                \(construction)
+                """)
     }
 
     // MARK: - Media must be excludable, and the vocabulary must not borrow
@@ -234,6 +256,29 @@ import Foundation
                 return String(line[line.startIndex..<marker.lowerBound])
             }
             .joined(separator: "\n")
+    }
+
+    /// The ARGUMENT LIST of a parenthesised call, delimited by **paren** depth.
+    /// See the twin in `BenchCountAndProposalCopyTests` for why brace-counting
+    /// is wrong here: a one-line closure argument takes `blockBody` from depth
+    /// 0→1→0 and terminates it after a single line (2026-08-05).
+    static func callArguments(ofCallStartingAtLineContaining needle: String, in source: String) throws -> String {
+        let lines = codeOnly(source)
+            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let start = lines.firstIndex(where: { $0.contains(needle) }) else {
+            throw Failure.blockNotFound(needle)
+        }
+        var depth = 0, started = false
+        var out: [String] = []
+        for line in lines[start...] {
+            out.append(line)
+            for ch in line {
+                if ch == "(" { depth += 1; started = true }
+                if ch == ")" { depth -= 1 }
+            }
+            if started && depth <= 0 { break }
+        }
+        return out.joined(separator: "\n")
     }
 
     static func blockBody(startingAtLineContaining needle: String, in source: String) throws -> String {
