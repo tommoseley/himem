@@ -79,4 +79,41 @@ struct ClipGroupEqualityTests {
         #expect(group.id == c1.clipId)
         #expect(group != ClipGroup(clips: [c2]))
     }
+
+    // MARK: - An identity must be a function of its content
+
+    /// **The 2026-08-09 Clips freeze, as an assertion.**
+    ///
+    /// `id` fell back to `?? UUID()` when `clips` was empty, so reading it
+    /// twice gave two different answers. `ForEach` reads identity repeatedly;
+    /// an id that changes per read means SwiftUI can never converge on a diff,
+    /// and the screen wedged — with a 0.4ms render over a 47-item bench, so it
+    /// never looked like cost. A stable sentinel closed it alone.
+    ///
+    /// This is the money test: it fails on the exact expression that shipped.
+    @Test func anEmptyGroupsIdentityIsStableAcrossReads() {
+        let empty = ClipGroup(clips: [])
+        #expect(empty.id == empty.id,
+                """
+                `ClipGroup.id` returns a different value on each read for an empty group. \
+                SwiftUI's ForEach re-reads identity, so it can never match a row to its \
+                previous self and the view diffs forever.
+                """)
+    }
+
+    /// Two empty groups COLLIDE on one id, deliberately. A collision renders a
+    /// visibly wrong list; per-read churn renders an unkillable freeze. The
+    /// first is diagnosable, the second is not — so the sentinel is the honest
+    /// failure mode, not merely the convenient one.
+    @Test func twoEmptyGroupsShareTheSentinelRatherThanInventingIds() {
+        #expect(ClipGroup(clips: []).id == ClipGroup(clips: []).id)
+        #expect(ClipGroup(clips: []).id == ClipGroup.emptyGroupId)
+    }
+
+    /// The sentinel must not collide with a real group's identity — otherwise
+    /// it would swap a freeze for a row that impersonates a session.
+    @Test func theSentinelCannotBeMistakenForARealGroup() {
+        let clip = makeClip(rollGroupId: nil)
+        #expect(ClipGroup(clips: [clip]).id != ClipGroup.emptyGroupId)
+    }
 }

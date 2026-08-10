@@ -158,8 +158,32 @@ struct ClipGroup: Identifiable, Hashable {
     /// stable across re-groups of the same content — deliberately
     /// membership-*independent* so a row keeps its identity across an
     /// add/delete (equality, above, carries the change).
+    /// **The empty case must never mint a fresh UUID** (device, 2026-08-09).
+    ///
+    /// It did — so an empty group's identity changed on *every read*, and
+    /// `ForEach` reads identity repeatedly. SwiftUI could never converge on a
+    /// diff and the Clips screen wedged: fast render, small bench, no loop of
+    /// our own, the churn entirely inside SwiftUI's diffing. Four `body` passes
+    /// at 0.4ms each and then silence. Proven by this fix — a stable sentinel
+    /// closed the hang on its own.
+    ///
+    /// The doc above says the id is "deterministic per-content"; the fallback
+    /// was the one branch where it was not, which is why it read as safe.
+    ///
+    /// `emptyGroupId` is a fixed sentinel, so two empty groups now COLLIDE on
+    /// one id rather than each inventing a new one. That is deliberate: a
+    /// visibly wrong list is a far better failure than an unkillable freeze,
+    /// and a collision is diagnosable where per-read churn is not.
+    ///
+    /// This predates C2 step 2b-ii (it is present at `5fdd0a6^`), so it is
+    /// fixed here on its own merits rather than folded into that step's redo —
+    /// reverting 2b-ii would otherwise have hidden it again (the F6d lesson:
+    /// removing the trigger while leaving the defect live is how it goes
+    /// invisible).
+    static let emptyGroupId = UUID(uuidString: "00000000-0000-0000-0000-00000000E317")!
+
     var id: UUID {
-        clips.first?.rollGroupId ?? clips.first?.clipId ?? UUID()
+        clips.first?.rollGroupId ?? clips.first?.clipId ?? Self.emptyGroupId
     }
 
     var capturedAt: Date {
