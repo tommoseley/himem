@@ -140,6 +140,8 @@ struct SessionListView: View {
         // content — the parent (`ClipsTabView`) owns the title ("Clips")
         // and the tab bar handles navigation. The modal-push paths from
         // Settings + JournalView (2026-07-09) are retired.
+        // `let _ =` because a bare call in a ViewBuilder is read as a view.
+        let _ = BenchPerf.body(sessions: sessions.count, clips: benchClips.count)
         ZStack {
             Crucible.Color.paper.ignoresSafeArea()
             // **"Nothing new" needs THREE conditions, and each was found
@@ -281,6 +283,8 @@ struct SessionListView: View {
     /// `BenchCountAndProposalCopyTests` asserts there is exactly one
     /// assignment site so a sixth cannot quietly appear.
     private func regroupSessions() {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        defer { BenchPerf.regroup(since: t0, sessions: sessions.count) }
         sessions = computeSessions()
         recomputeAbsorbedMedia()
     }
@@ -1618,3 +1622,55 @@ private struct AutoDismissView: View {
     }
 }
 
+
+/// **`[BenchPerf]` — the instrument that ended the 2026-08-09 Clips freeze.**
+///
+/// Same posture as `[Amp]` (B10) and `[Meter]` (D10), and it earned its keep
+/// the same way: three cost-shaped hypotheses were reasoned off the diff and
+/// all three died against one measurement. `render` at 0.0–0.4ms over a
+/// 47-item bench, four `body` passes, then silence — which is what redirected
+/// the search from cost to identity and found `ClipGroup.id` minting a fresh
+/// UUID on every read.
+///
+/// It reads no state it does not already have and changes no behaviour. Kept
+/// wired to the reverted composition path rather than parked, because a
+/// complete-but-uncalled type is precisely what this rebuild exists to stop
+/// (`UnifiedBenchGrouper` sat that way since July; `MediaBlobOrphanSweep`
+/// before it). **It carries into the C2 step 2b-ii redo, where the device pass
+/// needs it.**
+///
+/// What each line answers:
+///   * `body`/`regroup` counts climbing without bound → a CYCLE
+///   * one entry with a large `ms`                    → COST
+///   * counts that stop while the screen is frozen    → neither: the churn is
+///     inside SwiftUI's diff, which is the freeze this instrument found
+///
+/// Rate-limited so it cannot become the bottleneck: every call for the first
+/// 20, then every 25th.
+@MainActor
+enum BenchPerf {
+    private static var bodyCount = 0
+    private static var regroupCount = 0
+    private static var firstAt: CFAbsoluteTime?
+
+    private static func shouldLog(_ n: Int) -> Bool { n <= 20 || n % 25 == 0 }
+
+    private static func elapsed() -> Double {
+        let now = CFAbsoluteTimeGetCurrent()
+        if firstAt == nil { firstAt = now }
+        return now - (firstAt ?? now)
+    }
+
+    static func body(sessions: Int, clips: Int) {
+        bodyCount += 1
+        guard shouldLog(bodyCount) else { return }
+        NSLog("[HiMem][BenchPerf] body #\(bodyCount) · sessions=\(sessions) · clips=\(clips) · t+\(String(format: "%.2f", elapsed()))s")
+    }
+
+    static func regroup(since t0: CFAbsoluteTime, sessions: Int) {
+        regroupCount += 1
+        let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+        guard shouldLog(regroupCount) else { return }
+        NSLog("[HiMem][BenchPerf] regroup #\(regroupCount) · \(String(format: "%.1f", ms))ms · sessions=\(sessions) · t+\(String(format: "%.2f", elapsed()))s")
+    }
+}
