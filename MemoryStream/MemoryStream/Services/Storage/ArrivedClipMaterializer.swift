@@ -90,11 +90,6 @@ enum ArrivedClipMaterializer {
     /// keying by id collapses them to one, and the ref (the source of truth)
     /// is the survivor. Pure + order-independent so it's directly testable.
     @MainActor
-    /// **NO PRODUCTION CALLER AS OF C2 STEP 2b (2026-08-03).** `BenchInventory`
-    /// now performs this union at the bench, over items of every kind and with
-    /// review state resolved on the same refs-win precedence. Kept with its
-    /// tests until step 3/5; labelled so it does not become another complete,
-    /// tested, unreachable type nobody notices.
     static func composeBenchClips(manifestClips: [InboxClip], refs: [MediaReference]) -> [InboxClip] {
         var byId: [UUID: InboxClip] = [:]
         for clip in manifestClips { byId[clip.clipId] = clip }

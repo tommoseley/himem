@@ -42,26 +42,23 @@ struct SessionListView: View {
     /// clip is a ref, so `Transcribe again` must land on the ref, never no-op.
     private let lifecycle = EntryLifecycleService()
 
-    /// **Every bench item of every kind** (C2 step 2b, 2026-08-03). The one
-    /// input the whole surface composes from — replacing `benchClips` (voice
-    /// only) plus the `absorbedMediaBySessionId` side channel that carried
-    /// media around it. There is no longer a "+ media" term to forget, because
-    /// media is an item.
-    ///
-    /// Kept in `@State` (not computed) so the header and the cards read it
-    /// without a Core Data fetch on every SwiftUI render; `recomposeBench()`
-    /// is the one writer. Grouping and cluster arithmetic are pure and run per
-    /// render from this — see `render(now:)`.
-    @State private var benchItems: [BenchClipItem] = []
-    /// Ids the user has opened, resolved across BOTH backing stores at the
-    /// boundary (`BenchInventory`), so nothing downstream asks which store a
-    /// thing has.
-    @State private var reviewedIds: Set<UUID> = []
-    /// Item id → its backing row. The view layer resolves an item back to a
-    /// concrete `InboxClip` / `MediaReference` here and nowhere else; the
-    /// composition above is value-typed and knows nothing about Core Data.
-    @State private var clipsById: [UUID: InboxClip] = [:]
-    @State private var refsById: [UUID: MediaReference] = [:]
+    @State private var sessions: [ClipGroup] = []
+    /// The unified bench clip list (P0-3): in-flight manifest rows UNION the
+    /// materialized zero-edge voice refs (`MediaReference`), deduped by clipId.
+    /// A transcribed clip lives ONLY as a synced ref (it follows the person,
+    /// not the device); in-flight clips live ONLY in the per-device manifest —
+    /// so the union is disjoint in practice and the dedup is the id-keyed belt
+    /// for the migration window (risk-1). Recomputed alongside `sessions` (and
+    /// on Core Data change) so a materialized ref re-groups the bench. Source of
+    /// truth: `docs/architecture/2026-07-25-clip-sync-single-source-of-truth.md`.
+    @State private var benchClips: [InboxClip] = []
+    /// Unplaced photo/video refs pulled into each voice session by
+    /// `SessionMediaAbsorber` (July 11 2026 media-agnostic lock).
+    /// Keyed by `ClipGroup.id`. Recomputed on inbox change or Core
+    /// Data change; published to `BenchAbsorbedMediaBus` so the
+    /// parent `ClipsTabView` can filter these out of its top
+    /// day-grouped stack (avoids double-rendering).
+    @State private var absorbedMediaBySessionId: [UUID: [MediaReference]] = [:]
     @State private var bundleSession: BundleRequest? = nil
     // Clip-editor cycle 2: the boxed ✎ Edit opens the unified ClipEditorModal
     // as a sheet, superseding the pushed ClipDetailView.
@@ -88,9 +85,9 @@ struct SessionListView: View {
     /// value is the `Set` of `MediaReference.id` that the user has
     /// excluded from the bundle by tapping the ring on an absorbed
     /// media row (photo / video). Default = empty (all media
-    /// included). Bundling filters the session's media by this set —
-    /// an excluded media ref stays on the bench as a loose clip after
-    /// the voice bundle commits.
+    /// included). Bundling filters `absorbedMediaBySessionId` by
+    /// this set — an excluded media ref stays on the bench as a
+    /// loose clip after the voice bundle commits.
     @State private var sessionExcludedMediaIds: [UUID: Set<UUID>] = [:]
     // Sort cluster editor (Model A transient trim, ruling 2026-07-15).
     // Both view-state only — trims are provisional-and-reversible until
@@ -143,9 +140,6 @@ struct SessionListView: View {
         // content — the parent (`ClipsTabView`) owns the title ("Clips")
         // and the tab bar handles navigation. The modal-push paths from
         // Settings + JournalView (2026-07-09) are retired.
-        // Composed ONCE per render and threaded down. Every number on this
-        // screen reads this one value; nothing recomputes a set of its own.
-        let render = render()
         ZStack {
             Crucible.Color.paper.ignoresSafeArea()
             // **"Nothing new" needs THREE conditions, and each was found
@@ -167,8 +161,8 @@ struct SessionListView: View {
             //
             // All three live in one pure predicate so the rule is money-tested
             // in a single place rather than re-derived at each call site.
-            if render.drawnCount > 0 {
-                list(render)
+            if !sessions.isEmpty {
+                list
             } else if Self.showsEmptyState(
                 sessionsEmpty: true,
                 hasSiblingContent: hasSiblingContent,
@@ -206,48 +200,59 @@ struct SessionListView: View {
             // read) is the structural guarantee against double-render: a
             // clip is only ever in ONE store at read time (risk-1).
             ArrivedClipMaterializer.materializeAll(in: context)
-            recomposeAndRegister()
+            recomputeBenchClips()
+            regroupSessions()
+            registerSessionIds()
             // Tutorial #4 (Captured Clips · the Watch story). Spec
             // gate: opened **non-empty** — clips have actually
             // arrived. Empty-state is intentionally NOT a trigger
             // (nothing to explain yet). The orchestrator handles the
             // once-each + session/day caps + arming gate.
-            if !benchItems.isEmpty {
+            if !sessions.isEmpty {
                 TutorialOrchestrator.shared.tryFire(.watchStory)
             }
         }
         .onChange(of: inbox.clips) { _, _ in
-            recomposeAndRegister()
+            recomputeBenchClips()
+            regroupSessions()
+            registerSessionIds()
         }
         .onChange(of: arrivals.clipsInFlight) { _, _ in
-            // In-flight clips render as IncomingCard, never as a session card.
-            // `RenderedBench` partitions them off before grouping, but the
-            // announced-but-not-yet-delivered ones only exist in the tracker —
-            // so a change here has to re-read it.
-            recomposeAndRegister()
+            // In-flight clips are rendered as IncomingCard, NOT as
+            // a SessionCard inside the session list. When the
+            // tracker changes (clip enters/leaves any in-flight
+            // phase) the sessions need to be re-grouped without
+            // those clipIds to avoid double-rendering.
+            recomputeBenchClips()
+            regroupSessions()
+            registerSessionIds()
         }
         .onChange(of: inbox.soloClipIds) { _, _ in
             // The user *Removed a clip from session* on Clip Detail
             // (Chunk C, Clip triage July 12 2026). The manifest's
             // publish fires here even though `clips` didn't change;
-            // re-publish so the removed clip snaps into its own
+            // re-group so the removed clip snaps into its own
             // single-clip card without waiting for another mutation.
-            recomposeAndRegister()
+            regroupSessions()
+            registerSessionIds()
         }
         .onReceive(NotificationCenter.default.publisher(
             for: .NSManagedObjectContextObjectsDidChange,
             object: context
         )) { _ in
-            // P0-3: a materialized voice ref (this device) or a ref synced in
-            // from another device lands here — recompose so it re-groups. Media
-            // refs land the same way and now need no separate absorption pass.
-            recomposeAndRegister()
+            // P0-3: a materialized voice ref (this device) or a ref synced
+            // in from another device lands here — recompute the bench so it
+            // re-groups. Also media refs land as unplaced refs; re-absorb so
+            // a photo captured now appears inside its sitting's session card.
+            recomputeBenchClips()
+            regroupSessions()
+            registerSessionIds()
         }
         .onDisappear {
             stopPlayback()
-            // Clear the drawn-media signal on teardown so a re-mount of Clips
-            // starts fresh — matters if the Clips tab is torn down while
-            // unplaced refs are still queued.
+            // Clear absorption on teardown so a re-mount of Clips
+            // starts fresh — matters if the Clips tab is torn down
+            // while unplaced refs are still queued.
             BenchAbsorbedMediaBus.shared.setAbsorbed([])
         }
     }
@@ -256,117 +261,76 @@ struct SessionListView: View {
     /// (P7-4) — only loose sessions, since Sort clusters are excluded from
     /// multi-select. The unplaced stack registers its own ids under
     /// "unplaced" from `ClipsTabView`.
-    /// Takes the composed render rather than composing one (2026-08-05). Six
-    /// handlers call this; composing here meant each `onChange`/`onReceive`
-    /// scheduled another full NLTagger pass, which is what turned the per-card
-    /// recomposition into a livelock the screen never escaped.
-    /// Every handler's whole body: recompose the bench, then republish the
-    /// selectable ids from **one** composition.
-    ///
-    /// Named rather than inlined for two reasons. It keeps `body`'s modifier
-    /// chain small enough for the type-checker (inlining `registerSessionIds(render())`
-    /// into five closures tipped it into *"unable to type-check this expression
-    /// in reasonable time"*), and it makes "one composition per event" a thing
-    /// with a name instead of a pattern five call sites have to remember.
-    private func recomposeAndRegister() {
-        recomposeBench()
-        registerSessionIds(render())
+    private func registerSessionIds() {
+        selection.registerVisible(looseSessions.flatMap { sessionSelectableIds($0) }, source: "sessions")
     }
 
-    private func registerSessionIds(_ render: BenchRender) {
-        selection.registerVisible(
-            render.loose.flatMap { sessionSelectableIds($0) },
-            source: "sessions"
+    /// Runs `SessionMediaAbsorber` against the current sessions and
+    /// unplaced media refs. Publishes the absorbed id set for
+    /// `ClipsTabView` to consume.
+    /// **The ONE place `sessions` is regrouped** (F38, 2026-08-02).
+    ///
+    /// Regrouping and refreshing the absorbed-media map must happen
+    /// together: the map is keyed by `ClipGroup.id` and the header now counts
+    /// only media whose key is among the rendered sessions, so a regroup that
+    /// left the map behind produced entries nothing could draw.
+    ///
+    /// Four of the five original call sites remembered to pair them and one
+    /// did not (`:239`, the remove-clip-from-session regroup). That is an
+    /// invariant carried by memory; this makes it structural, and
+    /// `BenchCountAndProposalCopyTests` asserts there is exactly one
+    /// assignment site so a sixth cannot quietly appear.
+    private func regroupSessions() {
+        sessions = computeSessions()
+        recomputeAbsorbedMedia()
+    }
+
+    private func recomputeAbsorbedMedia() {
+        let unplaced = fetchUnplacedNonVoiceRefs()
+        let result = SessionMediaAbsorber.absorb(
+            sessions: sessions,
+            unplacedMedia: unplaced
         )
+        absorbedMediaBySessionId = result.mediaBySessionId
+        BenchAbsorbedMediaBus.shared.setAbsorbed(result.absorbedRefIds)
     }
 
-    /// **The ONE writer of bench state** (C2 step 2b; inherits F38's
-    /// single-owner rule and makes it structural rather than remembered).
-    ///
-    /// Reads both backing stores, resolves them to one item list plus one
-    /// review set, and keeps the id→row maps the view resolves through.
-    /// Everything else — grouping, the lens, clusters, counts — is a pure
-    /// function of these and runs per render in `render(now:)`.
-    private func recomposeBench() {
-        let refs = fetchBenchRefs()
-        let inventory = BenchInventory.compose(
+    /// Recompute the unified bench clip list (P0-3 piece B). Manifest rows
+    /// first (in-flight / not-yet-materialized), then materialized zero-edge
+    /// voice refs win on collision — the ref is the source of truth. Kept in
+    /// `@State` (not a computed prop) so the header + grouper read it without a
+    /// Core Data fetch on every SwiftUI render; the recompute sites drive it.
+    private func recomputeBenchClips() {
+        benchClips = ArrivedClipMaterializer.composeBenchClips(
             manifestClips: inbox.clips,
-            refs: refs.map {
-                BenchRefDescriptor(
-                    id: $0.id,
-                    kind: Self.kind(of: $0),
-                    createdAt: $0.createdAt,
-                    rollGroupId: nil
-                )
-            },
-            refIsReviewed: { BenchClipReviewStore.isReviewed($0) }
+            refs: fetchZeroEdgeVoiceRefs()
         )
-        // Clips the watch has ANNOUNCED but not yet delivered exist in no
-        // store, so they must be added here or the header would need the
-        // separate `inFlightOnly` term this rebuild removes.
-        let known = Set(inventory.items.map(\.id))
-        let announced: [BenchClipItem] = arrivals.clipsInFlight.values
-            .filter { !known.contains($0.clipId) }
-            .map { BenchClipItem(id: $0.clipId, kind: .voice,
-                                 capturedAt: $0.capturedAt, rollGroupId: nil) }
-
-        benchItems = inventory.items + announced
-        reviewedIds = inventory.reviewedIds
-        clipsById = Dictionary(inbox.clips.map { ($0.clipId, $0) },
-                               uniquingKeysWith: { first, _ in first })
-        refsById = Dictionary(refs.map { ($0.id, $0) },
-                              uniquingKeysWith: { first, _ in first })
-
-        publishDrawnMedia()
     }
 
-    /// Tell `ClipsTabView` which media refs this view is drawing, so its
-    /// sibling unplaced stack can subtract them and nothing renders twice.
-    ///
-    /// **The bus survives 2b deliberately** (ruled 2026-08-03). Deleting it
-    /// here — with the sibling stack still rendering until step 3 — would put
-    /// every photo on screen twice, reintroducing the F35(b) duplication class
-    /// in order to fix a structure problem. It dies in step 3, with the stack
-    /// it exists for.
-    ///
-    /// The set it publishes is now simply *the non-voice items in the sessions
-    /// this view draws*, rather than a separately-computed absorption result.
-    /// Independent of proposals and of the trim: setting an item aside moves it
-    /// from the cluster to the loose list, and both are drawn here.
-    private func publishDrawnMedia() {
-        let base = RenderedBench.compose(
-            allItems: benchItems, reviewedIds: reviewedIds,
-            hideReviewed: hideReviewed, now: Date(),
-            inFlightIds: Set(arrivals.clipsInFlight.keys),
-            soloIds: inbox.soloClipIds
-        )
-        let drawn = base.loose
-            .filter(\.hasVoice)
-            .flatMap(\.items)
-            .filter { $0.kind != .voice }
-            .map(\.id)
-        BenchAbsorbedMediaBus.shared.setAbsorbed(Set(drawn))
-    }
-
-    /// **One fetch for the whole bench** — zero-edge, non-recycled refs of
-    /// every kind. Replaces the voice/non-voice pair, whose split was F35(b)'s
-    /// shape: two sibling fetches of one store, each believing it owned a
-    /// disjoint half.
-    private func fetchBenchRefs() -> [MediaReference] {
+    /// Fetch the materialized bench voice clips — zero-edge, non-recycled
+    /// `MediaReference`s of `mediaType == voice`. The read-side mirror of
+    /// `fetchUnplacedNonVoiceRefs` (which pulls the absorbable photo/video).
+    private func fetchZeroEdgeVoiceRefs() -> [MediaReference] {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-        // P8: recycled clips (in Recently Deleted) are not on the bench.
-        req.predicate = NSPredicate(format: "edges.@count == 0 AND recycledAt == nil")
+        req.predicate = NSPredicate(
+            format: "edges.@count == 0 AND recycledAt == nil AND mediaType == %@",
+            MediaReference.MediaType.voice.rawValue
+        )
         req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         return (try? context.fetch(req)) ?? []
     }
 
-    private static func kind(of ref: MediaReference) -> BenchClipItem.Kind {
-        switch ref.mediaTypeEnum {
-        case .voice: return .voice
-        case .image: return .image
-        case .video: return .video
-        case .note:  return .note
-        }
+    /// Fetch unplaced photo/video/note MediaReferences — candidates
+    /// for absorption into a voice session's time window.
+    private func fetchUnplacedNonVoiceRefs() -> [MediaReference] {
+        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+        // P8: exclude recycled clips from session absorption candidates.
+        req.predicate = NSPredicate(
+            format: "edges.@count == 0 AND recycledAt == nil AND mediaType != %@",
+            MediaReference.MediaType.voice.rawValue
+        )
+        req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
+        return (try? context.fetch(req)) ?? []
     }
 
     /// Groups the inbox's clips into sessions for the SessionCard
@@ -382,122 +346,97 @@ struct SessionListView: View {
     /// you're inside a session, marking its clips reviewed (P7-2) must
     /// not make the session vanish out from under you (the New-filtered
     /// derivation would drop every just-marked clip → AutoDismiss).
-    // MARK: - The render (C2 step 2b)
-
-    /// One session as this view needs it: the pure grouping, plus the concrete
-    /// rows resolved out of the id maps.
+    /// **The clips this lens actually shows** (F35, ruled 2026-08-02) — the
+    /// ONE set the header, the grouper and the body all read.
     ///
-    /// **`ClipGroup` is ADAPTED here, not migrated** — migration is step 4, and
-    /// adapting is what keeps 2b revertible on its own. The voice clips are
-    /// reversed to newest-first so `ClipGroup.id` and `capturedAt` compute
-    /// exactly as they did before, which is what keeps the
-    /// `navigationDestination(for: ClipGroup.self)` round-trip working.
-    private struct RenderedSession: Identifiable {
-        let unified: UnifiedSession
-        let group: ClipGroup
-        let media: [MediaReference]
-        var id: UUID { group.id }
+    /// Before this existed, `headerTitle` counted `benchClips` and
+    /// `headerSubtitle` ranged over `benchClips`, while the session count in
+    /// that same subtitle came from the filtered `sessions`. On device that
+    /// read *"19 new clips · 1 session · Apr 28 – today"* above one rendered
+    /// clip: three numbers, two sets, and a three-month "session" that never
+    /// happened.
+    private var lensClips: [InboxClip] {
+        // F36: `now` and `soloClipIds` so the lens asks the SAME question
+        // the grouper answers — a clip stays New while its session could
+        // still gain a neighbour, rather than leaving the instant it is
+        // opened.
+        BenchLensClips.forLens(
+            benchClips: benchClips,
+            hideReviewed: hideReviewed,
+            now: Date(),
+            soloClipIds: inbox.soloClipIds
+        )
     }
 
-    /// Everything the surface draws, composed once per render from one input.
-    private struct BenchRender {
-        let bench: RenderedBench
-        let proposals: [ClusterProposal]
-        /// Loose sessions THIS view draws, resolved.
-        let loose: [RenderedSession]
-        /// The header's number: every item drawn here, in any of the three
-        /// regions. Not a sum of separately-scoped terms — that was the defect.
-        let drawnCount: Int
-        /// Capture times of the drawn items, for the subtitle's span. Same set
-        /// as `drawnCount`, so the two cannot describe different things.
-        let drawnCapturedAts: [Date]
-    }
-
-    /// Compose the bench, then the proposals it implies, then the bench again
-    /// with those proposals claiming their sessions.
-    ///
-    /// Twice, deliberately: a proposal is a function of the sessions, and the
-    /// clustered/loose split is a function of the proposals. `now` is passed in
-    /// so both passes measure the F36 window against one instant — two `Date()`
-    /// calls could straddle the boundary and disagree about one clip.
-    private func render(now: Date = Date()) -> BenchRender {
-        let inFlightIds = Set(arrivals.clipsInFlight.keys)
+    private func computeSessions(applyFilter: Bool = true) -> [ClipGroup] {
+        let inFlight = arrivals.clipsInFlight.keys
         let solo = inbox.soloClipIds
-        func compose(_ proposals: [ClusterProposal]) -> RenderedBench {
-            RenderedBench.compose(
-                allItems: benchItems, reviewedIds: reviewedIds,
-                hideReviewed: hideReviewed, now: now,
-                inFlightIds: inFlightIds, soloIds: solo,
-                proposals: proposals, trim: removedByFingerprint
-            )
+        // New = unseen: drop reviewed clips so a session the user has
+        // already eyeballed leaves the New lens (P7-2). All shows
+        // everything (hideReviewed == false).
+        let base = applyFilter ? lensClips : benchClips
+        guard !inFlight.isEmpty else {
+            return ClipSessionGrouper.group(base, soloClipIds: solo)
         }
-        let base = compose([])
-        // The proposer reads transcripts and coordinates, so it takes the
-        // resolved voice groups. It only ever claims sessions this view draws.
-        let proposals = ClipClusterProposer.propose(
-            sessions: base.sessions.filter(\.hasVoice).map { resolve($0).group },
+        let inFlightSet = Set(inFlight)
+        return ClipSessionGrouper.group(
+            base.filter { !inFlightSet.contains($0.clipId) },
+            soloClipIds: solo
+        )
+    }
+
+    // MARK: - Workbench + Sort layer (v3, July 4 2026)
+
+    /// The current cluster proposals — the Sort layer's confident
+    /// groupings, rendered as `ClusterCardStack` above the loose
+    /// session list. Recomputed from sessions + dismissed set on
+    /// every render; the proposer is pure and cheap, and this is
+    /// how spec § "Sort is the bench's resting state" says to do
+    /// it ("Sort is what Captured Clips looks like now").
+    private var proposals: [ClusterProposal] {
+        ClipClusterProposer.propose(
+            sessions: sessions,
             dismissed: inbox.dismissedClusterFingerprints
         )
-        let bench = compose(proposals)
-
-        let loose = Self.drawnHere(bench.loose).map { resolve($0) }
-        let drawnItems = Self.drawnHere(bench.loose).flatMap(\.items)
-            + bench.items.filter { bench.clustered.contains($0.id) }
-            + bench.inFlight
-        return BenchRender(
-            bench: bench,
-            proposals: proposals,
-            loose: loose,
-            drawnCount: drawnItems.count,
-            drawnCapturedAts: drawnItems.map(\.capturedAt)
-        )
     }
 
-    /// **The one scope this view still applies, in one place** (ruled
-    /// 2026-08-03).
-    ///
-    /// A session with no voice item belongs to `ClipsTabView`'s sibling
-    /// unplaced stack until step 3 retires it. Drawing it here *as well* would
-    /// double-render — the F35(b) class. Drawing it here *instead* would render
-    /// a voice-shaped card: `ClipGroup` with no clips reports `capturedAt`
-    /// `.distantPast` and a `.transcribing` body, i.e. "Transcribing…" over a
-    /// date in 1970, which is worse than the scope.
-    ///
-    /// Deliberately a static pure function rather than an inline `filter`, so
-    /// the rule can be asserted rather than inspected — the whole thesis of
-    /// this rebuild. **Step 3 deletes it along with the sibling stack.**
-    static func drawnHere(_ sessions: [UnifiedSession]) -> [UnifiedSession] {
-        sessions.filter(\.hasVoice)
-    }
-
-    /// Resolve a pure session back to its concrete rows.
-    private func resolve(_ session: UnifiedSession) -> RenderedSession {
-        let voice = session.items
-            .filter { $0.kind == .voice }
-            .compactMap { clipsById[$0.id] }
-            .sorted { $0.capturedAt > $1.capturedAt }   // ClipGroup order
-        let media = session.items
-            .filter { $0.kind != .voice }
-            .compactMap { refsById[$0.id] }
-            .sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
-        return RenderedSession(unified: session, group: ClipGroup(clips: voice), media: media)
-    }
-
-    /// The unfiltered sessions, for the opened-session screen. Once you are
-    /// inside a session, marking its clips reviewed must not make it vanish out
-    /// from under you (the New-filtered derivation would drop every
-    /// just-marked clip → AutoDismiss). Ruling of July 19 2026, recorded at the
-    /// call site; F37 (the New count vs this set) is logged and unruled.
-    private func unfilteredSessions(now: Date = Date()) -> [RenderedSession] {
-        RenderedBench.compose(
-            allItems: benchItems, reviewedIds: reviewedIds,
-            hideReviewed: false, now: now,
-            inFlightIds: Set(arrivals.clipsInFlight.keys),
-            soloIds: inbox.soloClipIds
-        )
-        .sessions
-        .filter(\.hasVoice)
-        .map { resolve($0) }
+    /// Sessions NOT currently in a cluster proposal — the loose
+    /// pile below the cluster stack. Spec § "Lead with signal,
+    /// never bury the rest": the loose pile is always in plain
+    /// sight, not subtracted or hidden by the Sort layer.
+    private var looseSessions: [ClipGroup] {
+        // **F44 · a set-aside clip comes BACK to the loose list.**
+        //
+        // Only the KEPT ids count as clustered. Previously this read
+        // `proposals.flatMap(\.clipIds)` — the original membership — so
+        // setting a clip aside removed it from the proposal AND from the
+        // bench entirely. It is still new, still unconnected, and still
+        // hers; hiding it is the subtractive posture J2 retired.
+        //
+        // A correction to F40's reasoning, recorded because it was stated
+        // the other way: partially-clustered sessions are unreachable FROM
+        // THE PROPOSER (proposals consume whole sessions) but the USER
+        // creates them the moment she sets one clip aside. So the subset
+        // rendering declined then is required now.
+        //
+        // Subset groups carry only the non-kept clips. Their absorbed media
+        // is deliberately not looked up: `ClipGroup.id` derives from its
+        // first clip, so a subset's id may differ from the full session's —
+        // and that is the correct outcome here, because the cluster card now
+        // owns this session's media (kept ones in its glyphs, set-aside ones
+        // in its own set-aside block). Rendering it twice would be the
+        // duplication class F35(b) closed.
+        let keptClusteredIds = Set(proposals.flatMap { proposal -> [UUID] in
+            let removed = removedByFingerprint[proposal.fingerprint.rawValue] ?? []
+            return proposal.clipIds.filter { !removed.contains($0) }
+        })
+        guard !keptClusteredIds.isEmpty else { return sessions }
+        return sessions.compactMap { session in
+            let remaining = session.clips.filter { !keptClusteredIds.contains($0.clipId) }
+            if remaining.isEmpty { return nil }
+            if remaining.count == session.clips.count { return session }
+            return ClipGroup(clips: remaining)
+        }
     }
 
     /// "Not together" tap — record the dismissal and let the manifest
@@ -511,7 +450,8 @@ struct SessionListView: View {
     /// Member clips of a cluster (kept + set-aside), ordered by the
     /// proposal's `clipIds`, for the expanded editor rows.
     private func clips(forCluster proposal: ClusterProposal) -> [InboxClip] {
-        proposal.clipIds.compactMap { clipsById[$0] }
+        let byId = Dictionary(benchClips.map { ($0.clipId, $0) }, uniquingKeysWith: { first, _ in first })
+        return proposal.clipIds.compactMap { byId[$0] }
     }
 
     /// **F40 · the absorbed media of every session this proposal consumed.**
@@ -524,34 +464,28 @@ struct SessionListView: View {
     ///
     /// A session belongs to this proposal when any of its clips is in it;
     /// proposals consume whole sessions, so "any" and "all" coincide here.
-    ///
-    /// **No second lookup any more.** This used to walk `sessions` and read the
-    /// `absorbedMediaBySessionId` side channel by key — two scopes, which is
-    /// how F38 counted media no card could draw. A claimed session now simply
-    /// *contains* its media, so this reads the same value everything else does.
-    /// **Takes the already-composed bench; it must never compose its own**
-    /// (2026-08-05). This read `render().bench`, and `body` hands this function
-    /// to `ClusterCardStack` as a reference that the card calls ~4× per card —
-    /// so every cluster re-ran two compose passes plus `ClipClusterProposer`'s
-    /// NLTagger sweep over every transcript, on the main thread. Guarded by
-    /// `theComposedRenderIsThreadedDownNotRecomputedPerCallSite`.
-    private func media(forCluster proposal: ClusterProposal, in bench: RenderedBench) -> [MediaReference] {
-        RenderedBench.claimedSessions(for: proposal, in: bench.sessions)
-            .flatMap(\.items)
-            .filter { $0.kind != .voice }
-            .compactMap { refsById[$0.id] }
-            .reduce(into: [MediaReference]()) { out, ref in
-                if !out.contains(where: { $0.id == ref.id }) { out.append(ref) }
+    /// Deduped by ref id — a session cannot contribute the same media twice,
+    /// but the union is taken defensively rather than assumed.
+    private func media(forCluster proposal: ClusterProposal) -> [MediaReference] {
+        let clusterIds = Set(proposal.clipIds)
+        var seen: Set<UUID> = []
+        var out: [MediaReference] = []
+        for session in sessions where session.clips.contains(where: { clusterIds.contains($0.clipId) }) {
+            for ref in absorbedMediaBySessionId[session.id] ?? [] where !seen.contains(ref.id) {
+                seen.insert(ref.id)
+                out.append(ref)
             }
+        }
+        return out
     }
 
     /// The proposal's media MINUS anything the user set aside (F43).
     /// `removedByFingerprint` is a `Set<UUID>` and the handlers never look
     /// the id up, so it carries `MediaReference.id` alongside clip ids
     /// without a parallel store or a key change.
-    private func includedClusterMedia(_ proposal: ClusterProposal, in bench: RenderedBench) -> [MediaReference] {
+    private func includedClusterMedia(_ proposal: ClusterProposal) -> [MediaReference] {
         let removed = removedByFingerprint[proposal.fingerprint.rawValue] ?? []
-        return media(forCluster: proposal, in: bench).filter { !removed.contains($0.id) }
+        return media(forCluster: proposal).filter { !removed.contains($0.id) }
     }
 
     /// **The card's subtitle, computed from what is KEPT** (F43).
@@ -566,8 +500,8 @@ struct SessionListView: View {
     /// Sittings are recomputed by regrouping the kept clips through the same
     /// grouper the bench uses, so the lens, the card and this line cannot
     /// disagree about what a sitting is.
-    private func clusterSubtitle(_ proposal: ClusterProposal, _ kept: [InboxClip], in bench: RenderedBench) -> String {
-        let keptMedia = includedClusterMedia(proposal, in: bench)
+    private func clusterSubtitle(_ proposal: ClusterProposal, _ kept: [InboxClip]) -> String {
+        let keptMedia = includedClusterMedia(proposal)
         let sittings = ClipSessionGrouper.group(kept, soloClipIds: inbox.soloClipIds).count
         return ClusterSubtitleBuilder.subtitle(
             clipCount: kept.count + keptMedia.count,
@@ -590,7 +524,8 @@ struct SessionListView: View {
         guard let trimmed = ClusterTrim.keptForCommit(
             proposals: [proposal], removedByFingerprint: removedByFingerprint
         ).first else { return }
-        let kept = trimmed.keptClipIds.compactMap { clipsById[$0] }
+        let byId = Dictionary(benchClips.map { ($0.clipId, $0) }, uniquingKeysWith: { first, _ in first })
+        let kept = trimmed.keptClipIds.compactMap { byId[$0] }
         guard !kept.isEmpty else { return }
         // **F43 · the cluster commit used to pass `absorbedMediaRefs: []`**
         // while BOTH session paths pass `includedAbsorbedMedia(in:)`. So no
@@ -601,9 +536,7 @@ struct SessionListView: View {
         //
         // Respects the same set-aside store the voice rows use, so a photo
         // the user excluded is excluded here too.
-        // One composition per tap, not per render — this is a user action, not
-        // a draw, so the cost is bounded and paid once (2026-08-05).
-        let keptMedia = includedClusterMedia(proposal, in: render().bench)
+        let keptMedia = includedClusterMedia(proposal)
         bundleSession = BundleRequest(
             session: ClipGroup(clips: kept),
             clipsToBundle: kept,
@@ -698,10 +631,10 @@ struct SessionListView: View {
 
     // MARK: - List
 
-    private func list(_ render: BenchRender) -> some View {
+    private var list: some View {
         ScrollView {
             VStack(spacing: 0) {
-                header(render)
+                header
                 let inFlight = arrivals.sortedNewestFirst()
                 if !inFlight.isEmpty {
                     // Global sync state at-a-glance. Spec § SYNC /
@@ -728,13 +661,10 @@ struct SessionListView: View {
                     .padding(.bottom, 12)
                 }
                 ClusterCardStack(
-                    proposals: render.proposals,
+                    proposals: proposals,
                     clipsFor: clips(forCluster:),
-                    // Both close over the ONE `render` composed at `:148`, so a
-                    // card asking ~4× per card is ~4 dictionary-cheap lookups
-                    // rather than ~4 full recompositions (2026-08-05 livelock).
-                    mediaFor: { media(forCluster: $0, in: render.bench) },
-                    subtitleFor: { clusterSubtitle($0, $1, in: render.bench) },
+                    mediaFor: media(forCluster:),
+                    subtitleFor: clusterSubtitle,
                     expandedFingerprints: expandedClusterFingerprints,
                     removedByFingerprint: removedByFingerprint,
                     onToggleExpand: toggleClusterExpanded,
@@ -752,11 +682,11 @@ struct SessionListView: View {
                 // the ochre bar can't be misread as acting on the loose clips
                 // (2026-07-17, §Sort-is-the-moment). Only when both regions
                 // exist.
-                if !render.proposals.isEmpty && !render.loose.isEmpty {
+                if !proposals.isEmpty && !looseSessions.isEmpty {
                     ungroupedSectionHeader
                 }
                 LazyVStack(spacing: 12) {
-                    ForEach(render.loose) { session in
+                    ForEach(looseSessions) { session in
                         sessionCard(session)
                     }
                 }
@@ -794,16 +724,16 @@ struct SessionListView: View {
         }
     }
 
-    private func header(_ render: BenchRender) -> some View {
+    private var header: some View {
         // The Select entry for New lives at the ClipsTabView level (a
         // consistent position across all three filters) — SessionListView's
         // header renders only when the inbox is non-empty, so hosting Select
         // here would hide it whenever New is all returned-refs / all-clustered.
         VStack(alignment: .leading, spacing: 4) {
-            Text(BenchHeaderTitleBuilder.title(clipCount: render.drawnCount))
+            Text(headerTitle)
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(Crucible.Color.ink)
-            Text(headerSubtitle(render))
+            Text(headerSubtitle)
                 .font(.footnote)
                 .foregroundStyle(Crucible.Color.ink3)
         }
@@ -812,39 +742,72 @@ struct SessionListView: View {
         .padding(.bottom, 16)
     }
 
-    /// **One set, one source — and now there is nothing to add up** (C2 step
-    /// 2b, closing the shape F35(a)/F38/F40/F44 each fixed one term of).
-    ///
-    /// This read `lensClips.count + inFlightOnly + absorbedMediaCount`: three
-    /// counts over three separately-scoped sets. The count and the span came
-    /// from the raw bench while the session count came from the filtered one,
-    /// which on device produced *"19 new clips · 1 session · Apr 28 – today"*
-    /// above a single rendered clip.
-    ///
-    /// `drawnCount` and `drawnCapturedAts` are the same items, gathered once in
-    /// `render(now:)` — so the number, the span and the session count cannot
-    /// describe different sets. Source-agnostic per `CLAUDE.md` §Phone: the
-    /// headline never names a source; that lives per-clip on the card.
-    private func headerSubtitle(_ render: BenchRender) -> String {
-        guard let first = render.drawnCapturedAts.min(),
-              let last = render.drawnCapturedAts.max() else { return "" }
+
+    private var headerTitle: String {
+        // Title counts EVERYTHING landing on the bench, ready or
+        // in-flight — "N new clips" stays honest about the full
+        // incoming workload regardless of source. Manifest clips
+        // include the already-in-flight ones (the file lands in the
+        // manifest at `acceptArrivedClip` time, before transcription);
+        // add any pre-announced clips that aren't yet in the manifest.
+        //
+        // Source-agnostic per `CLAUDE.md` §Phone (July 10 2026,
+        // line 142 corollary): the bench takes clips from Watch AND
+        // from the phone Clips-FAB, so the headline never names a
+        // source. Source lives per-clip on the card, not here.
+        // F35: `lensClips`, not `benchClips` — on the New lens the two
+        // differ by every already-reviewed clip, and the header sits under
+        // the New chip where "new" means unseen.
+        let inFlightOnly = arrivals.clipsInFlight.keys.filter { id in
+            !lensClips.contains(where: { $0.clipId == id })
+        }.count
+        // Include absorbed photo/video items (July 11 media-agnostic
+        // lock) so the count is honest across media types — a mixed
+        // sitting reads "3 new clips," not "2" with a stray photo
+        // row inside the card.
+        // F38: count only media attached to the sessions this header
+        // DESCRIBES. `.values` summed every entry regardless of key, while a
+        // card *looks up* `absorbedMediaBySessionId[session.id]` — so media
+        // keyed to a session outside the lens was counted and undrawable.
+        // Ruled: one set, one source (third instance of the F35(a) shape).
+        // Accepted consequence: the count drops when a photo is absorbed by
+        // a session the lens does not show. A count including clips nothing
+        // can draw is the dishonest alternative.
+        let absorbedMediaCount = sessions.reduce(0) { $0 + (absorbedMediaBySessionId[$1.id]?.count ?? 0) }
+        let n = lensClips.count + inFlightOnly + absorbedMediaCount
+        return BenchHeaderTitleBuilder.title(clipCount: n)
+    }
+
+    private var headerSubtitle: String {
+        // Range covers every clip we know about — ready manifest
+        // rows AND in-flight tracker entries. Pre-announced but
+        // not-yet-landed clips carry their `capturedAt` from the
+        // wire payload.
+        // F35: the span must cover the SAME set the session count below
+        // describes. Ranging over `benchClips` here is what produced
+        // "Apr 28 – today" beside "1 session".
+        let manifestCapturedAts = lensClips.map(\.capturedAt)
+        let inFlightCapturedAts = arrivals.clipsInFlight.values.map(\.capturedAt)
+        let all = manifestCapturedAts + inFlightCapturedAts
+        guard let first = all.min(), let last = all.max() else { return "" }
         let syncingCount = arrivals.inFlightCount
-        // When syncing, swap to the sync-aware variant so the user sees
-        // "K ready · J syncing · time-range" instead of the plain session
-        // count. Cross-day handling and the bug-fix contract from
-        // `CapturedClipsHeaderSubtitleTests` are preserved inside the builder.
+        // When syncing, swap to the sync-aware variant so the user
+        // sees "K ready · J syncing · time-range" instead of the
+        // plain session count. Cross-day handling and the bug-fix
+        // contract from `CapturedClipsHeaderSubtitleTests` are
+        // preserved inside the builder.
         if syncingCount > 0 {
             return CapturedClipsSubtitleBuilder.syncAwareSubtitle(
                 earliest: first,
                 latest: last,
-                readySessionCount: render.loose.count,
+                readySessionCount: sessions.count,
                 syncingClipCount: syncingCount
             )
         }
         return CapturedClipsSubtitleBuilder.subtitle(
             earliest: first,
             latest: last,
-            sessionCount: render.loose.count
+            sessionCount: sessions.count
         )
     }
 
@@ -886,14 +849,12 @@ struct SessionListView: View {
     /// The selectable clip ids a session card batch-selects: its voice
     /// clips + any absorbed media refs shown inside the card. Partitioned
     /// by backing downstream (clipIds → inbox, refIds → media).
-    private func sessionSelectableIds(_ session: RenderedSession) -> [UUID] {
-        // Every item in the session, of every kind. This used to be voice ids
-        // PLUS a side-channel lookup for media — the "+ media" term, once more.
-        session.unified.items.map(\.id)
+    private func sessionSelectableIds(_ session: ClipGroup) -> [UUID] {
+        session.clips.map(\.clipId) + (absorbedMediaBySessionId[session.id] ?? []).map(\.id)
     }
 
     @ViewBuilder
-    private func sessionCard(_ session: RenderedSession) -> some View {
+    private func sessionCard(_ session: ClipGroup) -> some View {
         if selection.selecting {
             // Selecting mode (P7-4): the card is one toggle target that
             // batch-selects every clip in the session; navigation stands
@@ -914,11 +875,8 @@ struct SessionListView: View {
     }
 
     @ViewBuilder
-    private func sessionCardNavLink(_ session: RenderedSession) -> some View {
-        // The nav value stays `ClipGroup` — `navigationDestination` matches on
-        // type, and its `id` is what `openedSessionContent` looks up. Adapting
-        // rather than migrating is what keeps 2b revertible on its own.
-        NavigationLink(value: session.group) {
+    private func sessionCardNavLink(_ session: ClipGroup) -> some View {
+        NavigationLink(value: session) {
             sessionCardFace(session, selecting: false)
                 .contentShape(Rectangle())
         }
@@ -931,10 +889,10 @@ struct SessionListView: View {
         .contextMenu {
             Button {
                 let selected = selectionFor(session)
-                let clips = session.group.clips.filter { selected.contains($0.clipId) }
+                let clips = session.clips.filter { selected.contains($0.clipId) }
                 guard !clips.isEmpty else { return }
                 bundleSession = BundleRequest(
-                    session: session.group,
+                    session: session,
                     clipsToBundle: clips,
                     absorbedMediaRefs: includedAbsorbedMedia(in: session)
                 )
@@ -956,7 +914,7 @@ struct SessionListView: View {
     /// selecting (toggle) paths. In selecting mode the footer swaps to the
     /// "selects all N clips" note and the border goes accent when checked.
     @ViewBuilder
-    private func sessionCardFace(_ session: RenderedSession, selecting: Bool) -> some View {
+    private func sessionCardFace(_ session: ClipGroup, selecting: Bool) -> some View {
         let ids = sessionSelectableIds(session)
         let checked = selecting && selection.isChecked(all: ids)
         VStack(alignment: .leading, spacing: 0) {
@@ -1010,18 +968,15 @@ struct SessionListView: View {
     /// a memory, all deleted, or bundled by Sort).
     @ViewBuilder
     private func openedSessionContent(sessionId: UUID) -> some View {
-        // Derive the session **live** (P0 2026-07-14 · "all counts read from
-        // one reconciled source"). `unfilteredSessions()` recomposes from
-        // `benchItems` / `arrivals.clipsInFlight` per render, so this pushed
-        // screen re-renders the instant a clip is deleted or arrives inside
-        // it — a snapshot could lag behind a mutation made two navigation
-        // levels deep. Cheap: one grouping pass over a small bench.
-        //
-        // Unfiltered on purpose, per the July 19 ruling recorded below. F37
-        // (this set vs the New count) is logged and still needs a ruling; 2b
-        // preserves the behaviour rather than resolving it, because
-        // reconciling them changes a *what*.
-        if let session = unfilteredSessions().first(where: { $0.id == sessionId }) {
+        // Derive the session **live** from the manifest, not the
+        // `sessions` @State snapshot (P0 2026-07-14 · "all counts read
+        // from one reconciled source"). `computeSessions()` reads
+        // `inbox.clips` / `arrivals.clipsInFlight` directly, so this
+        // pushed screen re-renders the instant a clip is deleted or
+        // arrives inside it — the snapshot could lag behind a mutation
+        // made two navigation levels deep. Cheap: one grouping pass over
+        // a small inbox per render of a single opened session.
+        if let session = computeSessions(applyFilter: false).first(where: { $0.id == sessionId }) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     sessionMetaRow(session)
@@ -1048,9 +1003,9 @@ struct SessionListView: View {
     /// rule). Voice clips ride the manifest (one batched persist);
     /// absorbed media refs use the per-device bench store. Idempotent —
     /// re-opening a fully-seen session is a no-op (no write).
-    private func markSessionReviewed(_ session: RenderedSession) {
-        inbox.markReviewed(clipIds: session.group.clips.map(\.clipId))
-        for ref in session.media {
+    private func markSessionReviewed(_ session: ClipGroup) {
+        inbox.markReviewed(clipIds: session.clips.map(\.clipId))
+        for ref in absorbedMediaBySessionId[session.id] ?? [] {
             BenchClipReviewStore.markReviewed(ref.id)
         }
     }
@@ -1072,19 +1027,19 @@ struct SessionListView: View {
     /// `mic 2 · camera 1`, not `3 clips` — matches how the memory
     /// card composition line reads elsewhere, so the count
     /// vocabulary stays consistent across surfaces.
-    private func sessionMetaRow(_ session: RenderedSession) -> some View {
-        let voiceClips = session.group.clips.map {
-            ClipDisplayModel(inboxClip: $0, sessionStart: session.group.capturedAt)
+    private func sessionMetaRow(_ session: ClipGroup) -> some View {
+        let voiceClips = session.clips.map {
+            ClipDisplayModel(inboxClip: $0, sessionStart: session.capturedAt)
         }
-        let mediaClips = session.media.map {
-            ClipDisplayModel(mediaReference: $0, sessionStart: session.group.capturedAt)
+        let mediaClips = (absorbedMediaBySessionId[session.id] ?? []).map {
+            ClipDisplayModel(mediaReference: $0, sessionStart: session.capturedAt)
         }
         let composition = CompositionModel.from(clips: voiceClips + mediaClips)
         let timeStr: String = {
             let f = DateFormatter(); f.dateFormat = "h:mm a"
-            return f.string(from: session.group.capturedAt)
+            return f.string(from: session.capturedAt)
         }()
-        let durStr = formatDuration(session.group.totalDuration)
+        let durStr = formatDuration(session.totalDuration)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text(timeStr)
@@ -1099,7 +1054,7 @@ struct SessionListView: View {
             }
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(Crucible.Color.ink2)
-            Text(sessionDateLabel(session.group.capturedAt))
+            Text(sessionDateLabel(session.capturedAt))
                 .font(.system(size: 11.5))
                 .foregroundStyle(Crucible.Color.ink3)
         }
@@ -1125,7 +1080,7 @@ struct SessionListView: View {
     /// capped at 3 lines. Per spec Bug #8: "Reads like the thought it
     /// was," not a stack of separate quoted lines like a status log.
     @ViewBuilder
-    private func collapsedBody(_ session: RenderedSession) -> some View {
+    private func collapsedBody(_ session: ClipGroup) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             // Body variant is decided on ClipGroup so the
             // "Transcribing…" vs "(nothing, the footer carries it)"
@@ -1133,7 +1088,7 @@ struct SessionListView: View {
             // contradict the accidental footer below. See
             // `ClipSessionGrouper.swift` + `SessionCollapsedBody-
             // VariantTests`.
-            switch session.group.collapsedBodyVariant {
+            switch session.collapsedBodyVariant {
             case .preview(let text):
                 Text("\u{201C}\(text)\u{201D}")
                     .font(.system(size: 13.5))
@@ -1166,7 +1121,7 @@ struct SessionListView: View {
     /// ring (auto-excluded by default; user can opt them in by tapping).
     /// Usable clips default-selected with a filled ochre ring + check.
     @ViewBuilder
-    private func expandedBody(_ session: RenderedSession) -> some View {
+    private func expandedBody(_ session: ClipGroup) -> some View {
         let selected = selectionFor(session)
         let rows = chronologicalRows(session)
         VStack(alignment: .leading, spacing: 0) {
@@ -1212,8 +1167,8 @@ struct SessionListView: View {
 
     /// Clips ordered earliest-first within the session (matches the
     /// spec's chronological row order).
-    private func orderedClipsByOffset(_ session: RenderedSession) -> [InboxClip] {
-        session.group.clips.sorted { $0.capturedAt < $1.capturedAt }
+    private func orderedClipsByOffset(_ session: ClipGroup) -> [InboxClip] {
+        session.clips.sorted { $0.capturedAt < $1.capturedAt }
     }
 
     /// One row in the expanded session card — a voice clip or an
@@ -1247,12 +1202,12 @@ struct SessionListView: View {
     /// merged into one chronological list. Media without a
     /// `createdAt` sink to the start (`.distantPast`) rather than
     /// crashing the sort.
-    private func chronologicalRows(_ session: RenderedSession) -> [ExpandedRow] {
+    private func chronologicalRows(_ session: ClipGroup) -> [ExpandedRow] {
         let voiceOrdered = orderedClipsByOffset(session)
         let voiceRows: [ExpandedRow] = voiceOrdered.enumerated().map { idx, clip in
             .voice(clip, voiceIndex: idx)
         }
-        let media = session.media
+        let media = absorbedMediaBySessionId[session.id] ?? []
         let mediaRows: [ExpandedRow] = media.map { .media($0) }
         return (voiceRows + mediaRows).sorted { $0.capturedAt < $1.capturedAt }
     }
@@ -1271,7 +1226,7 @@ struct SessionListView: View {
     /// after the voice bundle commits (see
     /// `handleCommitOneMemory` for the filter).
     @ViewBuilder
-    private func mediaClipRow(_ ref: MediaReference, session: RenderedSession, isLast: Bool) -> some View {
+    private func mediaClipRow(_ ref: MediaReference, session: ClipGroup, isLast: Bool) -> some View {
         // Photos/videos have no explicit session offset — the atom's
         // operational timing header computes offset against
         // sessionStart, but for absorbed media the offset reads as
@@ -1297,7 +1252,7 @@ struct SessionListView: View {
         // Absorbed-media rows count with voice clips because the
         // ring is meaningful when the session has more than one
         // clip in any form.
-        let totalClips = session.unified.items.count
+        let totalClips = session.clips.count + (absorbedMediaBySessionId[session.id]?.count ?? 0)
         let effectiveRing: Binding<Bool>? = totalClips > 1 ? ringBinding : nil
         VStack(spacing: 0) {
             HStack(spacing: 8) {
@@ -1336,10 +1291,10 @@ struct SessionListView: View {
     }
 
     @ViewBuilder
-    private func clipRow(_ clip: InboxClip, indexInSession: Int, session: RenderedSession, isSelected: Bool, isLast: Bool) -> some View {
+    private func clipRow(_ clip: InboxClip, indexInSession: Int, session: ClipGroup, isSelected: Bool, isLast: Bool) -> some View {
         let accidental = clip.transcript.isEmpty && clip.transcriptionAttempted
         let isPlaying = playingClipId == clip.clipId
-        let model = ClipDisplayModel(inboxClip: clip, sessionStart: session.group.capturedAt)
+        let model = ClipDisplayModel(inboxClip: clip, sessionStart: session.capturedAt)
         // Ring binding — `toggleClipSelection` handles both directions
         // (insert or remove), so the setter ignores the incoming value
         // and just flips.
@@ -1352,7 +1307,7 @@ struct SessionListView: View {
         // inclusion selection is meaningless"). Count includes
         // absorbed media because the ring is meaningful whenever
         // there's more than one clip on the card.
-        let totalClips = session.unified.items.count
+        let totalClips = session.clips.count + (absorbedMediaBySessionId[session.id]?.count ?? 0)
         let effectiveRing: Binding<Bool>? = totalClips > 1 ? ringBinding : nil
         VStack(spacing: 0) {
             // Chunk B: voice content-tap opens ClipDetailView with the
@@ -1496,8 +1451,8 @@ struct SessionListView: View {
     }
 
     @ViewBuilder
-    private func accidentalNote(_ session: RenderedSession) -> some View {
-        let n = session.group.accidentalClips.count
+    private func accidentalNote(_ session: ClipGroup) -> some View {
+        let n = session.accidentalClips.count
         if n > 0 {
             Text(n == 1
                  ? "1 clip auto-excluded · no speech"
@@ -1521,9 +1476,9 @@ struct SessionListView: View {
     /// spec: "Create memory," "Bundle," "Save as memory," "Bundle as
     /// memory," "Create one memory," "Make a Memory" — do not drift.
     @ViewBuilder
-    private func sessionActionRow(_ session: RenderedSession, isExpanded: Bool) -> some View {
+    private func sessionActionRow(_ session: ClipGroup, isExpanded: Bool) -> some View {
         let selected = selectionFor(session)
-        let selectedClips = session.group.clips.filter { selected.contains($0.clipId) }
+        let selectedClips = session.clips.filter { selected.contains($0.clipId) }
         let isDisabled = selectedClips.isEmpty
         HStack(spacing: 12) {
             startAMemoryPill(session, selectedClips: selectedClips, isDisabled: isDisabled)
@@ -1538,10 +1493,10 @@ struct SessionListView: View {
     /// §Model. Disabled state drops the ochre to 35% alpha so it reads
     /// as inert rather than dimmed (per JSX: `rgba(198,74,28,0.35)`).
     @ViewBuilder
-    private func startAMemoryPill(_ session: RenderedSession, selectedClips: [InboxClip], isDisabled: Bool) -> some View {
+    private func startAMemoryPill(_ session: ClipGroup, selectedClips: [InboxClip], isDisabled: Bool) -> some View {
         Button {
             bundleSession = BundleRequest(
-                session: session.group,
+                session: session,
                 clipsToBundle: selectedClips,
                 absorbedMediaRefs: includedAbsorbedMedia(in: session)
             )
@@ -1572,11 +1527,12 @@ struct SessionListView: View {
     /// NOT deselected on the media clip ring. Feeds
     /// `BundleRequest.absorbedMediaRefs` so the create-memory step
     /// attaches these to the new/existing entry via
-    /// `StorageService.createEdge`. Order is the session's own media
-    /// order (`createdAt` ascending, set in `resolve`).
-    private func includedAbsorbedMedia(in session: RenderedSession) -> [MediaReference] {
+    /// `StorageService.createEdge`. Order preserved from
+    /// `absorbedMediaBySessionId` (which itself is `createdAt`-
+    /// sorted upstream).
+    private func includedAbsorbedMedia(in session: ClipGroup) -> [MediaReference] {
         let excluded = sessionExcludedMediaIds[session.id] ?? []
-        let all = session.media
+        let all = absorbedMediaBySessionId[session.id] ?? []
         guard !excluded.isEmpty else { return all }
         return all.filter { !excluded.contains($0.id) }
     }
@@ -1586,14 +1542,14 @@ struct SessionListView: View {
     /// Returns the current selection for a session — explicit if the
     /// user has toggled anything, otherwise the default (non-accidental
     /// clips selected).
-    private func selectionFor(_ session: RenderedSession) -> Set<UUID> {
+    private func selectionFor(_ session: ClipGroup) -> Set<UUID> {
         if let explicit = sessionSelections[session.id] {
-            return explicit.intersection(Set(session.group.clips.map(\.clipId)))
+            return explicit.intersection(Set(session.clips.map(\.clipId)))
         }
-        return Set(session.group.usableClips.map(\.clipId))
+        return Set(session.usableClips.map(\.clipId))
     }
 
-    private func toggleClipSelection(clipId: UUID, in session: RenderedSession) {
+    private func toggleClipSelection(clipId: UUID, in session: ClipGroup) {
         var current = selectionFor(session)
         if current.contains(clipId) {
             current.remove(clipId)
@@ -1605,22 +1561,22 @@ struct SessionListView: View {
 
     // MARK: - Behavior
 
-    private func deleteSession(_ session: RenderedSession) {
+    private func deleteSession(_ session: ClipGroup) {
         // Stop playback first: if any clip in this session is
         // currently playing, leaving the AVAudioPlayer pointed at a
         // file we're about to remove leaks audio + an activated audio
         // session past the row's disappearance.
-        if let playing = playingClipId, session.group.clips.contains(where: { $0.clipId == playing }) {
+        if let playing = playingClipId, session.clips.contains(where: { $0.clipId == playing }) {
             stopPlayback()
         }
-        let ids = session.group.clips.map(\.clipId)
+        let ids = session.clips.map(\.clipId)
         for id in ids {
             inbox.remove(clipId: id)
         }
-        // Session vanishing from `unfilteredSessions()` on the next render
-        // triggers `AutoDismissView` in `openedSessionContent` (Chunk E2,
-        // July 12 2026) — the opened-session pushed screen pops back to the
-        // calm list.
+        // Session vanishing from `sessions` after `computeSessions()`
+        // re-runs triggers `AutoDismissView` in `openedSessionContent`
+        // (Chunk E2, July 12 2026) — the opened-session pushed screen
+        // pops back to the calm list.
     }
 
     // MARK: - Helpers

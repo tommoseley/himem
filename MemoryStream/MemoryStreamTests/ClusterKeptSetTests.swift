@@ -69,32 +69,10 @@ import Foundation
 
     /// The caller must supply it — an unused parameter is the shape that
     /// slipped past the F40 guard.
-    ///
-    /// **Pins the invariant, not the spelling** (2026-08-05). This asserted the
-    /// literal `"subtitleFor: clusterSubtitle"` and broke when the argument
-    /// correctly became a closure over the composed bench, to stop the card
-    /// recomposing the whole bench — NLTagger sweep included — once per call
-    /// site. The promise, *the card is supplied a kept-set subtitle source*,
-    /// was intact. Sibling of `theBenchSuppliesTheClusterItsMedia`, which broke
-    /// the same way in the same change; both are now invariant-shaped.
     @Test func theBenchSuppliesTheKeptSetSubtitle() throws {
         let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
-        let code = try Self.callArguments(ofCallStartingAtLineContaining: "ClusterCardStack(", in: src)
-        let construction = code
-        // Self-test: `mediaFor:` is on a different line from `subtitleFor:`, so
-        // requiring it proves the extractor spans the argument list rather than
-        // stopping at the first one-line closure (2026-08-05).
-        #expect(code.contains("mediaFor:"),
-                "The construction window collapsed — `callArguments` is not spanning the call.")
-        #expect(code.contains("subtitleFor:"),
+        #expect(Self.codeOnly(src).contains("subtitleFor: clusterSubtitle"),
                 "`ClusterCardStack` is constructed without a kept-set subtitle source.")
-        #expect(code.contains("clusterSubtitle("),
-                """
-                `subtitleFor:` is supplied but does not reach `clusterSubtitle`, so the \
-                card's subtitle is whatever that argument happens to be — not the kept \
-                set. Construction was:
-                \(construction)
-                """)
     }
 
     // MARK: - Media must be excludable, and the vocabulary must not borrow
@@ -221,30 +199,24 @@ import Foundation
                 "The expander total is not kept clips + kept media, so it cannot match the subtitle.")
     }
 
-    /// **RETIRED IN C2 STEP 2b — the invariant moved somewhere it can be
-    /// asserted, which is the point of the rebuild.**
-    ///
-    /// This pinned `ClipGroup(clips: remaining)` and the absence of
-    /// `proposals.flatMap(\.clipIds)` inside `SessionListView.looseSessions`.
-    /// That function no longer exists: the clustered/loose split is now
-    /// `RenderedBench.compose`, a pure function over explicit inputs.
-    ///
-    /// F44's defect — a set-aside clip vanishing from the bench instead of
-    /// returning to the loose list — is therefore pinned BEHAVIOURALLY, and
-    /// from both directions, by:
-    ///
-    ///   - `RenderedBenchTests.aSetAsideItemLandsInLooseRatherThanVanishing`
-    ///     (it comes back, and is still counted)
-    ///   - `RenderedBenchTests.aFullyClaimedSessionIsNotDrawnTwice`
-    ///     (the other bound, so "everything is loose" cannot pass)
-    ///   - `RenderedBenchTests.itemsPartitionIntoTheThreeDrawnRegions`
-    ///     (covering AND disjoint, with a non-empty trim in play)
-    ///
-    /// Those hold under a behaviour-preserving rename, which this could not:
-    /// the mutation harness showed the source scans staying green while four
-    /// fixed defects were fully restored, and FAILING on a rename. Blind to
-    /// wrong sets, hostile to right ones. **This is a case where the gate
-    /// count drops and coverage improves.**
+    /// **A set-aside clip is still hers.** It is new, unconnected, and must
+    /// return to the loose list rather than disappearing from the bench —
+    /// hiding it is the subtractive posture J2 retired.
+    @Test func setAsideReturnsTheClipToTheLooseList() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
+        let body = try Self.blockBody(startingAtLineContaining: "private var looseSessions:", in: src)
+        let code = Self.codeOnly(body)
+        #expect(code.contains("proposals.flatMap(\\.clipIds)") == false,
+                """
+                `looseSessions` treats the proposal's ORIGINAL membership as clustered, so a \
+                clip removed from the proposal vanishes from the bench as well. Body was:
+                \(body)
+                """)
+        #expect(code.contains("removedByFingerprint"),
+                "`looseSessions` does not consult the trim, so set-aside clips stay hidden.")
+        #expect(code.contains("ClipGroup(clips: remaining)"),
+                "A partially-kept session is not rendered with its remaining clips.")
+    }
 
     // MARK: - Source access
 
@@ -256,29 +228,6 @@ import Foundation
                 return String(line[line.startIndex..<marker.lowerBound])
             }
             .joined(separator: "\n")
-    }
-
-    /// The ARGUMENT LIST of a parenthesised call, delimited by **paren** depth.
-    /// See the twin in `BenchCountAndProposalCopyTests` for why brace-counting
-    /// is wrong here: a one-line closure argument takes `blockBody` from depth
-    /// 0→1→0 and terminates it after a single line (2026-08-05).
-    static func callArguments(ofCallStartingAtLineContaining needle: String, in source: String) throws -> String {
-        let lines = codeOnly(source)
-            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        guard let start = lines.firstIndex(where: { $0.contains(needle) }) else {
-            throw Failure.blockNotFound(needle)
-        }
-        var depth = 0, started = false
-        var out: [String] = []
-        for line in lines[start...] {
-            out.append(line)
-            for ch in line {
-                if ch == "(" { depth += 1; started = true }
-                if ch == ")" { depth -= 1 }
-            }
-            if started && depth <= 0 { break }
-        }
-        return out.joined(separator: "\n")
     }
 
     static func blockBody(startingAtLineContaining needle: String, in source: String) throws -> String {

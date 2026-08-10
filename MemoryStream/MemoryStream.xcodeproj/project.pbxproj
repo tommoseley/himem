@@ -180,6 +180,7 @@
 		A200000033 /* NewProjectRequestBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000033 /* NewProjectRequestBus.swift */; };
 		A200000034 /* NewProjectFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000034 /* NewProjectFAB.swift */; };
 		A200000035 /* UnifiedBenchGrouper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000035 /* UnifiedBenchGrouper.swift */; };
+		A200000036 /* SessionMediaAbsorber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000036 /* SessionMediaAbsorber.swift */; };
 		A200000037 /* BenchAbsorbedMediaBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000037 /* BenchAbsorbedMediaBus.swift */; };
 		A200000038 /* MemoryDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000038 /* MemoryDetailPresentationContext.swift */; };
 		A200000039 /* ClipDisplayModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000039 /* ClipDisplayModel.swift */; };
@@ -456,6 +457,7 @@
 		B200000033 /* NewProjectRequestBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NewProjectRequestBus.swift; path = MemoryStream/Services/Projects/NewProjectRequestBus.swift; sourceTree = SOURCE_ROOT; };
 		B200000034 /* NewProjectFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NewProjectFAB.swift; path = MemoryStream/Views/Components/NewProjectFAB.swift; sourceTree = SOURCE_ROOT; };
 		B200000035 /* UnifiedBenchGrouper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UnifiedBenchGrouper.swift; path = MemoryStream/Services/Storage/UnifiedBenchGrouper.swift; sourceTree = SOURCE_ROOT; };
+		B200000036 /* SessionMediaAbsorber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SessionMediaAbsorber.swift; path = MemoryStream/Services/Storage/SessionMediaAbsorber.swift; sourceTree = SOURCE_ROOT; };
 		B200000037 /* BenchAbsorbedMediaBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BenchAbsorbedMediaBus.swift; path = MemoryStream/Services/Storage/BenchAbsorbedMediaBus.swift; sourceTree = SOURCE_ROOT; };
 		B200000038 /* MemoryDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryDetailPresentationContext.swift; path = MemoryStream/Services/MemoryDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000039 /* ClipDisplayModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDisplayModel.swift; path = MemoryStream/Views/Clip/ClipDisplayModel.swift; sourceTree = SOURCE_ROOT; };
@@ -806,6 +808,7 @@
 				B200000031 /* PhoneCaptureBenchDispatcher.swift */,
 				B200000092 /* ArrivedClipMaterializer.swift */,
 				B200000035 /* UnifiedBenchGrouper.swift */,
+				B200000036 /* SessionMediaAbsorber.swift */,
 				B200000037 /* BenchAbsorbedMediaBus.swift */,
 			);
 			path = Storage;
@@ -1433,6 +1436,7 @@
 				A200000033 /* NewProjectRequestBus.swift in Sources */,
 				A200000034 /* NewProjectFAB.swift in Sources */,
 				A200000035 /* UnifiedBenchGrouper.swift in Sources */,
+				A200000036 /* SessionMediaAbsorber.swift in Sources */,
 				A200000037 /* BenchAbsorbedMediaBus.swift in Sources */,
 				A200000038 /* MemoryDetailPresentationContext.swift in Sources */,
 				A200000D00 /* ClipDetailPresentationContext.swift in Sources */,
