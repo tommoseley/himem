@@ -79,6 +79,7 @@
 		A100000310 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
 		A100000311 /* InboxManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000311 /* InboxManifest.swift */; };
 		A100000312 /* WatchSessionDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000312 /* WatchSessionDelegate.swift */; };
+		A100000913 /* InboxRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000913 /* InboxRetryPolicy.swift */; };
 		A100000313 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
 		A100000315 /* CreateMemoryFromClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000315 /* CreateMemoryFromClipsSheet.swift */; };
 		A100000316 /* ExistingMemoryPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000316 /* ExistingMemoryPickerView.swift */; };
@@ -362,6 +363,7 @@
 		B100000310 /* ClipMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipMetadata.swift; path = Shared/ClipMetadata.swift; sourceTree = "<group>"; };
 		B100000311 /* InboxManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxManifest.swift; sourceTree = "<group>"; };
 		B100000312 /* WatchSessionDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionDelegate.swift; sourceTree = "<group>"; };
+		B100000913 /* InboxRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxRetryPolicy.swift; sourceTree = "<group>"; };
 		B100000315 /* CreateMemoryFromClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateMemoryFromClipsSheet.swift; sourceTree = "<group>"; };
 		B100000316 /* ExistingMemoryPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingMemoryPickerView.swift; sourceTree = "<group>"; };
 		B100000320 /* WatchSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchSharedState.swift; path = Shared/WatchSharedState.swift; sourceTree = "<group>"; };
@@ -936,6 +938,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000312 /* WatchSessionDelegate.swift */,
+				B100000913 /* InboxRetryPolicy.swift */,
 				B100000741 /* InboxTranscriptionDispatcher.swift */,
 				B100000748 /* WatchPreAnnounceParser.swift */,
 				B100000750 /* AcceptanceCriticalSection.swift */,
@@ -1377,6 +1380,7 @@
 				A100000698 /* SortBatchCommit.swift in Sources */,
 				A100000699 /* ClusterCardStack.swift in Sources */,
 				A100000312 /* WatchSessionDelegate.swift in Sources */,
+				A100000913 /* InboxRetryPolicy.swift in Sources */,
 				A100000691 /* SessionListView.swift in Sources */,
 				A100000315 /* CreateMemoryFromClipsSheet.swift in Sources */,
 				A100000316 /* ExistingMemoryPickerView.swift in Sources */,

@@ -297,12 +297,38 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     @MainActor
     static func transcribePendingInboxClips(trigger: String = "scene-active") async {
         let allClips = InboxManifest.shared.clips
-        let pending = allClips.filter {
+        let allPending = allClips.filter {
             $0.transcript.isEmpty && !$0.transcriptionAttempted
         }
+        // **B15 · do not sweep a clip whose bytes are not here.**
+        //
+        // Transcribing it cannot succeed — but the attempt is not free. Each
+        // one calls `recordTranscribingStarted` and then `clear`, so it
+        // publishes the arrival tracker TWICE per clip, and every publish
+        // drives a full bench regroup and re-render. That, not the manifest
+        // write, is what made the Clips screen empty and rebuild every ~15s
+        // on device while two stranded clips retried twelve times in four
+        // minutes.
+        //
+        // Their download is requested instead, and `awaitDownloads` resumes
+        // the sweep when iCloud reports the bytes have landed.
+        let readiness = Dictionary(uniqueKeysWithValues: allPending.map {
+            ($0.clipId, audioIsReadyLocally(for: $0))
+        })
+        let pending = allPending.filter { readiness[$0.clipId] == true }
+        let stranded = allPending.filter { readiness[$0.clipId] == false }
         let pendingIds = pending.map { $0.clipId.uuidString.prefix(8) }.joined(separator: ",")
-        NSLog("[HiMem][InboxDx] sweep trigger=\(trigger) total=\(allClips.count) pending=\(pending.count) ids=[\(pendingIds)]")
-        guard !pending.isEmpty else { return }
+        let strandedIds = stranded.map { $0.clipId.uuidString.prefix(8) }.joined(separator: ",")
+        NSLog("[HiMem][InboxDx] sweep trigger=\(trigger) total=\(allClips.count) pending=\(pending.count) ids=[\(pendingIds)] awaitingBytes=\(stranded.count) ids=[\(strandedIds)]")
+        guard !allPending.isEmpty else {
+            scheduleRetryIfStillPending()
+            return
+        }
+        guard !pending.isEmpty else {
+            // Everything is waiting on bytes. Ask for them, arm nothing.
+            scheduleRetryIfStillPending()
+            return
+        }
         NSLog("[HiMem][Inbox] transcribing \(pending.count) pending clip(s)")
         if #available(iOS 26.0, *) {
             for clip in pending {
@@ -395,27 +421,86 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
     static func cancelPendingRetryForTesting() {
         retryTask?.cancel()
         retryTask = nil
+        // **The attempt budget is teardown state too.** Without this the
+        // counter survives between tests, so one test that spends the budget
+        // silently puts every later test on the terminal path and they fail
+        // for a reason that has nothing to do with what they assert. Found by
+        // a mutation's collateral, not by a failing test — the unmutated suite
+        // happened to pass on ordering.
+        consecutiveRetries = 0
+        lastPendingIds = []
     }
 
-    /// Schedules a 30s retry of `transcribePendingInboxClips` iff at
-    /// least one clip is still pending after the just-completed
-    /// sweep. Idempotent — re-arming cancels any prior pending retry
-    /// so we never stack multiple sleeping tasks. Stops when the
-    /// queue drains.
+    /// How many times the sweep has re-armed without making progress.
+    ///
+    /// **Reset on PROGRESS, not only on an empty queue.** Draining is the
+    /// obvious reset and it is not sufficient: one permanently-stuck clip
+    /// would hold the queue non-empty forever, so the budget would be spent
+    /// once and every *newly arrived* clip after it would inherit a terminal
+    /// policy and never get a retry at all. The counter has to measure
+    /// consecutive *failures*, and any change in the pending set is evidence
+    /// that a sweep accomplished something.
+    @MainActor private static var consecutiveRetries = 0
+    /// The pending set at the last decision, for the progress check above.
+    @MainActor private static var lastPendingIds: Set<UUID> = []
+
+    /// Re-arms the sweep according to `InboxRetryPolicy` — **and for clips
+    /// waiting on bytes, arms nothing at all** (B15).
+    ///
+    /// This was a flat 30-second re-arm for anything still pending, which is
+    /// correct for the case it was written for (the speech model still
+    /// installing, money 2026-06-17) and wrong for the case that actually
+    /// dominates: a clip whose audio has not downloaded. No interval helps
+    /// that clip — the file has to *arrive* — so the fix is an event, not a
+    /// shorter or longer poll. *"Backoff alone only slows the bleeding."*
+    ///
+    /// Idempotent: re-arming cancels any prior pending retry so sleeping tasks
+    /// never stack.
     @MainActor
     private static func scheduleRetryIfStillPending() {
-        let stillPendingCount = InboxManifest.shared.clips.filter {
+        let stillPending = InboxManifest.shared.clips.filter {
             $0.transcript.isEmpty && !$0.transcriptionAttempted
-        }.count
+        }
+        // Progress resets the budget — see `consecutiveRetries`.
+        let pendingIds = Set(stillPending.map(\.clipId))
+        if pendingIds != lastPendingIds {
+            consecutiveRetries = 0
+            lastPendingIds = pendingIds
+        }
+        let decision = InboxRetryPolicy.decide(
+            pending: stillPending.map {
+                InboxRetryPolicy.Pending(
+                    clipId: $0.clipId,
+                    fileIsReadyLocally: audioIsReadyLocally(for: $0)
+                )
+            },
+            consecutiveAttempts: consecutiveRetries
+        )
         retryTask?.cancel()
-        guard stillPendingCount > 0 else {
-            NSLog("[HiMem][InboxDx] retry not scheduled — queue drained")
-            retryTask = nil
+        retryTask = nil
+
+        // Ask iCloud for the missing bytes and wait to be told they arrived.
+        awaitDownloads(of: stillPending.filter { decision.awaitingDownload.contains($0.clipId) })
+
+        if !decision.exhausted.isEmpty {
+            // Never a silent stop: the budget is spent, and the per-clip Retry
+            // affordance on the bench is the way forward.
+            let ids = decision.exhausted.map { $0.uuidString.prefix(8) }.joined(separator: ",")
+            NSLog("[HiMem][InboxDx] retry budget spent after \(consecutiveRetries) attempts — giving up on [\(ids)]; manual Retry remains")
+        }
+        guard let delay = decision.retryAfter else {
+            if stillPending.isEmpty {
+                consecutiveRetries = 0
+                NSLog("[HiMem][InboxDx] retry not scheduled — queue drained")
+            } else {
+                NSLog("[HiMem][InboxDx] retry not scheduled — \(decision.awaitingDownload.count) awaiting bytes, \(decision.exhausted.count) exhausted; no timer armed")
+            }
             return
         }
-        NSLog("[HiMem][InboxDx] retry armed in 30s (stillPending=\(stillPendingCount))")
+        consecutiveRetries += 1
+        NSLog("[HiMem][InboxDx] retry armed in \(Int(delay))s (retryable=\(decision.retryable.count) awaitingBytes=\(decision.awaitingDownload.count) attempt=\(consecutiveRetries))")
         retryTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard !Task.isCancelled else {
                 NSLog("[HiMem][InboxDx] retry cancelled before wake")
                 return
@@ -423,6 +508,75 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
             NSLog("[HiMem][InboxDx] retry timer fired — re-entering sweep")
             await transcribePendingInboxClips(trigger: "retry")
         }
+    }
+
+    /// Is this clip's audio readable on THIS device right now?
+    ///
+    /// **Not `fileExists`.** A ubiquitous item that has not downloaded still
+    /// has a placeholder on disk, and that placeholder is exactly what made
+    /// the retry loop look like it had something to work with — the preflight
+    /// log has been printing the real answer as `dlStatus` all along.
+    /// `.missing` counts as not-ready rather than as a hard failure: the two
+    /// clips that produced this defect on device read
+    /// `exists=false ubiquitous=false`, so they are `.missing` and were never
+    /// going to become readable by asking again. They may still *arrive* —
+    /// from the watch, or once the container materializes them — which is an
+    /// event, so they wait rather than burn a retry budget.
+    @MainActor
+    private static func audioIsReadyLocally(for clip: InboxClip) -> Bool {
+        let url = InboxManifest.audioURL(for: clip.audioFilename)
+        switch UbiquityStore.shared.downloadStatus(at: url) {
+        case .downloaded:
+            return FileManager.default.fileExists(atPath: url.path)
+        case .notDownloaded, .downloading, .missing:
+            return false
+        }
+    }
+
+    /// Live observer for "the bytes landed" — the event that replaces the poll.
+    @MainActor private static var downloadWatcher: NSMetadataQuery?
+    @MainActor private static var downloadObserver: NSObjectProtocol?
+
+    /// Requests the missing downloads and resumes the sweep when iCloud
+    /// reports progress, rather than asking again on a timer.
+    ///
+    /// Torn down as soon as nothing is waiting, so the query does not sit live
+    /// for the life of the app.
+    @MainActor
+    private static func awaitDownloads(of clips: [InboxClip]) {
+        guard !clips.isEmpty else {
+            stopAwaitingDownloads()
+            return
+        }
+        for clip in clips {
+            UbiquityStore.shared.startDownload(at: InboxManifest.audioURL(for: clip.audioFilename))
+        }
+        guard downloadWatcher == nil else { return }
+
+        let query = NSMetadataQuery()
+        query.searchScopes = [NSMetadataQueryUbiquitousDataScope]
+        query.predicate = NSPredicate(format: "%K LIKE %@", NSMetadataItemFSNameKey, "*")
+        downloadObserver = NotificationCenter.default.addObserver(
+            forName: .NSMetadataQueryDidUpdate, object: query, queue: .main
+        ) { _ in
+            Task { @MainActor in
+                NSLog("[HiMem][InboxDx] ubiquity update — re-entering sweep")
+                await transcribePendingInboxClips(trigger: "ubiquity")
+            }
+        }
+        downloadWatcher = query
+        query.start()
+        NSLog("[HiMem][InboxDx] awaiting ubiquity downloads for \(clips.count) clip(s) — no timer armed")
+    }
+
+    @MainActor
+    private static func stopAwaitingDownloads() {
+        guard let query = downloadWatcher else { return }
+        query.stop()
+        if let observer = downloadObserver { NotificationCenter.default.removeObserver(observer) }
+        downloadWatcher = nil
+        downloadObserver = nil
+        NSLog("[HiMem][InboxDx] ubiquity watcher stopped — nothing awaiting bytes")
     }
 
     /// Pre-flight diagnostic: file existence, byte size, and the
