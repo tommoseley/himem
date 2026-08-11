@@ -51,56 +51,74 @@ import Foundation
 
     // MARK: - (a) The lens set is one set (behavioural)
 
-    /// The pure helper the header and the grouper must both read.
+    /// The one definition of "what this lens shows".
     ///
     /// **Updated at F36 (2026-08-02) — the meaning moved, not the phrasing.**
-    /// `forLens` gained a `now`, because a reviewed clip is now admitted
-    /// while its session is still open. These assertions still pin what they
-    /// always pinned — that a reviewed clip is dropped — so they pass a
-    /// `now` past the window, which is the state they were implicitly
-    /// written against.
+    /// A reviewed clip is now admitted while its session is still open, so
+    /// these pass a `now` past the window, which is the state they were
+    /// implicitly written against.
+    ///
+    /// **Re-pointed 2026-08-10:** `BenchLensClips` is deleted and the lens
+    /// lives in `RenderedBench.compose`. Under F37 it admits whole SESSIONS
+    /// rather than surviving CLIPS — so these fixtures space their items past
+    /// the idle gap, which keeps each item its own session and makes the
+    /// item-level assertion these were written to make still the right one.
     @Test func lensClips_onNewLens_dropsReviewed() {
-        let reviewed = Self.clip(reviewed: true)
-        let unseen = Self.clip(reviewed: false)
-        let lens = BenchLensClips.forLens(benchClips: [reviewed, unseen], hideReviewed: true,
-                                          now: Self.afterTheWindow)
-        #expect(lens.count == 1)
-        #expect(lens.first?.clipId == unseen.clipId)
+        let reviewed = Self.item(Self.longAgo)
+        let unseen = Self.item(Self.longAgo.addingTimeInterval(3 * 3600))
+        let bench = RenderedBench.compose(
+            allItems: [reviewed, unseen], reviewedIds: [reviewed.id],
+            hideReviewed: true, now: Self.afterTheWindow
+        )
+        #expect(bench.count == 1)
+        #expect(bench.items.first?.id == unseen.id)
     }
 
-    /// On All, nothing is dropped — one helper serves both lenses, so there
-    /// is one definition of "what this lens shows" rather than two.
+    /// On All, nothing is dropped — one definition serves both lenses, so
+    /// there is one answer to "what does this lens show" rather than two.
     @Test func lensClips_onAllLens_keepsEverything() {
-        let clips = [Self.clip(reviewed: true), Self.clip(reviewed: false)]
-        #expect(BenchLensClips.forLens(benchClips: clips, hideReviewed: false,
-                                       now: Self.afterTheWindow).count == 2)
+        let a = Self.item(Self.longAgo)
+        let b = Self.item(Self.longAgo.addingTimeInterval(3 * 3600))
+        let bench = RenderedBench.compose(
+            allItems: [a, b], reviewedIds: [a.id],
+            hideReviewed: false, now: Self.afterTheWindow
+        )
+        #expect(bench.count == 2)
     }
 
-    /// **The device case, as data.** 19 bench clips, 18 already reviewed,
-    /// spanning three months. The lens shows one — so the header must say
-    /// one, and its span must not reach back to April.
+    /// **The device case, as data.** 19 bench items, 18 already reviewed,
+    /// spanning three months, each its own sitting. The lens shows one — so
+    /// the header must say one, and its span must not reach back to April.
+    ///
+    /// This is the assertion the whole rebuild is for, and it is now checkable
+    /// in the form the header actually reads: `count` and `capturedAts` come
+    /// off one `items` array, so the "19 new clips · 1 session · Apr 28 –
+    /// today" shape is no longer expressible.
     @Test func theDeviceCase_headerDescribesWhatIsRendered() {
         let april = Date(timeIntervalSince1970: 1_777_000_000)
         let today = april.addingTimeInterval(90 * 24 * 3600)
-        var clips = (0..<18).map { i in
-            Self.clip(reviewed: true, capturedAt: april.addingTimeInterval(Double(i) * 3600))
-        }
-        clips.append(Self.clip(reviewed: false, capturedAt: today))
+        let seen = (0..<18).map { i in Self.item(april.addingTimeInterval(Double(i) * 3600)) }
+        let fresh = Self.item(today)
 
-        let lens = BenchLensClips.forLens(benchClips: clips, hideReviewed: true, now: today)
-        #expect(lens.count == 1, "the lens renders one clip; the header counted \(clips.count)")
+        let bench = RenderedBench.compose(
+            allItems: seen + [fresh], reviewedIds: Set(seen.map(\.id)),
+            hideReviewed: true, now: today
+        )
+        #expect(bench.count == 1, "the lens renders one clip; the header counted \(seen.count + 1)")
 
-        let span = lens.map(\.capturedAt)
+        let span = bench.items.map(\.capturedAt)
         #expect(span.min() == today, "the subtitle span reached back to a clip the lens does not show")
         #expect(span.max() == today)
     }
 
-    /// Bound the other side: a helper that returned nothing would pass the
-    /// filtering tests above while emptying the lens entirely.
+    /// Bound the other side: a lens that returned nothing would pass the
+    /// filtering tests above while emptying New entirely.
     @Test func lensClips_keepsEveryUnseenClip() {
-        let unseen = (0..<5).map { _ in Self.clip(reviewed: false) }
-        #expect(BenchLensClips.forLens(benchClips: unseen, hideReviewed: true,
-                                       now: Self.afterTheWindow).count == 5)
+        let unseen = (0..<5).map { i in Self.item(Self.longAgo.addingTimeInterval(Double(i) * 3 * 3600)) }
+        let bench = RenderedBench.compose(
+            allItems: unseen, reviewedIds: [], hideReviewed: true, now: Self.afterTheWindow
+        )
+        #expect(bench.count == 5)
     }
 
     // MARK: - (a) Caller guard — the header must not reach past the lens
@@ -250,20 +268,17 @@ import Foundation
     static let afterTheWindow = Date(timeIntervalSince1970: 1_785_000_000)
         .addingTimeInterval(365 * 24 * 3600)
 
-    static func clip(reviewed: Bool, capturedAt: Date = Date(timeIntervalSince1970: 1_785_000_000)) -> InboxClip {
-        InboxClip(
-            clipId: UUID(),
-            capturedAt: capturedAt,
-            duration: 10,
-            transcript: "",
-            latitude: nil,
-            longitude: nil,
-            source: "phone",
-            audioFilename: "f35-\(UUID().uuidString).m4a",
-            transcriptionAttempted: true,
-            rollGroupId: nil,
-            reviewed: reviewed
-        )
+    /// The fixtures' capture time — a year before `afterTheWindow`, so every
+    /// session in this file is long closed and these assertions stay about
+    /// filtering rather than about F36's window.
+    static let longAgo = Date(timeIntervalSince1970: 1_785_000_000)
+
+    /// Items rather than `InboxClip`s since `BenchLensClips` was deleted:
+    /// `RenderedBench.compose` is media-agnostic and takes the value type.
+    /// Callers space these past the idle gap when they want one item per
+    /// session, because F37 admits whole sessions.
+    static func item(_ at: Date) -> BenchClipItem {
+        BenchClipItem(id: UUID(), kind: .voice, capturedAt: at, rollGroupId: nil)
     }
 
     // MARK: - Source access

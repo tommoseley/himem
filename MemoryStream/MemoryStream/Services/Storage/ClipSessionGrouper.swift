@@ -257,74 +257,16 @@ enum CollapsedBodyVariant: Equatable {
     case allAccidental
 }
 
-/// **Which bench clips does the current lens actually show?** (F35, ruled
-/// 2026-08-02.)
-///
-/// One definition, read by the header, the grouper, and the body — so the
-/// three cannot describe different sets. On device the header read
-/// *"19 new clips · 1 session · Apr 28 – today"* above a single rendered
-/// clip: the count and the time range came from the raw bench while the
-/// session count came from the filtered set. Each number was true of a
-/// different set; together they claimed a three-month session.
-///
-/// **The word "new" was lying independently of the arithmetic.** The header
-/// sits under the New chip, where New means *unseen* (P7-2), so a count that
-/// includes reviewed clips is an Honest-Label failure and not a rounding
-/// error. The ruling is that the header describes the lens.
-///
-/// Note what this is NOT: the idle-gap grouper was never at fault. It
-/// applies its threshold correctly and simply never saw the reviewed clips,
-/// because this filter runs first.
-enum BenchLensClips {
-
-    /// - Parameters:
-    ///   - hideReviewed: true on the **New** lens (unseen only); false on
-    ///     **All**, which shows everything.
-    ///   - now: injected so the window is testable without a wall clock.
-    ///   - soloClipIds: passed through to the grouper so the sessions this
-    ///     reads are the same sessions the bench renders.
-    ///
-    /// **F36 · New admits `!reviewed || stillInPlay`.** `reviewed` still
-    /// records "opened by you" — that fact is unchanged. What changed is
-    /// that opening a clip no longer ejects it from New while it could
-    /// still gain a neighbour, because the lens and the grouper now share
-    /// one notion of "still in play".
-    ///
-    /// **Session-relative, not clip-relative — the distinction is the fix.**
-    /// A clip-relative window splits a real session: clip A at T and clip B
-    /// at T+9 are one session, but at T+11 A has aged out while B has not,
-    /// so they land in different lenses. That IS the reported symptom. A
-    /// session extends as clips join it, so measuring from the session's
-    /// latest clip keeps its members together.
-    ///
-    /// **This is a LENS-level fix, which is why it covers every trigger.**
-    /// Four sites write review state — the clip editor on open, the
-    /// per-session bulk mark, the one-time backfill migration, and the
-    /// materializer mirroring into the ref store — and all four land in
-    /// `benchClips[].reviewed` (refs via `composeBenchClips`, which reads
-    /// `BenchClipReviewStore`). Softening one trigger would have left the
-    /// others doing the thing the ruling forbids; reading leniently here
-    /// covers them by construction.
-    static func forLens(
-        benchClips: [InboxClip],
-        hideReviewed: Bool,
-        now: Date,
-        soloClipIds: Set<UUID> = []
-    ) -> [InboxClip] {
-        guard hideReviewed else { return benchClips }
-
-        // Group the FULL bench, not the filtered set: a session's window is
-        // a property of the session, and a reviewed clip is still one of its
-        // members. Grouping the filtered set would shrink the very sessions
-        // this is asking about.
-        let sessions = ClipSessionGrouper.group(benchClips, soloClipIds: soloClipIds)
-        var stillInPlay: Set<UUID> = []
-        for session in sessions {
-            guard let latest = session.clips.map(\.capturedAt).max() else { continue }
-            if now.timeIntervalSince(latest) < ClipSessionGrouper.sessionTimeWindowSeconds {
-                stillInPlay.formUnion(session.clips.map(\.clipId))
-            }
-        }
-        return benchClips.filter { !$0.reviewed || stillInPlay.contains($0.clipId) }
-    }
-}
+// `BenchLensClips` lived here until 2026-08-10 and is deleted with the
+// follow-up to C2 step 2b-ii-c2. It answered "which bench CLIPS does this lens
+// show?" at the item level; F37 inverted that to "which SESSIONS does this lens
+// admit?", and the answer moved into `RenderedBench.compose` — which by then was
+// also the only thing that could have called it. Its behavioural coverage lives
+// in `RenderedBenchTests` and its threshold guard in `ClipsStillInPlayTests`,
+// re-anchored on `compose`.
+//
+// Deleted rather than left in place. A type with no production caller whose
+// tests still pass is the shape this project has now been bitten by twice —
+// `FirstImportState`'s zero production readers under a doc asserting a completed
+// contract, and the hand-rolled second `AVAudioPlayer` while `AudioPlayerService`
+// sat unused. Green tests over dead code read as coverage and are not.

@@ -28,88 +28,63 @@ import Foundation
 @Suite struct ClipsStillInPlayTests {
 
 
-    // MARK: - The window (behavioural)
-
-    /// **The worked example that decided session-relative over
-    /// clip-relative.** A at T, B at T+9 are ONE session. At T+11 a
-    /// clip-relative window ages A out while B survives — the reported
-    /// symptom, a session split across two lenses. Session-relative keeps
-    /// them together, because the session's window runs from ITS latest
-    /// clip.
-    @Test func aSessionIsNotSplitAcrossLenses() {
-        let t = Date(timeIntervalSince1970: 1_785_000_000)
-        let a = Self.clip(reviewed: true, capturedAt: t)
-        let b = Self.clip(reviewed: true, capturedAt: t.addingTimeInterval(9 * 60))
-        let lens = BenchLensClips.forLens(
-            benchClips: [a, b], hideReviewed: true,
-            now: t.addingTimeInterval(11 * 60)
-        )
-        #expect(lens.count == 2, "the session was split — A aged out while B did not")
-    }
-
-    /// Opening a clip no longer ejects it: reviewed, but its session is
-    /// still open, so New keeps it.
-    @Test func openedClipStaysNewWhileItsSessionIsOpen() {
-        let t = Date(timeIntervalSince1970: 1_785_000_000)
-        let opened = Self.clip(reviewed: true, capturedAt: t)
-        let lens = BenchLensClips.forLens(
-            benchClips: [opened], hideReviewed: true,
-            now: t.addingTimeInterval(60)
-        )
-        #expect(lens.count == 1)
-    }
-
-    /// **The ceiling.** Once the window has passed a reviewed clip DOES
-    /// leave — a predicate that never reclassified would pass every test
-    /// above while retiring the New lens entirely.
-    @Test func onceTheWindowPassesTheReviewedClipLeaves() {
-        let t = Date(timeIntervalSince1970: 1_785_000_000)
-        let opened = Self.clip(reviewed: true, capturedAt: t)
-        let lens = BenchLensClips.forLens(
-            benchClips: [opened], hideReviewed: true,
-            now: t.addingTimeInterval(ClipSessionGrouper.sessionTimeWindowSeconds + 1)
-        )
-        #expect(lens.isEmpty)
-    }
+    // MARK: - The window (behavioural), over `RenderedBench.compose`
+    //
+    // **Re-pointed 2026-08-10 when `BenchLensClips` was deleted.** F36's
+    // predicate now lives in `RenderedBench.compose`, and under F37 it decides
+    // which SESSIONS are admitted rather than which CLIPS survive. The
+    // invariants below are unchanged — they were always about outcomes, not
+    // about which function produced them.
+    //
+    // Three cases that used to live here are NOT reproduced, because
+    // `RenderedBenchTests` already asserts them behaviourally and duplicating
+    // them would inflate the count without adding coverage:
+    //   aSessionIsNotSplitAcrossLenses      -> aSessionIsNotSplitAcrossLensesEvenAcrossKinds
+    //   openedClipStaysNewWhileItsSessionIsOpen -> aReviewedItemStaysWhileItsSessionCouldStillGrow
+    //   onceTheWindowPassesTheReviewedClipLeaves -> onceTheWindowPassesTheReviewedItemLeaves
+    // Checked by reading each, not assumed from the names.
 
     /// An unseen clip is admitted regardless of age — `!reviewed` is the
     /// first half of the predicate and the window must not override it.
     @Test func unseenClipsAreAdmittedAtAnyAge() {
         let t = Date(timeIntervalSince1970: 1_700_000_000)
-        let old = Self.clip(reviewed: false, capturedAt: t)
-        let lens = BenchLensClips.forLens(
-            benchClips: [old], hideReviewed: true,
+        let old = Self.item(t)
+        let bench = RenderedBench.compose(
+            allItems: [old], reviewedIds: [], hideReviewed: true,
             now: t.addingTimeInterval(365 * 24 * 3600)
         )
-        #expect(lens.count == 1)
+        #expect(bench.count == 1)
     }
 
-    /// **The bulk trigger, covered by the same predicate.** `markSessionReviewed`
-    /// marks every clip in an opened session — including ones never
-    /// individually looked at. Because the fix is at the lens rather than at
-    /// a trigger, that path is covered by construction: all four writers land
-    /// in `benchClips[].reviewed`, which this reads leniently.
+    /// **The bulk trigger, covered by the same predicate.**
+    /// `markSessionReviewed` marks every clip in an opened session — including
+    /// ones never individually looked at. Because the rule is at the lens
+    /// rather than at a trigger, that path is covered by construction: every
+    /// review writer lands in the one `reviewedIds` set `compose` reads.
+    ///
+    /// Under F37 this is stronger than it was. The session is admitted or
+    /// refused whole, so a bulk mark can no longer leave a sitting straddling
+    /// two lenses even in principle.
     @Test func bulkSessionMarkDoesNotEjectAnOpenSession() {
         let t = Date(timeIntervalSince1970: 1_785_000_000)
-        let members = (0..<5).map { i in
-            Self.clip(reviewed: true, capturedAt: t.addingTimeInterval(Double(i) * 60))
-        }
-        let lens = BenchLensClips.forLens(
-            benchClips: members, hideReviewed: true,
+        let members = (0..<5).map { i in Self.item(t.addingTimeInterval(Double(i) * 60)) }
+        let bench = RenderedBench.compose(
+            allItems: members, reviewedIds: Set(members.map(\.id)), hideReviewed: true,
             now: t.addingTimeInterval(6 * 60)
         )
-        #expect(lens.count == 5, "the bulk mark ejected clips whose session is still open")
+        #expect(bench.count == 5, "the bulk mark ejected clips whose session is still open")
     }
 
     /// All shows everything — the window is a New-lens concept only.
     @Test func theAllLensIsUnaffectedByTheWindow() {
         let t = Date(timeIntervalSince1970: 1_700_000_000)
-        let clips = [Self.clip(reviewed: true, capturedAt: t), Self.clip(reviewed: false, capturedAt: t)]
-        let lens = BenchLensClips.forLens(
-            benchClips: clips, hideReviewed: false,
+        let seen = Self.item(t)
+        let unseen = Self.item(t)
+        let bench = RenderedBench.compose(
+            allItems: [seen, unseen], reviewedIds: [seen.id], hideReviewed: false,
             now: t.addingTimeInterval(999_999)
         )
-        #expect(lens.count == 2)
+        #expect(bench.count == 2)
     }
 
     // MARK: - Copy (the wording IS the promise)
@@ -126,32 +101,32 @@ import Foundation
 
     // MARK: - Fixtures
 
-    static func clip(reviewed: Bool, capturedAt: Date) -> InboxClip {
-        InboxClip(
-            clipId: UUID(), capturedAt: capturedAt, duration: 10, transcript: "",
-            latitude: nil, longitude: nil, source: "phone",
-            audioFilename: "f36-\(UUID().uuidString).m4a",
-            transcriptionAttempted: true, rollGroupId: nil, reviewed: reviewed
-        )
+    static func item(_ at: Date) -> BenchClipItem {
+        BenchClipItem(id: UUID(), kind: .voice, capturedAt: at, rollGroupId: nil)
     }
 
     // MARK: - Caller guards
 
     /// The lens must read the grouper's threshold, never its own copy —
     /// two numbers is how the lens and the grouper drift apart again.
+    ///
+    /// Re-anchored on `RenderedBench.compose` when `BenchLensClips` was
+    /// deleted. The consequence recorded at the constant is unchanged:
+    /// retuning the grouper also retunes how long a session lingers in New.
     @Test func lensReadsTheGroupersThresholdNotItsOwn() throws {
-        let src = try Self.source("MemoryStream/Services/Storage/ClipSessionGrouper.swift")
-        let body = try Self.blockBody(startingAtLineContaining: "enum BenchLensClips", in: src)
+        let src = try Self.source("MemoryStream/Services/Storage/RenderedBench.swift")
+        let body = try Self.blockBody(startingAtLineContaining: "static func compose(", in: src)
         let code = Self.codeOnly(body)
-        #expect(code.contains("sessionTimeWindowSeconds"),
+        #expect(code.contains("ClipSessionGrouper.sessionTimeWindowSeconds"),
                 """
-                `BenchLensClips` does not read `ClipSessionGrouper.sessionTimeWindowSeconds`, \
-                so the lens and the grouper have separate notions of "still in play". Body was:
+                `RenderedBench.compose` does not read \
+                `ClipSessionGrouper.sessionTimeWindowSeconds`, so the lens and the grouper \
+                have separate notions of "still in play". Body was:
                 \(body)
                 """)
         // A literal duration in the lens is the duplication this forbids.
         #expect(code.contains("10 * 60") == false,
-                "`BenchLensClips` restates the idle-gap threshold instead of reading it.")
+                "`RenderedBench.compose` restates the idle-gap threshold instead of reading it.")
     }
 
     /// The Unconnected lens must explain the state, not just label the
@@ -173,7 +148,7 @@ import Foundation
 
     @Test func scanner_flagsALensWithItsOwnThreshold() {
         let offending = """
-        enum BenchLensClips {
+        static func compose(
             static let window: TimeInterval = 10 * 60
         }
         """
@@ -183,7 +158,7 @@ import Foundation
 
     @Test func scanner_acceptsALensThatReadsTheGrouper() {
         let fixed = """
-        enum BenchLensClips {
+        static func compose(
             let w = ClipSessionGrouper.sessionTimeWindowSeconds
         }
         """
