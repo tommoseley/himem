@@ -137,7 +137,24 @@ struct RenderedBench: Equatable {
 
         // 2 · In-flight items are partitioned off before grouping, never
         // subtracted from a count afterwards.
-        let inFlight = lensItems.filter { inFlightIds.contains($0.id) }
+        //
+        // **Partitioned from `allItems`, NOT from `lensItems`** (device,
+        // 2026-08-10). The lens governs what is *groupable into sessions*; it
+        // does not govern what is *arriving*. Filtering the in-flight region
+        // through it dropped a REVIEWED clip that was re-arriving — while
+        // `SessionListView` feeds its `IncomingCard` list from
+        // `arrivals.sortedNewestFirst()`, un-lensed, so the item was on screen
+        // and absent from the count.
+        //
+        // `[BenchPerf]` caught it as `bench DIFFER · oldCount=4 newCount=3`,
+        // firing only inside a retry sweep and AGREE in every quiet window.
+        // The old header's `inFlightOnly` term was compensating for exactly
+        // this — right intent, wrong layer — which is why it looked like a
+        // rogue second set and survived two prior fixes of this header.
+        //
+        // An arriving clip's review state is stale by construction: it is
+        // re-arriving. Premise 1: it is drawn, so it counts.
+        let inFlight = allItems.filter { inFlightIds.contains($0.id) }
         let groupable = lensItems.filter { !inFlightIds.contains($0.id) }
 
         let sessions = UnifiedBenchGrouper.group(groupable, soloIds: soloIds)
@@ -167,7 +184,12 @@ struct RenderedBench: Equatable {
         }
 
         return RenderedBench(
-            items: lensItems,
+            // `groupable + inFlight`, NOT `lensItems` — the two differ by
+            // exactly the reviewed-and-re-arriving clip, which is drawn as an
+            // IncomingCard. Keeping the partition true (`count == loose +
+            // clustered + inFlight`) requires `items` to contain every region,
+            // and the in-flight region is no longer a subset of the lens.
+            items: groupable + inFlight,
             sessions: sessions,
             clustered: clustered,
             loose: loose,

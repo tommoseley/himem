@@ -448,6 +448,55 @@ import Foundation
                 "and the step-3 flip is one parameter with a test, not a filter to remember")
     }
 
+    /// **An arriving clip is DRAWN, so it counts — even if reviewed** (device,
+    /// 2026-08-10; ruled by Tom).
+    ///
+    /// `compose` applied the lens at step 1 and partitioned in-flight at step 2
+    /// **from the already-lensed set**, so a reviewed clip that is re-arriving
+    /// was dropped before it could reach the in-flight region. Meanwhile
+    /// `SessionListView` feeds its `IncomingCard` list from
+    /// `arrivals.sortedNewestFirst()` — **un-lensed** — so the item is on
+    /// screen while the composed count omits it.
+    ///
+    /// Caught by `[BenchPerf]` on device: `bench DIFFER · oldCount=4
+    /// newCount=3`, firing only inside a retry sweep and `AGREE` in every
+    /// quiet window. The old header's `inFlightOnly` term — which reads like a
+    /// rogue second set — was **compensating for this**: right intent, wrong
+    /// layer.
+    ///
+    /// The lens governs what is *groupable into sessions*, not what is
+    /// *arriving*. An arriving clip's review state is stale by construction.
+    @Test func anArrivingClipIsDrawnEvenWhenReviewed() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let arriving = Self.item(.voice, t)
+        let bench = RenderedBench.compose(
+            allItems: [arriving],
+            reviewedIds: [arriving.id],
+            hideReviewed: true,
+            now: t.addingTimeInterval(3600),   // far past the still-in-play window
+            inFlightIds: [arriving.id]
+        )
+        #expect(bench.inFlight.count == 1,
+                "a reviewed clip that is re-arriving was dropped by the lens before the in-flight partition")
+        #expect(bench.count == 1, "the composed count omits an item the view draws as an IncomingCard")
+        #expect(DrawnBench.from(bench, proposals: []).count == 1,
+                "the drawn count must include arriving items — premise 1: it is drawn, so it counts")
+    }
+
+    /// The converse, so the fix cannot become "in-flight ignores the lens
+    /// entirely in both directions": an UNREVIEWED arriving clip was always
+    /// counted, and must stay counted.
+    @Test func anUnreviewedArrivingClipStillCounts() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let arriving = Self.item(.voice, t)
+        let bench = RenderedBench.compose(
+            allItems: [arriving], reviewedIds: [], hideReviewed: true,
+            now: t.addingTimeInterval(3600), inFlightIds: [arriving.id]
+        )
+        #expect(bench.inFlight.count == 1)
+        #expect(bench.count == 1)
+    }
+
     // MARK: - Fixtures
 
     static func item(_ kind: BenchClipItem.Kind, _ at: Date, roll: UUID? = nil) -> BenchClipItem {

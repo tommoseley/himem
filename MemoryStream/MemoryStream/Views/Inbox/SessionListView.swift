@@ -141,7 +141,7 @@ struct SessionListView: View {
         // and the tab bar handles navigation. The modal-push paths from
         // Settings + JournalView (2026-07-09) are retired.
         // `let _ =` because a bare call in a ViewBuilder is read as a view.
-        let _ = BenchPerf.body(sessions: sessions.count, clips: benchClips.count)
+        let _ = BenchPerf.body(sessions: sessions.count, clips: benchClips.count, lens: lensClips.count)
         ZStack {
             Crucible.Color.paper.ignoresSafeArea()
             // **"Nothing new" needs THREE conditions, and each was found
@@ -284,9 +284,81 @@ struct SessionListView: View {
     /// assignment site so a sixth cannot quietly appear.
     private func regroupSessions() {
         let t0 = CFAbsoluteTimeGetCurrent()
-        defer { BenchPerf.regroup(since: t0, sessions: sessions.count) }
+        defer { BenchPerf.regroup(since: t0, sessions: sessions.count, lens: lensClips.count) }
         sessions = computeSessions()
         recomputeAbsorbedMedia()
+        reportDrawnBenchDisagreement()
+    }
+
+    /// **C2 step 2b-ii-c1 — compose the new bench ALONGSIDE the old and report
+    /// where they disagree. Nothing renders from this.**
+    ///
+    /// 2b-ii-c is atomic: the header and the cards must move together, because
+    /// `SessionMediaAbsorber` and `UnifiedBenchGrouper` group media by
+    /// different rules (±5 min around the session's *span*, versus a ≤10 min
+    /// gap to the *adjacent item*, chaining). Wiring the header alone would
+    /// count a photo the cards draw elsewhere — the exact class this rebuild
+    /// exists to end.
+    ///
+    /// That makes the swap a 76-reference edit in the file where all seven
+    /// defects lived, and the reverted attempt made it blind. This measures the
+    /// difference **first**, on real data, so the margin shift arrives as a
+    /// number rather than as a surprise inside the edit.
+    ///
+    /// `oldCount` mirrors `headerTitle`'s arithmetic exactly, including the
+    /// term that ranges a fourth set — so a disagreement here is either the
+    /// intended grouping shift or the latent fourth-set defect, and the two are
+    /// distinguishable by whether `span` moves with it.
+    private func reportDrawnBenchDisagreement() {
+        let refs = fetchZeroEdgeVoiceRefs() + fetchUnplacedNonVoiceRefs()
+        let inventory = BenchInventory.compose(
+            manifestClips: inbox.clips,
+            refs: refs.map {
+                BenchRefDescriptor(
+                    id: $0.id,
+                    kind: Self.benchKind(of: $0),
+                    createdAt: $0.createdAt,
+                    rollGroupId: nil
+                )
+            },
+            refIsReviewed: { BenchClipReviewStore.isReviewed($0) }
+        )
+        let bench = RenderedBench.compose(
+            allItems: inventory.items,
+            reviewedIds: inventory.reviewedIds,
+            hideReviewed: hideReviewed,
+            now: Date(),
+            inFlightIds: Set(arrivals.clipsInFlight.keys),
+            soloIds: inbox.soloClipIds,
+            proposals: proposals,
+            trim: removedByFingerprint
+        )
+        let drawn = DrawnBench.from(bench, proposals: proposals)
+
+        let inFlightOnly = arrivals.clipsInFlight.keys.filter { id in
+            !lensClips.contains(where: { $0.clipId == id })
+        }.count
+        let absorbed = sessions.reduce(0) { $0 + (absorbedMediaBySessionId[$1.id]?.count ?? 0) }
+        let oldCount = lensClips.count + inFlightOnly + absorbed
+        // The span's set, which today OMITS absorbed media — the fourth set.
+        let oldSpanCount = lensClips.count + arrivals.clipsInFlight.count
+
+        BenchPerf.disagreement(
+            oldCount: oldCount,
+            oldSpanCount: oldSpanCount,
+            newCount: drawn.count,
+            oldSessions: sessions.count,
+            newSessionTerm: drawn.sessionTerm
+        )
+    }
+
+    private static func benchKind(of ref: MediaReference) -> BenchClipItem.Kind {
+        switch ref.mediaTypeEnum {
+        case .voice: return .voice
+        case .image: return .image
+        case .video: return .video
+        case .note:  return .note
+        }
     }
 
     private func recomputeAbsorbedMedia() {
@@ -1661,16 +1733,53 @@ enum BenchPerf {
         return now - (firstAt ?? now)
     }
 
-    static func body(sessions: Int, clips: Int) {
+    /// `lens` is `lensClips.count` — **the number that explains B16.**
+    ///
+    /// The device showed `sessions=3 → 2 → 1` with `clips=27` constant, which
+    /// reads as sessions being regrouped away under a fixed clip set. It is
+    /// not: the New lens is `!reviewed || stillInPlay`, and `stillInPlay`
+    /// needs `now − latest < 10 min`, so for 8-day-old clips it is
+    /// permanently empty and the lens reduces to `!reviewed`. Sessions shrink
+    /// only as clips become **reviewed** — P7-2 working.
+    ///
+    /// That reading rested on inference plus a screenshot, because the
+    /// instrument printed `benchClips` (invariant by construction) and never
+    /// the set that actually moves. `lens` makes it unarguable: it must fall
+    /// in step with `sessions`, and `clips` must not move at all.
+    ///
+    /// **Cost, stated rather than hidden:** `lensClips` regroups the full
+    /// bench, so this adds one grouping pass per body — measured at 0.3–0.9ms
+    /// at this bench size, and the `regroup` line prints that cost, so an
+    /// instrument that started distorting what it measures would say so.
+    static func body(sessions: Int, clips: Int, lens: Int) {
         bodyCount += 1
         guard shouldLog(bodyCount) else { return }
-        NSLog("[HiMem][BenchPerf] body #\(bodyCount) · sessions=\(sessions) · clips=\(clips) · t+\(String(format: "%.2f", elapsed()))s")
+        NSLog("[HiMem][BenchPerf] body #\(bodyCount) · sessions=\(sessions) · lens=\(lens) · clips=\(clips) · t+\(String(format: "%.2f", elapsed()))s")
     }
 
-    static func regroup(since t0: CFAbsoluteTime, sessions: Int) {
+    /// **2b-ii-c1 · where the old bench and the new one disagree.**
+    ///
+    /// `AGREE` means the swap is a no-op on this data. A difference is not a
+    /// bug by itself — the absorber and the grouper deliberately disagree at
+    /// the margins (2b-i) — but it must be a NUMBER before the 76-reference
+    /// edit, not a discovery inside it.
+    ///
+    /// `oldSpan` is printed because the reverted header ranges a **fourth
+    /// set** that omits absorbed media: `oldCount != oldSpan` means the count
+    /// and the span already describe different sets on this screen, under a
+    /// green gate. On a bench with no media the two coincide, which is why the
+    /// header currently looks honest — that is luck, not correctness.
+    static func disagreement(oldCount: Int, oldSpanCount: Int, newCount: Int,
+                             oldSessions: Int, newSessionTerm: Int?) {
+        let verdict = oldCount == newCount ? "AGREE" : "DIFFER"
+        let term = newSessionTerm.map(String.init) ?? "dropped"
+        NSLog("[HiMem][BenchPerf] bench \(verdict) · oldCount=\(oldCount) newCount=\(newCount) · oldSpan=\(oldSpanCount) · oldSessions=\(oldSessions) newTerm=\(term)")
+    }
+
+    static func regroup(since t0: CFAbsoluteTime, sessions: Int, lens: Int) {
         regroupCount += 1
         let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
         guard shouldLog(regroupCount) else { return }
-        NSLog("[HiMem][BenchPerf] regroup #\(regroupCount) · \(String(format: "%.1f", ms))ms · sessions=\(sessions) · t+\(String(format: "%.2f", elapsed()))s")
+        NSLog("[HiMem][BenchPerf] regroup #\(regroupCount) · \(String(format: "%.1f", ms))ms · sessions=\(sessions) · lens=\(lens) · t+\(String(format: "%.2f", elapsed()))s")
     }
 }
