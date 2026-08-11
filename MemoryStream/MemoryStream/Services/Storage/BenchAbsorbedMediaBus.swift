@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 /// Shared, tab-level signal: which unplaced `MediaReference` ids have
-/// been absorbed into a voice session (by `SessionMediaAbsorber`).
+/// been drawn inside a voice session card by the bench's grouping.
 ///
 /// SessionListView owns the write side — it runs the absorber every
 /// time its `sessions` recompute. ClipsTabView reads the id set to

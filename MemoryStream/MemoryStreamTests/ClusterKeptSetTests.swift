@@ -202,20 +202,39 @@ import Foundation
     /// **A set-aside clip is still hers.** It is new, unconnected, and must
     /// return to the loose list rather than disappearing from the bench —
     /// hiding it is the subtractive posture J2 retired.
-    @Test func setAsideReturnsTheClipToTheLooseList() throws {
-        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
-        let body = try Self.blockBody(startingAtLineContaining: "private var looseSessions:", in: src)
+    /// **This guard has MOVED to where the decision now lives** (C2 step
+    /// 2b-ii-c2) — `RenderedBenchTests.aSetAsideItemReturnsToTheLooseRegion`.
+    ///
+    /// It asserted that `SessionListView.looseSessions` consulted
+    /// `removedByFingerprint` and rebuilt a partial group. After the swap the
+    /// view's loose pile IS the composed one (`looseSessions` is `sessions`),
+    /// and the trim is applied in `RenderedBench.claiming` — so every clause
+    /// here describes a mechanism the file no longer contains. Left as a
+    /// source guard it would fail while the behaviour was intact, and the
+    /// obvious "fix" would be to delete it: a guard removed because it moved
+    /// is how coverage drops silently.
+    ///
+    /// The successor is strictly stronger. It asserts the *outcome* — the
+    /// set-aside item is drawn, in the loose region, not clustered, and the
+    /// count is unmoved — rather than the three mechanisms that happened to
+    /// produce it, so it survives the next relocation and still fails if the
+    /// clip vanishes.
+    ///
+    /// What this file still guards, unchanged: the cluster card's own kept-set
+    /// arithmetic (`theExpanderTotalIsTheSubtitleTotal` and the F43 subtitle
+    /// tests above), which is genuinely a property of `ClusterCardStack`.
+    @Test func theSetAsideRuleIsGuardedWhereTheDecisionLives() throws {
+        let src = try Self.source("MemoryStream/Services/Storage/RenderedBench.swift")
+        let body = try Self.blockBody(startingAtLineContaining: "func claiming(", in: src)
         let code = Self.codeOnly(body)
-        #expect(code.contains("proposals.flatMap(\\.clipIds)") == false,
+        #expect(code.contains("removed.contains(item.id)"),
                 """
-                `looseSessions` treats the proposal's ORIGINAL membership as clustered, so a \
-                clip removed from the proposal vanishes from the bench as well. Body was:
+                `RenderedBench.claiming` does not consult the trim, so a set-aside item is \
+                still clustered and never returns to the loose region — F44, reopened. Body was:
                 \(body)
                 """)
-        #expect(code.contains("removedByFingerprint"),
-                "`looseSessions` does not consult the trim, so set-aside clips stay hidden.")
-        #expect(code.contains("ClipGroup(clips: remaining)"),
-                "A partially-kept session is not rendered with its remaining clips.")
+        #expect(code.contains("UnifiedSession(items: remaining)"),
+                "A partially-claimed session is not rebuilt from its remaining items.")
     }
 
     // MARK: - Source access

@@ -42,7 +42,26 @@ struct RenderedBench: Equatable {
     /// The groupable items (`items` minus `inFlight`), grouped
     /// media-agnostically. A photo captured inside a voice clip's idle window
     /// is *in that session*, not absorbed into it by a separate pass.
+    ///
+    /// **Admitted sessions only** — under F37 the lens admits or refuses whole
+    /// sessions, so these are exactly the sittings this lens shows, each with
+    /// every member it has.
     let sessions: [UnifiedSession]
+
+    /// **Every session on the bench, before the lens admitted any of them.**
+    ///
+    /// The drill-in reads this. Opening a session marks its clips reviewed
+    /// (Tom, July 19: *"open the container → its contents are seen"*), which
+    /// on the New lens removes the very session being read — so the pushed
+    /// screen must derive from a set the lens cannot empty, or it dismisses
+    /// itself out from under the reader.
+    ///
+    /// It is the grouping `compose` already performs to decide admission, kept
+    /// rather than discarded: the alternative is a second full grouping pass
+    /// on the path `[BenchPerf]` watches, to arrive at the same answer.
+    ///
+    /// With `hideReviewed == false` this is identical to `sessions`.
+    let allSessions: [UnifiedSession]
 
     /// Item ids claimed by a cluster proposal **after the user's trim** —
     /// the one definition. There were four independent producers of this for
@@ -112,33 +131,10 @@ struct RenderedBench: Equatable {
         trim: [String: Set<UUID>] = [:]
     ) -> RenderedBench {
 
-        // 1 · The lens. F36: a reviewed item stays while its SESSION could
-        // still gain a neighbour — session-relative, because a clip-relative
-        // window splits a real sitting across two lenses.
-        //
-        // Grouped over ALL items, in-flight included: a session's window is a
-        // property of the session, and an arriving clip is one of its members.
-        // Matches `BenchLensClips.forLens`, which groups the full bench for
-        // the same reason and likewise passes the solo set through.
-        let lensItems: [BenchClipItem]
-        if hideReviewed {
-            let allSessions = UnifiedBenchGrouper.group(allItems, soloIds: soloIds)
-            var stillInPlay: Set<UUID> = []
-            for session in allSessions {
-                guard let latest = session.items.map(\.capturedAt).max() else { continue }
-                if now.timeIntervalSince(latest) < ClipSessionGrouper.sessionTimeWindowSeconds {
-                    stillInPlay.formUnion(session.items.map(\.id))
-                }
-            }
-            lensItems = allItems.filter { !reviewedIds.contains($0.id) || stillInPlay.contains($0.id) }
-        } else {
-            lensItems = allItems
-        }
-
-        // 2 · In-flight items are partitioned off before grouping, never
+        // 1 · In-flight items are partitioned off before grouping, never
         // subtracted from a count afterwards.
         //
-        // **Partitioned from `allItems`, NOT from `lensItems`** (device,
+        // **Partitioned from `allItems`, NOT from a lensed set** (device,
         // 2026-08-10). The lens governs what is *groupable into sessions*; it
         // does not govern what is *arriving*. Filtering the in-flight region
         // through it dropped a REVIEWED clip that was re-arriving — while
@@ -155,9 +151,69 @@ struct RenderedBench: Equatable {
         // An arriving clip's review state is stale by construction: it is
         // re-arriving. Premise 1: it is drawn, so it counts.
         let inFlight = allItems.filter { inFlightIds.contains($0.id) }
-        let groupable = lensItems.filter { !inFlightIds.contains($0.id) }
+        let groupable = allItems.filter { !inFlightIds.contains($0.id) }
 
-        let sessions = UnifiedBenchGrouper.group(groupable, soloIds: soloIds)
+        // 2 · **GROUP FIRST, THEN ADMIT WHOLE SESSIONS** — F37, ruled
+        // 2026-08-10, and this inversion is the whole of that ruling.
+        //
+        // Until now the lens filtered ITEMS and the survivors were grouped, so
+        // a session arrived pre-shrunk: the card and the header described the
+        // lens-filtered members while the drill-in
+        // (`computeSessions(applyFilter: false)`) deliberately showed the full
+        // session. On device that read **2 · 2 · 4** for one sitting — a
+        // header saying 2 above a card whose glyph said 2, opening to 4 rows.
+        //
+        // > *A count must describe the thing it sits on.* The lens decides
+        // > WHICH SESSIONS APPEAR; it does not decide how many clips a session
+        // > is said to contain. Every count describes its own container's full
+        // > contents.
+        //
+        // Resolved in favour of the drill-in — it shows 4, so 4 is the number.
+        // So the full bench is grouped once, and a session is admitted whole
+        // when anything in it is new. Nothing is ever subtracted from a
+        // session, which is what makes the three numbers agree by construction
+        // rather than by three call sites remembering the same rule.
+        //
+        // F36's still-in-play survives the inversion with a narrowed job. It
+        // was written so a reviewed clip would not split its sitting across
+        // two lenses — group-then-admit makes splitting impossible, so that
+        // half is now structural. What remains is the half only a clock can
+        // do: hold a fully-reviewed session on New while it could still gain a
+        // neighbour, so the next clip of a live sitting joins the session
+        // already on screen instead of appearing beside it.
+        let allSessions = UnifiedBenchGrouper.group(groupable, soloIds: soloIds)
+        let sessions: [UnifiedSession]
+        if hideReviewed {
+            // **Still-in-play is measured over the FULL bench, in-flight
+            // included** — and that is load-bearing, not incidental. A
+            // session's window is a property of the session, and an arriving
+            // clip is one of its members: measuring it over `groupable` alone
+            // ages out a reviewed sibling *while its own session is still
+            // arriving*, which is the moment the lens exists to protect.
+            //
+            // Caught by `anArrivingItemKeepsItsReviewedSiblingInTheNewLens`
+            // during this swap, on exactly that case. The old item-level lens
+            // had it right and the inversion dropped it — recorded because it
+            // is invisible on any bench where nothing is mid-arrival, which is
+            // every bench a test composes by hand and most benches on device.
+            var stillInPlay: Set<UUID> = []
+            for session in UnifiedBenchGrouper.group(allItems, soloIds: soloIds) {
+                guard let latest = session.items.map(\.capturedAt).max() else { continue }
+                if now.timeIntervalSince(latest) < ClipSessionGrouper.sessionTimeWindowSeconds {
+                    stillInPlay.formUnion(session.items.map(\.id))
+                }
+            }
+            // The admission predicate is the old per-item lens, lifted whole
+            // to the session: a session is admitted when ANY member would have
+            // survived it. Nothing is subtracted from the session that passes.
+            sessions = allSessions.filter { session in
+                session.items.contains {
+                    !reviewedIds.contains($0.id) || stillInPlay.contains($0.id)
+                }
+            }
+        } else {
+            sessions = allSessions
+        }
 
         // 3 · Clustered, once. A proposal claims whole SESSIONS (the proposer
         // flatMaps them), so everything in a claimed session is clustered —
@@ -184,13 +240,59 @@ struct RenderedBench: Equatable {
         }
 
         return RenderedBench(
-            // `groupable + inFlight`, NOT `lensItems` — the two differ by
-            // exactly the reviewed-and-re-arriving clip, which is drawn as an
-            // IncomingCard. Keeping the partition true (`count == loose +
-            // clustered + inFlight`) requires `items` to contain every region,
-            // and the in-flight region is no longer a subset of the lens.
-            items: groupable + inFlight,
+            // **The ADMITTED sessions' items + inFlight** — F37. Not
+            // `groupable`, which still holds the sessions the lens turned
+            // away; not a lensed item set, which no longer exists. An admitted
+            // session contributes every member it has, including its reviewed
+            // ones, because that is what the card opens to.
+            //
+            // The in-flight region is added rather than filtered: it is drawn
+            // un-lensed as `IncomingCard`s, so keeping the partition true
+            // (`count == loose + clustered + inFlight`) requires `items` to
+            // carry every region.
+            items: sessions.flatMap(\.items) + inFlight,
             sessions: sessions,
+            allSessions: allSessions,
+            clustered: clustered,
+            loose: loose,
+            inFlight: inFlight
+        )
+    }
+
+    /// Re-derive `clustered` and `loose` for a proposal set, reusing the
+    /// grouping already computed.
+    ///
+    /// **This exists to break a genuine cycle, not to save a few
+    /// milliseconds.** `ClipClusterProposer` takes the bench's sessions as
+    /// input, and `compose` takes the resulting proposals as input — so the
+    /// caller must compose once with no proposals, ask the proposer, then
+    /// apply what it said. Composing a second time would regroup the whole
+    /// bench to reach the same `sessions`, on the path `[BenchPerf]` watches.
+    ///
+    /// `items`, `sessions` and `inFlight` are carried through untouched:
+    /// proposals decide only which drawn region an item lands in, never
+    /// whether it is drawn. That is what keeps the count invariant to
+    /// clustering — the property F37's ruling depends on.
+    func claiming(proposals: [ClusterProposal], trim: [String: Set<UUID>]) -> RenderedBench {
+        var clustered: Set<UUID> = []
+        for proposal in proposals {
+            let removed = trim[proposal.fingerprint.rawValue] ?? []
+            for session in Self.claimedSessions(for: proposal, in: sessions) {
+                for item in session.items where !removed.contains(item.id) {
+                    clustered.insert(item.id)
+                }
+            }
+        }
+        let loose: [UnifiedSession] = sessions.compactMap { session in
+            let remaining = session.items.filter { !clustered.contains($0.id) }
+            if remaining.isEmpty { return nil }
+            if remaining.count == session.items.count { return session }
+            return UnifiedSession(items: remaining)
+        }
+        return RenderedBench(
+            items: items,
+            sessions: sessions,
+            allSessions: allSessions,
             clustered: clustered,
             loose: loose,
             inFlight: inFlight
@@ -294,8 +396,11 @@ struct DrawnBench: Equatable {
         var claimed: [UnifiedSession] = []
         for proposal in proposals {
             for session in RenderedBench.claimedSessions(for: proposal, in: bench.sessions) {
-                let key = session.items.first?.id ?? UUID()
-                if seen.insert(key).inserted { claimed.append(session) }
+                // `session.id`, not `items.first?.id ?? UUID()`. The fallback
+                // was the freeze expression again (see `UnifiedSession.id`):
+                // an empty session took a fresh key on every read, so `seen`
+                // could never suppress it and it appended once per proposal.
+                if seen.insert(session.id).inserted { claimed.append(session) }
             }
         }
         return DrawnBench(

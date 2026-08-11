@@ -40,12 +40,35 @@ struct UnifiedSession: Identifiable, Hashable {
     static func == (lhs: UnifiedSession, rhs: UnifiedSession) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
+    /// A fixed sentinel for the empty case — see `id`. Mirrors
+    /// `ClipGroup.emptyGroupId`, deliberately a different value so the two
+    /// cannot be confused in a log.
+    static let emptySessionId = UUID(uuidString: "00000000-0000-0000-0000-00000000E318")!
+
     /// Stable identity for SwiftUI ForEach — deterministic per-content
     /// so re-grouping doesn't churn the diff. Prefers a shared
     /// `rollGroupId` (present on declared rolls) over the earliest
     /// item's id.
+    ///
+    /// **The empty case must never mint a fresh UUID.** This carried
+    /// `?? UUID()` — byte-for-byte the expression that froze the Clips
+    /// screen on 2026-08-09 (`ClipGroup.id`, fixed in `18021bc`): an empty
+    /// session's identity changed on *every read*, and `ForEach` reads
+    /// identity repeatedly, so SwiftUI can never match a row to its previous
+    /// self and diffs forever.
+    ///
+    /// It was harmless here only because nothing drew a `UnifiedSession`.
+    /// **C2 step 2b-ii-c2 makes this the bench's row identity**, which is
+    /// what moves the expression onto the live path — so premise 3 of the
+    /// redo contract ("no session carries a content-independent id") is
+    /// closed on this type by the same commit that promotes it, rather than
+    /// after the next freeze.
+    ///
+    /// The sentinel collides deliberately: two empty sessions share one id
+    /// instead of each inventing its own. A visibly wrong list is
+    /// diagnosable; per-read churn is an unkillable freeze.
     var id: UUID {
-        items.first?.rollGroupId ?? items.first?.id ?? UUID()
+        items.first?.rollGroupId ?? items.first?.id ?? Self.emptySessionId
     }
 
     /// The session's representative time = its earliest item's

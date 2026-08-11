@@ -37,29 +37,36 @@ import Foundation
 
     // MARK: - F38 · one set, one source
 
-    @Test func headerCountsOnlyMediaItCanDraw() throws {
-        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
-        let body = try Self.blockBody(startingAtLineContaining: "private var headerTitle: String {", in: src)
-        let code = Self.codeOnly(body)
-        #expect(code.contains("absorbedMediaBySessionId.values") == false,
-                """
-                `headerTitle` sums every absorbed-media entry regardless of whether a \
-                session with that key renders. A card looks the media up by session id, \
-                so anything keyed to a session outside the lens is counted and undrawable. \
-                Body was:
-                \(body)
-                """)
-        #expect(code.contains("sessions"),
-                "`headerTitle` does not scope the absorbed-media count to the sessions it describes.")
-    }
+    /// **F38's guard has MOVED, not been dropped** (C2 step 2b-ii-c2).
+    ///
+    /// It asserted that `headerTitle` scoped its absorbed-media term to the
+    /// sessions it described. The header has no media term any more — media
+    /// is an item, counted by being drawn — so a source-level assertion here
+    /// can only pass by matching nothing. The property F38 ruled is now
+    /// behavioural, in `RenderedBenchTests`:
+    ///
+    ///  - `mediaInARefusedSessionIsNotCounted` — the F38 case itself.
+    ///  - `mediaInAnAdmittedSessionIsCountedEvenIfReviewed` — the F37
+    ///    converse, which the source guard could never have expressed.
+    ///
+    /// What remains here is the half that is still a statement about *this
+    /// file*: the header must not rebuild any set of its own. That is
+    /// `theHeaderAssemblesNoCountOfItsOwn` below, which subsumes the old
+    /// assertion — it forbids `absorbedMediaBySessionId` outright rather than
+    /// forbidding one wrong way of reading it.
 
-    /// **Mechanism, not memory.** If `sessions` and the absorbed-media map
-    /// must always move together, one function moves them — rather than five
-    /// call sites each remembering to.
+    /// **Mechanism, not memory.** If `sessions` and the media map must always
+    /// move together, one function moves them — rather than five call sites
+    /// each remembering to.
+    ///
+    /// Re-anchored on the composition that replaced `computeSessions()`. The
+    /// invariant is unchanged and now covers more: `sessions`, `allSessions`,
+    /// the media map, `proposals` and `drawn` are all written in one place, so
+    /// none of them can go stale relative to another.
     @Test func regroupingHasExactlyOneOwner() throws {
         let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
         let code = Self.codeOnly(src)
-        let assignments = code.components(separatedBy: "sessions = computeSessions()").count - 1
+        let assignments = code.components(separatedBy: "sessions = drawnBench.loose").count - 1
         #expect(assignments == 1,
                 """
                 `sessions` is assigned from \(assignments) places. Four of the five original \
@@ -67,6 +74,12 @@ import Foundation
                 remove-clip-from-session regroup), which is how the map went stale. \
                 Regrouping needs one owner.
                 """)
+        // The owner must also be the only composer — a second `compose` call
+        // would reintroduce two answers to one question, which is the class
+        // this rebuild exists to end.
+        let composes = code.components(separatedBy: "RenderedBench.compose(").count - 1
+        #expect(composes == 1,
+                "`RenderedBench.compose` is called from \(composes) places; the bench has one composer.")
     }
 
     // MARK: - F39 · a proposal must not read as a session
@@ -179,6 +192,47 @@ import Foundation
     }
 
     // MARK: - Source access
+
+    // MARK: - C2 step 2b-ii-b · the view must have ONE source
+
+    /// **Premise 4 of the redo contract, as the caller half.**
+    ///
+    /// The behavioural assertions live on `DrawnBench` (2b-ii-a) and describe
+    /// what the surface says. They only *mean* that if the view has no second
+    /// source — otherwise they describe a value the header ignores, which is
+    /// precisely how the reverted 2b-ii was green at 1394/192 with "7 new
+    /// clips · 0 sessions" on screen.
+    ///
+    /// Every guard in that step asserted on the composition and the
+    /// composition was correct. So this one asserts the *relationship*: the
+    /// header assembles nothing of its own.
+    ///
+    /// **RED WHEN WRITTEN, against real shipped code** — the reverted header
+    /// reads three separately-scoped terms (`lensClips.count + inFlightOnly +
+    /// absorbedMediaCount`) and ranges the span over a *fourth* set that omits
+    /// absorbed media, so a photo is counted but never spans. That is not the
+    /// defect 2b-ii introduced; it is the one it was written to fix and did
+    /// not.
+    @Test func theHeaderAssemblesNoCountOfItsOwn() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
+        // `blockBody` throws on a missing anchor, so a rename fails loudly
+        // rather than letting this pass by matching nothing.
+        for needle in ["private var headerTitle: String {", "private var headerSubtitle: String {"] {
+            let body = try Self.blockBody(startingAtLineContaining: needle, in: src)
+            let code = Self.codeOnly(body)
+            for raw in ["lensClips", "benchClips", "absorbedMediaBySessionId", "arrivals.clipsInFlight", "sessions."] {
+                #expect(code.contains(raw) == false,
+                        """
+                        `\(needle.trimmingCharacters(in: .whitespaces))` reads `\(raw)` directly. \
+                        Every number the header says must come from the ONE drawn value, or the \
+                        count, the span and the session term can describe different sets again — \
+                        which is the class this rebuild exists to end, and which shipped inside \
+                        the step written to close it. Body was:
+                        \(body)
+                        """)
+            }
+        }
+    }
 
     static func codeOnly(_ source: String) -> String {
         source

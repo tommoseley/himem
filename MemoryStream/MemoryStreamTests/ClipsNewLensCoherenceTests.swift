@@ -108,7 +108,24 @@ import Foundation
     /// The helper being right says nothing about whether the header reads
     /// it. This is the defect: both header properties bound `benchClips`
     /// directly while the session count came from the filtered set.
-    @Test func headerReadsTheLensSetNotTheRawBench() throws {
+    ///
+    /// **SUPERSEDED by `BenchCountAndProposalCopyTests
+    /// .theHeaderAssemblesNoCountOfItsOwn`** (C2 step 2b-ii-c2), which is
+    /// strictly stronger and was written as a verified red against this very
+    /// header.
+    ///
+    /// This asserted the header reads `lensClips`. That was the right demand
+    /// while the header assembled its own count — it named the *one correct*
+    /// source among several. The successor forbids **every** raw source
+    /// (`lensClips` included) and requires the number to come from the single
+    /// drawn value, so the two are now contradictory by construction and the
+    /// stronger one wins.
+    ///
+    /// Kept as the negative half rather than deleted: "must not read the raw
+    /// bench" is still true, still this file's subject, and is the clause that
+    /// actually failed on device — *"19 new clips · 1 session · Apr 28 –
+    /// today"*, three numbers over two sets. The positive half moved.
+    @Test func headerReadsNeitherTheRawBenchNorAnySetOfItsOwn() throws {
         let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
         for property in ["private var headerTitle: String {", "private var headerSubtitle: String {"] {
             let body = try Self.blockBody(startingAtLineContaining: property, in: src)
@@ -116,12 +133,15 @@ import Foundation
             #expect(code.contains("benchClips") == false,
                     """
                     \(property) reads `benchClips` directly, which is unfiltered — so on the \
-                    New lens it describes a different set than the one rendered. It must read \
-                    the lens set. Body was:
+                    New lens it describes a different set than the one rendered. Body was:
                     \(body)
                     """)
-            #expect(code.contains("lensClips"),
-                    "\(property) does not read the lens set.")
+            #expect(code.contains("drawn"),
+                    """
+                    \(property) does not read the drawn bench. Every number the header says \
+                    must be a property of the ONE value the surface draws, or the count, the \
+                    span and the session term can describe different sets again.
+                    """)
         }
     }
 

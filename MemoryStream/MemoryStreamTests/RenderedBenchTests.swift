@@ -497,6 +497,95 @@ import Foundation
         #expect(bench.count == 1)
     }
 
+    // MARK: - Guards inherited from the view, C2 step 2b-ii-c2
+
+    /// **F44 · a set-aside clip comes BACK to the loose list.**
+    ///
+    /// Inherited from `ClusterKeptSetTests.setAsideReturnsTheClipToTheLooseList`,
+    /// which asserted that `SessionListView.looseSessions` consulted
+    /// `removedByFingerprint`. The swap moved that decision into
+    /// `RenderedBench`, so a source-level guard on the view now describes a
+    /// property the view no longer has — it would pass by matching nothing,
+    /// or fail while the behaviour is intact.
+    ///
+    /// **This is the stronger form**: it asserts the outcome (the clip is
+    /// drawn, in the loose region, and not clustered) rather than the
+    /// mechanism, so it survives the next move and still fails if the clip
+    /// vanishes. Verified by mutation — dropping the `!clustered.contains`
+    /// filter in `claiming` fails it.
+    @Test func aSetAsideItemReturnsToTheLooseRegion() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let kept = Self.item(.voice, t)
+        let setAside = Self.item(.voice, t.addingTimeInterval(120))
+        let bench = RenderedBench.compose(
+            allItems: [kept, setAside],
+            reviewedIds: [], hideReviewed: true, now: t.addingTimeInterval(180)
+        )
+        let proposal = Self.proposal(claiming: [kept.id, setAside.id])
+        let claimed = bench.claiming(
+            proposals: [proposal],
+            trim: [proposal.fingerprint.rawValue: [setAside.id]]
+        )
+        #expect(claimed.clustered.contains(setAside.id) == false,
+                "a set-aside item is still counted as clustered")
+        #expect(claimed.loose.flatMap(\.items).contains(setAside) == true,
+                """
+                the set-aside item is not in the loose region — it has vanished from the \
+                bench entirely. It is still new, still unconnected and still hers; hiding \
+                it is the subtractive posture J2 retired.
+                """)
+        #expect(claimed.count == 2, "the count must not move when an item is merely set aside")
+    }
+
+    /// **F38 · the header counted media that nothing drew.**
+    ///
+    /// Inherited from `BenchCountAndProposalCopyTests.headerCountsOnlyMediaItCanDraw`,
+    /// which asserted that `headerTitle` scoped its absorbed-media term to
+    /// the rendered sessions. The header has no media term any more — media
+    /// is an item, so it is counted by being drawn — and the guard's subject
+    /// moved with it.
+    ///
+    /// Stated as the property F38 actually ruled: **a photo in a session the
+    /// lens turned away is not counted.** Under F37 the unit of admission is
+    /// the session, so the case is a photo alone in an all-reviewed sitting.
+    @Test func mediaInARefusedSessionIsNotCounted() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let seenVoice = Self.item(.voice, t)
+        let seenPhoto = Self.item(.image, t.addingTimeInterval(60))
+        let freshVoice = Self.item(.voice, t.addingTimeInterval(5 * 3600))
+        let bench = RenderedBench.compose(
+            allItems: [seenVoice, seenPhoto, freshVoice],
+            reviewedIds: [seenVoice.id, seenPhoto.id],
+            hideReviewed: true,
+            // Well past the still-in-play window for the reviewed sitting.
+            now: t.addingTimeInterval(6 * 3600)
+        )
+        #expect(bench.items.contains(seenPhoto) == false,
+                "a photo in a session the lens refused is counted but cannot be drawn")
+        #expect(bench.count == 1)
+    }
+
+    /// The converse, and the F37 half: **a photo in an ADMITTED session is
+    /// counted even when the photo itself has been seen.** Every count
+    /// describes its own container's full contents, so a session admitted for
+    /// one fresh clip carries its reviewed media into the number.
+    @Test func mediaInAnAdmittedSessionIsCountedEvenIfReviewed() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let seenPhoto = Self.item(.image, t)
+        let freshVoice = Self.item(.voice, t.addingTimeInterval(60))
+        let bench = RenderedBench.compose(
+            allItems: [seenPhoto, freshVoice],
+            reviewedIds: [seenPhoto.id],
+            hideReviewed: true,
+            now: t.addingTimeInterval(6 * 3600)
+        )
+        #expect(bench.count == 2,
+                """
+                the admitted session was counted pre-shrunk — F37's 2 · 2 · 4 defect, \
+                where the header said one number and the card opened to another.
+                """)
+    }
+
     // MARK: - Fixtures
 
     static func item(_ kind: BenchClipItem.Kind, _ at: Date, roll: UUID? = nil) -> BenchClipItem {

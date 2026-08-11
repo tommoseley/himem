@@ -18,35 +18,59 @@ enum CapturedClipsSubtitleBuilder {
 
     /// Builds the subtitle. `calendar` and `now` are injected so
     /// tests can pin to a deterministic timezone.
+    ///
+    /// **`sessionCount: nil` drops the session term entirely**, leaving the
+    /// span alone (ruled by Tom, 2026-08-09). A header saying "1 session"
+    /// over a cluster card asserts the grouping the card is only *proposing*
+    /// — J5's observe-don't-conclude line, crossed by the surface's own
+    /// chrome rather than by the AI. *"1 group"* was rejected too: it mints a
+    /// noun the user has not accepted, and a second word for a sitting she
+    /// would have to learn. Saying less is the honest option — the span is a
+    /// fact about drawn items however they are grouped, and the cluster card
+    /// already speaks for itself in its own careful language.
+    ///
+    /// The caller decides *whether* the term is carried (`DrawnBench
+    /// .sessionTerm` is nil when every session is clustered); this only
+    /// decides how it reads. **The arithmetic is uniform; only the sentence
+    /// is conditional.**
     static func subtitle(
         earliest: Date,
         latest: Date,
-        sessionCount: Int,
+        sessionCount: Int?,
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> String {
-        let sessionPart = sessionCount == 1 ? "1 session" : "\(sessionCount) sessions"
+        let sessionPart = sessionCount.map { $0 == 1 ? "1 session" : "\($0) sessions" }
+        let span = spanText(
+            earliest: earliest, latest: latest, now: now, calendar: calendar
+        )
+        guard let sessionPart else { return span }
+        return "\(sessionPart) · \(span)"
+    }
 
+    /// The time-range half, shared by both variants. Same calendar day →
+    /// "<day>, <timeRange>"; cross-day → "<earlyDay> <earlyTime> – <lateDay>
+    /// <lateTime>", with both day labels surfaced so the user can never be
+    /// misled about when the latest clip was actually captured.
+    private static func spanText(
+        earliest: Date,
+        latest: Date,
+        now: Date,
+        calendar: Calendar
+    ) -> String {
         let timeFmt = DateFormatter()
         timeFmt.calendar = calendar
         timeFmt.timeZone = calendar.timeZone
         timeFmt.dateFormat = "h:mm a"
         let earliestTime = timeFmt.string(from: earliest)
         let latestTime = timeFmt.string(from: latest)
-
         let earliestDay = dayLabel(for: earliest, now: now, calendar: calendar)
         let latestDay = dayLabel(for: latest, now: now, calendar: calendar)
-
-        // Same calendar day → "<sessionPart> · <day>, <timeRange>"
         if calendar.isDate(earliest, inSameDayAs: latest) {
             let timeRange = earliestTime == latestTime ? earliestTime : "\(earliestTime)–\(latestTime)"
-            return "\(sessionPart) · \(earliestDay), \(timeRange)"
+            return "\(earliestDay), \(timeRange)"
         }
-
-        // Cross-day → "<sessionPart> · <earlyDay> <earlyTime> – <lateDay> <lateTime>"
-        // Both day labels surface so the user can never be misled
-        // about when the latest clip was actually captured.
-        return "\(sessionPart) · \(earliestDay) \(earliestTime) – \(latestDay) \(latestTime)"
+        return "\(earliestDay) \(earliestTime) – \(latestDay) \(latestTime)"
     }
 
     /// Sync-aware variant. When at least one clip is syncing
@@ -56,42 +80,36 @@ enum CapturedClipsSubtitleBuilder {
     /// totals at a glance. Time range covers the full set so the
     /// header window reflects everything in the inbox, in flight
     /// or not. Spec § SYNC / INCOMING (`CCHeaderSync`).
+    ///
+    /// **`readySessionCount: nil` drops the ready-session term**, on the same
+    /// ruling as `subtitle`. The syncing count is *not* dropped with it: "2
+    /// syncing" reports transfer state, which the surface knows for certain,
+    /// where "1 session" would assert a grouping the cluster card is only
+    /// proposing. Only the term that claims a grouping is conditional.
     static func syncAwareSubtitle(
         earliest: Date,
         latest: Date,
-        readySessionCount: Int,
+        readySessionCount: Int?,
         syncingClipCount: Int,
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> String {
         // Counts portion adapts to whether anything is in flight.
-        let countsPart: String
-        if syncingClipCount > 0 {
-            let readyLabel = "\(readySessionCount) ready"
-            let syncingLabel = syncingClipCount == 1
-                ? "1 syncing"
-                : "\(syncingClipCount) syncing"
-            countsPart = "\(readyLabel) · \(syncingLabel)"
-        } else {
-            countsPart = readySessionCount == 1
-                ? "1 session"
-                : "\(readySessionCount) sessions"
+        let readyPart = readySessionCount.map { count -> String in
+            syncingClipCount > 0
+                ? "\(count) ready"
+                : (count == 1 ? "1 session" : "\(count) sessions")
         }
+        let syncingPart = syncingClipCount > 0
+            ? (syncingClipCount == 1 ? "1 syncing" : "\(syncingClipCount) syncing")
+            : nil
+        let countsPart = [readyPart, syncingPart].compactMap { $0 }.joined(separator: " · ")
 
-        // Time-range portion is the same dance as `subtitle(...)`.
-        let timeFmt = DateFormatter()
-        timeFmt.calendar = calendar
-        timeFmt.timeZone = calendar.timeZone
-        timeFmt.dateFormat = "h:mm a"
-        let earliestTime = timeFmt.string(from: earliest)
-        let latestTime = timeFmt.string(from: latest)
-        let earliestDay = dayLabel(for: earliest, now: now, calendar: calendar)
-        let latestDay = dayLabel(for: latest, now: now, calendar: calendar)
-        if calendar.isDate(earliest, inSameDayAs: latest) {
-            let timeRange = earliestTime == latestTime ? earliestTime : "\(earliestTime)–\(latestTime)"
-            return "\(countsPart) · \(earliestDay), \(timeRange)"
-        }
-        return "\(countsPart) · \(earliestDay) \(earliestTime) – \(latestDay) \(latestTime)"
+        let span = spanText(
+            earliest: earliest, latest: latest, now: now, calendar: calendar
+        )
+        guard !countsPart.isEmpty else { return span }
+        return "\(countsPart) · \(span)"
     }
 
     /// Same rules as the existing header used: today / yesterday /
