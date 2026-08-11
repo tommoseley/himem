@@ -380,6 +380,74 @@ import Foundation
                 && bench.clustered.isEmpty && bench.inFlight.isEmpty)
     }
 
+    // MARK: - C2 step 2b-ii-a · what the SURFACE draws
+
+    /// **The ruling, 2026-08-09.** With every session clustered, the header is
+    /// count + span only. "1 session" over a cluster card asserts the grouping
+    /// the card is merely proposing — J5's line crossed by chrome rather than
+    /// by the AI — and "1 group" mints a noun the user has not accepted.
+    @Test func theSessionTermDropsWhenEverySessionIsClustered() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let a = Self.item(.voice, t), b = Self.item(.voice, t.addingTimeInterval(60))
+        let bench = RenderedBench.compose(
+            allItems: [a, b], reviewedIds: [], hideReviewed: false, now: t,
+            proposals: [Self.proposal(claiming: [a.id, b.id])]
+        )
+        let drawn = DrawnBench.from(bench, proposals: [Self.proposal(claiming: [a.id, b.id])])
+        #expect(drawn.loose.isEmpty, "fixture precondition: the proposal claims every session")
+        #expect(drawn.sessionTerm == nil,
+                "the header still carries a session term while the only thing on screen is a proposal")
+        #expect(drawn.count == 2, "dropping the SENTENCE must not drop the COUNT")
+    }
+
+    /// The other half: the term returns the moment anything is loose, and it
+    /// counts **every** drawn session — clustered included. The arithmetic is
+    /// uniform; only the sentence drops.
+    @Test func theSessionTermReturnsAndCountsClusteredSessionsToo() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let a = Self.item(.voice, t), b = Self.item(.voice, t.addingTimeInterval(60))
+        let far = Self.item(.voice, t.addingTimeInterval(6 * 3600))   // its own sitting
+        let proposals = [Self.proposal(claiming: [a.id, b.id])]
+        let bench = RenderedBench.compose(
+            allItems: [a, b, far], reviewedIds: [], hideReviewed: false, now: t,
+            proposals: proposals
+        )
+        let drawn = DrawnBench.from(bench, proposals: proposals)
+        #expect(drawn.loose.count == 1)
+        #expect(drawn.sessionTerm == 2,
+                "the term must count the clustered session too — premise 1's arithmetic is uniform")
+    }
+
+    /// **One set, mechanically.** The count, the span and the term all read
+    /// `items`, so they cannot describe different things — the identity seven
+    /// defects violated and 2b-ii claimed in prose while breaking.
+    @Test func theCountAndTheSpanAreTheSameSet() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let items = [Self.item(.voice, t), Self.item(.image, t.addingTimeInterval(120)),
+                     Self.item(.note, t.addingTimeInterval(240))]
+        let bench = RenderedBench.compose(
+            allItems: items, reviewedIds: [], hideReviewed: false, now: t
+        )
+        let drawn = DrawnBench.from(bench, proposals: [])
+        #expect(drawn.capturedAts.count == drawn.count)
+        #expect(drawn.count == drawn.items.count)
+    }
+
+    /// The sibling-stack scope lives in the value, not in the view — otherwise
+    /// "what is drawn" is unanswerable by a test, which is how the reverted
+    /// step shipped two visible defects under a green suite.
+    @Test func aVoicelessSessionIsNotDrawnHereUntilStep3() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let photo = Self.item(.image, t)
+        let bench = RenderedBench.compose(
+            allItems: [photo], reviewedIds: [], hideReviewed: false, now: t
+        )
+        #expect(DrawnBench.from(bench, proposals: []).loose.isEmpty,
+                "a photo-only sitting belongs to ClipsTabView's stack until step 3")
+        #expect(DrawnBench.from(bench, proposals: [], drawsVoicelessSessions: true).loose.count == 1,
+                "and the step-3 flip is one parameter with a test, not a filter to remember")
+    }
+
     // MARK: - Fixtures
 
     static func item(_ kind: BenchClipItem.Kind, _ at: Date, roll: UUID? = nil) -> BenchClipItem {

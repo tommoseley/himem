@@ -185,3 +185,101 @@ struct RenderedBench: Equatable {
         return sessions.filter { $0.items.contains(where: { ids.contains($0.id) }) }
     }
 }
+
+/// **The bench AS DRAWN — C2 step 2b-ii-a, 2026-08-09. Inert: nothing calls
+/// this yet.**
+///
+/// `RenderedBench` is what the bench *composes*. This is what the surface
+/// *draws*, and the difference is the whole reason 2b-ii was reverted.
+///
+/// The shipped 2b-ii was green at 1394/192 with two live defects — a header
+/// reading "7 new clips · 0 sessions" over a visible card, and a cluster
+/// subtitle saying "1 clip from 1 sitting · 1 minute apart" over three rows
+/// spanning 58 minutes. Every guard passed because every guard asserted on the
+/// composition, **and the composition was correct**. Nothing asserted on what
+/// the view read out of it. Guard-the-caller, one layer further out than the
+/// three prior instances.
+///
+/// So the drawn set becomes a value with a name, and the surface's numbers
+/// become properties of it. A guard can then assert what the header SAYS
+/// rather than what the bench COMPUTED — premise 4 of the redo contract.
+///
+/// The one scope the view applies lives here rather than being applied
+/// afterwards: a session with no voice item belongs to `ClipsTabView`'s
+/// sibling unplaced stack until step 3 retires it. Drawing it here too
+/// double-renders (the F35(b) class); drawing it *instead* renders a
+/// voice-shaped card over a 1970 date. Keeping that scope inside the value is
+/// what makes "what is drawn" answerable by a test.
+struct DrawnBench: Equatable {
+
+    /// Loose sessions this surface draws, after the sibling-stack scope.
+    let loose: [UnifiedSession]
+    /// Sessions consumed by a cluster proposal. Drawn — as cluster cards.
+    let clusteredSessions: [UnifiedSession]
+    /// Items still arriving, drawn as `IncomingCard`s.
+    let inFlight: [BenchClipItem]
+
+    /// **Every item on screen, in any region.** One set — so the count, the
+    /// span and the session term cannot describe different things, which is
+    /// the identity seven defects violated.
+    var items: [BenchClipItem] {
+        loose.flatMap(\.items) + clusteredSessions.flatMap(\.items) + inFlight
+    }
+
+    var count: Int { items.count }
+
+    var capturedAts: [Date] { items.map(\.capturedAt) }
+
+    /// **Every drawn session, clustered included** — premise 1's arithmetic,
+    /// uniform regardless of region.
+    var drawnSessionCount: Int { loose.count + clusteredSessions.count }
+
+    /// **nil when every session is clustered** (ruled 2026-08-09).
+    ///
+    /// A header saying "1 session" over a cluster card asserts the grouping the
+    /// card is only *proposing* — J5's observe-don't-conclude line, crossed by
+    /// the surface's own chrome rather than by the AI. "1 group" was rejected
+    /// too: it mints a noun for something the user has not accepted, and a
+    /// second word for a sitting she would have to learn.
+    ///
+    /// Saying less is the honest option: the count and the span are facts about
+    /// drawn items however they are grouped, and the cluster card already
+    /// speaks for itself in its own careful language. When any session is
+    /// loose the term returns and counts *all* drawn sessions — the arithmetic
+    /// never changes, only whether the sentence carries it.
+    var sessionTerm: Int? {
+        loose.isEmpty ? nil : drawnSessionCount
+    }
+
+    /// Narrow a composed bench to what this surface actually draws.
+    ///
+    /// - Parameter drawsVoicelessSessions: `false` while `ClipsTabView`'s
+    ///   sibling stack still owns them (through step 2). Step 3 retires the
+    ///   stack and flips this, and the flip is a one-line change with a test
+    ///   rather than a filter to remember at a call site.
+    static func from(
+        _ bench: RenderedBench,
+        proposals: [ClusterProposal],
+        drawsVoicelessSessions: Bool = false
+    ) -> DrawnBench {
+        let drawnLoose = drawsVoicelessSessions
+            ? bench.loose
+            : bench.loose.filter(\.hasVoice)
+        // A proposal consumes whole sessions, so the claimed sets are disjoint
+        // across proposals; `Set` on session identity guards the assumption
+        // rather than trusting it.
+        var seen = Set<UUID>()
+        var claimed: [UnifiedSession] = []
+        for proposal in proposals {
+            for session in RenderedBench.claimedSessions(for: proposal, in: bench.sessions) {
+                let key = session.items.first?.id ?? UUID()
+                if seen.insert(key).inserted { claimed.append(session) }
+            }
+        }
+        return DrawnBench(
+            loose: drawnLoose,
+            clusteredSessions: claimed,
+            inFlight: bench.inFlight
+        )
+    }
+}
