@@ -139,14 +139,13 @@ struct ClipEditorModal: View {
         // Detail) since they all present this modal. Per-device, idempotent.
         .onAppear {
             switch source {
-            case .inbox(let clip):
-                // P0-3: a bench clip may already be materialized (a ref). Mark
-                // BOTH stores — the manifest flag for the still-in-flight case,
-                // the ref-keyed store (clipId == ref.id) for the materialized
-                // case — so "seen" sticks regardless of backing. Both idempotent.
-                InboxManifest.shared.markReviewed(clipId: clip.clipId)
-                BenchClipReviewStore.markReviewed(clip.clipId)
-            case .managed(let ref): BenchClipReviewStore.markReviewed(ref.id)
+            // P0-3: a bench clip may already be materialized (a ref), so "seen"
+            // must be written to BOTH stores to stick regardless of backing.
+            // This site had that right and said so; it is now routed through
+            // `BenchClipReviewWriter` so the rule has an owner rather than a
+            // correct copy here and an incorrect one in `SessionListView`.
+            case .inbox(let clip): BenchClipReviewWriter.markReviewed(clip.clipId)
+            case .managed(let ref): BenchClipReviewWriter.markReviewed(ref.id)
             }
         }
         // Drive the Zone 1 progress bar while this clip plays. 4 Hz is smooth

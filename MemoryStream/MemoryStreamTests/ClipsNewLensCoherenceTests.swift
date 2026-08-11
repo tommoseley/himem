@@ -145,6 +145,60 @@ import Foundation
         }
     }
 
+    // MARK: - (c) Caller guard — review must stick regardless of backing
+
+    /// **A session containing a materialized voice clip can never leave New.**
+    ///
+    /// Found 2026-08-10 while reporting C2 step 2b-ii-c2. Review state lives in
+    /// two stores to match the two backings — `InboxClip.reviewed` on the
+    /// device-local manifest row, and the ref-keyed `BenchClipReviewStore` for
+    /// a materialized clip — and `BenchInventory` resolves both on the READ
+    /// side. The WRITE side has no owner: each site open-codes the routing.
+    ///
+    /// `ClipEditorModal.onAppear` gets it right and says why (*"mark BOTH
+    /// stores … so 'seen' sticks regardless of backing"*).
+    /// `SessionListView.markSessionReviewed` does not: it calls
+    /// `inbox.markReviewed(clipIds:)`, which walks `clips` and **silently
+    /// no-ops on an id it has no row for**, and reaches
+    /// `BenchClipReviewStore` only for media refs.
+    ///
+    /// So opening a session marks its manifest-backed clips and leaves its
+    /// ref-backed ones unseen. On a mature bench that is most of them —
+    /// `materializeAll` drains every transcribed row into a ref.
+    ///
+    /// **Under F37 this became a stuck session rather than a stale flag.**
+    /// Admission is per-session now: a session is admitted whole while
+    /// *anything* in it is unreviewed. A ref-backed clip that can never be
+    /// marked keeps re-admitting its session forever — the user reads it,
+    /// leaves, and finds it still sitting in New.
+    ///
+    /// It is the manifest-vs-ref asymmetry of premise 2, one layer up in the
+    /// review path. `BenchReviewBackfillMigration`'s doc still asserts *"the
+    /// open paths are correct — every one presents `ClipEditorModal`"*; the
+    /// July 19 *"open the container → its contents are seen"* ruling added a
+    /// second open path that bypasses the editor, and that comment did not
+    /// follow it.
+    ///
+    /// Mechanical because the call site is `private` on a `View` and therefore
+    /// unreachable — the form CLAUDE.md sanctions for exactly this case.
+    /// `blockBody` throws on a missing anchor, so a rename fails loudly rather
+    /// than letting this pass by matching nothing.
+    @Test func openingASessionMarksVoiceReviewedInBothStores() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
+        let body = try Self.blockBody(
+            startingAtLineContaining: "private func markSessionReviewed(", in: src
+        )
+        let code = Self.codeOnly(body)
+        #expect(code.contains("BenchClipReviewWriter.markReviewed"),
+                """
+                `markSessionReviewed` routes review state by hand instead of through the \
+                one owner. `InboxManifest.markReviewed` no-ops on an id it has no row for, \
+                so a materialized (ref-backed) voice clip is never marked seen — and under \
+                F37 its session re-admits to New forever. Body was:
+                \(body)
+                """)
+    }
+
     // MARK: - (b) Caller guard — one owner per media type on the bench
 
     /// `loadUnplaced` must not fetch voice: `SessionListView` already owns

@@ -1438,6 +1438,52 @@ enum BenchClipReviewStore {
     }
 }
 
+/// **The one owner of "this bench clip has been seen"** (2026-08-10).
+///
+/// Review state lives in two stores because the bench has two backings —
+/// `InboxClip.reviewed` on the device-local manifest row, and the ref-keyed
+/// `BenchClipReviewStore` once `materializeAll` has drained the row into a
+/// `MediaReference`. `BenchInventory` owns resolving both on the **read**
+/// side. Until this existed the **write** side had no owner and every call
+/// site open-coded the routing — the invariant-with-a-literal-at-each-site
+/// shape that has been this project's most repeated defect (F34's level
+/// curve, F38's unpaired regroup, `.measurement`).
+///
+/// Two of three sites were right and one was not.
+/// `SessionListView.markSessionReviewed` called
+/// `InboxManifest.markReviewed(clipIds:)`, which walks `clips` and **silently
+/// no-ops on an id it has no row for**, so a materialized voice clip was
+/// never marked seen. Under F37 admission is per-session and a session is
+/// admitted whole while anything in it is unreviewed — so that clip
+/// re-admitted its session to New forever. The user reads a sitting, leaves,
+/// and finds it exactly where she left it.
+///
+/// **Both stores, always, keyed by the same id.** A clip keeps its id across
+/// materialization (`ArrivedClipMaterializer.syntheticClip` reuses `ref.id`),
+/// so writing both is correct in every direction and idempotent in both:
+/// the manifest no-ops on an id it does not have, and the ref store no-ops on
+/// an id it already holds. Which store *will* back the clip is not knowable
+/// at write time — a transcription can materialize it a second later — which
+/// is precisely why this cannot be a lookup.
+@MainActor
+enum BenchClipReviewWriter {
+
+    /// Mark one bench clip seen, whatever backs it now or next.
+    static func markReviewed(_ id: UUID) {
+        markReviewed(clipIds: [id])
+    }
+
+    /// Batch variant — one manifest write and one store write for the whole
+    /// set, which is what the session-open path needs (`Clip model · spec.md`,
+    /// July 19: *"open the container → its contents are seen"* marks every
+    /// clip in one act).
+    static func markReviewed(clipIds: [UUID]) {
+        guard !clipIds.isEmpty else { return }
+        InboxManifest.shared.markReviewed(clipIds: clipIds)
+        BenchClipReviewStore.markReviewed(clipIds)
+    }
+}
+
 /// One-time backfill (2026-07-27): mark the entire PRE-EXISTING bench library
 /// reviewed. Review tracking — `InboxClip.reviewed` (P7-2, July 18 2026) and
 /// the ref-keyed `BenchClipReviewStore` — only records opens made THROUGH the
@@ -1448,8 +1494,18 @@ enum BenchClipReviewStore {
 /// pass 2026-07-27: New listed May/June clips already opened and once in
 /// memories).
 ///
-/// This is a watermark, not a live-wiring fix — the open paths are correct
-/// (every one presents `ClipEditorModal`, whose `.onAppear` marks reviewed).
+/// This is a watermark, not a live-wiring fix.
+///
+/// **Correction, 2026-08-10: the claim this comment used to make was false by
+/// the time it was written.** It read *"the open paths are correct — every one
+/// presents `ClipEditorModal`, whose `.onAppear` marks reviewed."* The July 19
+/// ruling (*"open the container → its contents are seen"*) added a **second**
+/// open path — opening a session card marks every clip in it, without
+/// presenting the editor — and that path open-coded its own review write and
+/// got the two-store routing wrong. So a live-wiring fault did exist, in the
+/// path this comment asserted could not have one, which is why it went
+/// unlooked-at for three weeks. Both paths now route through
+/// `BenchClipReviewWriter`.
 /// Mark every `MediaReference` present at upgrade time reviewed. Scoped to
 /// refs ONLY: recent manifest clips are all post-P7-2 and track correctly, so
 /// blanket-marking them would wrongly hide genuinely-new arrivals.

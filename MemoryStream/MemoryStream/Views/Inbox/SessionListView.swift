@@ -1084,10 +1084,17 @@ struct SessionListView: View {
     /// absorbed media refs use the per-device bench store. Idempotent —
     /// re-opening a fully-seen session is a no-op (no write).
     private func markSessionReviewed(_ session: ClipGroup) {
-        inbox.markReviewed(clipIds: session.clips.map(\.clipId))
-        for ref in mediaBySessionId[session.id] ?? [] {
-            BenchClipReviewStore.markReviewed(ref.id)
-        }
+        // **One owner, both stores** — see `BenchClipReviewWriter`. This
+        // marked voice through the manifest alone, which no-ops on an id it
+        // has no row for, so a materialized (ref-backed) clip was never marked
+        // seen. Under F37 that clip re-admitted its whole session to New
+        // forever: the user reads a sitting and finds it still sitting there.
+        //
+        // Media rides the same call rather than a second loop — the routing is
+        // the owner's problem, and a per-kind branch here is how the two
+        // halves drifted apart in the first place.
+        let media = (mediaBySessionId[session.id] ?? []).map(\.id)
+        BenchClipReviewWriter.markReviewed(clipIds: session.clips.map(\.clipId) + media)
     }
 
     // Meta rows (per JSX mock v3): top row is time · clips · duration

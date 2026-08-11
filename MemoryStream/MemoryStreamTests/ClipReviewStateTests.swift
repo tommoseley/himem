@@ -188,4 +188,107 @@ struct ClipReviewStateTests {
         let lost = ids.filter { !BenchClipReviewStore.isReviewed($0) }
         #expect(lost.isEmpty, "\(lost.count)/120 marks lost to a torn read-modify-write")
     }
+
+    // MARK: - The two-store write owner (2026-08-10)
+
+    /// **A clip with no manifest row must still be marked seen.**
+    ///
+    /// This is the whole defect, as a behaviour. `InboxManifest.markReviewed`
+    /// walks `clips` and returns silently for an id it has no row for — which
+    /// is every **materialized** clip, and on a mature bench that is most of
+    /// them (`materializeAll` drains each transcribed row into a ref).
+    ///
+    /// `SessionListView.markSessionReviewed` called only that, so opening a
+    /// session left its ref-backed voice clips unseen. Under F37 admission is
+    /// per-session and a session is admitted whole while anything in it is
+    /// unreviewed, so such a clip re-admitted its session to New indefinitely:
+    /// the user reads a sitting, leaves, and finds it exactly where it was.
+    ///
+    /// The id here is deliberately one the manifest does not know, because
+    /// that is the case the old code silently dropped — a test using a
+    /// manifest-backed id passes against the defect.
+    @MainActor
+    @Test func markingAClipWithNoManifestRowStillRecordsItSeen() {
+        let refBacked = UUID()
+        #expect(BenchClipReviewStore.isReviewed(refBacked) == false, "fixture id was already recorded")
+
+        BenchClipReviewWriter.markReviewed(refBacked)
+
+        #expect(BenchClipReviewStore.isReviewed(refBacked),
+                """
+                A clip the manifest has no row for was not recorded as seen. It is \
+                materialized (ref-backed), so the manifest write no-ops — and under F37 \
+                it re-admits its whole session to New forever.
+                """)
+    }
+
+    /// **Bound the other side.** The test above passes if the writer drops the
+    /// manifest call entirely — which would silently break the
+    /// still-in-flight case, where the manifest row *is* the only record. A
+    /// one-sided bound exonerates half the defect it was written to catch.
+    ///
+    /// Mechanical rather than behavioural because the manifest is a shared
+    /// singleton persisting to `Documents/Inbox/manifest.json`; the honest
+    /// behavioural version needs a production test seam, and adding one to
+    /// ship so a test can mutate the real manifest is a worse trade than
+    /// asserting the writer names both stores. **Stated so the gate is not
+    /// read as stronger than it is:** this pins that the call exists, not that
+    /// it lands.
+    @Test func theReviewWriterWritesBothStoresNotJustTheRefOne() throws {
+        let src = try Self.source("MemoryStream/Services/Storage/InboxManifest.swift")
+        let body = try Self.blockBody(
+            startingAtLineContaining: "static func markReviewed(clipIds: [UUID]) {", in: src
+        )
+        #expect(body.contains("InboxManifest.shared.markReviewed"),
+                """
+                The review writer no longer writes the manifest, so a clip that has not \
+                been materialized yet has no record at all — the still-in-flight half of \
+                the two-store rule. Body was:
+                \(body)
+                """)
+        #expect(body.contains("BenchClipReviewStore.markReviewed"),
+                """
+                The review writer no longer writes the ref store, which is the half whose \
+                absence made a session re-admit to New forever. Body was:
+                \(body)
+                """)
+    }
+
+    // MARK: - Source access
+
+    static func source(_ relativePath: String) throws -> String {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        while dir.path != "/" {
+            let candidate = dir.appendingPathComponent(relativePath)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return try String(contentsOf: candidate, encoding: .utf8)
+            }
+            dir.deleteLastPathComponent()
+        }
+        // Never pass by finding nothing: a moved file must fail loudly.
+        throw SourceLookupError.notFound(relativePath)
+    }
+
+    enum SourceLookupError: Error { case notFound(String), anchorMissing(String) }
+
+    /// Brace-balanced body of the block whose opening line contains `needle`.
+    /// Throws on a missing anchor so a rename fails rather than passing by
+    /// matching nothing.
+    static func blockBody(startingAtLineContaining needle: String, in source: String) throws -> String {
+        let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let start = lines.firstIndex(where: { $0.contains(needle) }) else {
+            throw SourceLookupError.anchorMissing(needle)
+        }
+        var depth = 0
+        var out: [String] = []
+        for line in lines[start...] {
+            out.append(String(line))
+            for ch in line {
+                if ch == "{" { depth += 1 }
+                if ch == "}" { depth -= 1 }
+            }
+            if depth == 0 && out.count > 1 { break }
+        }
+        return out.joined(separator: "\n")
+    }
 }
