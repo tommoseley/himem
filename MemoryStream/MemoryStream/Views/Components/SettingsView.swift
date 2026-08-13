@@ -462,6 +462,59 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
+
+                    // QA fixtures for the device checks that have stayed open
+                    // because their preconditions are hard to produce — one of
+                    // them (a ref-backed clip inside a cluster) cannot be made
+                    // by hand at all. Same precedent as the seed control above:
+                    // DEBUG-only, `5EED…` ids, non-destructive to real content,
+                    // and a Clear that removes exactly what it made.
+                    Button {
+                        seedClusterMessage = QAFixtureSeeder.seedFixtures(in: storage.viewContext)
+                        showSeedClusterAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "testtube.2")
+                                .foregroundStyle(Crucible.Color.accent)
+                            Text("Seed QA fixtures (F37 · F41 · F43 · F44)")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    // Separate button, not a variant of the one above: "every
+                    // session is clustered" cannot be true while a loose
+                    // session exists, so the dropped-session-term case is only
+                    // reachable without one. One seed cannot produce both.
+                    Button {
+                        seedClusterMessage = QAFixtureSeeder.seedFullyClusteredBench(in: storage.viewContext)
+                        showSeedClusterAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.stack.3d.down.right.fill")
+                                .foregroundStyle(Crucible.Color.accent)
+                            Text("Seed fully-clustered bench")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        QAFixtureSeeder.clear(in: storage.viewContext)
+                        seedClusterMessage = "Cleared every QA fixture — manifest rows, media refs and their files. Real bench content is untouched."
+                        showSeedClusterAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash")
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Text("Clear QA fixtures")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
                 } header: {
                     Text("Debug")
                 } footer: {

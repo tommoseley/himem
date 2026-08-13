@@ -79,7 +79,6 @@
 		A100000310 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
 		A100000311 /* InboxManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000311 /* InboxManifest.swift */; };
 		A100000312 /* WatchSessionDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000312 /* WatchSessionDelegate.swift */; };
-		A100000913 /* InboxRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000913 /* InboxRetryPolicy.swift */; };
 		A100000313 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
 		A100000315 /* CreateMemoryFromClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000315 /* CreateMemoryFromClipsSheet.swift */; };
 		A100000316 /* ExistingMemoryPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000316 /* ExistingMemoryPickerView.swift */; };
@@ -153,6 +152,7 @@
 		A100000901 /* MediaResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000901 /* MediaResolver.swift */; };
 		A100000902 /* MediaReferenceUbiquityMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000902 /* MediaReferenceUbiquityMigration.swift */; };
 		A100000910 /* EditTextSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000910 /* EditTextSheet.swift */; };
+		A100000913 /* InboxRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000913 /* InboxRetryPolicy.swift */; };
 		A100000950 /* TopicChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000950 /* TopicChip.swift */; };
 		A100000951 /* ManageTopicsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000951 /* ManageTopicsSheet.swift */; };
 		A100000970 /* TranscriptMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000970 /* TranscriptMode.swift */; };
@@ -204,6 +204,7 @@
 		A200000404 /* SilentCaptureBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000404 /* SilentCaptureBanner.swift */; };
 		A200000405 /* RenderedBench.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000405 /* RenderedBench.swift */; };
 		A200000406 /* BenchInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000406 /* BenchInventory.swift */; };
+		A200000915 /* QAFixtureSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000915 /* QAFixtureSeeder.swift */; };
 		A200000D00 /* ClipDetailPresentationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D00 /* ClipDetailPresentationContext.swift */; };
 		A200000D01 /* MemoryNavigationBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000D01 /* MemoryNavigationBus.swift */; };
 		A900000001 /* Organizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900000001 /* Organizer.swift */; };
@@ -363,7 +364,6 @@
 		B100000310 /* ClipMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipMetadata.swift; path = Shared/ClipMetadata.swift; sourceTree = "<group>"; };
 		B100000311 /* InboxManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxManifest.swift; sourceTree = "<group>"; };
 		B100000312 /* WatchSessionDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionDelegate.swift; sourceTree = "<group>"; };
-		B100000913 /* InboxRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxRetryPolicy.swift; sourceTree = "<group>"; };
 		B100000315 /* CreateMemoryFromClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateMemoryFromClipsSheet.swift; sourceTree = "<group>"; };
 		B100000316 /* ExistingMemoryPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingMemoryPickerView.swift; sourceTree = "<group>"; };
 		B100000320 /* WatchSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchSharedState.swift; path = Shared/WatchSharedState.swift; sourceTree = "<group>"; };
@@ -430,6 +430,7 @@
 		B100000901 /* MediaResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaResolver.swift; sourceTree = "<group>"; };
 		B100000902 /* MediaReferenceUbiquityMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaReferenceUbiquityMigration.swift; sourceTree = "<group>"; };
 		B100000910 /* EditTextSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTextSheet.swift; sourceTree = "<group>"; };
+		B100000913 /* InboxRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxRetryPolicy.swift; sourceTree = "<group>"; };
 		B100000950 /* TopicChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicChip.swift; sourceTree = "<group>"; };
 		B100000951 /* ManageTopicsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageTopicsSheet.swift; sourceTree = "<group>"; };
 		B100000970 /* TranscriptMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptMode.swift; sourceTree = "<group>"; };
@@ -481,6 +482,7 @@
 		B200000404 /* SilentCaptureBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SilentCaptureBanner.swift; path = MemoryStream/Views/Components/SilentCaptureBanner.swift; sourceTree = SOURCE_ROOT; };
 		B200000405 /* RenderedBench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenderedBench.swift; path = MemoryStream/Services/Storage/RenderedBench.swift; sourceTree = SOURCE_ROOT; };
 		B200000406 /* BenchInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BenchInventory.swift; path = MemoryStream/Services/Storage/BenchInventory.swift; sourceTree = SOURCE_ROOT; };
+		B200000915 /* QAFixtureSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QAFixtureSeeder.swift; path = MemoryStream/Services/Storage/QAFixtureSeeder.swift; sourceTree = SOURCE_ROOT; };
 		B200000D00 /* ClipDetailPresentationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipDetailPresentationContext.swift; path = MemoryStream/Services/ClipDetailPresentationContext.swift; sourceTree = SOURCE_ROOT; };
 		B200000D01 /* MemoryNavigationBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MemoryNavigationBus.swift; path = MemoryStream/Services/MemoryNavigationBus.swift; sourceTree = SOURCE_ROOT; };
 		B900000001 /* Organizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Organizer.swift; sourceTree = "<group>"; };
@@ -762,6 +764,7 @@
 				B200000404 /* SilentCaptureBanner.swift */,
 				B200000403 /* SilentCapture.swift */,
 				B200000405 /* RenderedBench.swift */,
+				B200000915 /* QAFixtureSeeder.swift */,
 				B200000406 /* BenchInventory.swift */,
 				B200000401 /* CaptureUnavailableView.swift */,
 				B100000993 /* QuickLookViewer.swift */,
@@ -1488,6 +1491,7 @@
 				A200000404 /* SilentCaptureBanner.swift in Sources */,
 				A200000403 /* SilentCapture.swift in Sources */,
 				A200000405 /* RenderedBench.swift in Sources */,
+				A200000915 /* QAFixtureSeeder.swift in Sources */,
 				A200000406 /* BenchInventory.swift in Sources */,
 				A200000401 /* CaptureUnavailableView.swift in Sources */,
 				A100000993 /* QuickLookViewer.swift in Sources */,
