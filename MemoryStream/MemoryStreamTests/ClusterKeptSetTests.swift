@@ -237,6 +237,61 @@ import Foundation
                 "A partially-claimed session is not rebuilt from its remaining items.")
     }
 
+    // MARK: - The subtitle's three numbers describe ONE set (device, 2026-08-12)
+
+    /// **A photo outside the voice span must move the span AND the sittings.**
+    ///
+    /// Device: Cluster B read *"4 clips from 3 sittings"* and Cluster C
+    /// *"5 clips from 3 sittings"*. Both were right — but only because every
+    /// seeded photo happened to fall inside a voice sitting. `clusterSubtitle`
+    /// counted voice **plus media** while grouping and ranging over **voice
+    /// alone**, so the count could move while the other two could not. That is
+    /// F35(a)/F38's shape surviving in the cluster card, which was never
+    /// migrated to the composed bench.
+    ///
+    /// The case that exposes it: a photo well after the last voice clip. It is
+    /// its own sitting and it extends the span, so all three numbers must move.
+    @Test func aPhotoOutsideTheVoiceSpanMovesEveryNumber() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let voice = [
+            BenchClipItem(id: UUID(), kind: .voice, capturedAt: t, rollGroupId: nil),
+            BenchClipItem(id: UUID(), kind: .voice, capturedAt: t.addingTimeInterval(60), rollGroupId: nil),
+        ]
+        let voiceOnly = ClusterSubtitleBuilder.subtitle(items: voice)
+        #expect(voiceOnly.contains("2 clips from 1 sitting"))
+        #expect(voiceOnly.contains("1 minute apart"))
+
+        // A photo an hour later: a third item, a second sitting, a 61-minute span.
+        let withPhoto = voice + [
+            BenchClipItem(id: UUID(), kind: .image, capturedAt: t.addingTimeInterval(3600), rollGroupId: nil)
+        ]
+        let subtitle = ClusterSubtitleBuilder.subtitle(items: withPhoto)
+        #expect(subtitle.contains("3 clips"), "the photo is not counted: \(subtitle)")
+        #expect(subtitle.contains("2 sittings"),
+                """
+                The photo moved the clip count but not the sitting count, so the two numbers \
+                describe different sets — the defect this replaced. Subtitle was: \(subtitle)
+                """)
+        #expect(subtitle.contains("60 minutes apart") || subtitle.contains("61 minutes apart"),
+                "the span still ranges voice only: \(subtitle)")
+    }
+
+    /// The caller must go through the one-set API. The three-argument
+    /// primitive cannot check that its arguments describe the same set, which
+    /// is exactly how they came apart.
+    @Test func theClusterCardBuildsItsSubtitleFromOneSet() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
+        let body = try Self.blockBody(startingAtLineContaining: "private func clusterSubtitle(", in: src)
+        let code = Self.codeOnly(body)
+        #expect(code.contains("ClusterSubtitleBuilder.subtitle(items:"),
+                """
+                `clusterSubtitle` still assembles the three numbers itself. Body was:
+                \(body)
+                """)
+        #expect(code.contains("ClipSessionGrouper.group(kept") == false,
+                "the sitting count is still grouped over voice alone, so media cannot move it")
+    }
+
     // MARK: - Source access
 
     static func codeOnly(_ source: String) -> String {

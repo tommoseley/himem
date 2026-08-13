@@ -18,6 +18,26 @@ final class LocalEntityExtractor: EntityExtractor {
 
     private let tagger = NLTagger(tagSchemes: [.nameType, .lexicalClass])
 
+    /// **B14, confirmed 2026-08-12.** One shared mutable `NLTagger` behind a
+    /// `shared` singleton, and `extractEntities` is a compound operation —
+    /// assign `tagger.string`, then enumerate over it. Two callers interleaving
+    /// leaves the second enumerating a string the first has already replaced,
+    /// and the process dies: `signal segv`, or `Crash: HiMem` taking down the
+    /// whole test host and failing 41 unrelated tests as collateral.
+    ///
+    /// CLAUDE.md already named this singleton unsafe and prescribed
+    /// `@Suite(.serialized)` for suites that touch it — but that orders tests
+    /// *within* a suite and Swift Testing runs suites concurrently, so the
+    /// remedy could never cover the real case. It held only while few tests
+    /// reached the proposer; adding a handful tipped it into reliable crashes.
+    ///
+    /// B14 had it as circumstantial ("reachable from a main-thread render
+    /// path"). It is now reproduced. The lock wraps the whole
+    /// assign-then-enumerate, because the compound operation is the unit that
+    /// must be atomic — the same shape, and the same fix, as
+    /// `BenchClipReviewStore`'s read-modify-write.
+    private let lock = NSLock()
+
     struct LocalResult {
         let entities: [LocalEntity]
     }
@@ -30,6 +50,8 @@ final class LocalEntityExtractor: EntityExtractor {
     }
 
     func extractEntities(from text: String) -> LocalResult {
+        lock.lock()
+        defer { lock.unlock() }
         tagger.string = text
 
         var entities: [LocalEntity] = []

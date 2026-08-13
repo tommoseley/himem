@@ -183,6 +183,36 @@ enum ClusterTrim {
 /// Observation, never conclusion (J5): how many clips, how many sittings,
 /// how far apart. Never that they belong together.
 enum ClusterSubtitleBuilder {
+
+    /// **All three numbers from ONE set of items** (2026-08-12).
+    ///
+    /// The three-argument form below cannot stop a caller supplying three
+    /// numbers scoped to different sets, and `SessionListView.clusterSubtitle`
+    /// did exactly that: `clipCount` counted voice **plus media**, while
+    /// `sittingCount` grouped and `capturedAts` ranged over **voice alone**.
+    /// On device that read *"4 clips from 3 sittings"* and *"5 clips from 3
+    /// sittings"* — correct only because every seeded photo happened to sit
+    /// inside a voice sitting. A photo captured between two sittings, or after
+    /// the last clip, makes the count move while the sitting count and the
+    /// span do not.
+    ///
+    /// This is F35(a)/F38's shape — a number computed from a different set
+    /// than the one being described — surviving in the cluster card because
+    /// the card's subtitle was never migrated to the composed bench. Media is
+    /// an item; grouping it media-agnostically through `UnifiedBenchGrouper`
+    /// is what makes the sitting count answer the same question the clip count
+    /// does.
+    static func subtitle(items: [BenchClipItem], soloIds: Set<UUID> = []) -> String {
+        subtitle(
+            clipCount: items.count,
+            sittingCount: UnifiedBenchGrouper.group(items, soloIds: soloIds).count,
+            capturedAts: items.map(\.capturedAt)
+        )
+    }
+
+    /// The primitive. Prefer `subtitle(items:)` — this cannot check that its
+    /// three arguments describe the same set, which is precisely how they came
+    /// apart.
     static func subtitle(clipCount: Int, sittingCount: Int, capturedAts: [Date]) -> String {
         let clipsWord = clipCount == 1 ? "clip" : "clips"
         let sittingsWord = sittingCount == 1 ? "sitting" : "sittings"

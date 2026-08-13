@@ -28,12 +28,28 @@ import UIKit
 /// `5EED-…`, and `clear` removes exactly those — manifest rows, Core Data refs
 /// and files — leaving real bench content untouched.
 ///
-/// **Each cluster gets its OWN place, and the loose session none.** Found by
-/// `QAFixtureSeederTests` before this ever reached a device: `proposeTimePlace`
-/// clusters on time + shared location *independently of the words*, so seeding
-/// every fixture at one coordinate collapsed all three into a single
-/// "Together at …" proposal. The device pass would then have been reading a
-/// shape nobody designed — and reading it as the bench misbehaving.
+/// **NO coordinates, and nothing at "now" — both learned on device.**
+///
+/// The first version seeded one shared coordinate, and
+/// `QAFixtureSeederTests` caught that `proposeTimePlace` then collapsed all
+/// three clusters into a single "Together at …" proposal, because it clusters
+/// on time + place *independently of the words*.
+///
+/// Giving each cluster its own place fixed the merge and introduced a subtler
+/// failure that only a real bench could show: **Cluster A drew 2 clips of 3.**
+/// A live capture had grouped into the seeded 11:04 sitting, and
+/// `ClipClusterProposer.coordinate(for:)` takes the FIRST clip with coords in
+/// a newest-first list — so the session inherited the *user's* real location,
+/// hundreds of kilometres outside the 200 m proximity gate, and dropped out of
+/// the timePlace cluster. The word-match proposal covering all three was then
+/// discarded by the ≥50 % overlap dedup, because timePlace (Tier 2) had
+/// already claimed two of its members. One contaminating clip, and the fixture
+/// silently becomes a different shape.
+///
+/// So the fixtures now carry **no location at all**: `proposeTimePlace` cannot
+/// fire, the clusters form by word-match on their distinctive place names, and
+/// nothing a user captures can change what they are. They are also shifted a
+/// full hour off "now", because "now" is exactly where live captures land.
 ///
 /// **Real media, deliberately.** Audio is a written CAF and photos are written
 /// JPEGs, because a zero-byte or absent file no longer means "an inert seed":
@@ -107,6 +123,7 @@ enum QAFixtureSeeder {
     /// over three rows.
     @MainActor
     private static func seedClusterA(now: Date, in context: NSManagedObjectContext) -> String {
+        let base = now.addingTimeInterval(-1 * 3600)
         let lines = [
             "Walking past Harbor Lantern before the tide turned — QA fixture 1",
             "Second pass by Harbor Lantern, quieter now — QA fixture 2",
@@ -116,9 +133,9 @@ enum QAFixtureSeeder {
         for i in 0..<3 {
             let clip = voiceClip(
                 id: id(100 + i),
-                capturedAt: now.addingTimeInterval(Double(-i) * 15 * 60),
+                capturedAt: base.addingTimeInterval(Double(-i) * 15 * 60),
                 transcript: lines[i],
-                coordinate: (32.2371, -80.8557)      // Bluffton
+                coordinate: nil
             )
             seeded.append(clip)
         }
@@ -146,7 +163,7 @@ enum QAFixtureSeeder {
     /// recomputed subtitle from a stale one.
     @MainActor
     private static func seedClusterB(now: Date, in context: NSManagedObjectContext) -> String {
-        let base = now.addingTimeInterval(-3 * 3600)
+        let base = now.addingTimeInterval(-4 * 3600)
         let lines = [
             "Notes from Sparrow Quarry, north face in shadow — QA fixture 4",
             "More from Sparrow Quarry after the climb — QA fixture 5",
@@ -158,7 +175,7 @@ enum QAFixtureSeeder {
                 id: id(200 + i),
                 capturedAt: base.addingTimeInterval(Double(-i) * 15 * 60),
                 transcript: lines[i],
-                coordinate: (44.3876, -68.2039)      // Acadia — far from Bluffton
+                coordinate: nil
             ))
         }
         appendToManifest(seeded)
@@ -186,7 +203,7 @@ enum QAFixtureSeeder {
     /// must move together when anything is set aside.
     @MainActor
     private static func seedClusterC(now: Date, in context: NSManagedObjectContext) -> String {
-        let base = now.addingTimeInterval(-6 * 3600)
+        let base = now.addingTimeInterval(-7 * 3600)
         let lines = [
             "Thistle Beacon from the lower path — QA fixture 7",
             "Halfway up to Thistle Beacon now — QA fixture 8",
@@ -198,7 +215,7 @@ enum QAFixtureSeeder {
                 id: id(300 + i),
                 capturedAt: base.addingTimeInterval(Double(-i) * 15 * 60),
                 transcript: lines[i],
-                coordinate: (47.6062, -122.3321)     // Seattle — far from both
+                coordinate: nil
             ))
         }
         appendToManifest(seeded)
@@ -228,7 +245,7 @@ enum QAFixtureSeeder {
     /// unplaced stack above it.
     @MainActor
     private static func seedLooseSession(now: Date, in context: NSManagedObjectContext) -> String {
-        let base = now.addingTimeInterval(-9 * 3600)
+        let base = now.addingTimeInterval(-10 * 3600)
         appendToManifest([voiceClip(
             id: id(400),
             capturedAt: base,

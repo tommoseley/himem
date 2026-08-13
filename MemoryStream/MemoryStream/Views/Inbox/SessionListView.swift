@@ -598,13 +598,25 @@ struct SessionListView: View {
     /// grouper the bench uses, so the lens, the card and this line cannot
     /// disagree about what a sitting is.
     private func clusterSubtitle(_ proposal: ClusterProposal, _ kept: [InboxClip]) -> String {
-        let keptMedia = includedClusterMedia(proposal)
-        let sittings = ClipSessionGrouper.group(kept, soloClipIds: inbox.soloClipIds).count
-        return ClusterSubtitleBuilder.subtitle(
-            clipCount: kept.count + keptMedia.count,
-            sittingCount: sittings,
-            capturedAts: kept.map(\.capturedAt)
-        )
+        // **One set, three properties** (device, 2026-08-12). This built the
+        // three numbers separately — `clipCount` over voice + media, but
+        // `sittingCount` and `capturedAts` over voice alone — which on device
+        // read "4 clips from 3 sittings" and was right only because each photo
+        // happened to fall inside a voice sitting. A photo between two
+        // sittings moves the count and neither of the others.
+        //
+        // Media is an item, so it is grouped and ranged as one.
+        let items = kept.map {
+            BenchClipItem(id: $0.clipId, kind: .voice, capturedAt: $0.capturedAt, rollGroupId: $0.rollGroupId)
+        } + includedClusterMedia(proposal).map {
+            BenchClipItem(
+                id: $0.id,
+                kind: Self.benchKind(of: $0),
+                capturedAt: $0.createdAt ?? Date(timeIntervalSince1970: 0),
+                rollGroupId: nil
+            )
+        }
+        return ClusterSubtitleBuilder.subtitle(items: items, soloIds: inbox.soloClipIds)
     }
 
     /// `Add to a memory…` on a cluster — routes the cluster's KEPT clips

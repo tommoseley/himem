@@ -72,7 +72,7 @@ import Foundation
         // cannot reach it however close in time it lands.
         let looseClip = Self.clip(
             text: Self.looseLine,
-            at: Self.now.addingTimeInterval(-9 * 3600),
+            at: Self.now.addingTimeInterval(-10 * 3600),
             coordinate: nil
         )
         let all = Self.seededClusters.flatMap(Self.clips(for:)) + [looseClip]
@@ -162,6 +162,68 @@ import Foundation
         BenchClipItem(id: UUID(), kind: kind, capturedAt: at, rollGroupId: nil)
     }
 
+    /// **Why the fixtures carry no location — the mechanism, pinned.**
+    ///
+    /// Device 2026-08-12: Cluster A drew "2 clips from 2 sittings" over a
+    /// 3-clip seed. Reproduced here. When the seed carried coordinates, one
+    /// member whose session coordinate did not match its siblings dropped out
+    /// of the timePlace cluster — and the word-match proposal covering all
+    /// three was then discarded by the ≥50 % overlap dedup, because timePlace
+    /// (Tier 2) had already claimed two of its members. **Word-match cannot
+    /// rescue what timePlace has half-taken.**
+    ///
+    /// Kept as a guard rather than deleted with the fix: it documents *why*
+    /// the fixtures are location-free, so restoring a coordinate "for realism"
+    /// fails here instead of silently reshaping the fixtures on device.
+    ///
+    /// Deliberately `== 2`: this asserts the hazard is real, not that it is
+    /// desired. `probe_seededTextClustersOnWordMatchAlone` asserts the escape.
+    @Test func aMismatchedCoordinateHalfTakesTheClusterAndWordMatchCannotRescueIt() {
+        let cluster = Self.seededClusters[0]
+        // Re-apply coordinates to two of three, as the earlier seed did, then
+        // leave the third without — the contaminated-session shape.
+        var clips = Self.clips(for: cluster).map { c in
+            InboxClip(clipId: c.clipId, capturedAt: c.capturedAt, duration: c.duration,
+                      transcript: c.transcript, latitude: 32.2371, longitude: -80.8557,
+                      source: c.source, audioFilename: c.audioFilename,
+                      transcriptionAttempted: true, rollGroupId: nil, status: .transcribed)
+        }
+        let oldest = clips[2]
+        clips[2] = InboxClip(
+            clipId: oldest.clipId, capturedAt: oldest.capturedAt, duration: oldest.duration,
+            transcript: oldest.transcript, latitude: nil, longitude: nil,
+            source: oldest.source, audioFilename: oldest.audioFilename,
+            transcriptionAttempted: true, rollGroupId: nil, status: .transcribed
+        )
+        let proposals = ClipClusterProposer.propose(sessions: Self.sessions(clips), dismissed: [])
+        let claimed = proposals.first?.clipIds.count ?? 0
+        #expect(claimed == 2 && proposals.first?.ruleTag == .timePlace,
+                """
+                The hazard this fixture design avoids has changed shape: \(claimed) of 3 \
+                clustered under rule=\(proposals.first?.ruleTag.rawValue ?? "none"). If \
+                mismatched coordinates no longer half-take a cluster, the location-free \
+                fixtures may no longer be necessary — re-derive before changing them.
+                """)
+    }
+
+    /// **The escape, and the property the fixtures now rely on.** With no
+    /// location the timePlace rule cannot fire at all, so each cluster forms
+    /// on its distinctive place name alone — deterministic, and immune to
+    /// whatever the user happens to capture nearby.
+    @Test func seededTextClustersOnWordMatchAlone() {
+        for cluster in Self.seededClusters {
+            let stripped = Self.clips(for: cluster).map { c in
+                InboxClip(clipId: c.clipId, capturedAt: c.capturedAt, duration: c.duration,
+                          transcript: c.transcript, latitude: nil, longitude: nil,
+                          source: c.source, audioFilename: c.audioFilename,
+                          transcriptionAttempted: true, rollGroupId: nil, status: .transcribed)
+            }
+            let proposals = ClipClusterProposer.propose(sessions: Self.sessions(stripped), dismissed: [])
+            #expect(proposals.count == 1 && proposals[0].clipIds.count == 3,
+                    "“\(cluster.name)” without coords: \(proposals.count) proposals, \(proposals.first?.clipIds.count ?? 0)/3 clips, rule=\(proposals.first?.ruleTag.rawValue ?? "none")")
+        }
+    }
+
     // MARK: - Fixtures mirrored from the seeder
     //
     // Duplicated deliberately: the seeder is `#if DEBUG` *and* `@MainActor`
@@ -186,17 +248,17 @@ import Foundation
     }
 
     static let seededClusters: [Cluster] = [
-        Cluster(name: "Harbor Lantern", hoursAgo: 0, coordinate: (32.2371, -80.8557), lines: [
+        Cluster(name: "Harbor Lantern", hoursAgo: 1, coordinate: nil, lines: [
             "Walking past Harbor Lantern before the tide turned — QA fixture 1",
             "Second pass by Harbor Lantern, quieter now — QA fixture 2",
             "Last look at Harbor Lantern on the way back — QA fixture 3",
         ]),
-        Cluster(name: "Sparrow Quarry", hoursAgo: 3, coordinate: (44.3876, -68.2039), lines: [
+        Cluster(name: "Sparrow Quarry", hoursAgo: 4, coordinate: nil, lines: [
             "Notes from Sparrow Quarry, north face in shadow — QA fixture 4",
             "More from Sparrow Quarry after the climb — QA fixture 5",
             "Leaving Sparrow Quarry as the light went — QA fixture 6",
         ]),
-        Cluster(name: "Thistle Beacon", hoursAgo: 6, coordinate: (47.6062, -122.3321), lines: [
+        Cluster(name: "Thistle Beacon", hoursAgo: 7, coordinate: nil, lines: [
             "Thistle Beacon from the lower path — QA fixture 7",
             "Halfway up to Thistle Beacon now — QA fixture 8",
             "At Thistle Beacon, wind off the water — QA fixture 9",
