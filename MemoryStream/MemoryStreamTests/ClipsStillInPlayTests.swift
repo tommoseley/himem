@@ -115,7 +115,15 @@ import Foundation
     /// retuning the grouper also retunes how long a session lingers in New.
     @Test func lensReadsTheGroupersThresholdNotItsOwn() throws {
         let src = try Self.source("MemoryStream/Services/Storage/RenderedBench.swift")
-        let body = try Self.blockBody(startingAtLineContaining: "static func compose(", in: src)
+        // Anchored on the lens block itself, NOT on `static func compose(`.
+        // `blockBody` counts BRACES, and `compose`'s signature now carries a
+        // closure default (`reviewedAt: (UUID) -> Date? = { _ in nil }`) whose
+        // braces open and close on one line — so anchoring on the signature
+        // returned that single line as the "body". It failed loudly here, but
+        // the same trap can pass VACUOUSLY when the needle happens to sit on
+        // the terminating line. Same hazard the `callArguments` helper was
+        // written for and which died with the 2b-ii revert.
+        let body = try Self.blockBody(startingAtLineContaining: "if hideReviewed {", in: src)
         let code = Self.codeOnly(body)
         #expect(code.contains("ClipSessionGrouper.sessionTimeWindowSeconds"),
                 """

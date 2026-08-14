@@ -270,6 +270,22 @@ struct SessionListView: View {
         // Missing these would silently revert **F44**: a clip set aside from a
         // cluster would leave the proposal and never come back to the loose
         // list, which is the subtractive posture J2 retired.
+        // **The visible registry must be populated when it is about to be
+        // USED, not only when the data happens to change** (device,
+        // 2026-08-13: Select all inert, "0 selected").
+        //
+        // `resetVisible()` fires on a filter switch, and the only things that
+        // re-register are data-change hooks. On a quiet bench nothing changes,
+        // so the registry stayed empty and Select all had nothing to select.
+        //
+        // It was masked until now by B15: the 30-second retry sweep
+        // republished the manifest continuously, so a regroup — and with it a
+        // re-registration — was never more than a few seconds away. Stopping
+        // the blink removed the churn that was accidentally carrying this.
+        // A defect that only appears once the noise stops was always there.
+        .onChange(of: selection.selecting) { _, entering in
+            if entering { registerSessionIds() }
+        }
         .onChange(of: removedByFingerprint) { _, _ in
             regroupSessions()
             registerSessionIds()
@@ -393,6 +409,7 @@ struct SessionListView: View {
             hideReviewed: hideReviewed,
             now: Date(),
             inFlightIds: Set(arrivals.clipsInFlight.keys),
+            reviewedAt: { BenchClipReviewStore.reviewedAt($0) },
             soloIds: inbox.soloClipIds
         )
         // The proposer still speaks `ClipGroup`, so it is asked about the

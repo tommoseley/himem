@@ -126,6 +126,7 @@ struct RenderedBench: Equatable {
         hideReviewed: Bool,
         now: Date,
         inFlightIds: Set<UUID> = [],
+        reviewedAt: (UUID) -> Date? = { _ in nil },
         soloIds: Set<UUID> = [],
         proposals: [ClusterProposal] = [],
         trim: [String: Set<UUID>] = [:]
@@ -206,9 +207,27 @@ struct RenderedBench: Equatable {
             // The admission predicate is the old per-item lens, lifted whole
             // to the session: a session is admitted when ANY member would have
             // survived it. Nothing is subtracted from the session that passes.
+            // **A session the user just looked at stays put for the window**
+            // (ruled by Tom, 2026-08-13). F36's window is measured from
+            // CAPTURE, so it is permanently closed for anything older than ten
+            // minutes — it cannot protect an act that happens now. Opening a
+            // day-old session therefore ejected it instantly, and the list
+            // changed under the reader as they navigated back. That is the
+            // harm; the grace period is granted by the *looking*.
+            //
+            // Both prior rulings survive: July 19's "open the container → its
+            // contents are seen" still marks everything, and F37 still admits
+            // whole sessions. Only the clock moved — from when a clip was
+            // captured to when it was read.
+            func recentlyRead(_ item: BenchClipItem) -> Bool {
+                guard let seenAt = reviewedAt(item.id) else { return false }
+                return now.timeIntervalSince(seenAt) < ClipSessionGrouper.sessionTimeWindowSeconds
+            }
             sessions = allSessions.filter { session in
                 session.items.contains {
-                    !reviewedIds.contains($0.id) || stillInPlay.contains($0.id)
+                    !reviewedIds.contains($0.id)
+                        || stillInPlay.contains($0.id)
+                        || recentlyRead($0)
                 }
             }
         } else {

@@ -234,6 +234,31 @@ import Foundation
         }
     }
 
+    /// **Select all was inert on a quiet bench** (device, 2026-08-13).
+    ///
+    /// `resetVisible()` fires on a filter switch and only data-change hooks
+    /// re-register, so on a bench where nothing was arriving the registry
+    /// stayed empty and Select all had nothing to select.
+    ///
+    /// It was masked by B15: the 30-second retry sweep republished the
+    /// manifest continuously, so a re-registration was never more than a few
+    /// seconds away. **Stopping the blink removed the churn that was carrying
+    /// this** — a defect that only appears once the noise stops was always
+    /// there, and is worth naming as a class: quieting a busy path can reveal
+    /// work that was riding on its side effects.
+    ///
+    /// The registry must be populated when it is about to be USED.
+    @Test func enteringSelectionRepopulatesTheVisibleRegistry() throws {
+        let src = try Self.source("MemoryStream/Views/Inbox/SessionListView.swift")
+        let code = Self.codeOnly(src)
+        #expect(code.contains("onChange(of: selection.selecting)"),
+                """
+                Nothing re-registers the selectable ids when selection mode is entered, so \
+                Select all depends on a data change having happened recently. On a quiet \
+                bench there is none.
+                """)
+    }
+
     static func codeOnly(_ source: String) -> String {
         source
             .split(separator: "\n", omittingEmptySubsequences: false)

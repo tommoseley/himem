@@ -1411,6 +1411,32 @@ enum BenchClipReviewStore {
         return reviewedIds().contains(id.uuidString)
     }
 
+    /// **When each id was reviewed** — the grace-period clock (ruled by Tom,
+    /// 2026-08-13). Separate key so the id set stays a plain array and old
+    /// installs decode unchanged; a missing stamp simply means "no grace".
+    private static let stampKey = "com.himem.bench.reviewedAt"
+
+    /// Nil when this id has no recorded review — including every id reviewed
+    /// before the stamps existed, which correctly gets no grace rather than a
+    /// fabricated one.
+    static func reviewedAt(_ id: UUID) -> Date? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let raw = UserDefaults.standard.dictionary(forKey: stampKey) as? [String: Double],
+              let t = raw[id.uuidString] else { return nil }
+        return Date(timeIntervalSince1970: t)
+    }
+
+    /// Stamps ids as reviewed *now*. Called by the writer alongside the id
+    /// set; kept separate so a caller cannot stamp without recording.
+    fileprivate static func stamp(_ ids: [UUID], at now: Date) {
+        lock.lock()
+        defer { lock.unlock() }
+        var raw = (UserDefaults.standard.dictionary(forKey: stampKey) as? [String: Double]) ?? [:]
+        for id in ids { raw[id.uuidString] = now.timeIntervalSince1970 }
+        UserDefaults.standard.set(raw, forKey: stampKey)
+    }
+
     /// Idempotent — a no-op (no write) when the id is already recorded.
     static func markReviewed(_ id: UUID) {
         lock.lock()
@@ -1477,10 +1503,14 @@ enum BenchClipReviewWriter {
     /// set, which is what the session-open path needs (`Clip model · spec.md`,
     /// July 19: *"open the container → its contents are seen"* marks every
     /// clip in one act).
-    static func markReviewed(clipIds: [UUID]) {
+    static func markReviewed(clipIds: [UUID], at now: Date = Date()) {
         guard !clipIds.isEmpty else { return }
         InboxManifest.shared.markReviewed(clipIds: clipIds)
         BenchClipReviewStore.markReviewed(clipIds)
+        // **Looking starts the grace period** (ruled 2026-08-13). Stamped here
+        // rather than at each call site so every review write — editor, session
+        // open, backfill — grants the same window by construction.
+        BenchClipReviewStore.stamp(clipIds, at: now)
     }
 }
 

@@ -237,7 +237,7 @@ struct ClipReviewStateTests {
     @Test func theReviewWriterWritesBothStoresNotJustTheRefOne() throws {
         let src = try Self.source("MemoryStream/Services/Storage/InboxManifest.swift")
         let body = try Self.blockBody(
-            startingAtLineContaining: "static func markReviewed(clipIds: [UUID]) {", in: src
+            startingAtLineContaining: "static func markReviewed(clipIds: [UUID]", in: src
         )
         #expect(body.contains("InboxManifest.shared.markReviewed"),
                 """

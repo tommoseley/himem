@@ -586,6 +586,59 @@ import Foundation
                 """)
     }
 
+    // MARK: - The grace period is granted by LOOKING (ruled 2026-08-13)
+
+    /// **A session you just opened stays put for the window.**
+    ///
+    /// Device 2026-08-13: opening the loose session and navigating back made
+    /// it leave the bench mid-gesture. Opening marks every clip reviewed
+    /// (July 19), F37 then refuses the whole session, and F36's still-in-play
+    /// could not help because that window is measured from **capture** — for
+    /// a day-old sitting it is permanently closed. A window granted by the
+    /// clip's age cannot protect an act that happens now.
+    @Test func aSessionJustLookedAtStaysForTheWindow() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let old = Self.item(.voice, t)                     // captured long ago
+        let now = t.addingTimeInterval(24 * 3600)
+        let bench = RenderedBench.compose(
+            allItems: [old], reviewedIds: [old.id], hideReviewed: true, now: now,
+            reviewedAt: { _ in now.addingTimeInterval(-5) }   // read five seconds ago
+        )
+        #expect(bench.count == 1,
+                """
+                The session left the bench the instant it was opened. Both prior rulings are \
+                intact — the harm is that the list changes under the reader as they navigate \
+                back — so looking must start the window.
+                """)
+    }
+
+    /// **The ceiling.** It leaves once the window passes, or "New" would never
+    /// drain and the grace period would be a permanent reprieve.
+    @Test func onceTheReadWindowPassesTheSessionLeaves() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let old = Self.item(.voice, t)
+        let now = t.addingTimeInterval(24 * 3600)
+        let bench = RenderedBench.compose(
+            allItems: [old], reviewedIds: [old.id], hideReviewed: true, now: now,
+            reviewedAt: { _ in now.addingTimeInterval(-ClipSessionGrouper.sessionTimeWindowSeconds - 1) }
+        )
+        #expect(bench.count == 0, "a reviewed session never leaves — the lens no longer drains")
+    }
+
+    /// An id with no recorded read gets no grace. Every clip reviewed before
+    /// the stamps existed lands here, and must not be handed a fabricated
+    /// window on first launch of this build.
+    @Test func anUnstampedReviewGrantsNoGrace() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let old = Self.item(.voice, t)
+        let bench = RenderedBench.compose(
+            allItems: [old], reviewedIds: [old.id], hideReviewed: true,
+            now: t.addingTimeInterval(24 * 3600),
+            reviewedAt: { _ in nil }
+        )
+        #expect(bench.count == 0)
+    }
+
     // MARK: - Fixtures
 
     static func item(_ kind: BenchClipItem.Kind, _ at: Date, roll: UUID? = nil) -> BenchClipItem {
