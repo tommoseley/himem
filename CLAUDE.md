@@ -84,6 +84,22 @@ This rule applies to all runtime defects including: exceptions, incorrect output
 
 *Second instance, 2026-08-02 — **the rule was quoted while being broken.** Xcode's Build failed an hour after building fine. CC proposed a rename from two days earlier; when Tom asked "why fail now?", CC proposed a merge-driven mtime storm; when Tom said "and YOU ran builds an hour ago as well," the actual nearest antecedent turned out to be **CC's own CLI build, half an hour before the failure**, with a configuration and destination the IDE never uses, into the DerivedData Xcode owned. **Twice in one investigation the explanation reached past our own actions** — and both reaches were toward older, more distant, more environmental causes. **The tell is chronological: list what WE did, in time order, before proposing any mechanism.** `git reflog --date=format:'%H:%M'` and the mtimes of your own build logs answer "what changed in the last hour" in two commands, and both were available before the first wrong answer. Corollary, learned the same hour: **fixing the symptom can destroy the evidence** — deleting DerivedData cleared the fault and with it the timestamps that would have named the cause.*
 
+### Quieting a Busy Path Reveals What Was Riding On It (Mandatory)
+
+**When you remove churn, expect latent work to stop happening — and expect it to look like a regression in the change that removed it.**
+
+A noisy path carries passengers. Anything that re-ran "often enough" because something else was firing constantly now runs only when its own trigger fires — and if it never had a correct trigger, it stops. The defect was always there; the noise was paying for it.
+
+*Origin: 2026-08-13. B15 replaced a 30-second retry sweep with an event. Within one build, **Select all went inert**: the selectable-id registry is cleared on a filter switch and re-populated only by data-change hooks, so on a quiet bench nothing repopulated it. The sweep had been republishing the manifest every 30 seconds, so a re-registration was never more than a few seconds away. Nothing about the registry changed; the thing accidentally driving it stopped.*
+
+- **Do not attribute it to the quieting change.** The honest description is *"this never had a trigger of its own"*, not *"B15 broke selection."* Reverting the quieting hides it again — F6d's shape.
+- **Fix the trigger, not the silence.** Whatever needs to be current must be refreshed **when it is about to be used**, not whenever the data happens to move.
+- **Expect more of them.** One quieting change can strand several passengers, surfacing over days as unrelated-looking defects. When something breaks shortly after a path goes quiet, ask what it used to ride on **before** bisecting.
+
+This is the constructive twin of *Don't Go Looking for Zebras*: the recent change **is** the first suspect, and here it is the correct suspect for the *timing* while being the wrong suspect for the *cause*.
+
+---
+
 ### Assertions Need a Ceiling, Not Just a Floor (Mandatory)
 
 **A one-sided bound exonerates the failure it was written to catch.** `AudioCompressorTests` asserted `ratio >= 10.0` under the message *"codec settings may be wrong"* — so a **780× ratio, which is what silence compresses to, passed**. The more completely the audio was destroyed, the more emphatically the test approved.
