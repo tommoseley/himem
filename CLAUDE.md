@@ -307,15 +307,28 @@ The system idle timer is a trust contract. HiMem isn't special enough to overrid
 
 ---
 
-### Test Concurrency and Shared Singletons
+### Test Concurrency and Shared Singletons (Mandatory)
 
-Swift Testing runs `@Test` methods inside a `@Suite` in parallel by default. Tests that touch non-thread-safe shared singletons crash with `libsystem_malloc.dylib: Abort Cause` errors when run concurrently.
+**A process-global mutable singleton must be made safe AT ITS OWNER. Serializing the tests that touch it is not a remedy — it is a remedy-shaped thing that works until enough tests reach the object.**
 
-Known offenders in this codebase:
+Swift Testing runs `@Test` methods inside a `@Suite` in parallel by default, and tests that touch non-thread-safe shared singletons crash — `libsystem_malloc.dylib: Abort Cause`, `signal segv`, or a bare `Crash: HiMem`.
 
-- `LocalEntityExtractor.shared` — uses an `NLTagger` instance which isn't thread-safe.
+**The retired rule, and why it could never have worked.** This section used to say: *mark any suite that exercises a shared non-thread-safe API with `@Suite(.serialized)`.* That orders tests **within** a suite. **Swift Testing runs suites concurrently**, so two different suites reaching the same singleton are exactly as unsafe as before — and the singleton is process-global, so the scope the annotation controls is not the scope that needs controlling. The rule appeared to hold only while few tests reached the shared object.
 
-**Rule:** mark any suite that exercises a shared non-thread-safe API with `@Suite(.serialized)` and leave a comment naming the reason. Example: `ProcessingEngineFallbackTests`.
+**Disproven by reproduction, not by argument** (2026-08-12). Adding a handful of tests that call `ClipClusterProposer` — which reaches `LocalEntityExtractor.shared` — tipped a latent race into reliable crashes, with `@Suite(.serialized)` correctly applied and doing nothing. The lock fixed it; the annotation had not.
+
+**Rule:** own the compound operation. Wrap the whole read-modify-write (or assign-then-enumerate, or any multi-step use of shared mutable state) in a lock **at the owner**, and say at the lock why the compound operation — not any single call — is the unit that must be atomic. Both current instances follow this shape:
+
+- `BenchClipReviewStore` — `NSLock` around the whole read-modify-write. `UserDefaults` is individually thread-safe, which is precisely what made the tear invisible: no single call is wrong.
+- `LocalEntityExtractor.shared` — `NSLock` around `extractEntities`'s assign-then-enumerate over one shared `NLTagger`. Two callers interleaving leaves the second enumerating a string the first replaced.
+
+`@Suite(.serialized)` remains legitimate for **suite-local** shared state (a fixture file, a singleton the suite itself installs and tears down). It is never the answer for a process-global one. This is the *"where a rule can be replaced by a mechanism, replace it"* non-negotiable: a lock removes the failure mode, an annotation asks every future suite author to remember a rule that would not have protected them anyway.
+
+**THE READING TRAP, and it is the expensive part.** A crash takes down the **test host**, so every test scheduled after it fails as collateral. That run reported **49 failures**; it was **one defect**. The 41 extras spanned suites with no relationship to the change — URL detection, entity keys, manifest dedup — which is the tell: a change cannot plausibly break that spread at once.
+
+**Detect it before diagnosing anything:** read the failure *text*, not the count. `Crash: HiMem at <deduplicated_symbol>` or `Test crashed with signal segv` means the host died and the count is meaningless. Fix the crash, re-run, and only then read the number. This is the **exit-65 overload one layer along** — one signal, several meanings — and it earns the same discipline: *name which failure you have before you act on it.*
+
+**Corollary for mutation verification:** a mutation that makes code *crash* rather than misbehave proves nothing about the guard you are testing, because it fails everything downstream too. If a mutation's collateral spans unrelated suites, discard the run and choose a mutation that produces a wrong answer instead of a trap. *(Cost 2026-08-11: an `Int.max` mutation of a bounds check was read as evidence about a different defect entirely.)*
 
 ---
 
