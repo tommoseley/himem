@@ -84,6 +84,30 @@ This rule applies to all runtime defects including: exceptions, incorrect output
 
 *Second instance, 2026-08-02 — **the rule was quoted while being broken.** Xcode's Build failed an hour after building fine. CC proposed a rename from two days earlier; when Tom asked "why fail now?", CC proposed a merge-driven mtime storm; when Tom said "and YOU ran builds an hour ago as well," the actual nearest antecedent turned out to be **CC's own CLI build, half an hour before the failure**, with a configuration and destination the IDE never uses, into the DerivedData Xcode owned. **Twice in one investigation the explanation reached past our own actions** — and both reaches were toward older, more distant, more environmental causes. **The tell is chronological: list what WE did, in time order, before proposing any mechanism.** `git reflog --date=format:'%H:%M'` and the mtimes of your own build logs answer "what changed in the last hour" in two commands, and both were available before the first wrong answer. Corollary, learned the same hour: **fixing the symptom can destroy the evidence** — deleting DerivedData cleared the fault and with it the timestamps that would have named the cause.*
 
+### Per-Device State Keyed by Content Id Must Prune When Its Content Goes (Mandatory)
+
+**A store keyed by a clip/entry id outlives the thing it describes unless something deletes it. Give every such store prune-on-write, or it will one day answer a question about a row that no longer exists.**
+
+Three instances in this codebase, and the difference between them is the whole rule:
+
+| Store | Prunes? | Outcome |
+|---|---|---|
+| `dismissedClusters` | **Yes** — drops records whose member clipIds are no longer in the inbox, from `replace(with:)` | Correct. A stale *Not together* can never suppress a future proposal. |
+| `BenchClipReviewStore` | **No** | Leaked for three sessions. |
+| `BenchClipDurationStore` | **No** | Latent — logged, not yet bitten. |
+
+*Origin: 2026-08-13/15.* QA fixture ids are deterministic by design, so a cleared-and-reseeded clip reuses its id. The review mark survived the clip it belonged to, and the replacement was **born reviewed** — present on **All**, absent from **New**, because All applies no review filter. That signature is diagnostic and was misread four times as a resolve failure in the cluster path.
+
+**It surfaced on exactly one clip, and that is why it took so long.** Only the ref-backed fixture kept its mark, because its review state lives in the ref-keyed store under a stable id; its manifest-backed siblings were recreated each run with `reviewed: false` and could never have shown the fault. So the single misbehaving clip's one distinguishing property — being ref-backed — pointed straight at the wrong subsystem. **A coincidence of storage read as a causal signal.**
+
+- **Ask of any id-keyed per-device store: what deletes this?** If the answer is "nothing", it is this defect waiting for a reused id.
+- **`BenchClipDurationStore` is the live one.** Harmless only because every seeded clip is 2 s, so the stale value equals the fresh one — which is precisely why no test would catch it.
+- **Present-on-All / absent-on-New is a review-state signature**, not a composition failure. Read the lens before blaming the pipeline.
+
+*The general shape: state that outlives its subject is indistinguishable from state about a different subject.*
+
+---
+
 ### Quieting a Busy Path Reveals What Was Riding On It (Mandatory)
 
 **When you remove churn, expect latent work to stop happening — and expect it to look like a regression in the change that removed it.**
