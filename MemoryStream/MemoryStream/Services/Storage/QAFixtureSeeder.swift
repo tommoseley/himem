@@ -73,6 +73,13 @@ enum QAFixtureSeeder {
 
     private static let filePrefix = "5EED-qa-"
 
+    /// Every id this seeder can mint. Enumerated rather than derived from what
+    /// is currently on the bench, because the state that needs clearing —
+    /// review flags and stamps — outlives the rows themselves.
+    static var allSeededIds: [UUID] {
+        [100, 101, 102, 200, 201, 202, 210, 300, 301, 302, 310, 311, 400, 410, 411].map(id)
+    }
+
     // MARK: - What gets built
 
     /// The four coexisting shapes: three clusters and one loose session.
@@ -270,6 +277,22 @@ enum QAFixtureSeeder {
     /// Removes every seeded row, ref and file — and nothing else.
     @MainActor
     static func clear(in context: NSManagedObjectContext) {
+        // **Review state must go too, or the fixtures are not repeatable.**
+        //
+        // Seeded ids are deterministic by design (`5EED0002-…102` every run),
+        // which is what makes `clear` precise — and it is also what let review
+        // state outlive the clip it belonged to. Open a seeded clip once and
+        // its id is marked reviewed; re-seed, and the new clip is **born
+        // reviewed**, so the New lens refuses it while All still shows it.
+        //
+        // That is exactly how fixture 3 went missing from Harbor Lantern, and
+        // it was the ref-backed one specifically because its review state
+        // lives in the ref-keyed store under that stable id — the manifest
+        // rows are recreated fresh each run with `reviewed: false`, so they
+        // could not show the fault. Three wrong theories about the cluster
+        // path came from that asymmetry.
+        let seededIds = Self.allSeededIds
+        BenchClipReviewStore.forget(seededIds)
         InboxManifest.shared.removeBatch(
             clipIds: InboxManifest.shared.clips.map(\.clipId).filter(isSeeded)
         )

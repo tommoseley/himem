@@ -1429,7 +1429,7 @@ enum BenchClipReviewStore {
 
     /// Stamps ids as reviewed *now*. Called by the writer alongside the id
     /// set; kept separate so a caller cannot stamp without recording.
-    fileprivate static func stamp(_ ids: [UUID], at now: Date) {
+    static func stamp(_ ids: [UUID], at now: Date) {
         lock.lock()
         defer { lock.unlock() }
         var raw = (UserDefaults.standard.dictionary(forKey: stampKey) as? [String: Double]) ?? [:]
@@ -1457,6 +1457,25 @@ enum BenchClipReviewStore {
         for id in ids where set.insert(id.uuidString).inserted { changed = true }
         guard changed else { return }
         UserDefaults.standard.set(Array(set), forKey: key)
+    }
+
+    /// **Forget these ids entirely** — id set and stamp together.
+    ///
+    /// Exists for fixtures whose ids are deterministic and therefore reused:
+    /// a QA seed that recreates `5EED…102` on every run inherits whatever
+    /// review state a previous run left on that id, and is **born reviewed**.
+    /// Nothing in production reuses an id after deleting its clip, so this is
+    /// not a lifecycle the app needs — it is the one the fixtures need to be
+    /// repeatable.
+    static func forget(_ ids: [UUID]) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !ids.isEmpty else { return }
+        let drop = Set(ids.map(\.uuidString))
+        UserDefaults.standard.set(Array(reviewedIds().subtracting(drop)), forKey: key)
+        var raw = (UserDefaults.standard.dictionary(forKey: stampKey) as? [String: Double]) ?? [:]
+        for id in drop { raw.removeValue(forKey: id) }
+        UserDefaults.standard.set(raw, forKey: stampKey)
     }
 
     private static func reviewedIds() -> Set<String> {
@@ -1493,6 +1512,15 @@ enum BenchClipReviewStore {
 /// is precisely why this cannot be a lookup.
 @MainActor
 enum BenchClipReviewWriter {
+
+    #if DEBUG
+    /// Test seam: mark without touching `InboxManifest`, which persists to
+    /// disk and is shared across concurrently-running suites.
+    static func markReviewedForTesting(_ id: UUID) {
+        BenchClipReviewStore.markReviewed([id])
+        BenchClipReviewStore.stamp([id], at: Date())
+    }
+    #endif
 
     /// Mark one bench clip seen, whatever backs it now or next.
     static func markReviewed(_ id: UUID) {

@@ -254,6 +254,56 @@ struct ClipReviewStateTests {
                 """)
     }
 
+    // MARK: - Fixture repeatability (device, 2026-08-15)
+
+    /// **A deterministic id must not inherit the review state of the clip it
+    /// replaces.**
+    ///
+    /// Fixture 3 was present on All and absent from New across three sessions
+    /// of wrong theories about the cluster path. Present-on-All /
+    /// absent-from-New is the signature of a clip marked **reviewed** — All
+    /// applies no review filter — and the cause was that QA ids are
+    /// deterministic by design while `clear` removed only rows, refs and
+    /// files. Open a seeded clip once and its id carries that mark into every
+    /// future seed, so the replacement is born reviewed.
+    ///
+    /// It showed on the ref-backed clip alone because its review state lives
+    /// in the ref-keyed store under the stable id; the manifest-backed
+    /// siblings are recreated each run with `reviewed: false` and could never
+    /// have exposed it. That asymmetry is what made this look like premise 2
+    /// failing in the cluster path.
+    @MainActor
+    @Test func forgettingAnIdClearsBothTheMarkAndItsStamp() {
+        let id = UUID()
+        BenchClipReviewWriter.markReviewedForTesting(id)
+        #expect(BenchClipReviewStore.isReviewed(id) == true)
+        #expect(BenchClipReviewStore.reviewedAt(id) != nil)
+
+        BenchClipReviewStore.forget([id])
+
+        #expect(BenchClipReviewStore.isReviewed(id) == false,
+                "the mark outlived the clip — a re-seeded fixture is born reviewed")
+        #expect(BenchClipReviewStore.reviewedAt(id) == nil,
+                """
+                the stamp outlived the mark, so a forgotten id would carry a stale grace \
+                period the moment it is reviewed again.
+                """)
+    }
+
+    /// The seeder must actually forget what it mints. Enumerated ids, not
+    /// whatever happens to be on the bench — the state that needs clearing
+    /// outlives the rows.
+    @Test func theSeedClearForgetsEverySeededId() throws {
+        let src = try Self.source("MemoryStream/Services/Storage/QAFixtureSeeder.swift")
+        let body = try Self.blockBody(startingAtLineContaining: "static func clear(in context", in: src)
+        #expect(body.contains("BenchClipReviewStore.forget"),
+                """
+                `clear` leaves review state behind, so re-seeding produces clips that are \
+                already reviewed and the New lens refuses them. Body was:
+                \(body)
+                """)
+    }
+
     // MARK: - Source access
 
     static func source(_ relativePath: String) throws -> String {
