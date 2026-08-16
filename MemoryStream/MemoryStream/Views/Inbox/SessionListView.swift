@@ -416,10 +416,23 @@ struct SessionListView: View {
         // projected sessions — the same projection the cards render, not a
         // separately-derived one.
         let project: (UnifiedSession) -> ClipGroup = { Self.projectGroup($0, voiceById: voiceById) }
+        // `[ClusterTrace]` — DEBUG-only, read-only, and nil in release so the
+        // proposer's production path is byte-for-byte what it was. It answers
+        // the one question the screen cannot: whether a proposal was formed and
+        // discarded, or never formed at all.
+        #if DEBUG
+        let trace = ClusterProposalTrace()
+        #else
+        let trace: ClusterProposalTrace? = nil
+        #endif
         let proposed = ClipClusterProposer.propose(
             sessions: ungrouped.sessions.map(project),
-            dismissed: inbox.dismissedClusterFingerprints
+            dismissed: inbox.dismissedClusterFingerprints,
+            trace: trace
         )
+        #if DEBUG
+        BenchPerf.clusterTrace(trace)
+        #endif
         let bench = ungrouped.claiming(proposals: proposed, trim: removedByFingerprint)
         let drawnBench = DrawnBench.from(bench, proposals: proposed)
 
@@ -1804,6 +1817,29 @@ enum BenchPerf {
     // its second run measured the absorber/grouper margin at zero divergence
     // with media present, which is what made this swap a mechanical edit
     // rather than a leap.
+
+    /// **`[ClusterTrace]` — emitted only when the decision actually changes.**
+    ///
+    /// The bench republishes constantly (B15 quieted the worst of it, and the
+    /// retry sweeps that remain still fire), so an unconditional print would
+    /// bury the one reading that matters under identical repeats. Gating on the
+    /// trace's own signature means every *distinct* outcome prints and no
+    /// outcome is rate-limited away — the opposite trade from `body`/`regroup`,
+    /// which sample because their question is frequency.
+    ///
+    /// `@MainActor` isolation is what makes `lastSignature` safe; per CLAUDE.md
+    /// § Test Concurrency an annotation that merely *orders* callers would not
+    /// be, but isolation removes the shared-mutable-state question entirely.
+    static func clusterTrace(_ trace: ClusterProposalTrace) {
+        let signature = trace.signature
+        guard signature != lastClusterSignature else { return }
+        lastClusterSignature = signature
+        for line in trace.lines {
+            NSLog("[HiMem][ClusterTrace] \(line)")
+        }
+    }
+
+    private static var lastClusterSignature: String?
 
     static func regroup(since t0: CFAbsoluteTime, sessions: Int, lens: Int) {
         regroupCount += 1

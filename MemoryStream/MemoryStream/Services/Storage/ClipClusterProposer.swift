@@ -55,35 +55,52 @@ enum ClipClusterProposer {
     ///     grouping) — the loose bench. Newest-first.
     ///   - dismissed: fingerprints the user already declined via
     ///     "Not together." These are filtered out silently.
+    ///   - trace: optional recorder for `[ClusterTrace]`. Nil in every
+    ///     production path that does not want it and in every test that does
+    ///     not assert on it, so the proposer's behaviour is identical with and
+    ///     without one. **It is a per-call collector, never shared** — which is
+    ///     why it needs no lock, unlike `LocalEntityExtractor.shared` below it.
     static func propose(
         sessions: [ClipGroup],
         dismissed: Set<ClusterFingerprint>,
-        entityExtractor: EntityExtractor = LocalEntityExtractor.shared
+        entityExtractor: EntityExtractor = LocalEntityExtractor.shared,
+        trace: ClusterProposalTrace? = nil
     ) -> [ClusterProposal] {
+        trace?.recordInput(sessions: sessions)
         // Only run Sort when there's material to sort — a single
         // session on the bench can never cluster with anything.
-        guard sessions.count >= 2 else { return [] }
+        guard sessions.count >= 2 else {
+            trace?.recordTooFewSessions(sessions.count)
+            return []
+        }
 
         var proposals: [ClusterProposal] = []
         proposals.append(contentsOf: proposeTimePlace(sessions: sessions))
         proposals.append(contentsOf: proposeWordMatch(
             sessions: sessions,
-            entityExtractor: entityExtractor
+            entityExtractor: entityExtractor,
+            trace: trace
         ))
+        trace?.recordFormed(proposals)
         // Overlap dedup per spec § "Clustering is Honest-Label" —
         // locked July 4 2026: a clip may appear in at most one
         // rendered candidate. Order by signal strength and greedily
         // drop any proposal whose clipIds are ≥ 50% already claimed
         // by a stronger one. This subsumes exact-set, subset, and
         // substantial-overlap cases in one pass.
-        proposals = dedupByOverlap(proposals)
+        proposals = dedupByOverlap(proposals, trace: trace)
 
         // Filter dismissed. Exact-set suppression only per spec.
+        let beforeDismissal = proposals
         proposals = proposals.filter { !dismissed.contains($0.fingerprint) }
+        trace?.recordDismissed(removed: beforeDismissal.filter { dismissed.contains($0.fingerprint) })
 
         // No cluster should propose fewer than 2 sessions — that's
         // the loose clip itself. Belt against a rule bug.
+        let beforeMinimum = proposals
         proposals = proposals.filter { $0.clipIds.count >= 2 }
+        trace?.recordBelowMinimum(removed: beforeMinimum.filter { $0.clipIds.count < 2 })
+        trace?.recordSurvivors(proposals)
 
         // Order by the cluster's earliest clip's capturedAt
         // descending (newest cluster first). Stable tiebreak on
@@ -183,7 +200,10 @@ enum ClipClusterProposer {
     /// - **Tier 1 (weaker):** distinctive bigram word-match
     /// Bigrams are identified by a space in the proposedName
     /// (which is the shared token itself for word-match clusters).
-    static func dedupByOverlap(_ proposals: [ClusterProposal]) -> [ClusterProposal] {
+    static func dedupByOverlap(
+        _ proposals: [ClusterProposal],
+        trace: ClusterProposalTrace? = nil
+    ) -> [ClusterProposal] {
         let sorted = proposals.sorted { a, b in
             let sa = signalStrength(a)
             let sb = signalStrength(b)
@@ -194,6 +214,10 @@ enum ClipClusterProposer {
         }
         var kept: [ClusterProposal] = []
         var claimedClipIds: Set<UUID> = []
+        // Only built when someone is tracing: naming the *eater* is the whole
+        // question the instrument was written for, and a flat claimed-set
+        // cannot answer it. Nil trace leaves the production path unchanged.
+        var claimedBy: [UUID: ClusterProposal] = [:]
         for proposal in sorted {
             let clipIdSet = Set(proposal.clipIds)
             let intersection = clipIdSet.intersection(claimedClipIds)
@@ -203,9 +227,19 @@ enum ClipClusterProposer {
             // its own clipIds stays.
             let overlapRatio = clipIdSet.isEmpty ? 0 :
                 Double(intersection.count) / Double(clipIdSet.count)
-            if overlapRatio >= 0.5 { continue }
+            if overlapRatio >= 0.5 {
+                trace?.recordEatenByOverlap(
+                    proposal,
+                    ratio: overlapRatio,
+                    claimedBy: intersection.compactMap { claimedBy[$0] }
+                )
+                continue
+            }
             kept.append(proposal)
             claimedClipIds.formUnion(clipIdSet)
+            if trace != nil {
+                for id in clipIdSet { claimedBy[id] = proposal }
+            }
         }
         return kept
     }
@@ -236,7 +270,8 @@ enum ClipClusterProposer {
     /// silence.
     static func proposeWordMatch(
         sessions: [ClipGroup],
-        entityExtractor: EntityExtractor
+        entityExtractor: EntityExtractor,
+        trace: ClusterProposalTrace? = nil
     ) -> [ClusterProposal] {
         // Extract candidate tokens per session and build inverse
         // indexes: token → session indices it appears in.
@@ -295,7 +330,16 @@ enum ClipClusterProposer {
             let isProperNoun = properNouns.contains(token)
             let isBigram = bigrams.contains(token)
             let distinctive = isProperNoun || isBigram
-            guard distinctive else { continue }
+            guard distinctive else {
+                trace?.recordToken(
+                    token,
+                    sessionIndices: indices,
+                    isProperNoun: isProperNoun,
+                    isBigram: isBigram,
+                    fate: .notDistinctive
+                )
+                continue
+            }
             // Group cluster proposals by their session index set —
             // "Hosta Hideaway" (bigram) and "Hideaway" (proper noun)
             // both surfacing the same session pair should not double.
@@ -305,9 +349,37 @@ enum ClipClusterProposer {
             // proper nouns produce the clearest reason string.
             if clustersByTokenKey[key] == nil ||
                 (isProperNoun && !properNouns.contains(clustersByTokenKey[key]!.token)) {
+                let displaced = clustersByTokenKey[key]?.token
                 clustersByTokenKey[key] = (indices, token)
+                trace?.recordToken(
+                    token,
+                    sessionIndices: indices,
+                    isProperNoun: isProperNoun,
+                    isBigram: isBigram,
+                    fate: .namesTheCluster(displacing: displaced)
+                )
+            } else {
+                // Qualified, and still produced no proposal of its own: another
+                // token already speaks for this exact set of sessions. The
+                // cluster is not lost — it is named by the other token — but a
+                // reader looking for THIS token in the formed list would
+                // otherwise read its absence as "never qualified".
+                trace?.recordToken(
+                    token,
+                    sessionIndices: indices,
+                    isProperNoun: isProperNoun,
+                    isBigram: isBigram,
+                    fate: .sessionSetNamedByAnotherToken(clustersByTokenKey[key]?.token ?? "?")
+                )
             }
         }
+
+        trace?.recordSingleSessionTokens(
+            tokenToSessions
+                .filter { $0.value.count == 1 }
+                .filter { properNouns.contains($0.key) || bigrams.contains($0.key) }
+                .map(\.key)
+        )
 
         return clustersByTokenKey.values.map { entry in
             let sessionsInCluster = entry.sessionIndices
@@ -624,5 +696,262 @@ enum ClipClusterProposer {
             * sin(dLon / 2) * sin(dLon / 2)
         let c = 2 * atan2(sqrt(a), sqrt(1 - a))
         return earthR * c
+    }
+}
+
+// MARK: - `[ClusterTrace]` · the proposal instrument
+
+/// **What the proposer decided, as a value.**
+///
+/// Written 2026-08-15 for one question that cannot be answered from outside
+/// `propose`: Sparrow Quarry did not cluster on a real bench while Harbor
+/// Lantern (3/3) and Thistle Beacon (5/3) did, and the two candidate causes —
+/// *a formed proposal was discarded* versus *the token never qualified* —
+/// produce an identical observation (no card). Four wrong theories were spent
+/// on the adjacent clip before a two-tap fixture check ended it; this exists so
+/// the fifth is a reading rather than a guess.
+///
+/// **Presence in `formed` names what ate it. Absence points at the token**, and
+/// the token verdicts say which gate it failed rather than leaving the reader
+/// to infer it from silence.
+///
+/// Same posture as `[BenchPerf]`, `[Amp]` and `[Meter]`: read-only, changes no
+/// behaviour, and answers a question three of this project's hardest defects
+/// needed a log rather than more reasoning to settle.
+///
+/// **It is built to be falsifiable.** The 2026-08-09 lesson is that a
+/// diagnostic written specifically to be falsifiable *passed by matching
+/// nothing* — `synthesizedRows` and `emptyGroups` were both reductions over an
+/// empty set, so both printed 0 regardless of the truth. So this is a value
+/// with tests over it (`ClusterProposalTraceTests`), not a `print` statement:
+/// one test proves it distinguishes eaten-by-dedup from never-formed, which is
+/// exactly the discrimination it was built to make. A trace that recorded
+/// nothing fails those tests.
+final class ClusterProposalTrace {
+
+    /// A proposal as the rules formed it, before anything downstream could
+    /// discard it.
+    struct Formed: Equatable {
+        let fingerprint: String
+        let ruleTag: ClusterProposal.RuleTag
+        let proposedName: String
+        let clipIds: [UUID]
+    }
+
+    /// What became of a formed proposal. Four fates, because there are four
+    /// places one can die — the overlap dedup is only the loudest.
+    enum Fate: Equatable {
+        /// Survived every filter and reached the caller.
+        case survived
+        /// The ≥50% overlap dedup dropped it; a stronger proposal had already
+        /// claimed its clips.
+        case eatenByOverlap(ratio: Double, claimedBy: [String])
+        /// The user's own "Not together" suppressed it.
+        case dismissedByUser
+        /// The belt-and-braces `clipIds.count >= 2` filter dropped it.
+        case belowMinimumSize(Int)
+    }
+
+    /// Why a shared token did or did not become a cluster. `notDistinctive` is
+    /// the one that answers "the token never qualified" — the branch the device
+    /// cannot show.
+    enum TokenFate: Equatable {
+        case namesTheCluster(displacing: String?)
+        case notDistinctive
+        case sessionSetNamedByAnotherToken(String)
+    }
+
+    struct TokenVerdict: Equatable {
+        let token: String
+        let sessionIndices: [Int]
+        let isProperNoun: Bool
+        let isBigram: Bool
+        let fate: TokenFate
+    }
+
+    /// One drawn session as the proposer received it. Carries a transcript
+    /// snippet per clip because "did these three land in one sitting or three"
+    /// is the first question a missing token raises, and it is unanswerable
+    /// from counts alone.
+    struct SessionInput: Equatable {
+        let index: Int
+        let clipCount: Int
+        let hasCoordinate: Bool
+        let snippets: [String]
+    }
+
+    private(set) var sessionInputs: [SessionInput] = []
+    private(set) var formed: [Formed] = []
+    private(set) var fates: [String: Fate] = [:]
+    private(set) var tokenVerdicts: [TokenVerdict] = []
+    private(set) var singleSessionDistinctiveTokens: [String] = []
+    private(set) var tooFewSessions: Int?
+
+    init() {}
+
+    // MARK: Recording
+
+    func recordInput(sessions: [ClipGroup]) {
+        sessionInputs = sessions.enumerated().map { index, session in
+            SessionInput(
+                index: index,
+                clipCount: session.clips.count,
+                hasCoordinate: session.clips.contains { $0.latitude != nil && $0.longitude != nil },
+                snippets: session.clips.map {
+                    String($0.transcript.trimmingCharacters(in: .whitespacesAndNewlines).prefix(48))
+                }
+            )
+        }
+    }
+
+    func recordTooFewSessions(_ count: Int) { tooFewSessions = count }
+
+    func recordFormed(_ proposals: [ClusterProposal]) {
+        formed = proposals.map {
+            Formed(
+                fingerprint: $0.fingerprint.rawValue,
+                ruleTag: $0.ruleTag,
+                proposedName: $0.proposedName,
+                clipIds: $0.clipIds
+            )
+        }
+    }
+
+    func recordEatenByOverlap(_ proposal: ClusterProposal, ratio: Double, claimedBy: [ClusterProposal]) {
+        // Distinct eaters, in a stable order, so the same run reads the same
+        // way twice.
+        var seen: Set<String> = []
+        let names = claimedBy.compactMap { eater -> String? in
+            let label = "\(eater.proposedName)#\(String(eater.fingerprint.rawValue.prefix(8)))"
+            return seen.insert(label).inserted ? label : nil
+        }.sorted()
+        fates[proposal.fingerprint.rawValue] = .eatenByOverlap(ratio: ratio, claimedBy: names)
+    }
+
+    func recordDismissed(removed: [ClusterProposal]) {
+        for proposal in removed { fates[proposal.fingerprint.rawValue] = .dismissedByUser }
+    }
+
+    func recordBelowMinimum(removed: [ClusterProposal]) {
+        for proposal in removed {
+            fates[proposal.fingerprint.rawValue] = .belowMinimumSize(proposal.clipIds.count)
+        }
+    }
+
+    func recordSurvivors(_ proposals: [ClusterProposal]) {
+        for proposal in proposals { fates[proposal.fingerprint.rawValue] = .survived }
+    }
+
+    func recordToken(
+        _ token: String,
+        sessionIndices: Set<Int>,
+        isProperNoun: Bool,
+        isBigram: Bool,
+        fate: TokenFate
+    ) {
+        tokenVerdicts.append(
+            TokenVerdict(
+                token: token,
+                sessionIndices: sessionIndices.sorted(),
+                isProperNoun: isProperNoun,
+                isBigram: isBigram,
+                fate: fate
+            )
+        )
+    }
+
+    func recordSingleSessionTokens(_ tokens: [String]) {
+        singleSessionDistinctiveTokens = tokens.sorted()
+    }
+
+    // MARK: Reading
+
+    /// The fate of a proposal by fingerprint — `nil` when no proposal with that
+    /// fingerprint was ever formed. **That nil is the discrimination the
+    /// instrument exists to make:** a proposal that was eaten has a fate, a
+    /// proposal that never formed has none.
+    func fate(ofFingerprint fingerprint: String) -> Fate? { fates[fingerprint] }
+
+    /// Whether any formed proposal claimed this clip, regardless of what
+    /// happened to it afterwards.
+    func formedProposalsClaiming(_ clipId: UUID) -> [Formed] {
+        formed.filter { $0.clipIds.contains(clipId) }
+    }
+
+    /// A stable digest of everything recorded. The call site emits only when
+    /// this changes, so a retry sweep republishing the same bench does not
+    /// reprint the same trace — and a bench that genuinely changed always
+    /// prints.
+    var signature: String { lines.joined(separator: "\n") }
+
+    /// The log form. Deliberately several short lines naming each decision
+    /// rather than one paragraph: a paragraph tells you *that* something
+    /// changed, never *what*.
+    var lines: [String] {
+        var out: [String] = []
+        if let tooFew = tooFewSessions {
+            out.append("sessions=\(tooFew) · SKIPPED (needs ≥2)")
+            return out
+        }
+        out.append("sessions=\(sessionInputs.count) · formed=\(formed.count) · survived=\(fates.values.filter { $0 == .survived }.count)")
+        for input in sessionInputs {
+            let snippets = input.snippets.map { "“\($0)”" }.joined(separator: " | ")
+            out.append("  s\(input.index) · clips=\(input.clipCount) · coord=\(input.hasCoordinate ? "yes" : "no") · \(snippets)")
+        }
+        for proposal in formed {
+            let fate = fates[proposal.fingerprint] ?? .survived
+            out.append("  FORMED \(proposal.ruleTag) “\(proposal.proposedName)” · ids=\(proposal.clipIds.count) [\(shortIds(proposal.clipIds))] → \(describe(fate))")
+        }
+        for verdict in tokenVerdicts {
+            let kind = [verdict.isProperNoun ? "properNoun" : nil, verdict.isBigram ? "bigram" : nil]
+                .compactMap { $0 }
+                .joined(separator: "+")
+            out.append("  TOKEN “\(verdict.token)” · sessions=\(verdict.sessionIndices) · \(kind.isEmpty ? "neither" : kind) → \(describe(verdict.fate))")
+        }
+        out.append(contentsOf: singleSessionTokenLines())
+        return out
+    }
+
+    /// **The cap is stated in the output, never silent.** A withheld list that
+    /// looks like an empty one is how a `head -8` becomes "there are none".
+    private func singleSessionTokenLines() -> [String] {
+        let all = singleSessionDistinctiveTokens
+        guard !all.isEmpty else { return ["  single-session distinctive tokens: none"] }
+        let ceiling = 60
+        if all.count <= ceiling {
+            return ["  single-session distinctive tokens (\(all.count)): \(all.joined(separator: ", "))"]
+        }
+        return [
+            "  single-session distinctive tokens: \(all.count) — LIST WITHHELD above \(ceiling); "
+            + "first \(ceiling) shown, the rest are NOT absent: \(all.prefix(ceiling).joined(separator: ", "))"
+        ]
+    }
+
+    private func shortIds(_ ids: [UUID]) -> String {
+        ids.map { String($0.uuidString.prefix(8)) }.joined(separator: ",")
+    }
+
+    private func describe(_ fate: Fate) -> String {
+        switch fate {
+        case .survived:
+            return "SURVIVED"
+        case let .eatenByOverlap(ratio, claimedBy):
+            return "EATEN by overlap \(Int((ratio * 100).rounded()))% · claimed by \(claimedBy.joined(separator: ", "))"
+        case .dismissedByUser:
+            return "DISMISSED by the user"
+        case let .belowMinimumSize(count):
+            return "DROPPED below minimum size (\(count))"
+        }
+    }
+
+    private func describe(_ fate: TokenFate) -> String {
+        switch fate {
+        case let .namesTheCluster(displaced):
+            return displaced.map { "NAMES the cluster (displaced “\($0)”)" } ?? "NAMES the cluster"
+        case .notDistinctive:
+            return "NOT DISTINCTIVE — shared across sessions but neither proper noun nor bigram, so no proposal formed"
+        case let .sessionSetNamedByAnotherToken(other):
+            return "qualified, but “\(other)” already names this exact session set"
+        }
     }
 }
