@@ -11,8 +11,9 @@ import SwiftUI
 /// - **Adjust / card-body tap → the minimal editor (§87, ruling
 ///   2026-07-15):** expands the card in place, every member clip as a
 ///   `ClipAtomView` row with a subtractive `Remove`. A removed clip drops
-///   to a quiet "Not in this memory" set-aside within the card,
-///   reversible via `Add back` — trims are provisional until commit
+///   to a quiet "Set aside" within the card, reversible via "Put back"
+///   (both from `ClusterCardCopy`; "Not in this memory" and "Add back" are the
+///   retired F43 wording and must not return) — trims are provisional until commit
 ///   (Model A: the card *is* the review, commit is the decision). No
 ///   pull-in, no ring; subtractive only.
 /// - **Bottom bar: "Keep these · N memories"** — the ONE ochre moment.
@@ -52,6 +53,13 @@ enum ClusterCardCopy {
     /// container noun, and surfaces the spec's own §87 term rather than new
     /// vocabulary. The trailing ⊕ already carries "put it back".
     static let setAside = "Set aside"
+
+    /// The ⊕ counterpart. Lives here rather than as a literal at each call
+    /// site because the pair went out of step once already: the ref-backed
+    /// rows said "Put back" while the manifest-backed rows said "Add back to
+    /// this memory", six months after F43 retired that vocabulary. One owner
+    /// is the mechanism; a second sweep is the rule that already failed.
+    static let putBack = "Put back"
 }
 
 struct ClusterCardStack: View {
@@ -370,7 +378,7 @@ struct ClusterCardStack: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isRemoved ? "Put back" : "Set aside")
+            .accessibilityLabel(isRemoved ? ClusterCardCopy.putBack : ClusterCardCopy.setAside)
         }
         .opacity(isRemoved ? 0.55 : 1)
         .padding(.vertical, 4)
@@ -472,7 +480,16 @@ struct ClusterCardStack: View {
                 RowIconButton(
                     systemName: isRemoved ? "plus.circle" : "minus.circle",
                     tint: Crucible.Color.ink3,
-                    accessibilityLabel: isRemoved ? "Add back to this memory" : "Set aside from this memory"
+                    // Coherence fix 2026-08-18: these two labels still carried
+                    // the memory vocabulary F43 retired from the visible label,
+                    // and an accessibility label is user-facing copy — VoiceOver
+                    // users were the only ones still being told about a "memory"
+                    // that does not exist on a bench. The sibling control on
+                    // ref-backed rows already said "Set aside"/"Put back"; one
+                    // site was swept and its twin was not, which is the
+                    // `.measurement`-on-the-watch shape. Guarded by
+                    // `SetAsideVocabularyTests`.
+                    accessibilityLabel: isRemoved ? ClusterCardCopy.putBack : ClusterCardCopy.setAside
                 ) {
                     if isRemoved { onReAddClip(proposal, clip.clipId) }
                     else { onRemoveClip(proposal, clip.clipId) }

@@ -41,7 +41,8 @@ One **row per clip**: `media-icon · time · first line · boxed ✎`. The 14-pa
 
 - Lives on the **transcript section header**, not the top nav toolbar — it governs only the transcript, and keeps the nav cluster (trash / folder / share / edit) uncluttered.
 - Two conventional density glyphs in a small segmented control, **default on the left**: **stacked-rows-with-dots = Compact (left, the default)**, **text-lines = Full (right)**. (Reordered July 17 2026 so the default sits left; the cluster card uses the identical order per `Captured Clips · session-first · spec.md`.) On the cluster card the same control sits **right-aligned on the title row**; here it sits on the transcript section header.
-- Eyebrow beside it states the scale honestly: `Transcript · 14 clips · 3,581 words`.
+- Eyebrow beside it states the scale honestly: `Transcript · 3,581 words`.
+  - **The clip count was removed 2026-08-18 (ruled), not renamed.** It read `Transcript · 14 clips · 3,581 words`, and the clip figure counted voice + note only while the eyebrow heads the whole PARTS body. This example — a 25-minute lecture — is all voice, so the two sets coincided and the conflict never surfaced; once cluster commits began carrying their media (F43), a memory of 2 voice + 1 photo drew **“TRANSCRIPT · 2 CLIPS”** over three visible parts. A photo has no place in a transcript count under any noun, so the wrong number is deleted rather than relabelled; the word count is honest at every composition and carries the scale signal this line asks for. Guarded by `TranscriptEyebrowTests`.
 
 ## Scope / deliberately out
 

@@ -9,14 +9,24 @@ import AVFoundation
 
 // MARK: - Transcript section header
 
-/// Eyebrow above the transcript section: `Transcript · N clips · N words`
-/// on the left, a two-segment Full/Compact toggle on the right. Only
-/// rendered when `TranscriptModeThreshold.toggleEarned(...)` returns true
-/// — short memories never see the control. The eyebrow's count text is
-/// authoritative; callers pass the same numbers they fed the threshold
-/// check so the display can never drift.
+/// Eyebrow above the transcript section: `Transcript · N words` on the left,
+/// a two-segment Full/Compact toggle on the right. Only rendered when
+/// `TranscriptModeThreshold.toggleEarned(...)` returns true — short memories
+/// never see the control.
+///
+/// **The clip count was REMOVED, not renamed (ruled 2026-08-18).** It read
+/// `Transcript · N clips · N words`, where the clip figure was
+/// `TranscriptWordCount.clipCount` — voice + note, excluding image and video —
+/// while this eyebrow heads the whole PARTS body. Once F43 made cluster
+/// commits carry their media, a memory of 2 voice + 1 photo drew
+/// **"TRANSCRIPT · 2 CLIPS"** over three visible parts: F37's rule (*a count
+/// must describe the thing it sits on*) broken by one eyebrow serving two
+/// scopes. Renaming the noun was rejected — a photo has no place in a
+/// transcript count under any noun — so the wrong number is deleted and the
+/// word count, which is honest at every composition, carries the scale signal
+/// the spec asks for. **`clipCount` is not a parameter here**, so no caller
+/// can reintroduce it by passing one.
 struct TranscriptHeaderControl: View {
-    let clipCount: Int
     let wordCount: Int
     @Binding var mode: TranscriptMode
 
@@ -32,12 +42,16 @@ struct TranscriptHeaderControl: View {
         }
     }
 
-    private var eyebrowText: String {
+    private var eyebrowText: String { Self.eyebrow(wordCount: wordCount) }
+
+    /// Extracted so the eyebrow's copy is reachable by a test. `private var`
+    /// on a `View` is not, which is why nothing guarded this string.
+    static func eyebrow(wordCount: Int) -> String {
         // `formatted()` on Int respects the user's locale for grouping —
         // 3,581 in en-US, 3.581 in de-DE, etc. The design eyebrow is
         // information density, not a brand mark, so locale-correctness
         // matters more than visual rigidity.
-        "Transcript · \(clipCount) clips · \(wordCount.formatted()) words"
+        "Transcript · \(wordCount.formatted()) words"
     }
 
     private var toggle: some View { TranscriptModeToggle(mode: $mode) }

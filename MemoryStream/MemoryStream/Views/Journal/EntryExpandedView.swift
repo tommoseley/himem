@@ -311,7 +311,6 @@ struct EntryExpandedView: View {
             if transcriptHeaderShown {
                 sectionRow {
                     TranscriptHeaderControl(
-                        clipCount: transcriptClipCount,
                         wordCount: transcriptWordCount,
                         mode: Binding(
                             get: { transcriptMode },
