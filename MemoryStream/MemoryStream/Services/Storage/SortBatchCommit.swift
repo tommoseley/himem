@@ -11,7 +11,7 @@ import CoreData
 /// > confirmation sheet(s) after. The Sort screen was the review.
 ///
 /// Each new entry:
-/// - Title = `proposal.proposedName`
+/// - Title = **none** — a memory made from a proposal arrives untitled (B17(a))
 /// - Content = clips' transcripts joined
 /// - Media = one `.voice` MediaReference per clip, with per-clip
 ///   transcripts + lat/lon stamped
@@ -140,7 +140,13 @@ enum SortBatchCommit {
         request.predicate = NSPredicate(format: "id == %@", newId as CVarArg)
         request.fetchLimit = 1
         guard let entry = try? storage.viewContext.fetch(request).first else { return nil }
-        entry.title = proposal.proposedName
+        // **B17(a), ruled 2026-08-18: no title from the proposal.** A memory
+        // made from a proposal arrives untitled so Organize or the user names
+        // it. Fixed here even though this file has **zero production callers**
+        // today (J2 retired the single batch commit) — an unreachable file that
+        // still assigns the title is exactly how a retired behaviour returns
+        // when someone revives it, which is the `UnifiedBenchGrouper` /
+        // `MediaBlobOrphanSweep` shape this project keeps paying for.
 
         for clip in movedClips.sorted(by: { $0.capturedAt < $1.capturedAt }) {
             _ = try? storage.createVoiceFragment(

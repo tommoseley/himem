@@ -56,7 +56,12 @@ struct ProjectCardView: View {
             // the topic's pip color + 12pt ink2 label, gap 6.
             if !project.topicNames.isEmpty {
                 HStack(spacing: 6) {
-                    ForEach(project.topicNames.prefix(4), id: \.self) { topic in
+                    // B18's sibling shape. Topic names are unique per project
+                    // today, so this has not misbehaved — but `id: \.self` over
+                    // display strings is the same class, and the position is
+                    // stable for a static row. Keyed by offset rather than by
+                    // label so a future duplicate cannot give undefined results.
+                    ForEach(Array(project.topicNames.prefix(4).enumerated()), id: \.offset) { _, topic in
                         let hue = Crucible.Color.topicHue(for: topic)
                         HStack(spacing: 5) {
                             Circle().fill(hue.fg).frame(width: 6, height: 6)

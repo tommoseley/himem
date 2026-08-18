@@ -1571,8 +1571,10 @@ struct ReferencedInLine: View {
                 .tracking(0.4)
                 .textCase(.uppercase)
                 .foregroundStyle(Crucible.Color.ink4)
-            ForEach(memoryTitles.prefix(3), id: \.self) { title in
-                Text(title)
+            // Identifiable by the memory's id — see `MemoryChip`. A label is a
+            // display value; it is never an identity.
+            ForEach(memoryChips.prefix(3)) { chip in
+                Text(chip.title)
                     .font(.system(size: 11.5))
                     .tracking(-0.05)
                     .foregroundStyle(Crucible.Color.ink2)
@@ -1581,18 +1583,41 @@ struct ReferencedInLine: View {
                     .background(Crucible.Color.hairline.opacity(0.4))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            if memoryTitles.count > 3 {
-                Text("+\(memoryTitles.count - 3)")
+            if memoryChips.count > 3 {
+                Text("+\(memoryChips.count - 3)")
                     .font(.system(size: 11))
                     .foregroundStyle(Crucible.Color.ink3)
             }
         }
     }
 
-    private var memoryTitles: [String] {
+    private var memoryChips: [MemoryChip] {
         // Single canonical resolver (2026-07-26) — see ExistingMemoryPickerView
         // .rowTitle. Never the "Untitled memory" placeholder.
-        ref.referencingMemoriesSortedByLinkedAtDesc.map(\.displayTitle)
+        MemoryChip.chips(for: ref.referencingMemoriesSortedByLinkedAtDesc)
+    }
+}
+
+/// One "In <memory>" chip on a clip row.
+///
+/// **B18.** Identity is declared here rather than at the `ForEach`, so the
+/// question "what identifies this row?" has one answer instead of being decided
+/// by whatever key path a call site reaches for.
+struct MemoryChip: Identifiable, Equatable {
+    /// **The memory's id, never its title (B18, fixed 2026-08-18).** The row
+    /// was `ForEach(memoryTitles.prefix(3), id: \.self)` over `[String]`, so two
+    /// memories sharing a title collided and SwiftUI logged that the result is
+    /// undefined. Titles are not unique by construction and cannot be made so —
+    /// `displayTitle` falls back to derived text, so two clips from one sitting
+    /// can render the same string.
+    ///
+    /// Same family as the `ClipGroup.id` freeze (`18021bc`): an identity that is
+    /// not a function of a stable key. That one also looked harmless first.
+    let id: UUID
+    let title: String
+
+    static func chips(for memories: [JournalEntry]) -> [MemoryChip] {
+        memories.map { MemoryChip(id: $0.id, title: $0.displayTitle) }
     }
 }
 

@@ -680,7 +680,14 @@ struct SessionListView: View {
             session: ClipGroup(clips: kept),
             clipsToBundle: kept,
             absorbedMediaRefs: keptMedia,
-            prefillTitle: proposal.proposedName
+            // **B17(a), ruled 2026-08-18: a memory made from a proposal
+            // arrives UNTITLED**, for Organize or the user to name. The
+            // proposed name is a card label — for time+place a capture window
+            // the code itself calls neutral ("a later Plus pass can produce
+            // better names"), for word-match a shared token. Neither is a name
+            // the author chose, and spec §74 had it becoming what she sees in
+            // her Memory Box forever.
+            prefillTitle: nil
         )
     }
 

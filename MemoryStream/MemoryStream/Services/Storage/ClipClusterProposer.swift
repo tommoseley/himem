@@ -490,7 +490,20 @@ enum ClipClusterProposer {
         let proposedName: String = {
             let f = DateFormatter()
             f.dateFormat = "EEE h:mm a"
-            return "Together at " + f.string(from: sessions.first?.capturedAt ?? Date())
+            // **B17(a), ruled 2026-08-18.** Was "Together at <window>". The
+            // card draws this in its largest type, one line under the eyebrow
+            // "MIGHT GO TOGETHER" and above an observation ("3 clips from 3
+            // sittings · 30 minutes apart") — so the loudest line asserted the
+            // grouping the rest of the card is careful to only propose. J5's
+            // observe-don't-conclude line, crossed by the surface's own chrome
+            // rather than by the AI, one line above where F42 had already
+            // softened "seem to belong together".
+            //
+            // The window alone is the observation without the verdict. Safe for
+            // the dedup: `signalStrength` switches on `ruleTag` first, so a
+            // `.timePlace` proposal scores tier 2 regardless of spaces in its
+            // name — the space-means-bigram sniff only applies to word-match.
+            return f.string(from: sessions.first?.capturedAt ?? Date())
         }()
         let previewLines: [ClusterProposal.PreviewLine] = allClips
             .sorted { $0.capturedAt < $1.capturedAt }

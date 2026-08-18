@@ -530,10 +530,12 @@ struct ClipEditorModal: View {
 
     private var deleteFooter: some View {
         VStack(spacing: 10) {
-            Text(deleteWarning)
-                .font(.system(size: 12))
-                .foregroundStyle(Crucible.Color.ink3)
-                .multilineTextAlignment(.center)
+            if let deleteWarning {
+                Text(deleteWarning)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Crucible.Color.ink3)
+                    .multilineTextAlignment(.center)
+            }
             Button { deleteClip() } label: {
                 Label("Delete this Clip", systemImage: "trash")
                     .font(.system(size: 15.5, weight: .semibold))
@@ -722,9 +724,18 @@ struct ClipEditorModal: View {
     }
     private var referencingCount: Int { edges.count }
 
-    private var deleteWarning: String {
+    /// **B17(b), ruled 2026-08-18: nothing at zero.** This sheet stated the
+    /// same fact twice — "Not in any memory yet" as the eyebrow above the add
+    /// affordance, and "This clip isn't in any memory yet." under Delete.
+    ///
+    /// They are redundant **only** in the zero case. At non-zero each does
+    /// distinct work: the eyebrow labels the list of memories, this warns what
+    /// deletion destroys. So neither sentence is dropped — the *zero branch* is,
+    /// because a warning exists to say what deletion costs and at zero it costs
+    /// nothing the button does not already say.
+    private var deleteWarning: String? {
         referencingCount == 0
-            ? "This clip isn't in any memory yet."
+            ? nil
             : "This clip is part of \(referencingCount) \(referencingCount == 1 ? "memory" : "memories"). Deleting it removes it from \(referencingCount == 1 ? "that memory" : "all of them")."
     }
 
