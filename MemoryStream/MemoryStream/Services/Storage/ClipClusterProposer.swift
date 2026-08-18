@@ -325,12 +325,27 @@ enum ClipClusterProposer {
         // reintroduce a TF-rarity gate with proper corpus-size
         // gating.
         _ = sessionAppearances  // Kept in case a later TF-rarity gate wants it.
-        var clustersByTokenKey: [String: (sessionIndices: Set<Int>, token: String)] = [:]
-        for (token, indices) in tokenToSessions where indices.count >= 2 {
+
+        // **Collect every qualified candidate, then decide — B21, 2026-08-18.**
+        // This was a fold that let the FIRST token a `Dictionary` yielded name
+        // the cluster, so the name (and, through `signalStrength`, the dedup
+        // ordering) varied with a per-process hash seed. Gathering candidates
+        // and handing them to `nameForCluster` makes the winner a function of
+        // the candidates alone; there is no "first" for iteration order to pick.
+        //
+        // Group by session-index set — "Hosta Hideaway" (bigram) and "Hideaway"
+        // (proper noun) both surfacing the same session pair must not double.
+        var candidatesByKey: [String: (sessionIndices: Set<Int>, candidates: [TokenCandidate])] = [:]
+        // Sorted here as well as below: this loop emits the `notDistinctive`
+        // verdicts, and those lines are part of the trace's signature too. A
+        // deterministic winner with non-deterministic verdict ORDER would have
+        // left the symptom (a signature that moves on identical input) fully
+        // intact while looking fixed.
+        for (token, indices) in tokenToSessions.sorted(by: { $0.key < $1.key })
+        where indices.count >= 2 {
             let isProperNoun = properNouns.contains(token)
             let isBigram = bigrams.contains(token)
-            let distinctive = isProperNoun || isBigram
-            guard distinctive else {
+            guard isProperNoun || isBigram else {
                 trace?.recordToken(
                     token,
                     sessionIndices: indices,
@@ -340,36 +355,38 @@ enum ClipClusterProposer {
                 )
                 continue
             }
-            // Group cluster proposals by their session index set —
-            // "Hosta Hideaway" (bigram) and "Hideaway" (proper noun)
-            // both surfacing the same session pair should not double.
             let key = indices.sorted().map(String.init).joined(separator: ",")
-            // First-writer wins. Proper-noun match beats bigram
-            // beats rare content word for the "why" text, since
-            // proper nouns produce the clearest reason string.
-            if clustersByTokenKey[key] == nil ||
-                (isProperNoun && !properNouns.contains(clustersByTokenKey[key]!.token)) {
-                let displaced = clustersByTokenKey[key]?.token
-                clustersByTokenKey[key] = (indices, token)
+            var entry = candidatesByKey[key] ?? (indices, [])
+            entry.candidates.append(TokenCandidate(token: token, isProperNoun: isProperNoun))
+            candidatesByKey[key] = entry
+        }
+
+        var clustersByTokenKey: [String: (sessionIndices: Set<Int>, token: String)] = [:]
+        // Sorted so the trace's token verdicts are emitted in a stable order.
+        // The trace's signature is derived from those lines, and while they were
+        // appended in dictionary order the signature moved on identical input —
+        // which is how this defect was found: `[ClusterTrace]` fired ~16 times
+        // in 2 seconds reporting churn it had introduced itself.
+        for (key, entry) in candidatesByKey.sorted(by: { $0.key < $1.key }) {
+            guard let winner = nameForCluster(entry.candidates) else { continue }
+            clustersByTokenKey[key] = (entry.sessionIndices, winner)
+
+            guard trace != nil else { continue }
+            let losers = entry.candidates.filter { $0.token != winner }.map(\.token).sorted()
+            for candidate in entry.candidates.sorted(by: { $0.token < $1.token }) {
+                let isWinner = candidate.token == winner
                 trace?.recordToken(
-                    token,
-                    sessionIndices: indices,
-                    isProperNoun: isProperNoun,
-                    isBigram: isBigram,
-                    fate: .namesTheCluster(displacing: displaced)
-                )
-            } else {
-                // Qualified, and still produced no proposal of its own: another
-                // token already speaks for this exact set of sessions. The
-                // cluster is not lost — it is named by the other token — but a
-                // reader looking for THIS token in the formed list would
-                // otherwise read its absence as "never qualified".
-                trace?.recordToken(
-                    token,
-                    sessionIndices: indices,
-                    isProperNoun: isProperNoun,
-                    isBigram: isBigram,
-                    fate: .sessionSetNamedByAnotherToken(clustersByTokenKey[key]?.token ?? "?")
+                    candidate.token,
+                    sessionIndices: entry.sessionIndices,
+                    isProperNoun: candidate.isProperNoun,
+                    isBigram: bigrams.contains(candidate.token),
+                    // A loser is not lost — the cluster exists and another token
+                    // names it. Without this a reader would find the token
+                    // missing from `formed` and read it as "never qualified",
+                    // which is the exact discrimination the trace is for.
+                    fate: isWinner
+                        ? .namesTheCluster(displacing: losers.first)
+                        : .sessionSetNamedByAnotherToken(winner)
                 )
             }
         }
@@ -391,6 +408,38 @@ enum ClipClusterProposer {
                 sharedToken: display
             )
         }
+    }
+
+    /// One token competing to name a cluster, with the only property the
+    /// contest consults.
+    struct TokenCandidate: Equatable {
+        let token: String
+        let isProperNoun: Bool
+    }
+
+    /// Which token names the cluster when several describe the same set of
+    /// sessions.
+    ///
+    /// **B21, fixed 2026-08-18.** This was a fold over `tokenToSessions` — a
+    /// `Dictionary` — so the winner was whichever token iteration happened to
+    /// reach first, and Swift seeds that order **per process**. The name is not
+    /// cosmetic: `signalStrength` reads it (a space ⇒ bigram, tier 1; no space
+    /// ⇒ proper noun, tier 2), so the overlap dedup could order differently
+    /// between runs on identical input, under a class doc reading *"Idempotent
+    /// + stateless. Same input always produces the same output."*
+    ///
+    /// The rule now, in order: **a proper noun beats a non-proper noun** (the
+    /// pre-existing preference — proper nouns produce the clearest reason
+    /// string, and determinism must not be bought by flattening a deliberate
+    /// rule); **among equals, the lexicographically smaller token**. The second
+    /// clause is arbitrary in the sense that any total order would do — its job
+    /// is to *be* total, so the answer is a function of the candidates and
+    /// nothing else.
+    static func nameForCluster(_ candidates: [TokenCandidate]) -> String? {
+        candidates.min { lhs, rhs in
+            if lhs.isProperNoun != rhs.isProperNoun { return lhs.isProperNoun }
+            return lhs.token < rhs.token
+        }?.token
     }
 
     // MARK: - Proposal construction
@@ -902,7 +951,15 @@ final class ClusterProposalTrace {
             let fate = fates[proposal.fingerprint] ?? .survived
             out.append("  FORMED \(proposal.ruleTag) “\(proposal.proposedName)” · ids=\(proposal.clipIds.count) [\(shortIds(proposal.clipIds))] → \(describe(fate))")
         }
-        for verdict in tokenVerdicts {
+        // **Canonical order, not emission order (2026-08-18).** `signature` is
+        // derived from these lines, and its job is to say whether the BENCH
+        // changed. Anything else that moves it is a false positive — which is
+        // precisely what happened: verdicts were appended in dictionary order
+        // and the trace fired ~16 times over an unchanging bench, reporting
+        // churn it had introduced itself (B23 → B21). The producing loops are
+        // now deterministic too, but sorting here is what makes the signature
+        // independent of how they emit.
+        for verdict in tokenVerdicts.sorted(by: { $0.token < $1.token }) {
             let kind = [verdict.isProperNoun ? "properNoun" : nil, verdict.isBigram ? "bigram" : nil]
                 .compactMap { $0 }
                 .joined(separator: "+")
