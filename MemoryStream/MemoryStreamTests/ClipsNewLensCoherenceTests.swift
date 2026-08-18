@@ -222,44 +222,28 @@ import Foundation
     /// `loadUnplaced` must not fetch voice: `SessionListView` already owns
     /// zero-edge voice refs via `fetchZeroEdgeVoiceRefs`, and two views
     /// fetching the same row is what put one transcript on screen twice.
-    @Test func unplacedStackDoesNotFetchVoice() throws {
-        let src = try Self.source("MemoryStream/Views/ClipsTabView.swift")
-        let body = try Self.blockBody(startingAtLineContaining: "private func loadUnplaced()", in: src)
-        let code = Self.codeOnly(body)
-        #expect(code.contains("mediaType != %@"),
-                """
-                `loadUnplaced` fetches every media type, including voice — which \
-                `SessionListView.fetchZeroEdgeVoiceRefs` already renders as session \
-                cards. The same clip lands in both stacks. Body was:
-                \(body)
-                """)
-        #expect(code.contains("MediaType.voice.rawValue"),
-                "`loadUnplaced` does not name the type it excludes.")
-    }
-
-    /// Self-test: the scanner must flag the shipped predicate…
-    @Test func scanner_flagsAnUnfilteredUnplacedFetch() {
-        let shipped = """
-        private func loadUnplaced() {
-            req.predicate = NSPredicate(format: "edges.@count == 0 AND recycledAt == nil")
-        }
-        """
-        #expect(Self.codeOnly(shipped).contains("mediaType != %@") == false)
-    }
-
-    /// …and accept the fixed one, including when the exclusion is only
-    /// described in a comment (which would not filter anything).
-    @Test func scanner_ignoresAnExclusionThatIsOnlyProse() {
-        let prose = """
-        private func loadUnplaced() {
-            // voice is excluded — mediaType != %@ — see SessionListView
-            req.predicate = NSPredicate(format: "edges.@count == 0 AND recycledAt == nil")
-        }
-        """
-        #expect(Self.codeOnly(prose).contains("mediaType != %@") == false,
-                "a comment is not a predicate")
-    }
-
+    // **`unplacedStackDoesNotFetchVoice` was RETIRED — its promise became
+    // structural (C2 step 3, 2026-08-18).**
+    //
+    // F35(b): the sibling stack and the session cards each fetched
+    // independently, and the stack's predicate did not exclude voice, so one
+    // clip rendered in both. The fix added `mediaType != voice` to
+    // `loadUnplaced`, and this guard scanned that function's body for it.
+    //
+    // `loadUnplaced` no longer exists. The stack's refs come from
+    // `RenderedBench.siblingStackSessions` — the loose sessions where
+    // `!hasVoice` — and a session with no voice contains no voice item **by
+    // definition of `hasVoice`**. Voice cannot reach the stack, rather than
+    // being filtered out of it.
+    //
+    // This guard did its job on the way out: it failed loudly when its anchor
+    // disappeared instead of passing vacuously, which is why `blockBody` throws
+    // rather than matching nothing.
+    //
+    // Replaced by `BenchStackPartitionTests.noVoiceItemReachesTheSiblingStack`,
+    // which asserts the property behaviourally instead of by reading a
+    // predicate out of a source file. The two scanner self-tests below go with
+    // it — they exist only to prove this scanner could see its offender.
 
     // MARK: - Fixtures
 

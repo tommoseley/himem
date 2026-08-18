@@ -27,19 +27,15 @@ enum ClipsUnplacedFilter {
     ///
     /// - Skips refs whose Core Data row has been deleted or invalidated
     ///   (guards `EXC_BREAKPOINT` on `.id` access).
-    /// - Filters out refs already drawn inside a voice session card (per the
-    ///   July 11 media-agnostic lock), so a photo appears once. The set comes
-    ///   from `BenchAbsorbedMediaBus`, which since C2 step 2b-ii-c2 is fed by
-    ///   the bench's own grouping rather than by a separate absorbing pass.
-    static func visible(
-        refs: [MediaReference],
-        absorbed: Set<UUID>
-    ) -> [MediaReference] {
+    /// **The absorbed-set subtraction is gone (C2 step 3, 2026-08-18).** Refs
+    /// now arrive from `BenchSiblingStackBus` already scoped to what the bench
+    /// did not draw, so "appears once" is a property of the composition rather
+    /// than a filter the caller must remember. The invalidation guard stays:
+    /// published managed objects can still be deleted between the publish and
+    /// the render, which is the `EXC_BREAKPOINT` this was written for.
+    static func visible(refs: [MediaReference]) -> [MediaReference] {
         refs.filter { ref in
-            guard !ref.isDeleted, ref.managedObjectContext != nil else {
-                return false
-            }
-            return !absorbed.contains(ref.id)
+            !ref.isDeleted && ref.managedObjectContext != nil
         }
     }
 }

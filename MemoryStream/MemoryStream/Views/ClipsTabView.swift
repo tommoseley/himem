@@ -33,7 +33,7 @@ import UIKit
 struct ClipsTabView: View {
     @Environment(\.managedObjectContext) private var context
     @ObservedObject private var inbox = InboxManifest.shared
-    @ObservedObject private var absorbedBus = BenchAbsorbedMediaBus.shared
+    @ObservedObject private var stackBus = BenchSiblingStackBus.shared
     @StateObject private var viewModel = JournalViewModel()
     /// Status axis — `New ⟷ All`, the primary lens. Ochre toggle.
     /// See `ClipsStatus` for the July 12 2026 lock.
@@ -42,19 +42,11 @@ struct ClipsTabView: View {
     /// row. `.all` = every media type; `.video` is a first-class case
     /// (was folded into `.photos` in the retired single-row filter).
     @State private var type: ClipsType = .all
-    @State private var unplacedRefs: [MediaReference] = []
     /// The clip being edited in the unified `ClipEditorModal` sheet (Clip-editor
     /// cycle 2) — supersedes the pushed `ClipDetailView` for the bench.
     @State private var editingClip: ClipEditorModal.Source?
     /// Single-open accordion for the New view's loose-clip flat stack.
     @State private var expandedUnplacedItemId: String? = nil
-    /// Coalesces a burst of `NSManagedObjectContextObjectsDidChange`
-    /// notifications (which flood the main thread during CloudKit
-    /// import waves around freshly-arrived watch clips) into a
-    /// single `loadUnplaced()` fetch. Untuned, each notification
-    /// ran the fetch synchronously on main and starved the
-    /// session-card tap gesture's animation.
-    @State private var unplacedReload = DebouncedTrigger(interval: .milliseconds(250))
     /// Top-bar sheet/nav destinations. Each tab presents its own copies
     /// so any tab can reach search / Learn / settings without routing
     /// through Memories. Per `docs/design/screens-home.jsx` §HomeTopBar,
@@ -153,14 +145,6 @@ struct ClipsTabView: View {
             .navigationTitle("Clips")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-            .onAppear { loadUnplaced() }
-            .onDisappear { unplacedReload.cancel() }
-            .onReceive(NotificationCenter.default.publisher(
-                for: .NSManagedObjectContextObjectsDidChange,
-                object: context
-            )) { _ in
-                unplacedReload.fire { loadUnplaced() }
-            }
             .onChange(of: memoryNav.justCreatedMemoryId) { _, newValue in
                 // 3.5s auto-dismiss on the toast when it's shown.
                 // Cancel any prior task so back-to-back creates
@@ -415,26 +399,34 @@ struct ClipsTabView: View {
     ///
     /// Media refs *absorbed* into a voice session (per July 11 lock)
     /// are rendered inside their session card and filtered out here
-    /// via `BenchAbsorbedMediaBus` — a photo that idle-gap-groups
+    /// via `BenchSiblingStackBus` — a photo that idle-gap-groups
     /// into a voice sitting appears once, in the session card, not
     /// again in the top stack.
     @ViewBuilder
     private var newFilterContent: some View {
         // Route through `ClipsUnplacedFilter.visible` so we skip
-        // Core-Data-invalidated rows before touching `.id`. The
-        // 250ms fetch debounce (added task #148 for CloudKit-churn
-        // main-thread perf) can leave `unplacedRefs` holding a
-        // deleted ref for a re-render window; `$0.id` on an
-        // invalidated fault traps with `EXC_BREAKPOINT`. Money-tested
-        // by `ClipsUnplacedFilterTests`.
+        // Core-Data-invalidated rows before touching `.id`; `$0.id` on an
+        // invalidated fault traps with `EXC_BREAKPOINT`. Money-tested by
+        // `ClipsUnplacedFilterTests`. The 250ms debounced fetch that opened
+        // that window is gone (C2 step 3) — but the window is not, since a
+        // published managed object can still be deleted before the render.
         // New = unseen: hide reviewed refs (P7-2). A returned ref stays on
         // New until opened; once reviewed it's reachable via All /
         // Unconnected, but off the fresh-triage lens.
-        let visibleUnplaced = ClipsUnplacedFilter.visible(
-            refs: unplacedRefs,
-            absorbed: absorbedBus.absorbedRefIds
-        )
-        .filter { !BenchClipReviewStore.isReviewed($0.id) }
+        // **C2 step 3: one source.** These arrive from the composed bench —
+        // the loose sessions with no voice — rather than from a second
+        // `NSFetchRequest` over the same predicate whose results this view then
+        // had to subtract an id set from. `ClipsUnplacedFilter` still runs: a
+        // published managed object can be deleted between publish and render.
+        //
+        // Sorted newest-first HERE because the bench composes ascending for
+        // grouping while this stack reads descending. `groupedByDay` orders the
+        // days but preserves input order within a day, so dropping this would
+        // silently reverse each day's rows.
+        let visibleUnplaced = ClipsUnplacedFilter
+            .visible(refs: stackBus.stackMedia)
+            .filter { !BenchClipReviewStore.isReviewed($0.id) }
+            .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
         // P7-1 (July 18 2026): the new/unshaped session block goes on TOP;
         // the returned-from-memory day-grouped stack (older, previously-
         // connected-now-loose refs, running back months) goes BELOW. The
@@ -489,41 +481,6 @@ struct ClipsTabView: View {
     }
 
     // MARK: - Loading
-
-    private func loadUnplaced() {
-        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-        // P8: exclude recycled clips (in Recently Deleted) from the bench.
-        //
-        // **F35: voice is excluded — `SessionListView` already owns it.**
-        // That view fetches zero-edge voice refs into its session cards
-        // (`fetchZeroEdgeVoiceRefs`, the same predicate inverted). This
-        // fetch previously took every media type, so an unreviewed
-        // zero-edge voice ref rendered in BOTH stacks — the session card
-        // above and this stack below — putting one transcript on screen
-        // twice, three times once its row was expanded.
-        //
-        // This is P0-3's risk-1 resurfacing. "A clip is only ever in ONE
-        // store at read time" was built for manifest-vs-ref and holds there
-        // (`composeBenchClips` dedupes); it says nothing about ref-vs-ref
-        // across two independent fetches in two sibling views. The review
-        // backfill migration is what made it visible.
-        //
-        // **Scope, confirmed rather than assumed** (the ruling required it):
-        // `unplacedRefs` has exactly one consumer, `newFilterContent`. The
-        // Unconnected lens renders `UnconnectedListView` and All renders
-        // `FlatClipsListView`, both from independent sources — so excluding
-        // voice here cannot hide an unconnected voice clip from the lens
-        // whose whole job is cleanup. The fetch is New-lens-scoped already.
-        //
-        // The structural answer is one owner for "what is on the bench" —
-        // logged against C2, not attempted here.
-        req.predicate = NSPredicate(
-            format: "edges.@count == 0 AND recycledAt == nil AND mediaType != %@",
-            MediaReference.MediaType.voice.rawValue
-        )
-        req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
-        unplacedRefs = (try? context.fetch(req)) ?? []
-    }
 
     private func fetchRef(id: UUID) -> MediaReference? {
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")

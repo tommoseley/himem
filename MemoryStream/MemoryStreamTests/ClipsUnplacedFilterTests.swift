@@ -67,23 +67,33 @@ struct ClipsUnplacedFilterTests {
 
     // MARK: - Baseline — live ref stays
 
-    @Test func visible_returns_live_refs_not_in_absorbed_set() throws {
+    @Test func visible_returns_liveRefs() throws {
         let ctx = try makeInMemoryContext()
         let a = try makeRef(in: ctx)
         let b = try makeRef(in: ctx)
-        let result = ClipsUnplacedFilter.visible(refs: [a, b], absorbed: [])
+        let result = ClipsUnplacedFilter.visible(refs: [a, b])
         #expect(result.count == 2)
     }
 
-    @Test func visible_drops_refs_absorbed_into_a_voice_session() throws {
-        let ctx = try makeInMemoryContext()
-        let a = try makeRef(in: ctx)
-        let b = try makeRef(in: ctx)
-        // b is absorbed into a session card; a is loose.
-        let result = ClipsUnplacedFilter.visible(refs: [a, b], absorbed: [b.id])
-        #expect(result.count == 1)
-        #expect(result.first?.id == a.id)
-    }
+    // **`visible_drops_refs_absorbed_into_a_voice_session` was RETIRED here,
+    // not deleted (C2 step 3, 2026-08-18) — its invariant MOVED.**
+    //
+    // It asserted that a ref already drawn inside a voice session card is
+    // dropped from the sibling stack, so a photo appears once. That was this
+    // filter's job while the parent ran its own fetch and subtracted an id set
+    // the child published. It no longer is: refs now arrive from
+    // `BenchSiblingStackBus` already scoped to what the bench did not draw, so
+    // the filter is never handed an absorbed ref to drop.
+    //
+    // The invariant is stronger where it moved, because it is now a property of
+    // the composition rather than a filter a caller must remember to apply:
+    // `BenchStackPartitionTests.everyLooseItemIsDrawnByExactlyOneSurface` asserts
+    // that bench and stack never both draw an item AND never both skip one —
+    // the second half of which this test could not express at all.
+    //
+    // Recorded rather than removed silently: a guard whose defect became
+    // structurally impossible is a different thing from a guard that was wrong,
+    // and the next reader needs to know which happened.
 
     // MARK: - Money test — the crash guard
 
@@ -105,7 +115,7 @@ struct ClipsUnplacedFilterTests {
         // The doomed ref is now Core-Data-invalidated. The filter
         // must not touch its `.id` — the guard sits before the
         // `absorbed.contains($0.id)` read.
-        let result = ClipsUnplacedFilter.visible(refs: snapshotBeforeDelete, absorbed: [])
+        let result = ClipsUnplacedFilter.visible(refs: snapshotBeforeDelete)
         #expect(result.count == 1, "the deleted ref must be omitted")
         // Prove the survivor is the live one (guard against any
         // accidental swap in the filter body).
@@ -129,7 +139,7 @@ struct ClipsUnplacedFilterTests {
         ctx.delete(detached)
         try ctx.save()
         ctx.refresh(detached, mergeChanges: false)
-        let result = ClipsUnplacedFilter.visible(refs: snapshot, absorbed: [])
+        let result = ClipsUnplacedFilter.visible(refs: snapshot)
         #expect(result.count == 1)
         #expect(result.first?.id == live.id)
     }

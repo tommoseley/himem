@@ -1,32 +1,54 @@
 import Foundation
 import Combine
+import CoreData
 
-/// Shared, tab-level signal: which unplaced `MediaReference` ids have
-/// been drawn inside a voice session card by the bench's grouping.
+/// Shared, tab-level signal: the unplaced `MediaReference`s the **bench did not
+/// draw**, which `ClipsTabView`'s day-grouped sibling stack is responsible for.
 ///
-/// SessionListView owns the write side — it runs the absorber every
-/// time its `sessions` recompute. ClipsTabView reads the id set to
-/// filter its own unplaced-refs list so a photo doesn't render both
-/// inside a session card AND in the top day-grouped stack.
+/// **C2 step 3, 2026-08-18 — this used to carry the opposite.** It published the
+/// ids the bench HAD drawn, and the parent subtracted them from its own
+/// `NSFetchRequest` over the same predicate. Two stores answering one question,
+/// which is the class C2 exists to end: the parent's fetch was debounced at
+/// 250ms, so it could hold a ref Core Data had already invalidated, and
+/// `ClipsUnplacedFilter` existed to survive that window.
 ///
-/// Introduced 2026-07-11 for the media-agnostic idle-gap fix
+/// Now the composition names the complement once (`RenderedBench
+/// .siblingStackSessions`) and publishes the refs themselves. There is one
+/// fetch on the bench path and none in the parent.
+///
+/// **Direction, and why a bus at all:** `ClipsTabView` is the parent and
+/// `SessionListView` the child, so this data travels upward. That was true
+/// before this change and is unchanged by it.
+///
+/// **Filename note:** the type is `BenchSiblingStackBus`; the file is still
+/// `BenchAbsorbedMediaBus.swift`. Renaming the file means editing four explicit
+/// `project.pbxproj` references, and this project has already had `git mv`
+/// orphan such references (F18). Deliberately deferred, recorded here so the
+/// mismatch reads as a decision rather than an oversight.
+///
+/// Originally introduced 2026-07-11 for the media-agnostic idle-gap fix
 /// (`Captured Clips · session-first · spec.md` §Model, July 11 lock).
 @MainActor
-final class BenchAbsorbedMediaBus: ObservableObject {
-    static let shared = BenchAbsorbedMediaBus()
+final class BenchSiblingStackBus: ObservableObject {
+    static let shared = BenchSiblingStackBus()
 
-    /// Ids of unplaced `MediaReference`s currently absorbed into a
-    /// voice session's expanded body. Empty when the bench has no
-    /// voice sessions or no unplaced media falls inside any window.
-    @Published private(set) var absorbedRefIds: Set<UUID> = []
+    /// Refs the sibling stack draws — the items of loose sessions with no
+    /// voice. Empty when every unplaced media item grouped into a voice
+    /// sitting, or when there is none.
+    ///
+    /// Order is the bench's (ascending by capture). The stack sorts for
+    /// display; carrying data rather than presentation is what keeps the two
+    /// concerns from drifting back together.
+    @Published private(set) var stackMedia: [MediaReference] = []
 
     private init() {}
 
-    func setAbsorbed(_ ids: Set<UUID>) {
-        // Guard against redundant publishes — avoids feedback loops
-        // when SessionListView recomputes on an unrelated change.
-        if ids != absorbedRefIds {
-            absorbedRefIds = ids
+    func setStackMedia(_ refs: [MediaReference]) {
+        // Guard against redundant publishes — avoids feedback loops when
+        // `SessionListView` recomposes on an unrelated change. Compared by
+        // identity, which is what `MediaReference` equality is.
+        if refs != stackMedia {
+            stackMedia = refs
         }
     }
 }

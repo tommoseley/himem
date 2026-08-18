@@ -119,6 +119,11 @@ struct SessionListView: View {
     // Both view-state only — trims are provisional-and-reversible until
     // the batch commit; nothing here touches the proposer or any store.
     @State private var expandedClusterFingerprints: Set<String> = []
+    /// Whether the sibling day-grouped stack will draw rows — the voiceless
+    /// loose sessions this view publishes upward (C2 step 3). Stored in the
+    /// same pass that composes them so the empty state can never be asserted
+    /// before the sibling data has arrived.
+    @State private var siblingStackHasRows = false
     @State private var removedByFingerprint: [String: Set<UUID>] = [:]
     // Single-open accordion for the cluster editor's compact rows — the
     // clipId whose transcript is expanded (nil = all collapsed). Same
@@ -199,7 +204,15 @@ struct SessionListView: View {
                 list
             } else if Self.showsEmptyState(
                 sessionsEmpty: true,
-                hasSiblingContent: hasSiblingContent,
+                // **OR'd with this view's OWN composition (C2 step 3).** The
+                // sibling stack's rows now come from `siblingStackSessions`,
+                // published upward — so on a first render the parent has not
+                // received them yet and would pass `false`, and this view would
+                // assert "Nothing new" for a frame above a stack about to
+                // appear. That is F22's class exactly: a zero that means "we
+                // have not finished looking" read as "she has none". This view
+                // knows the answer in the same pass that computes it.
+                hasSiblingContent: hasSiblingContent || siblingStackHasRows,
                 mayAssertEmpty: firstImport.mayAssertEmpty
             ) {
                 emptyState
@@ -319,7 +332,8 @@ struct SessionListView: View {
             // Clear absorption on teardown so a re-mount of Clips
             // starts fresh — matters if the Clips tab is torn down
             // while unplaced refs are still queued.
-            BenchAbsorbedMediaBus.shared.setAbsorbed([])
+            siblingStackHasRows = false
+            BenchSiblingStackBus.shared.setStackMedia([])
         }
     }
 
@@ -471,9 +485,11 @@ struct SessionListView: View {
         // the sibling stack until step 3 (`drawsVoicelessSessions`), so its
         // media must not be filtered out of the stack that is still drawing
         // it.
-        BenchAbsorbedMediaBus.shared.setAbsorbed(
-            Set(drawnBench.items.filter { $0.kind != .voice }.map(\.id))
-        )
+        let stackMedia = bench.siblingStackSessions
+            .flatMap(\.items)
+            .compactMap { mediaById[$0.id] }
+        siblingStackHasRows = !stackMedia.isEmpty
+        BenchSiblingStackBus.shared.setStackMedia(stackMedia)
     }
 
     /// Resolve a drawn session back to the concrete `ClipGroup` the card layer

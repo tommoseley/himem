@@ -318,6 +318,27 @@ struct RenderedBench: Equatable {
         )
     }
 
+    /// **The media the bench does NOT draw — C2 step 3, 2026-08-18.**
+    ///
+    /// `DrawnBench.from` filters loose sessions to those with voice
+    /// (`drawsVoicelessSessions: false`), so a photo or note that grouped into
+    /// no voice sitting is drawn by `ClipsTabView`'s sibling day-grouped stack
+    /// instead. This is that complement, expressed once here rather than
+    /// derived by a second fetch in the parent view.
+    ///
+    /// Before step 3 the parent ran its own `NSFetchRequest` with the same
+    /// predicate and subtracted an id set the child published — two stores
+    /// answering one question, which is the class C2 exists to end. The set is
+    /// identical either way; only the sort differed (this side ascending for
+    /// grouping, the stack descending for display), so the stack applies its
+    /// own order.
+    ///
+    /// Clustered sessions are excluded by construction: their items are drawn
+    /// inside the cluster card, and `loose` never contains them.
+    var siblingStackSessions: [UnifiedSession] {
+        loose.filter { !$0.hasVoice }
+    }
+
     /// Sessions a proposal claims — matched by any member id, since proposals
     /// are built from whole sessions.
     static func claimedSessions(
