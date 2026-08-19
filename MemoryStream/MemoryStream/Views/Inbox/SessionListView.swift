@@ -475,6 +475,24 @@ struct SessionListView: View {
             if !refs.isEmpty { media[project(session).id] = refs }
         }
         mediaBySessionId = media
+        // **`[ResolveProbe]` — C2 step 4 slice B. Reports; renders nothing.**
+        //
+        // The legacy count is computed HERE the way the card computes it —
+        // `session.clips.count + (mediaBySessionId[id]?.count ?? 0)`, keyed by
+        // the PROJECTED group's id, which differs from the `UnifiedSession`'s
+        // by construction (opposite ends of the sitting). Recomputing it from
+        // the same two sources the cards read is what makes a disagreement mean
+        // something; deriving it from `ResolvedSession` would make the probe
+        // agree with itself.
+        #if DEBUG
+        let probeFindings = bench.allSessions.compactMap { session -> ResolvedSessionProbe.Finding? in
+            let group = project(session)
+            let legacy = group.clips.count + (media[group.id]?.count ?? 0)
+            let resolved = ResolvedSession.resolve(session, voiceById: voiceById, mediaById: mediaById)
+            return ResolvedSessionProbe.finding(resolved: resolved, legacyCount: legacy)
+        }
+        BenchPerf.resolveProbe(probeFindings)
+        #endif
         // `ClipsTabView` filters its sibling unplaced stack by this set so a
         // photo drawn inside a session card does not also draw above it. The
         // bus survives the absorber's retirement because the *question* it
@@ -1771,6 +1789,151 @@ private struct AutoDismissView: View {
 }
 
 
+/// **A session resolved to what the card layer draws — C2 step 4, 2026-08-18.
+/// Inert: nothing renders from this yet.**
+///
+/// The cards speak `ClipGroup`, which is **voice only** — so every quantity the
+/// card layer derives has had to remember a separately-scoped "+ media" term,
+/// carried in `mediaBySessionId`. Two of those are verbatim duplicates in this
+/// file today:
+///
+/// ```swift
+/// let totalClips = session.clips.count + (mediaBySessionId[session.id]?.count ?? 0)
+/// ```
+///
+/// That is the root cause the troika named — *"there is no 'all bench items'
+/// set anywhere in the program"* — surviving at the last layer that had not been
+/// migrated. `UnifiedSession` already holds every item; it just holds them as
+/// `BenchClipItem` descriptors, which carry no transcript and no audio, so the
+/// card layer cannot render from them directly. This is that resolution, as one
+/// value: **the session's items, in order, each resolved to its backing.**
+///
+/// **Unresolved ids are REPORTED, not dropped.** `projectGroup` resolves with
+/// `compactMap`, so an item whose backing is missing disappears silently — and a
+/// clip disappearing silently is the exact failure this rebuild keeps finding
+/// (F44's set-aside clip; 2b-ii's voice resolving through a manifest-only map).
+/// Making the loss visible is the difference between a defect and a diagnosis.
+struct ResolvedSession: Identifiable {
+    let id: UUID
+    let items: [Item]
+    /// Item ids that had no backing in either store. Non-empty means the bench
+    /// composed something the card layer cannot draw — always a finding.
+    let unresolved: [UUID]
+
+    enum Item: Identifiable {
+        case voice(InboxClip)
+        case media(MediaReference)
+
+        var id: UUID {
+            switch self {
+            case let .voice(clip): return clip.clipId
+            case let .media(ref): return ref.id
+            }
+        }
+
+        var capturedAt: Date {
+            switch self {
+            case let .voice(clip): return clip.capturedAt
+            case let .media(ref): return ref.createdAt ?? .distantPast
+            }
+        }
+    }
+
+    /// Every item the card draws — voice and media alike. The whole point: a
+    /// count taken from here cannot omit a term, because there is no second
+    /// term to omit.
+    var count: Int { items.count }
+
+    /// Newest-first, matching `ClipGroup.clips` — the order the card layer
+    /// already renders in, so migrating a consumer does not also reorder it.
+    static func resolve(
+        _ session: UnifiedSession,
+        voiceById: [UUID: InboxClip],
+        mediaById: [UUID: MediaReference]
+    ) -> ResolvedSession {
+        var items: [Item] = []
+        var unresolved: [UUID] = []
+        for item in session.items {
+            if let clip = voiceById[item.id] {
+                items.append(.voice(clip))
+            } else if let ref = mediaById[item.id] {
+                items.append(.media(ref))
+            } else {
+                unresolved.append(item.id)
+            }
+        }
+        return ResolvedSession(
+            id: session.id,
+            items: items.sorted { $0.capturedAt > $1.capturedAt },
+            unresolved: unresolved
+        )
+    }
+}
+
+/// **`[ResolveProbe]` — C2 step 4 slice B, 2026-08-18. Reports; renders nothing.**
+///
+/// Step 4's swap replaces `(ClipGroup, mediaBySessionId)` with `ResolvedSession`
+/// at ~12 consumers. Rather than land that and find out, this composes the new
+/// value **alongside** the old pair and reports where they disagree — the shape
+/// that earned its keep at 2b-ii-c1, where the probe fired
+/// `bench DIFFER · oldCount=4 newCount=3` on device and caught a real regression
+/// every test had missed, because only the device produces the state that
+/// triggered it.
+///
+/// Two disagreements are worth the log:
+///
+///  * **counts differ** — `resolved.count` against
+///    `session.clips.count + (mediaBySessionId[id]?.count ?? 0)`, which is the
+///    "+ media" term this step exists to delete. A difference here means the
+///    two ways of counting one session do not agree, which is the whole class.
+///  * **`unresolved` is non-empty** — the bench composed an item the card layer
+///    cannot draw. `projectGroup` resolves with `compactMap` and would hide it.
+///    **Surfaced here rather than computed and ignored**: a complete, tested,
+///    never-consulted value is the `UnifiedBenchGrouper` shape, and this project
+///    has paid for it twice.
+///
+/// **Canonically ordered, deliberately.** `[ClusterTrace]` derived its emission
+/// gate from rendered lines that were appended in dictionary order, so it fired
+/// ~16 times over an unchanging bench and a regroup storm was logged (B23) that
+/// did not exist. Findings here are sorted by session id, so a moving signature
+/// means the bench moved.
+enum ResolvedSessionProbe {
+
+    struct Finding: Equatable {
+        let sessionId: UUID
+        let resolvedCount: Int
+        let legacyCount: Int
+        let unresolved: [UUID]
+    }
+
+    /// `nil` when the two agree and everything resolved — the probe is silent
+    /// when there is nothing to say.
+    static func finding(resolved: ResolvedSession, legacyCount: Int) -> Finding? {
+        guard resolved.count != legacyCount || !resolved.unresolved.isEmpty else { return nil }
+        return Finding(
+            sessionId: resolved.id,
+            resolvedCount: resolved.count,
+            legacyCount: legacyCount,
+            unresolved: resolved.unresolved
+        )
+    }
+
+    static func lines(_ findings: [Finding]) -> [String] {
+        findings
+            .sorted { $0.sessionId.uuidString < $1.sessionId.uuidString }
+            .map { f in
+                let head = "session \(f.sessionId.uuidString.prefix(8))"
+                let counts = f.resolvedCount == f.legacyCount
+                    ? "counts AGREE (\(f.resolvedCount))"
+                    : "counts DIFFER · resolved=\(f.resolvedCount) legacy=\(f.legacyCount)"
+                let missing = f.unresolved.isEmpty
+                    ? ""
+                    : " · UNRESOLVED \(f.unresolved.count): \(f.unresolved.map { String($0.uuidString.prefix(8)) }.joined(separator: ","))"
+                return "\(head) · \(counts)\(missing)"
+            }
+    }
+}
+
 /// **`[BenchPerf]` — the instrument that ended the 2026-08-09 Clips freeze.**
 ///
 /// Same posture as `[Amp]` (B10) and `[Meter]` (D10), and it earned its keep
@@ -1863,6 +2026,24 @@ enum BenchPerf {
     }
 
     private static var lastClusterSignature: String?
+
+    /// `[ResolveProbe]` — emitted only when the finding set changes, for the
+    /// same reason `clusterTrace` is: the bench republishes constantly, and an
+    /// unconditional print buries the one reading that matters. Silence here
+    /// means every session's two counts agreed and everything resolved.
+    static func resolveProbe(_ findings: [ResolvedSessionProbe.Finding]) {
+        let lines = ResolvedSessionProbe.lines(findings)
+        let signature = lines.joined(separator: "\n")
+        guard signature != lastResolveSignature else { return }
+        lastResolveSignature = signature
+        if lines.isEmpty {
+            NSLog("[HiMem][ResolveProbe] all sessions AGREE · nothing unresolved")
+        } else {
+            for line in lines { NSLog("[HiMem][ResolveProbe] \(line)") }
+        }
+    }
+
+    private static var lastResolveSignature: String?
 
     static func regroup(since t0: CFAbsoluteTime, sessions: Int, lens: Int) {
         regroupCount += 1
