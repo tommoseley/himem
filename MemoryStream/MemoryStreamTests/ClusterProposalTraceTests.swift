@@ -214,4 +214,39 @@ struct ClusterProposalTraceTests {
         #expect(text.contains("WITHHELD"))
         #expect(text.contains("NOT absent"))
     }
+
+    /// **The trace's signature must not move when the bench has not.**
+    ///
+    /// `recordFormed` captured `proposals` straight from `proposeWordMatch`,
+    /// which builds its array by mapping `clustersByTokenKey.values` — a
+    /// `Dictionary`. So the FORMED block reordered between otherwise-identical
+    /// emissions, the signature gate saw a new string each time, and
+    /// `[ClusterTrace]` re-emitted on an unchanging bench. **Observed on device
+    /// 2026-08-18**, one day after B21 fixed the token-verdict half of exactly
+    /// this: the winner and the verdict order were made deterministic, the
+    /// proposal array was not.
+    ///
+    /// Production was never affected — `dedupByOverlap` and the final
+    /// `proposals.sort` are both total orders — but an instrument that reports
+    /// churn it invented is worse than no instrument, and this is the second
+    /// time in two days. Same test shape as B21's, for the same reason: a
+    /// `Dictionary`'s order is fixed *within* a process, so "run it twice"
+    /// cannot fail. Feeding the same proposals in a different order can.
+    @Test
+    func theFormedRecordDoesNotDependOnTheOrderProposalsArriveIn() {
+        let a = proposal(clipIds: [UUID(), UUID()], proposedName: "Alpha")
+        let b = proposal(clipIds: [UUID(), UUID()], proposedName: "Beta")
+        let c = proposal(clipIds: [UUID(), UUID()], proposedName: "Gamma")
+
+        let forward = ClusterProposalTrace()
+        forward.recordFormed([a, b, c])
+        let shuffled = ClusterProposalTrace()
+        shuffled.recordFormed([c, a, b])
+
+        #expect(!forward.lines.isEmpty, "self-test: the trace recorded something to compare")
+        #expect(
+            forward.lines == shuffled.lines,
+            "The same proposals in a different order produced a different signature — the emission gate fires on an unchanged bench and reports churn that is not there"
+        )
+    }
 }

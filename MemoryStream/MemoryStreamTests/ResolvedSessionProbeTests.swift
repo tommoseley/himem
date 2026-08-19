@@ -37,13 +37,13 @@ struct ResolvedSessionProbeTests {
 
     @Test
     func itIsSilentWhenTheTwoWaysOfCountingAgree() {
-        #expect(ResolvedSessionProbe.finding(resolved: resolved(count: 3), legacyCount: 3) == nil)
+        #expect(ResolvedSessionProbe.finding(resolved: resolved(count: 3), legacyCount: 3, projectedKey: UUID(), mapHadEntry: true, kinds: [.voice, .voice, .voice]) == nil)
     }
 
     /// The disagreement the step exists to prevent: one session, two counts.
     @Test
     func itFiresWhenTheCountsDiffer() {
-        let finding = ResolvedSessionProbe.finding(resolved: resolved(count: 4), legacyCount: 3)
+        let finding = ResolvedSessionProbe.finding(resolved: resolved(count: 4), legacyCount: 3, projectedKey: UUID(), mapHadEntry: true, kinds: [.voice, .image, .voice, .note])
         #expect(finding != nil, "a probe that cannot fire makes an unmeasured swap look measured")
         #expect(finding?.resolvedCount == 4)
         #expect(finding?.legacyCount == 3)
@@ -59,7 +59,7 @@ struct ResolvedSessionProbeTests {
     @Test
     func itFiresOnAnUnresolvedItemEvenWhenCountsAgree() {
         let ghost = UUID()
-        let finding = ResolvedSessionProbe.finding(resolved: resolved(count: 2, unresolved: [ghost]), legacyCount: 2)
+        let finding = ResolvedSessionProbe.finding(resolved: resolved(count: 2, unresolved: [ghost]), legacyCount: 2, projectedKey: UUID(), mapHadEntry: false, kinds: [.voice, .image])
         #expect(finding != nil, "an unread `unresolved` is the UnifiedBenchGrouper shape: complete, tested, never consulted")
         #expect(finding?.unresolved == [ghost])
 
@@ -73,9 +73,43 @@ struct ResolvedSessionProbeTests {
     /// bench and report churn that is not there.
     @Test
     func linesAreOrderedByTheFindingsThemselves() {
-        let a = ResolvedSessionProbe.Finding(sessionId: UUID(uuidString: "00000000-0000-0000-0000-0000000000AA")!, resolvedCount: 1, legacyCount: 2, unresolved: [])
-        let b = ResolvedSessionProbe.Finding(sessionId: UUID(uuidString: "00000000-0000-0000-0000-0000000000BB")!, resolvedCount: 1, legacyCount: 2, unresolved: [])
+        let a = ResolvedSessionProbe.Finding(sessionId: UUID(uuidString: "00000000-0000-0000-0000-0000000000AA")!, resolvedCount: 1, legacyCount: 2, unresolved: [], projectedKey: UUID(), mapHadEntry: true, kinds: ["voice"])
+        let b = ResolvedSessionProbe.Finding(sessionId: UUID(uuidString: "00000000-0000-0000-0000-0000000000BB")!, resolvedCount: 1, legacyCount: 2, unresolved: [], projectedKey: UUID(), mapHadEntry: true, kinds: ["voice"])
 
         #expect(ResolvedSessionProbe.lines([a, b]) == ResolvedSessionProbe.lines([b, a]))
+    }
+
+    /// **The discriminating fields must reach the log**, or the next device run
+    /// answers no more than the last one did. The first run reported
+    /// `resolved=4 legacy=1` with nothing unresolved, and three mechanisms fit
+    /// that reading equally well; these three fields are what separate them.
+    @Test
+    func theLineCarriesTheKeyTheMapVerdictAndTheKinds() {
+        let key = UUID(uuidString: "ABCDEF01-0000-0000-0000-000000000000")!
+        let finding = ResolvedSessionProbe.finding(
+            resolved: resolved(count: 4),
+            legacyCount: 1,
+            projectedKey: key,
+            mapHadEntry: false,
+            kinds: [.voice, .image, .image, .note]
+        )
+        let line = ResolvedSessionProbe.lines([finding!].compactMap { $0 }).first ?? ""
+
+        #expect(line.contains("key=ABCDEF01"), "the key the legacy path looked up must be readable — a colliding key is one of the three candidates")
+        #expect(line.contains("map=MISS"), "whether the map held anything under that key is the single most discriminating bit")
+        #expect(line.contains("kinds=[voice,image,image,note]"), "what the session is made of separates 'the mapping is wrong' from 'there was no media to map'")
+    }
+
+    /// The converse, so `map=` is not a constant that happens to read MISS.
+    @Test
+    func aMapHitIsReportedAsSuch() {
+        let finding = ResolvedSessionProbe.finding(
+            resolved: resolved(count: 4),
+            legacyCount: 1,
+            projectedKey: UUID(),
+            mapHadEntry: true,
+            kinds: [.voice, .image]
+        )
+        #expect(ResolvedSessionProbe.lines([finding!]).first?.contains("map=HIT") == true)
     }
 }

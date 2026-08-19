@@ -398,7 +398,17 @@ enum ClipClusterProposer {
                 .map(\.key)
         )
 
-        return clustersByTokenKey.values.map { entry in
+        // **Deterministic order (2026-08-18).** This mapped `Dictionary.values`,
+        // so the returned array's order came from a per-process hash seed. The
+        // returned VALUE was unaffected — `dedupByOverlap` and `propose`'s final
+        // sort are both total orders — but `trace?.recordFormed` captures this
+        // array *before* either, so `[ClusterTrace]`'s FORMED block reordered
+        // between identical emissions and its signature gate fired on an
+        // unchanging bench. B21 fixed the winner and the verdict order one day
+        // earlier and left this; the array is the third face of one defect.
+        return clustersByTokenKey
+            .sorted { $0.key < $1.key }
+            .map { (_, entry) in
             let sessionsInCluster = entry.sessionIndices
                 .sorted()
                 .map { sessions[$0] }
@@ -868,8 +878,17 @@ final class ClusterProposalTrace {
 
     func recordTooFewSessions(_ count: Int) { tooFewSessions = count }
 
+    /// **Sorted at capture.** The caller's order is not part of what this
+    /// records — `formed` answers "which proposals existed before anything
+    /// discarded them", a set, not a sequence. Sorting here means a future
+    /// producer cannot reintroduce the signature churn even if its own order
+    /// drifts, which is the mechanism-over-rule preference: the root is fixed in
+    /// `proposeWordMatch`, and this makes the root's correctness not load-bearing
+    /// for the instrument's stability.
     func recordFormed(_ proposals: [ClusterProposal]) {
-        formed = proposals.map {
+        formed = proposals
+            .sorted { $0.fingerprint.rawValue < $1.fingerprint.rawValue }
+            .map {
             Formed(
                 fingerprint: $0.fingerprint.rawValue,
                 ruleTag: $0.ruleTag,

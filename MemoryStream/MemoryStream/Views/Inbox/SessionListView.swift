@@ -489,7 +489,13 @@ struct SessionListView: View {
             let group = project(session)
             let legacy = group.clips.count + (media[group.id]?.count ?? 0)
             let resolved = ResolvedSession.resolve(session, voiceById: voiceById, mediaById: mediaById)
-            return ResolvedSessionProbe.finding(resolved: resolved, legacyCount: legacy)
+            return ResolvedSessionProbe.finding(
+                resolved: resolved,
+                legacyCount: legacy,
+                projectedKey: group.id,
+                mapHadEntry: media[group.id] != nil,
+                kinds: session.items.map(\.kind)
+            )
         }
         BenchPerf.resolveProbe(probeFindings)
         #endif
@@ -1904,17 +1910,54 @@ enum ResolvedSessionProbe {
         let resolvedCount: Int
         let legacyCount: Int
         let unresolved: [UUID]
+        /// The key the legacy path looked the media map up under — the
+        /// PROJECTED `ClipGroup.id`, which is a different value from
+        /// `sessionId` by construction (the two take their ids from opposite
+        /// ends of the sitting).
+        let projectedKey: UUID
+        /// Whether the media map had an entry under `projectedKey` at all.
+        let mapHadEntry: Bool
+        /// The session's item kinds, in composition order.
+        let kinds: [String]
     }
 
     /// `nil` when the two agree and everything resolved — the probe is silent
     /// when there is nothing to say.
-    static func finding(resolved: ResolvedSession, legacyCount: Int) -> Finding? {
+    ///
+    /// **The three extra fields exist to discriminate, 2026-08-18.** The first
+    /// device run reported `resolved=4 legacy=1` on three sessions with nothing
+    /// unresolved, and three mechanisms fit that equally well: the media map's
+    /// key colliding across sessions; `projectGroup`'s sort being unstable on
+    /// tied `capturedAt` so the key differs between the map-build pass and this
+    /// read; or items resolving here that never reach `refs`. Rather than pick
+    /// one — four wrong theories about a single clip is what this instrument was
+    /// built after — the probe now reports the key it used, whether the map held
+    /// anything under it, and what the session is actually made of. A `MISS`
+    /// with media in `kinds` says key; a `HIT` with a short count says the
+    /// mapping; kinds without media says neither.
+    static func finding(
+        resolved: ResolvedSession,
+        legacyCount: Int,
+        projectedKey: UUID,
+        mapHadEntry: Bool,
+        kinds: [BenchClipItem.Kind]
+    ) -> Finding? {
         guard resolved.count != legacyCount || !resolved.unresolved.isEmpty else { return nil }
         return Finding(
             sessionId: resolved.id,
             resolvedCount: resolved.count,
             legacyCount: legacyCount,
-            unresolved: resolved.unresolved
+            unresolved: resolved.unresolved,
+            projectedKey: projectedKey,
+            mapHadEntry: mapHadEntry,
+            kinds: kinds.map {
+                switch $0 {
+                case .voice: return "voice"
+                case .image: return "image"
+                case .video: return "video"
+                case .note:  return "note"
+                }
+            }
         )
     }
 
@@ -1929,7 +1972,9 @@ enum ResolvedSessionProbe {
                 let missing = f.unresolved.isEmpty
                     ? ""
                     : " · UNRESOLVED \(f.unresolved.count): \(f.unresolved.map { String($0.uuidString.prefix(8)) }.joined(separator: ","))"
-                return "\(head) · \(counts)\(missing)"
+                let key = " · key=\(f.projectedKey.uuidString.prefix(8)) map=\(f.mapHadEntry ? "HIT" : "MISS")"
+                let kinds = " · kinds=[\(f.kinds.joined(separator: ","))]"
+                return "\(head) · \(counts)\(missing)\(key)\(kinds)"
             }
     }
 }
