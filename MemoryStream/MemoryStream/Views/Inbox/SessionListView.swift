@@ -469,11 +469,11 @@ struct SessionListView: View {
         // count is derived from this map; F38's ruling against them was about
         // the header *counting* media it could not draw, and the header no
         // longer reads media at all.
-        var media: [UUID: [MediaReference]] = [:]
-        for session in bench.allSessions {
-            let refs = session.items.compactMap { mediaById[$0.id] }
-            if !refs.isEmpty { media[project(session).id] = refs }
-        }
+        let media = Self.mediaBySession(
+            bench.allSessions,
+            mediaById: mediaById,
+            key: { project($0).id }
+        )
         mediaBySessionId = media
         // **`[ResolveProbe]` — C2 step 4 slice B. Reports; renders nothing.**
         //
@@ -516,6 +516,29 @@ struct SessionListView: View {
         BenchSiblingStackBus.shared.setStackMedia(stackMedia)
     }
 
+    /// The card layer's session → media map.
+    ///
+    /// **Extracted 2026-08-18 so B25 has a seam a test can reach.** Behaviour is
+    /// unchanged by the extraction itself: the key closure is supplied by the
+    /// caller, which passes `project($0).id` exactly as the inline loop did.
+    ///
+    /// B25: that key is the projected `ClipGroup.id`, and `projectGroup` keeps
+    /// **voice only** — so every media-only session projects to an empty group
+    /// whose id is the fixed `emptyGroupId` sentinel. They all write one bucket
+    /// and all read back the last writer's refs.
+    static func mediaBySession(
+        _ sessions: [UnifiedSession],
+        mediaById: [UUID: MediaReference],
+        key: (UnifiedSession) -> UUID
+    ) -> [UUID: [MediaReference]] {
+        var media: [UUID: [MediaReference]] = [:]
+        for session in sessions {
+            let refs = session.items.compactMap { mediaById[$0.id] }
+            if !refs.isEmpty { media[key(session)] = refs }
+        }
+        return media
+    }
+
     /// Resolve a drawn session back to the concrete `ClipGroup` the card layer
     /// renders. Media items are carried by `mediaBySessionId` alongside.
     ///
@@ -530,7 +553,10 @@ struct SessionListView: View {
     /// `clips.first`) both depend on — the opposite end from
     /// `UnifiedSession`, which is why the media map is keyed by the projected
     /// group rather than by the session it came from.
-    private static func projectGroup(
+    /// Internal rather than private so B25's money test can compute the same
+    /// key the map is built with. Naming the real function beats a
+    /// `…ForTesting` alias, which would let the test and production drift.
+    static func projectGroup(
         _ session: UnifiedSession,
         voiceById: [UUID: InboxClip]
     ) -> ClipGroup {
