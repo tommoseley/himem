@@ -654,4 +654,57 @@ import Foundation
             previewLines: []
         )
     }
+
+    // MARK: - Remainders are identifiable (C2 step 4 slice C)
+
+    /// **`partlyClaimedIds` names the loose sessions that are REMAINDERS**, so
+    /// the card layer can honour "a remainder's media belongs to the cluster
+    /// card" without depending on a lookup that happens to miss.
+    ///
+    /// Until slice C the rule was enforced by accident: media was looked up in
+    /// a map keyed by the projected `ClipGroup.id`, and a remainder's
+    /// projection derives from a different first clip. Retiring that map
+    /// retires the accident, so the distinction needs to be a value.
+    ///
+    /// **Both directions asserted.** A set that marked everything, or nothing,
+    /// would satisfy a one-sided check while inverting the rule for half the
+    /// bench — the ceiling-not-just-a-floor lesson.
+    @Test func partlyClaimedRemaindersAreDistinguishedFromWholeLooseSessions() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        // Sitting 1: two voice + a photo; the proposal claims one clip, the
+        // user sets the photo aside — so the remainder is partly-claimed.
+        let claimed = Self.item(.voice, t)
+        let photo = Self.item(.image, t.addingTimeInterval(60))
+        // Sitting 2, hours later: untouched by any proposal.
+        let untouched = Self.item(.voice, t.addingTimeInterval(5 * 3600))
+
+        let proposal = Self.proposal(claiming: [claimed.id])
+        let bench = RenderedBench.compose(
+            allItems: [claimed, photo, untouched],
+            reviewedIds: [], hideReviewed: true, now: t.addingTimeInterval(6 * 3600),
+            proposals: [proposal],
+            trim: [proposal.fingerprint.rawValue: [photo.id]]
+        )
+
+        let remainders = bench.loose.filter { bench.partlyClaimedIds.contains($0.id) }
+        let whole = bench.loose.filter { !bench.partlyClaimedIds.contains($0.id) }
+
+        #expect(remainders.count == 1, "the sitting a proposal partly claimed must be marked")
+        #expect(remainders.first?.items.map(\.id) == [photo.id], "the remainder is exactly the set-aside item")
+        #expect(whole.count == 1, "an untouched sitting must NOT be marked — a set that marks everything enforces the rule everywhere and is equally wrong")
+        #expect(whole.first?.items.map(\.id) == [untouched.id])
+    }
+
+    /// The empty case, so the set cannot be a constant that happens to read
+    /// right: with no proposals nothing is a remainder.
+    @Test func nothingIsPartlyClaimedWithoutAProposal() {
+        let t = Date(timeIntervalSince1970: 1_785_000_000)
+        let bench = RenderedBench.compose(
+            allItems: [Self.item(.voice, t), Self.item(.image, t.addingTimeInterval(60))],
+            reviewedIds: [], hideReviewed: true, now: t.addingTimeInterval(60)
+        )
+        #expect(!bench.loose.isEmpty, "a partition claim over an empty region proves nothing")
+        #expect(bench.partlyClaimedIds.isEmpty)
+    }
+
 }

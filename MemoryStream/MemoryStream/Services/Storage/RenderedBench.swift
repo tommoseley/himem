@@ -74,6 +74,24 @@ struct RenderedBench: Equatable {
     /// which is what returns a set-aside item to the bench.
     let loose: [UnifiedSession]
 
+    /// Ids of the `loose` sessions that are REMAINDERS of a partly-claimed
+    /// session, rather than whole unclaimed ones.
+    ///
+    /// **Made explicit by C2 step 4 slice C (2026-08-19); the rule it carries
+    /// is older.** A remainder's media belongs to the cluster card, which
+    /// draws the kept refs in its glyphs and the set-aside ones in its own
+    /// "Set aside" block — so the loose card must not draw them a second time
+    /// (the duplication class F35(b) closed).
+    ///
+    /// That rule used to be enforced by ACCIDENT. The card layer looked media
+    /// up in a map keyed by the projected `ClipGroup.id`, and a remainder's
+    /// projection derives from a different first clip, so the lookup simply
+    /// missed. Slice C retires that map — and with it the accident — so the
+    /// rule needs somewhere real to live. **An invariant enforced by a lookup
+    /// that happens to miss is one refactor away from silently inverting**,
+    /// which is exactly what this swap would have done.
+    let partlyClaimedIds: Set<UUID>
+
     /// Items still arriving — drawn as `IncomingCard` rows above the cluster
     /// stack, and never grouped into a session (a clip in the `.transcribing`
     /// phase is already a manifest row, so without this it would render twice:
@@ -251,11 +269,14 @@ struct RenderedBench: Equatable {
         // 4 · Loose = what the cluster did not keep. A set-aside item lands
         // here rather than vanishing: it is still new, still unconnected, and
         // still hers.
+        var partlyClaimedIds: Set<UUID> = []
         let loose: [UnifiedSession] = sessions.compactMap { session in
             let remaining = session.items.filter { !clustered.contains($0.id) }
             if remaining.isEmpty { return nil }
             if remaining.count == session.items.count { return session }
-            return UnifiedSession(items: remaining)
+            let remainder = UnifiedSession(items: remaining)
+            partlyClaimedIds.insert(remainder.id)
+            return remainder
         }
 
         return RenderedBench(
@@ -274,6 +295,7 @@ struct RenderedBench: Equatable {
             allSessions: allSessions,
             clustered: clustered,
             loose: loose,
+            partlyClaimedIds: partlyClaimedIds,
             inFlight: inFlight
         )
     }
@@ -302,11 +324,20 @@ struct RenderedBench: Equatable {
                 }
             }
         }
+        // **Recomputed, not carried.** `partlyClaimedIds` is a property of the
+        // receiver too, so referencing it here without this compiles cleanly
+        // and silently re-uses the PREVIOUS proposal set's answer — a stale
+        // remainder marking, which is the "state that outlives its subject"
+        // class. Caught by `partlyClaimedRemaindersAreDistinguishedFromWhole-
+        // LooseSessions` before it left the working tree.
+        var partlyClaimedIds: Set<UUID> = []
         let loose: [UnifiedSession] = sessions.compactMap { session in
             let remaining = session.items.filter { !clustered.contains($0.id) }
             if remaining.isEmpty { return nil }
             if remaining.count == session.items.count { return session }
-            return UnifiedSession(items: remaining)
+            let remainder = UnifiedSession(items: remaining)
+            partlyClaimedIds.insert(remainder.id)
+            return remainder
         }
         return RenderedBench(
             items: items,
@@ -314,6 +345,7 @@ struct RenderedBench: Equatable {
             allSessions: allSessions,
             clustered: clustered,
             loose: loose,
+            partlyClaimedIds: partlyClaimedIds,
             inFlight: inFlight
         )
     }

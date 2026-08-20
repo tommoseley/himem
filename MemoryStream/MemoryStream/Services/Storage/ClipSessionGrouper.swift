@@ -194,7 +194,7 @@ struct ClipGroup: Identifiable, Hashable {
     }
 
     var totalDuration: TimeInterval {
-        clips.reduce(0) { $0 + $1.duration }
+        Self.totalDuration(of: clips)
     }
 
     var clipCount: Int { clips.count }
@@ -202,16 +202,54 @@ struct ClipGroup: Identifiable, Hashable {
     /// Clips with no transcript AND transcription attempted —
     /// today's "likely accidental" predicate.
     var accidentalClips: [InboxClip] {
-        clips.filter { $0.transcript.isEmpty && $0.transcriptionAttempted }
+        Self.accidentalClips(in: clips)
     }
 
     var usableClips: [InboxClip] {
-        let accidentals = Set(accidentalClips.map(\.clipId))
-        return clips.filter { !accidentals.contains($0.clipId) }
+        Self.usableClips(in: clips)
     }
 
     var isAllAccidental: Bool {
-        !clips.isEmpty && usableClips.isEmpty
+        Self.isAllAccidental(clips)
+    }
+
+    // MARK: - Voice derivations, as functions of the clips alone
+    //
+    // **Lifted from the computed vars above — C2 step 4 slice C, 2026-08-19.**
+    //
+    // These four (plus `collapsedBodyVariant` below) read `clips` and nothing
+    // else, so they are properties of a *list of voice clips*, not of a
+    // `ClipGroup`. Slice C retires the voice-only projection at the card layer,
+    // and `ResolvedSession` needs exactly these derivations over the voice half
+    // of its items.
+    //
+    // The alternative was for the card layer to build a throwaway
+    // `ClipGroup(clips: voice)` to reach them. That is how B25 happened: a
+    // projection constructed for one purpose, whose `id` was then read as an
+    // identity it was never fit to carry. Rather than construct the type and
+    // rely on nobody touching its `id`, the derivations move to where the `id`
+    // does not exist at all — the defect is removed by construction rather than
+    // by a rule someone has to remember (CLAUDE.md § Non-Negotiables).
+    //
+    // The instance properties delegate rather than duplicate, so
+    // `SessionCollapsedBodyVariantTests` and the rest keep testing the one
+    // implementation both callers reach.
+
+    static func totalDuration(of clips: [InboxClip]) -> TimeInterval {
+        clips.reduce(0) { $0 + $1.duration }
+    }
+
+    static func accidentalClips(in clips: [InboxClip]) -> [InboxClip] {
+        clips.filter { $0.transcript.isEmpty && $0.transcriptionAttempted }
+    }
+
+    static func usableClips(in clips: [InboxClip]) -> [InboxClip] {
+        let accidentals = Set(accidentalClips(in: clips).map(\.clipId))
+        return clips.filter { !accidentals.contains($0.clipId) }
+    }
+
+    static func isAllAccidental(_ clips: [InboxClip]) -> Bool {
+        !clips.isEmpty && usableClips(in: clips).isEmpty
     }
 
     /// What the collapsed Captured Clips card should show in its
@@ -229,6 +267,13 @@ struct ClipGroup: Identifiable, Hashable {
     ///   - At least one clip is still pending (attempted == false)
     ///     → `.transcribing`, the legitimate in-flight state
     var collapsedBodyVariant: CollapsedBodyVariant {
+        Self.collapsedBodyVariant(of: clips)
+    }
+
+    /// See `collapsedBodyVariant` above for the rules; lifted alongside the
+    /// other voice derivations in slice C so `ResolvedSession` reaches the same
+    /// implementation without constructing a `ClipGroup`.
+    static func collapsedBodyVariant(of clips: [InboxClip]) -> CollapsedBodyVariant {
         // Locked July 12 2026 (`Clip model · spec.md` §Model):
         // "preview of the FIRST clip's words (capture order, never a
         // concatenation of all clips)." The grouper stores clips
@@ -244,7 +289,7 @@ struct ClipGroup: Identifiable, Hashable {
         if let firstWithWords {
             return .preview(firstWithWords.transcript.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        if isAllAccidental {
+        if isAllAccidental(clips) {
             return .allAccidental
         }
         return .transcribing
