@@ -20,6 +20,8 @@ import CoreData
 /// Titles are not unique by construction and cannot be made so: `displayTitle`
 /// falls back to derived text, so two clips captured in one sitting can easily
 /// render the same string.
+@MainActor  // B24: `viewContext` is NSMainQueueConcurrencyType; without this the
+            // suite body runs on the Swift cooperative pool and `save()` aborts the host.
 struct MemoryChipIdentityTests {
 
     @Test

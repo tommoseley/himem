@@ -44,6 +44,8 @@ import CoreData
 ///
 /// The legacy formulation is preserved in the commit that introduced it, so
 /// the original red is recoverable from git rather than only described.
+@MainActor  // B24: `viewContext` is NSMainQueueConcurrencyType; without this the
+            // suite body runs on the Swift cooperative pool and `save()` aborts the host.
 struct BenchMediaKeyCollapseTests {
 
     private func makeRef(in ctx: NSManagedObjectContext, at date: Date) throws -> MediaReference {

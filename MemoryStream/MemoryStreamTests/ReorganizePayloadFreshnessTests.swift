@@ -8,6 +8,8 @@ import CoreData
 /// the memory's live clips, so a clip added after the last cache write (e.g. a
 /// voice clip whose transcript landed late) was invisible to the model — the
 /// summary only echoed the original quote and ignored the added "dad" context.
+@MainActor  // B24: `viewContext` is NSMainQueueConcurrencyType; without this the
+            // suite body runs on the Swift cooperative pool and `save()` aborts the host.
 @Suite(.serialized)
 struct ReorganizePayloadFreshnessTests {
 

@@ -8,6 +8,8 @@ import CoreData
 /// and returns the memory to its last committed state — never a "Draft
 /// organized" strand. Covers both cases + the caveat (orphaned summary must not
 /// survive an unorganized memory).
+@MainActor  // B24: `viewContext` is NSMainQueueConcurrencyType; without this the
+            // suite body runs on the Swift cooperative pool and `save()` aborts the host.
 @Suite(.serialized)
 struct ReorganizeDismissDiscardTests {
 

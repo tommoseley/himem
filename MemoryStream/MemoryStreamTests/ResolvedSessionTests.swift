@@ -16,6 +16,8 @@ import CoreData
 /// exercised it with an empty trim. So these fixtures deliberately mix voice and
 /// media, and assert the media half specifically: a suite that only ever
 /// resolves voice would pass with the media branch deleted.
+@MainActor  // B24: `viewContext` is NSMainQueueConcurrencyType; without this the
+            // suite body runs on the Swift cooperative pool and `save()` aborts the host.
 struct ResolvedSessionTests {
 
     private func makeContext() throws -> NSManagedObjectContext {
