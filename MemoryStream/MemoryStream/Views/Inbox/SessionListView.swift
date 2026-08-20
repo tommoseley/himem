@@ -473,27 +473,25 @@ struct SessionListView: View {
         let resolve: (UnifiedSession) -> ResolvedSession = {
             ResolvedSession.resolve($0, voiceById: voiceById, mediaById: mediaById)
         }
-        // **A partly-claimed session's remainder draws no media** — the cluster
-        // card owns it (kept refs in its glyphs, set-aside ones in its own
-        // block), and drawing it twice is the duplication class F35(b) closed.
+        // **A set-aside PHOTO returns to the loose bench card, exactly as a
+        // set-aside CLIP does** (Tom, 2026-08-19). Set aside means *"not part
+        // of this proposal"*, not *"gone"* — F44's whole point, and the same J2
+        // posture: nothing the user captured disappears because the AI's
+        // proposal changed.
         //
-        // This rule is not new; until slice C it was enforced by ACCIDENT. The
-        // media map was keyed by the projected `ClipGroup.id`, and a
-        // remainder's projection derives from a different first clip, so the
-        // lookup missed. Retiring the map retires the accident — and a swap
-        // that silently inverted a rendering rule is exactly what the probe
-        // and this review exist to prevent, since no test asserts it and the
-        // gate is green either way.
+        // **This is the first time the question has been answered, not a
+        // change.** The previous behaviour — a remainder drawing no media —
+        // existed only as a side effect of B25's broken lookup: the media map
+        // was keyed by the projected `ClipGroup.id`, and a remainder's
+        // projection derives from a different first clip, so the lookup simply
+        // missed. Nobody chose it. Retiring the map removes the accident, and
+        // the remainder now draws its own items like any other session, so no
+        // special case survives here at all.
         //
-        // **Stated as a preserved behaviour, not an endorsed one.** Whether a
-        // set-aside PHOTO should return to the loose bench card the way a
-        // set-aside CLIP does (F44, "set-aside comes back") is a *what*, and it
-        // is raised rather than decided here.
-        sessions = drawnBench.loose.map { session in
-            let resolved = resolve(session)
-            guard bench.partlyClaimedIds.contains(session.id) else { return resolved }
-            return resolved.withoutMedia()
-        }
+        // Set-aside clips already appeared both in the cluster card's own
+        // "Set aside" block and on the loose card; media now matches them
+        // rather than being the one kind that vanished.
+        sessions = drawnBench.loose.map(resolve)
         // The drill-in reads WHOLE sessions (`bench.allSessions`), never
         // remainders, so it keeps every item the sitting has — unchanged.
         allSessions = bench.allSessions.map(resolve)
@@ -544,6 +542,26 @@ struct SessionListView: View {
     // same key production did and showed two distinct sessions landing in one
     // bucket. With the card layer reading `ResolvedSession.media`, there is no
     // session → media map to key, correctly or otherwise.
+
+    /// Split a session's drawn items into the two recycle backings.
+    ///
+    /// **Internal rather than private so the money test can compute exactly
+    /// what `deleteSession` computes** — the same call this file made for
+    /// `projectGroup`, and for the same reason: a `…ForTesting` alias lets the
+    /// test and production drift, and this decision is destructive.
+    ///
+    /// An id in the manifest is a manifest row; everything else is a
+    /// `MediaReference`. Media items are always refs, so they take the ref
+    /// branch by construction — the partition is over *backing*, never over
+    /// kind, which is the distinction P0-3 exists to hold.
+    static func recycleTargets(
+        itemIds: [UUID],
+        manifestClips: [InboxClip]
+    ) -> (clipIds: [UUID], refIds: Set<UUID>) {
+        let ids = Set(itemIds)
+        let clipIds = manifestClips.filter { ids.contains($0.clipId) }.map(\.clipId)
+        return (clipIds, ids.subtracting(Set(clipIds)))
+    }
 
     /// Project a session to the voice-only `ClipGroup` the **proposer** speaks.
     ///
@@ -1805,16 +1823,31 @@ struct SessionListView: View {
         if let playing = playingClipId, session.voice.contains(where: { $0.clipId == playing }) {
             stopPlayback()
         }
-        // **`voice`, which is what `session.clips` meant before slice C** —
-        // this path removes the session's VOICE clips and leaves its absorbed
-        // media on the bench. Migrating it to `itemIds` would also delete the
-        // photos, and that is a behavioural change, not a mechanical one: it
-        // decides what "Delete session" destroys. Preserved exactly as it was
-        // and raised separately rather than widened in passing.
-        let ids = session.voice.map(\.clipId)
-        for id in ids {
-            inbox.remove(clipId: id)
-        }
+        // **Delete session destroys everything the card DRAWS** (ruled
+        // 2026-08-19). If the card shows a photo, deleting the session deletes
+        // the photo.
+        //
+        // This previously removed the session's voice clips and left its
+        // absorbed media on the bench — the count-describes-a-different-set
+        // class in its destructive form. The user deletes what they see, not
+        // what we internally scope to voice, and `session.itemIds` is exactly
+        // what the card drew and what `sessionSelectableIds` batch-selects.
+        //
+        // **Recoverability is Recently Deleted**, per the standing deletion
+        // rule — the same soft-delete `ClipEditorModal`'s "Delete this Clip"
+        // and the Clips-tab batch delete use. This path called
+        // `InboxManifest.remove(clipId:)`, which is the *dispose* path: it
+        // tombstones the row, emits a watch ack and deletes the staged audio,
+        // so a deleted session was unrecoverable while a deleted clip was not.
+        // One destructive verb, one meaning.
+        //
+        // Partitioned by backing exactly as `ClipsTabView.performSelectionDelete`
+        // does, and batched: a manifest row recycles through the manifest, a
+        // materialized ref through `MediaReference.recycledAt`. Media items are
+        // always refs, so they take the ref branch by construction.
+        let targets = Self.recycleTargets(itemIds: session.itemIds, manifestClips: inbox.clips)
+        if !targets.clipIds.isEmpty { inbox.recycleClips(clipIds: targets.clipIds) }
+        if !targets.refIds.isEmpty { lifecycle.recycleClips(refIds: targets.refIds) }
         // Session vanishing from `sessions` after `computeSessions()`
         // re-runs triggers `AutoDismissView` in `openedSessionContent`
         // (Chunk E2, July 12 2026) — the opened-session pushed screen
@@ -2013,24 +2046,6 @@ struct ResolvedSession: Identifiable, Hashable {
         ClipGroup.collapsedBodyVariant(of: voice)
     }
 
-    /// The same session with its media dropped — used for the remainder of a
-    /// partly-claimed session, whose media the cluster card draws.
-    ///
-    /// **The drop happens HERE, at composition, rather than at each consumer.**
-    /// The alternative is a rule every count, every selection set and every row
-    /// builder has to remember, which is the shape that let the header count a
-    /// photo the cards drew elsewhere (F35a). A `ResolvedSession` is what the
-    /// card draws; if the card does not draw the media, it is not in the value.
-    ///
-    /// `unresolved` is carried through untouched: an item with no backing is a
-    /// finding regardless of who draws the media.
-    func withoutMedia() -> ResolvedSession {
-        ResolvedSession(
-            id: id,
-            items: items.filter { if case .media = $0 { return false } else { return true } },
-            unresolved: unresolved
-        )
-    }
 
     /// Newest-first, matching `ClipGroup.clips` — the order the card layer
     /// already renders in, so migrating a consumer does not also reorder it.

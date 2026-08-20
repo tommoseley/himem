@@ -283,11 +283,19 @@ struct ClipsTabView: View {
         .shadow(color: .black.opacity(0.14), radius: 14, y: 4)
     }
 
-    /// Deletes the selected clips, partitioned by backing: InboxClips →
-    /// manifest dispose (tombstone + watch ack), MediaReferences → hard
-    /// delete. Both are the established delete paths (arbiter-consistent).
-    /// Permanent — gated behind the confirm alert (no clip Recently
-    /// Deleted yet). Same partition on every filter (New/All/Unconnected).
+    /// Deletes the selected clips, partitioned by backing: InboxClips → the
+    /// manifest's `recycledAt`, MediaReferences → `MediaReference.recycledAt`.
+    /// Both are the established delete paths (arbiter-consistent), and both are
+    /// **soft** — Recently Deleted, recoverable 30 days. Same partition on
+    /// every filter (New/All/Unconnected).
+    ///
+    /// **This paragraph described the pre-P8b behaviour** — "manifest dispose
+    /// (tombstone + watch ack), MediaReferences → hard delete… Permanent" —
+    /// while the body two lines below it soft-deleted, and the note that
+    /// corrected it sat *inside* the function rather than replacing the summary
+    /// a reader sees first. Corrected 2026-08-19, when routing "Delete session"
+    /// through the same rule made the contradiction load-bearing: a wrong
+    /// comment about a destructive path is how the wrong path gets copied.
     private func performSelectionDelete() {
         let ids = selection.selectedIds
         let clipIds = InboxManifest.shared.clips.filter { ids.contains($0.clipId) }.map(\.clipId)

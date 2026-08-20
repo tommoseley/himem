@@ -74,4 +74,42 @@ struct InboxClipRecycleTests {
         let d2 = try JSONDecoder().decode(InboxClip.self, from: JSONSerialization.data(withJSONObject: legacy))
         #expect(d2.recycledAt == nil)
     }
+
+    /// **The BATCH recycler had no coverage** — found while routing
+    /// "Delete session" through Recently Deleted (ruled 2026-08-19).
+    ///
+    /// That path used to call `remove(clipId:)`, which tombstones the row,
+    /// emits a watch ack and deletes the staged audio: a deleted **session**
+    /// was unrecoverable while a deleted **clip** was not. One destructive
+    /// verb, one meaning — so it now recycles, in one batch.
+    ///
+    /// The singular round-trip is `recycleThenRestore_roundTrips` above; this
+    /// is the plural form the session path actually calls, which nothing
+    /// exercised.
+    @Test func recycleClipsBatch_movesEveryClipToRecentlyDeleted_andRestores() {
+        let m = InboxManifest.shared
+        let a = UUID(), b = UUID()
+        m.acceptClip(sample(a))
+        m.acceptClip(sample(b))
+        defer {
+            m.purgeRecycledClip(clipId: a); m.purgeRecycledClip(clipId: b)
+            m.remove(clipId: a); m.remove(clipId: b)
+        }
+        #expect(m.clips.contains { $0.clipId == a } && m.clips.contains { $0.clipId == b })
+
+        m.recycleClips(clipIds: [a, b])
+
+        #expect(!m.clips.contains { $0.clipId == a }, "the session leaves the bench")
+        #expect(!m.clips.contains { $0.clipId == b })
+        let recycled = m.loadRecycledClips()
+        #expect(recycled.contains { $0.clipId == a && $0.recycledAt != nil },
+                "and lands in Recently Deleted — the promise the footnote makes")
+        #expect(recycled.contains { $0.clipId == b && $0.recycledAt != nil })
+
+        // Restorable, which is what makes it a delete the user can survive.
+        m.restoreClip(clipId: a)
+        #expect(m.clips.contains { $0.clipId == a })
+        #expect(m.clips.first { $0.clipId == a }?.recycledAt == nil)
+    }
+
 }
