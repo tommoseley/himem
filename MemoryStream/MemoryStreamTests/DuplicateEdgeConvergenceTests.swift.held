@@ -1,0 +1,210 @@
+import Testing
+import Foundation
+import CoreData
+@testable import HiMem
+
+/// **B26 — how two `MemoryClipEdge` rows get created, and what they then say.**
+///
+/// `StorageService.createEdge`'s idempotence guard is
+/// `entry.edgesArray.contains(where: { $0.clipId == ref.id })` — a check
+/// against **one context's own knowledge**. It cannot see an edge that another
+/// context, or another device, has already written and not yet merged. So two
+/// writers each pass their own guard and the store converges on two edges for
+/// one `(memoryId, clipId)`.
+///
+/// **Nothing downstream can enforce it either.** `MemoryClipEdge` is
+/// `syncable="YES"`, production runs `NSPersistentCloudKitContainer`, and the
+/// model carries **zero** uniqueness constraints — not an oversight, since
+/// `NSPersistentCloudKitContainer` forbids them. No post-merge reconcile
+/// exists anywhere in the app.
+///
+/// **TWO COMMENTS IN THE CODEBASE SAY THIS IS COVERED, AND BOTH ARE WRONG.**
+/// That is why it stayed unexamined for six weeks:
+///
+///  * `createEdge`'s docstring says the guard protects against "a re-invoked
+///    Sort commit / OrganizePass / **hostile CloudKit merge**." It covers the
+///    first two. The merge is precisely the case it cannot cover — the guard
+///    runs before the merge exists.
+///  * `EntryMapper`'s dedupe comment says *"`createEdge` is idempotent as of
+///    2026-07-09 **so new writes can't produce dupes**, but stale records
+///    already on-device would still render twice."* This treats the duplicate
+///    as legacy data. It is an ongoing production mechanism.
+///
+/// **THE WRITE PATH COULD NOT BE REPRODUCED LOCALLY, AND THAT IS THE FINDING.**
+/// Three fixtures were tried and each taught something:
+///
+///  1. Two contexts writing SEQUENTIALLY → 1 edge. The second fetches fresh,
+///     sees the first, and the guard correctly refuses. Passed, proving nothing.
+///  2. Two contexts interleaved, but over a ref made by `createVoiceFragment`
+///     → 1 edge. That helper attaches an edge as it goes, so BOTH contexts saw
+///     the pre-existing one and both correctly refused. Passed, proving nothing.
+///  3. Two contexts interleaved over a genuinely ZERO-EDGE ref → Core Data
+///     throws `NSCocoaErrorDomain 133020 "Could not merge changes."` The shared
+///     coordinator's optimistic locking catches the conflicting write and
+///     REFUSES the second save.
+///
+/// So within one store the duplicate cannot occur: the guard is correct, and
+/// where the guard cannot see, the coordinator does. **The duplicate requires
+/// two genuinely separate stores converging via CloudKit** — two devices —
+/// where no shared coordinator exists to detect the conflict.
+///
+/// That is escalation territory per CLAUDE.md (*"If a bug cannot be reliably
+/// reproduced in a test, the issue MUST be escalated rather than patched
+/// heuristically"*), and it changes the fix: a stronger write-side guard cannot
+/// help, because the write side is already right. Only a reconcile AFTER merge
+/// can, and the render-side dedupe stops being a cover-up and becomes
+/// correctness in the presence of a state we cannot prevent.
+///
+/// HELD (`.held` — not a `.swift` file, so it cannot compile into the target or
+/// redden a gate). It is the record for the **deferred reconcile**, not a
+/// pending red.
+///
+/// **WHAT SHIPPED INSTEAD (2026-08-19, ruled).** The render half landed
+/// pre-tag: `MediaReference.memoriesArray` dedupes, so the delete warning
+/// cannot say "2 memories" about one — see `DuplicateEdgeHonestCountTests`.
+/// That is the only part of B26 that reaches a dogfooder, and it is small.
+/// *"Corruption that renders honestly is survivable; a confident wrong number
+/// in front of a delete is not."*
+///
+/// **WHAT IS DEFERRED, AND WHY.** The reconcile that actually removes the
+/// duplicate row is new machinery on the sync path — exactly the shape that
+/// must not land days before a build reaches the person whose data it would be
+/// reconciling. Deferred to the C-family.
+///
+/// **SURVIVOR POLICY — RULED, DO NOT RE-DECIDE (Tom, 2026-08-19):**
+///  * **Oldest `linkedAt` wins.**
+///  * **No annotation is ever lost.** If the survivor has none, adopt the
+///    loser's. If both are annotated and differ, append.
+///  * Take the **survivor's** `orderInMemory`.
+///
+/// The principle behind it, which outranks any convenience in implementing it:
+/// **an artefact of syncing may never destroy something a person typed.**
+@MainActor
+@Suite(.serialized)
+struct DuplicateEdgeConvergenceTests {
+
+    /// **The boundary, not the defect.** Documents that two contexts over ONE
+    /// store cannot produce the duplicate — it throws `133020` instead. Kept as
+    /// the record of what was ruled out; it is NOT the reproduction, and must
+    /// not be read as one.
+    @Test func twoIndependentContextsEachCreateTheSameEdge() throws {
+        let storage = StorageService(inMemory: true)
+        let memory = try storage.createEntry(content: "", inputType: .typed)
+        memory.title = "Harbor Lantern"
+
+        // **A ZERO-EDGE ref**, built directly rather than through
+        // `createVoiceFragment`/`createMediaReference` — both of which attach an
+        // edge as they go. An earlier draft used one of those, so a first edge
+        // already existed, BOTH contexts saw it, the guard correctly refused in
+        // both, and the test passed while proving nothing. A zero-edge ref is
+        // also the real shape: it is exactly what the bench holds before a clip
+        // is placed into a memory.
+        let clip = MediaReference(context: storage.viewContext)
+        clip.id = UUID()
+        clip.mediaType = MediaReference.MediaType.image.rawValue
+        clip.osIdentifier = "asset://b26"
+        clip.createdAt = Date()
+        try storage.save(context: storage.viewContext)
+        #expect(clip.edgeCount == 0, "precondition: nothing is attached yet, so neither writer can see a prior edge")
+
+        let memoryId = memory.id, clipId = clip.id
+
+        // **Both writers read BEFORE either writes.** This is the whole
+        // mechanism, and getting it wrong hides the defect: a SEQUENTIAL second
+        // write is correctly refused, because that context fetches fresh and
+        // sees the first edge. The first draft of this test did exactly that,
+        // passed, and would have reported the guard as sound.
+        //
+        // Two devices have this interleaving permanently — neither can see the
+        // other's write until CloudKit merges, by which point both exist.
+        let ctxA = storage.container.newBackgroundContext()
+        let ctxB = storage.container.newBackgroundContext()
+
+        func fetchPair(_ ctx: NSManagedObjectContext) throws -> (JournalEntry, MediaReference)? {
+            let mReq = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+            mReq.predicate = NSPredicate(format: "id == %@", memoryId as CVarArg)
+            let rReq = NSFetchRequest<MediaReference>(entityName: "MediaReference")
+            rReq.predicate = NSPredicate(format: "id == %@", clipId as CVarArg)
+            guard let m = try ctx.fetch(mReq).first, let r = try ctx.fetch(rReq).first else { return nil }
+            return (m, r)
+        }
+
+        // Read + guard-check + build, on both, with no save in between.
+        try ctxA.performAndWait {
+            guard let (m, r) = try fetchPair(ctxA) else { Issue.record("fixture missing in ctxA"); return }
+            try StorageService.createEdge(from: m, to: r, linkedAt: Date(), in: ctxA)
+        }
+        try ctxB.performAndWait {
+            guard let (m, r) = try fetchPair(ctxB) else { Issue.record("fixture missing in ctxB"); return }
+            // ctxB's `entry.edgesArray` cannot contain ctxA's edge: it is
+            // unsaved and in another context. The guard passes, correctly by
+            // its own lights and wrongly for the store.
+            try StorageService.createEdge(from: m, to: r, linkedAt: Date(), in: ctxB)
+        }
+        // Only now do they converge.
+        try ctxA.performAndWait { try ctxA.save() }
+        try ctxB.performAndWait { try ctxB.save() }
+
+        storage.viewContext.refreshAllObjects()
+        let all = NSFetchRequest<MemoryClipEdge>(entityName: "MemoryClipEdge")
+        all.predicate = NSPredicate(format: "memoryId == %@ AND clipId == %@", memoryId as CVarArg, clipId as CVarArg)
+        let edges = try storage.viewContext.fetch(all)
+
+        #expect(
+            edges.count == 1,
+            "one clip attached to one memory must be ONE edge — two writers each passed a guard that can only see its own context"
+        )
+    }
+
+    /// **What the duplicate then says, at the worst possible moment.**
+    ///
+    /// `referencingMemoryCount` counts `memoriesArray`, which is
+    /// `edgesArray.compactMap { $0.memory }` with **no dedupe** — so the delete
+    /// warning reads *"This clip is part of 2 memories. Deleting it removes it
+    /// from all of them"* when it is one. A confident falsehood at the instant
+    /// of destruction, which is the Honest-Label class where it costs most —
+    /// and ruling 2 of 2026-08-19 just widened what "Delete session" destroys,
+    /// so a wrong count in front of that path is more expensive than it was.
+    ///
+    /// **The reciprocal direction was defended and this one was not.** On
+    /// 2026-07-09 `EntryMapper` gained a dedupe for `mediaItems`
+    /// (memory → clips). `MediaReference.memoriesArray` (clip → memories) never
+    /// got one. Worse, the deduped direction carries the UNDEDUPED number:
+    /// `EntryMapper` passes `referencingMemoryCount: ref.referencingMemoryCount`
+    /// onto each deduped row, so that fix deduped the rows and left the count on
+    /// them wrong — count-describes-a-different-set, inside the fix for the same
+    /// class.
+    @Test func aDuplicateEdgeMakesTheDeleteWarningLie() throws {
+        let storage = StorageService(inMemory: true)
+        let memory = try storage.createEntry(content: "", inputType: .typed)
+        memory.title = "Harbor Lantern"
+        let clip = try storage.createVoiceFragment(
+            for: memory,
+            audioFilename: "b26b.caf",
+            transcript: "the tide had already turned"
+        )
+        try storage.save(context: storage.viewContext)
+
+        // The converged state, constructed directly: what the store looks like
+        // AFTER a merge. Built by hand rather than through `createEdge` so this
+        // test describes the consequence even once the write path is fixed.
+        let dupe = MemoryClipEdge(context: storage.viewContext)
+        dupe.id = UUID()
+        dupe.clipId = clip.id
+        dupe.memoryId = memory.id
+        dupe.clip = clip
+        dupe.memory = memory
+        dupe.linkedAt = Date()
+        try storage.save(context: storage.viewContext)
+
+        #expect(clip.edgeCount == 2, "precondition: the store really is in the converged state")
+        #expect(
+            clip.referencingMemoryCount == 1,
+            "the clip is in ONE memory — the delete warning counts memoriesArray, which has no dedupe, so it says 2 at the moment of destruction"
+        )
+        #expect(
+            Set(clip.memoriesArray.map(\.id)).count == clip.memoriesArray.count,
+            "memoriesArray must not list one memory twice"
+        )
+    }
+}

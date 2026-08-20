@@ -90,8 +90,38 @@ extension MediaReference {
     /// `isRecycled` is a scalar `Bool` (nil reads `false` → live), so this is
     /// nil-safe for CloudKit-synced records. Mirrors
     /// `JournalEntry.projectsArray`, which already filters recycled.
+    /// **Deduped by memory id (B26, 2026-08-19).** Two `MemoryClipEdge` rows can
+    /// attach one clip to one memory, and without this the memory appears twice
+    /// — so `referencingMemoryCount` read 2 and the delete warning said *"This
+    /// clip is part of 2 memories"* about one. A confident falsehood at the
+    /// instant of destruction.
+    ///
+    /// **This is the render layer answering for a state the write layer cannot
+    /// prevent, not a cover-up for it.** The write path was investigated first
+    /// (ruled: no dedupe until it is understood) and is *correct*: `createEdge`
+    /// refuses a duplicate whenever it can see the prior edge, and where it
+    /// cannot, the shared coordinator's optimistic locking refuses the save
+    /// (`NSCocoaErrorDomain 133020`). Three fixtures failed to reproduce a
+    /// duplicate within one store, two of them by passing. The duplicate needs
+    /// two genuinely separate stores converging via CloudKit, and the model
+    /// cannot forbid it — `NSPersistentCloudKitContainer` permits no uniqueness
+    /// constraints. So it is a state to render honestly, not one to prevent.
+    ///
+    /// The reconcile that REMOVES the duplicate is deferred to the C-family;
+    /// its survivor policy is ruled and recorded in
+    /// `DuplicateEdgeConvergenceTests.swift.held`.
+    ///
+    /// **The reciprocal direction was defended on 2026-07-09 and this one was
+    /// not** — `EntryMapper` deduped `mediaItems` (memory → clips) while this
+    /// (clip → memories) kept listing a memory once per edge.
+    ///
+    /// First occurrence wins, so `edgesArray`'s `linkedAt`-descending order
+    /// survives the dedupe and "Referenced in" still reads newest-first.
     var memoriesArray: [JournalEntry] {
-        edgesArray.compactMap { $0.memory }.filter { !$0.isRecycled }
+        var seen: Set<UUID> = []
+        return edgesArray.compactMap { $0.memory }
+            .filter { !$0.isRecycled }
+            .filter { seen.insert($0.id).inserted }
     }
 
     /// Edges attaching this clip to memories, sorted by `linkedAt`

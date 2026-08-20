@@ -35,13 +35,27 @@ enum EntryMapper {
             inferenceSummary: inference?.summaryText,
             feedbackState: inference?.feedbackStateEnum,
             userCorrection: inference?.userCorrection,
-            // Dedupe by ref id in case the underlying data has more than
-            // one edge pointing at the same clip within this memory
-            // (CloudKit merge from a pre-fix device, unknown write path).
-            // `StorageService.createEdge` is idempotent as of 2026-07-09
-            // so new writes can't produce dupes, but stale records
-            // already on-device would still render twice without this
-            // safety. See MediaReferenceDuplicateRenderingTests.
+            // Dedupe by ref id: the underlying data can hold more than one edge
+            // pointing at the same clip within this memory.
+            //
+            // **CORRECTION (B26, 2026-08-19): this comment used to say
+            // `createEdge` is idempotent "so new writes can't produce dupes,
+            // but stale records already on-device would still render twice."
+            // That framed an ONGOING production mechanism as legacy data.** Two
+            // devices each write the edge, each passes its own guard because
+            // neither can see the other's yet, and CloudKit converges both —
+            // and the model cannot forbid it, since
+            // `NSPersistentCloudKitContainer` permits no uniqueness
+            // constraints. New writes on two devices produce dupes today.
+            //
+            // Together with `createEdge`'s docstring claiming coverage of the
+            // one case it structurally cannot cover, that is why B26 sat
+            // unexamined for six weeks.
+            //
+            // See MediaReferenceDuplicateRenderingTests and
+            // DuplicateEdgeHonestCountTests — the latter pins that the count
+            // travelling with each deduped row is itself deduped, which this
+            // fix originally left split.
             mediaItems: {
                 var seen: Set<UUID> = []
                 return entry.mediaReferencesArray.compactMap { ref in

@@ -522,14 +522,35 @@ final class StorageService {
     /// MediaReference lands with at least one edge (the temporary
     /// v1 invariant enforced through Phase 6).
     ///
-    /// **Idempotent per (memoryId, clipId).** If an edge already exists
-    /// for the pair, this is a no-op — the pre-existing edge is
-    /// preserved (its `linkedAt` / `orderInMemory` / `annotation` are
-    /// not overwritten). The `MemoryClipEdge` docstring names this
-    /// invariant; without the guard, a re-invoked Sort commit /
-    /// OrganizePass / hostile CloudKit merge could double a memory's
-    /// clip list, which surfaced as the "duplicate transcript rows on
-    /// Memory Detail" defect (CD 2026-07-09).
+    /// **Idempotent per (memoryId, clipId), WITHIN THIS CONTEXT.** If an edge
+    /// already exists for the pair *and this context can see it*, this is a
+    /// no-op — the pre-existing edge is preserved (its `linkedAt` /
+    /// `orderInMemory` / `annotation` are not overwritten). Without the guard, a
+    /// re-invoked Sort commit or OrganizePass could double a memory's clip
+    /// list, which surfaced as the "duplicate transcript rows on Memory Detail"
+    /// defect (CD 2026-07-09).
+    ///
+    /// **CORRECTION (B26, 2026-08-19): this docstring used to claim the guard
+    /// also covered a "hostile CloudKit merge." It does not, and cannot.** The
+    /// check reads `entry.edgesArray`, so it sees only what this context
+    /// already knows; a merge delivers the other device's edge *after* the
+    /// guard has run. Claiming the coverage it structurally lacks is a large
+    /// part of why B26 sat unexamined for six weeks.
+    ///
+    /// What actually holds the line, and it is worth knowing which is which:
+    ///  * **Same context** — this guard refuses the second edge.
+    ///  * **Two contexts, one store** — the shared coordinator's optimistic
+    ///    locking refuses the second *save* (`NSCocoaErrorDomain 133020`).
+    ///    Verified: three fixtures failed to produce a duplicate here.
+    ///  * **Two separate stores converging via CloudKit** — nothing refuses it.
+    ///    The model cannot either, since `NSPersistentCloudKitContainer` permits
+    ///    no uniqueness constraints. This is the one real production mechanism,
+    ///    and it needs a reconcile after merge (deferred to the C-family;
+    ///    survivor policy ruled and recorded in
+    ///    `DuplicateEdgeConvergenceTests.swift.held`).
+    ///
+    /// Until that reconcile exists, `MediaReference.memoriesArray` dedupes so
+    /// the duplicate cannot be *counted* twice at the delete warning.
     static func createEdge(
         from entry: JournalEntry,
         to ref: MediaReference,
