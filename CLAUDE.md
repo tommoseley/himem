@@ -156,6 +156,19 @@ This is the constructive twin of *Don't Go Looking for Zebras*: the recent chang
 
 *Origin: three instances in one session (2026-07-29/30) — a truncated `grep` producing "P0-3 is unwired" when it was fully wired; a watch-suite count reported as 27 when it was 28; and exit 65 read as an assertion failure when it was twice a compile error and once a simulator launch denial.*
 
+### A First Reading of an Unfamiliar Log Is a Hypothesis, Not a Measurement (Mandatory)
+
+**The first time you parse an instrument's output, you are guessing at its grammar.** Treat that parse as provisional until you have read the code that emits it. Both failures below were *right artifact, wrong pattern* — and both were invisible precisely because the answer came back well-formed.
+
+- **Confirm what an emitter does NOT emit.** A log that only fires on one branch cannot be read as an inventory of all of them. The absence of a line is evidence only once you know the line was possible.
+- **A signature with several phrasings needs all of them, every time.** Matching one is not a partial check; it is a check that reports success by failing to look.
+- **Where a pattern will be reused, put it in a file, not in a command you retype.** `scripts/gate-report.sh` is that for the crash signature.
+- **Say "first parse" out loud** when reporting a conclusion drawn from an instrument you had not read before, so the weakness travels with the finding rather than being discovered later.
+
+*Origin: two in one session, 2026-08-19, three hours apart.* **(1)** `[BinThumb]` was read as a manifest of Recently Deleted, and a ruling was reported as evidenced by it. It logs only tile-render **failures** — so the photo, the single item the ruling turned on, was structurally the item that could never appear in those lines. The conclusion was right; the evidence cited for it could not support it, and the real evidence (`lens 15 → 12 → 15`) was elsewhere. **(2)** A crash check grepped `crashed with signal abrt` alone and reported **"0 crashes in bundle"** on a run carrying **51** under `Crash: HiMem at <deduplicated_symbol>` — while § Test Concurrency, three lines long, already named both phrasings. A re-audit of every gate reported that session came back clean, but by the membership diff catching what the grep missed: **luck of construction, not the detector working.**
+
+---
+
 ### Assert the Meaning, Not the Phrasing (Mandatory)
 
 **A test that pins exact user-facing copy breaks on every approved rewording — which trains people to update tests reflexively, and a test updated reflexively has stopped guarding.**
