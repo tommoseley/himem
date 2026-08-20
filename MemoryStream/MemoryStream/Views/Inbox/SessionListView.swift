@@ -78,7 +78,7 @@ struct SessionListView: View {
     /// and `sessions.count` for the session term: three separately-scoped
     /// sets in one sentence, which is how "7 new clips · 0 sessions" rendered
     /// above a visible card under a green gate.
-    @State private var drawn: DrawnBench = DrawnBench(loose: [], clusteredSessions: [], inFlight: [])
+    @State private var drawn: DrawnBench = DrawnBench(loose: [], clusteredSessions: [], siblingStack: [], inFlight: [])
     // `mediaBySessionId` was RETIRED here by C2 step 4 slice C (2026-08-19).
     //
     // It held each drawn session's photo/video/note refs, keyed by the

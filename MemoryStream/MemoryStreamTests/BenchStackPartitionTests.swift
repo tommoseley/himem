@@ -51,9 +51,26 @@ struct BenchStackPartitionTests {
         let composed = bench([voice, absorbed, lonelyPhoto])
         let drawn = DrawnBench.from(composed, proposals: [])
 
-        let drawnIds = Set(drawn.items.map(\.id))
+        // **The CARD REGION, not `drawn.items`.** `drawn.items` used to mean
+        // "what the session-card block draws" and was a fair proxy for it;
+        // since the count fix (2026-08-19) it means "every item in every
+        // region, including the stack", so using it here would compare the
+        // stack against a set that now contains the stack. The invariant is
+        // unchanged — an item is drawn by exactly one SURFACE — and it is now
+        // expressed against the surfaces themselves.
+        let drawnIds = Set(
+            (drawn.loose.flatMap(\.items) + drawn.clusteredSessions.flatMap(\.items)).map(\.id)
+        )
         let stackIds = Set(composed.siblingStackSessions.flatMap(\.items).map(\.id))
         let looseIds = Set(composed.loose.flatMap(\.items).map(\.id))
+
+        // The stack the value reports and the stack the view is fed must be
+        // the same stack — the two-stores-answering-one-question class C2
+        // exists to end.
+        #expect(
+            Set(drawn.siblingStack.flatMap(\.items).map(\.id)) == stackIds,
+            "DrawnBench.siblingStack diverged from RenderedBench.siblingStackSessions"
+        )
 
         #expect(!looseIds.isEmpty, "self-test: the fixture must produce loose items, or this asserts nothing")
         #expect(

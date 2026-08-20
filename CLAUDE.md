@@ -88,13 +88,36 @@ This rule applies to all runtime defects including: exceptions, incorrect output
 
 **A store keyed by a clip/entry id outlives the thing it describes unless something deletes it. Give every such store prune-on-write, or it will one day answer a question about a row that no longer exists.**
 
-Three instances in this codebase, and the difference between them is the whole rule:
+Four instances in this codebase, and the difference between them is the whole rule:
 
 | Store | Prunes? | Outcome |
 |---|---|---|
 | `dismissedClusters` | **Yes** — drops records whose member clipIds are no longer in the inbox, from `replace(with:)` | Correct. A stale *Not together* can never suppress a future proposal. |
 | `BenchClipReviewStore` | **No** | Leaked for three sessions. |
 | `BenchClipDurationStore` | **No** | Latent — logged, not yet bitten. |
+| `PreviouslyConnectedStore` | **No** — `record` only ever inserts | Latent. Added to this table 2026-08-19. |
+
+**`PreviouslyConnectedStore` is the fourth instance, and it is worth naming
+because of what would depend on it.** It is a `UserDefaults` `Set<String>` of
+`MediaReference` ids, keyed by content id, written at exactly two sites (both in
+`EntryLifecycleService.removeClipFromMemory`) and read at one
+(`ClipsTabView:1828`, the *"was in a memory · now unconnected"* line). Nothing
+deletes from it. A reused or reseeded id inherits *"was connected"* — verbatim
+the `BenchClipReviewStore` defect that cost three sessions and was misread four
+times as a resolve failure.
+
+Today it drives one advisory line, so a stale entry is cosmetic. **It stops being
+cosmetic the moment anything structural depends on it** — which was proposed and
+declined the same day: re-partitioning the Clips bench on *new-vs-returned* would
+have made this store decide which region a clip is drawn in. A store that cannot
+forget would then be deciding layout from a fact that stopped being true.
+
+*Second, separate weakness, recorded so it is not rediscovered:* it also does not
+carry the signal its one reader implies. `record` is never called on the
+memory-deletion path (`recycle(entryId:)`), so a clip returned to the bench by
+deleting its memory — the largest producer of returned clips — is not marked as
+previously connected at all. **Insert-only AND incomplete**, in opposite
+directions.
 
 *Origin: 2026-08-13/15.* QA fixture ids are deterministic by design, so a cleared-and-reseeded clip reuses its id. The review mark survived the clip it belonged to, and the replacement was **born reviewed** — present on **All**, absent from **New**, because All applies no review filter. That signature is diagnostic and was misread four times as a resolve failure in the cluster path.
 

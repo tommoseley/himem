@@ -377,27 +377,61 @@ struct RenderedBench: Equatable {
 /// what makes "what is drawn" answerable by a test.
 struct DrawnBench: Equatable {
 
-    /// Loose sessions this surface draws, after the sibling-stack scope.
+    /// Loose sessions the **session-card block** draws, after the
+    /// sibling-stack scope.
     let loose: [UnifiedSession]
     /// Sessions consumed by a cluster proposal. Drawn — as cluster cards.
     let clusteredSessions: [UnifiedSession]
+    /// **Loose sessions the sibling day-grouped stack draws — the EIGHTH
+    /// instance of "the count described a different set than the screen"
+    /// (2026-08-19).**
+    ///
+    /// `ClipsTabView.unplacedDayGroupedStack` has always drawn these, fed from
+    /// `RenderedBench.siblingStackSessions` via `BenchSiblingStackBus`. They
+    /// were simply **absent from this value**, so `count`, `capturedAts` and
+    /// `sessionTerm` all described the session-card block while the header
+    /// they feed sat above both regions. On a bench with one voiceless
+    /// session the header said **2** with **4** items drawn.
+    ///
+    /// > **A count must describe the thing it sits on.** (Tom, 2026-08-10)
+    ///
+    /// This is a **region, not a set** — the same distinction `inFlight`
+    /// carries. It is a partition of `items` alongside `loose` and
+    /// `clustered`, computed here from one input, which is what stops it
+    /// becoming a second thing to keep in sync. The view still draws it
+    /// separately; the *arithmetic* no longer pretends it isn't there.
+    ///
+    /// **It does not change what the session cards draw.** `SessionListView`
+    /// renders `drawn.loose`, and this is deliberately not folded into that —
+    /// folding them together IS the deferred layout flip, which is a *what*
+    /// and unruled. This value now describes the current layout honestly
+    /// rather than quietly assuming a different one.
+    ///
+    /// Empty when `drawsVoicelessSessions` is true: with one region there is
+    /// nothing for the stack to hold.
+    let siblingStack: [UnifiedSession]
     /// Items still arriving, drawn as `IncomingCard`s.
     let inFlight: [BenchClipItem]
 
     /// **Every item on screen, in any region.** One set — so the count, the
     /// span and the session term cannot describe different things, which is
-    /// the identity seven defects violated.
+    /// the identity **eight** defects violated.
     var items: [BenchClipItem] {
-        loose.flatMap(\.items) + clusteredSessions.flatMap(\.items) + inFlight
+        loose.flatMap(\.items)
+            + clusteredSessions.flatMap(\.items)
+            + siblingStack.flatMap(\.items)
+            + inFlight
     }
 
     var count: Int { items.count }
 
     var capturedAts: [Date] { items.map(\.capturedAt) }
 
-    /// **Every drawn session, clustered included** — premise 1's arithmetic,
-    /// uniform regardless of region.
-    var drawnSessionCount: Int { loose.count + clusteredSessions.count }
+    /// **Every drawn session, clustered AND sibling-stack included** —
+    /// premise 1's arithmetic, uniform regardless of region.
+    var drawnSessionCount: Int {
+        loose.count + clusteredSessions.count + siblingStack.count
+    }
 
     /// **nil when every session is clustered** (ruled 2026-08-09).
     ///
@@ -412,8 +446,13 @@ struct DrawnBench: Equatable {
     /// speaks for itself in its own careful language. When any session is
     /// loose the term returns and counts *all* drawn sessions — the arithmetic
     /// never changes, only whether the sentence carries it.
+    /// **`siblingStack` participates in the nil test too.** The rule is *"nil
+    /// when every session is clustered"*, and a session drawn in the stack is
+    /// not clustered — so a bench of one cluster plus one voiceless sitting
+    /// must still carry the term. Testing `loose` alone would drop the word
+    /// over a screen that has an unclustered region on it.
     var sessionTerm: Int? {
-        loose.isEmpty ? nil : drawnSessionCount
+        (loose.isEmpty && siblingStack.isEmpty) ? nil : drawnSessionCount
     }
 
     /// Narrow a composed bench to what this surface actually draws.
@@ -430,6 +469,13 @@ struct DrawnBench: Equatable {
         let drawnLoose = drawsVoicelessSessions
             ? bench.loose
             : bench.loose.filter(\.hasVoice)
+        // The complement, held rather than discarded. `bench.loose` partitions
+        // exactly into these two by `hasVoice`, so nothing composed can fall
+        // outside both — which is the property `BenchStackPartitionTests`
+        // already asserts and `BenchHeaderCountTests` now counts.
+        let stack = drawsVoicelessSessions
+            ? []
+            : bench.loose.filter { !$0.hasVoice }
         // A proposal consumes whole sessions, so the claimed sets are disjoint
         // across proposals; `Set` on session identity guards the assumption
         // rather than trusting it.
@@ -447,6 +493,7 @@ struct DrawnBench: Equatable {
         return DrawnBench(
             loose: drawnLoose,
             clusteredSessions: claimed,
+            siblingStack: stack,
             inFlight: bench.inFlight
         )
     }
