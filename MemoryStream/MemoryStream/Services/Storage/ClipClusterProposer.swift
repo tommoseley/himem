@@ -1044,3 +1044,123 @@ final class ClusterProposalTrace {
         }
     }
 }
+
+// MARK: - B23 · the proposer must not re-run when its inputs have not changed
+
+/// **B23 — the bench recomputes its proposals when nothing about them changed.**
+///
+/// Device, 2026-08-19 (build 28), `[BenchPerf]`:
+///
+/// ```
+/// regroup #1  · 20.5ms · sessions=1 · lens=15 · t+0.09s
+/// regroup #2  · 12.0ms · sessions=1 · lens=15 · t+0.10s
+/// …
+/// regroup #11 · 12.2ms · sessions=1 · lens=15 · t+0.24s
+/// ```
+///
+/// **Eleven regroups inside a quarter-second, every one at an identical bench
+/// state.** Ten of the eleven are redundant, and each carries a full
+/// `propose` — the NLTagger pass. The same shape recurs in use (four regroups
+/// inside 70 ms at t+184.2), so it is not a launch-only artefact.
+///
+/// **The count reproduces; the unit cost does not.** The inherited target was
+/// *16 regroups / 532 ms in the first 2.0 s* (27.5–92.9 ms each). This run
+/// measured *11 / 138.9 ms* (11.6–20.5 ms each) — a ~4× disagreement that is
+/// **not explained**, and is recorded as unexplained rather than averaged away.
+/// What survives both readings is the redundancy, which is why this targets
+/// *recomputing when nothing changed* rather than *making the pass faster*.
+///
+/// **WHY THIS MEMOIZES `propose` AND NOT THE WHOLE COMPOSITION.**
+///
+/// `RenderedBench.compose` takes `now:` and uses it for `stillInPlay`
+/// (`now − latest < 10 min`), so the composition as a whole is **time-
+/// dependent**: the same manifest legitimately composes differently a minute
+/// later. A memo over `composeDrawnBench` keyed on data alone would freeze a
+/// bench whose window should have expired — a stale-bench defect wearing a
+/// performance fix's clothes.
+///
+/// `propose` takes no clock. `proposeTimePlace` reads each clip's `capturedAt`,
+/// never `Date()`. So the proposer is a pure function of its inputs, and it is
+/// the part carrying the cost B23 named.
+///
+/// **WHAT RIDES ON THE QUIETED PATH — checked, per CLAUDE.md § Quieting a Busy
+/// Path Reveals What Was Riding On It.** Nothing goes quiet except the
+/// proposer. `registerSessionIds()` is called at each trigger site *beside*
+/// `regroupSessions()` rather than inside it, so it cannot be stranded — that
+/// is exactly the passenger which stopped riding when B15 quieted the retry
+/// sweep and left *Select all* inert. `stillInPlay`, `BenchSiblingStackBus`,
+/// `siblingStackHasRows` and `[ResolveProbe]` all live in `composeDrawnBench`,
+/// which still runs in full on every trigger. The regroup keeps happening; only
+/// the redundant NLTagger pass stops.
+///
+/// **WHY THE SIGNATURE CANNOT MISS AN INPUT.** It is the inputs themselves,
+/// compared by `==`, not a derived key that could omit a field:
+///
+///  * `ClipGroup.==` compares `lhs.clips == rhs.clips` — full membership AND
+///    content, deliberately (P0 2026-07-14, so a post-delete group never
+///    compares equal to its larger self).
+///  * `InboxClip`'s `Equatable` is **synthesized** — no custom `==` exists —
+///    so `transcript`, `latitude`, `longitude` and `capturedAt` all
+///    participate. A late transcription landing, which is routine on this
+///    bench, invalidates the memo. That was the trap worth designing against:
+///    an id-only equality here would have silently frozen the proposals of a
+///    clip that had just gained its words.
+///  * `dismissed` is the other input `propose` reads, and it is compared whole.
+///
+/// A cache keyed on a hand-rolled signature would have to be re-audited every
+/// time `propose` learns to read a new field. This one is invalidated by the
+/// compiler's own notion of equality, so it stays correct by construction.
+///
+/// **Deliberately a value type owned by the view, not a `static` cache on the
+/// proposer.** A static cache would be process-global mutable state reached
+/// from whatever thread composes the bench — the `LocalEntityExtractor.shared`
+/// shape CLAUDE.md § Test Concurrency names, whose symptom is a
+/// `libsystem_malloc` abort rather than a wrong answer. This is held as
+/// `@State` on the MainActor surface that already owns the composition.
+///
+/// **It lives in this file rather than its own** because the app target uses
+/// **explicit** `project.pbxproj` references (only the test targets and the
+/// watch app are synchronized groups), so a new source file is not free here —
+/// F18's mixed-groups lesson. Reuse-first also puts "what invalidates a
+/// proposal" beside the proposer it invalidates.
+struct BenchProposalMemo {
+
+    private var lastSessions: [ClipGroup]?
+    private var lastDismissed: Set<ClusterFingerprint>?
+    private var lastProposals: [ClusterProposal]?
+
+    /// Whether the most recent `proposals(…)` call reused a cached answer.
+    /// Reported by `[BenchPerf]` so the hit rate is observable on device rather
+    /// than assumed — a memo nobody can see the hit rate of is a memo nobody
+    /// can tell is working.
+    private(set) var lastCallWasHit = false
+
+    init() {}
+
+    /// Returns the proposals for these inputs, computing them only when the
+    /// inputs differ from the previous call.
+    ///
+    /// `compute` is a closure rather than a direct `ClipClusterProposer.propose`
+    /// call so the caller keeps ownership of the trace and the extractor, and
+    /// so a test can count invocations without reaching into the proposer.
+    mutating func proposals(
+        sessions: [ClipGroup],
+        dismissed: Set<ClusterFingerprint>,
+        compute: ([ClipGroup], Set<ClusterFingerprint>) -> [ClusterProposal]
+    ) -> [ClusterProposal] {
+        if let lastSessions,
+           let lastDismissed,
+           let lastProposals,
+           lastSessions == sessions,
+           lastDismissed == dismissed {
+            lastCallWasHit = true
+            return lastProposals
+        }
+        let fresh = compute(sessions, dismissed)
+        lastCallWasHit = false
+        lastSessions = sessions
+        lastDismissed = dismissed
+        lastProposals = fresh
+        return fresh
+    }
+}

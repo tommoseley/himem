@@ -134,6 +134,11 @@ struct SessionListView: View {
     /// before the sibling data has arrived.
     @State private var siblingStackHasRows = false
     @State private var removedByFingerprint: [String: Set<UUID>] = [:]
+    /// **B23.** Skips `ClipClusterProposer.propose` when its inputs are
+    /// unchanged. Held here — MainActor, view-owned — rather than as a static
+    /// cache on the proposer, which would be process-global mutable state on
+    /// whatever thread composes the bench (CLAUDE.md § Test Concurrency).
+    @State private var proposalMemo = BenchProposalMemo()
     // Single-open accordion for the cluster editor's compact rows — the
     // clipId whose transcript is expanded (nil = all collapsed). Same
     // container-owned model as Memory Detail's compact stream.
@@ -369,8 +374,14 @@ struct SessionListView: View {
     /// assignment site so a sixth cannot quietly appear.
     private func regroupSessions() {
         let t0 = CFAbsoluteTimeGetCurrent()
-        defer { BenchPerf.regroup(since: t0, sessions: sessions.count, lens: drawn.count) }
-        composeDrawnBench()
+        let cost = composeDrawnBench()
+        BenchPerf.regroup(
+            since: t0,
+            sessions: sessions.count,
+            lens: drawn.count,
+            proposeMs: cost.proposeMs,
+            memoHit: cost.memoHit
+        )
     }
 
     /// **The swap (C2 step 2b-ii-c2): one composition, read by everything.**
@@ -390,7 +401,7 @@ struct SessionListView: View {
     /// the proposer said without regrouping. Proposals decide only which
     /// region an item is drawn in, never whether it is drawn — so the count
     /// is invariant across the two calls.
-    private func composeDrawnBench() {
+    private func composeDrawnBench() -> (proposeMs: Double, memoHit: Bool) {
         let voiceRefs = fetchZeroEdgeVoiceRefs()
         let mediaRefs = fetchUnplacedNonVoiceRefs()
         // Premise 2 of the redo contract — **voice resolves from BOTH stores,
@@ -452,13 +463,34 @@ struct SessionListView: View {
         #else
         let trace: ClusterProposalTrace? = nil
         #endif
-        let proposed = ClipClusterProposer.propose(
+        // **B23 — the proposer runs only when its inputs changed.** Eleven
+        // regroups inside 0.24 s on device, all at an identical bench state,
+        // each carrying a full NLTagger pass; ten of them were redundant. The
+        // memo's signature is the inputs themselves compared by `==`, so it
+        // cannot omit a field `propose` reads — see `BenchProposalMemo`.
+        var proposeMs = 0.0
+        let proposed = proposalMemo.proposals(
             sessions: ungrouped.sessions.map(project),
-            dismissed: inbox.dismissedClusterFingerprints,
-            trace: trace
-        )
+            dismissed: inbox.dismissedClusterFingerprints
+        ) { sessions, dismissed in
+            let t0 = CFAbsoluteTimeGetCurrent()
+            defer { proposeMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000 }
+            return ClipClusterProposer.propose(
+                sessions: sessions,
+                dismissed: dismissed,
+                trace: trace
+            )
+        }
         #if DEBUG
-        BenchPerf.clusterTrace(trace)
+        // **Only when the proposer actually ran.** On a hit the trace was never
+        // written into, and `clusterTrace` gates on the trace's *signature* —
+        // so emitting it would print `sessions=0 · formed=0` and announce an
+        // empty bench that does not exist. Two instruments in two days have
+        // already reported churn they invented (B21, and the FORMED array a day
+        // later); a memo that made the third would be this fix's own fault.
+        if !proposalMemo.lastCallWasHit {
+            BenchPerf.clusterTrace(trace)
+        }
         #endif
         let bench = ungrouped.claiming(proposals: proposed, trim: removedByFingerprint)
         let drawnBench = DrawnBench.from(bench, proposals: proposed)
@@ -532,6 +564,7 @@ struct SessionListView: View {
             .compactMap { mediaById[$0.id] }
         siblingStackHasRows = !stackMedia.isEmpty
         BenchSiblingStackBus.shared.setStackMedia(stackMedia)
+        return (proposeMs: proposeMs, memoHit: proposalMemo.lastCallWasHit)
     }
 
     // `mediaBySession` was RETIRED by C2 step 4 slice C (2026-08-19), together
@@ -2251,10 +2284,29 @@ enum BenchPerf {
 
     private static var lastResolveSignature: String?
 
-    static func regroup(since t0: CFAbsoluteTime, sessions: Int, lens: Int) {
+    /// **`propose=` and `memo=` were added with B23's memo (2026-08-19).**
+    ///
+    /// The fix is its own measurement. The inherited B23 target (*16 regroups /
+    /// 532 ms in the first 2.0 s*) did not reproduce — the same instrument on
+    /// build 28 measured *11 / 138.9 ms*, a ~4× disagreement left **unexplained
+    /// rather than averaged**. What both readings agreed on was the redundancy,
+    /// so these two fields report the thing actually being fixed: how much of a
+    /// regroup the proposer costs, and whether this regroup paid it.
+    ///
+    /// Without `memo=` a working memo and a memo wired to nothing look
+    /// identical from the log — the *"complete, tested, never-consulted value"*
+    /// shape this project has paid for twice.
+    static func regroup(
+        since t0: CFAbsoluteTime,
+        sessions: Int,
+        lens: Int,
+        proposeMs: Double,
+        memoHit: Bool
+    ) {
         regroupCount += 1
         let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
         guard shouldLog(regroupCount) else { return }
-        NSLog("[HiMem][BenchPerf] regroup #\(regroupCount) · \(String(format: "%.1f", ms))ms · sessions=\(sessions) · lens=\(lens) · t+\(String(format: "%.2f", elapsed()))s")
+        let memo = memoHit ? "hit" : "miss · propose=\(String(format: "%.1f", proposeMs))ms"
+        NSLog("[HiMem][BenchPerf] regroup #\(regroupCount) · \(String(format: "%.1f", ms))ms · sessions=\(sessions) · lens=\(lens) · memo=\(memo) · t+\(String(format: "%.2f", elapsed()))s")
     }
 }
