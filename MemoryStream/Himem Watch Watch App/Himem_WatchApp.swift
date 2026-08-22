@@ -16,6 +16,12 @@ struct Himem_Watch_Watch_AppApp: App {
     /// after a BT wedge, queue stuck until next cold launch.
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Stamps which binary this is at launch — the watch's only guard against
+    /// reading a device pass off a stale install. See `WatchBuildStamp`.
+    init() {
+        WatchBuildStamp.log()
+    }
+
     var body: some Scene {
         WindowGroup {
             WatchRootView()
