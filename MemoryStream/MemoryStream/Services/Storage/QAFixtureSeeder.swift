@@ -345,9 +345,34 @@ enum QAFixtureSeeder {
         InboxManifest.shared.removeBatch(
             clipIds: InboxManifest.shared.clips.map(\.clipId).filter(isSeeded)
         )
+        // **Read the id through KVC, not the non-optional accessor.**
+        //
+        // This fetches EVERY `MediaReference` in the store — the user's real
+        // clips, not just the fixtures — and `isSeeded` takes a non-optional
+        // `UUID`. `MediaReference.id` is declared `@NSManaged var id: UUID`
+        // over an `optional="YES"` model cell (every attribute here is
+        // optional, because `NSPersistentCloudKitContainer` requires it), so a
+        // single nil cell traps with `EXC_BREAKPOINT` — signal 5 — and takes
+        // the app down mid-teardown.
+        //
+        // A nil cell is reachable rather than theoretical:
+        // `StorageService:165` sets `shouldDeleteInaccessibleFaults = true` so
+        // a fault pointing at a CloudKit-deleted record does not throw. What
+        // that flag actually does is mark the object deleted and NIL OUT EVERY
+        // PROPERTY — it converts a catchable `NSObjectInaccessibleException`
+        // into a silently nil-valued object. Deleting rows is what makes a
+        // cached fault inaccessible, which is why both observed traps
+        // (2026-08-21, device) landed immediately after a delete and never
+        // before one.
+        //
+        // A row we cannot identify is by definition not ours: skip it. Owning
+        // only `5EED-` rows is the whole contract of this teardown.
+        // Guarded by `ClearNilIdTrapTests`.
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
         if let refs = try? context.fetch(req) {
-            for ref in refs where isSeeded(ref.id) {
+            for ref in refs {
+                guard let refId = ref.value(forKey: "id") as? UUID else { continue }
+                guard isSeeded(refId) else { continue }
                 context.delete(ref)
             }
         }
