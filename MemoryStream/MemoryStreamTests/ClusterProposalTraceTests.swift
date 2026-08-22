@@ -249,4 +249,71 @@ struct ClusterProposalTraceTests {
             "The same proposals in a different order produced a different signature — the emission gate fires on an unchanged bench and reports churn that is not there"
         )
     }
+
+    /// **The trace must be able to show an id collision — it is the instrument
+    /// reached for when identity is in doubt.**
+    ///
+    /// `shortIds` printed `prefix(8)`, which was right while clip ids were
+    /// random. The QA seeder's namespace made every fixture id share its first
+    /// eight characters (`5EED0002-0000-0000-0000-0000000000NN`), so a cluster
+    /// of three DISTINCT clips rendered as `[5EED0002,5EED0002,5EED0002]` —
+    /// byte-identical to what three genuinely colliding ids would print.
+    ///
+    /// That is the class B25 was: a sentinel id used as a dictionary key. An
+    /// instrument that cannot distinguish "three different things" from "the
+    /// same thing three times" reports success by failing to look — the
+    /// `loudPeakThenSilence` shape.
+    ///
+    /// **This test fails against `prefix(8)`**, which is the point: it is
+    /// written against the defect, not around it.
+    @Test
+    func namespacedIdsAreDistinguishableInTheTrace() {
+        // The seeder's exact shape: identical everywhere but the last segment.
+        let a = UUID(uuidString: "5EED0002-0000-0000-0000-000000000210")!
+        let b = UUID(uuidString: "5EED0002-0000-0000-0000-000000000310")!
+        let c = UUID(uuidString: "5EED0002-0000-0000-0000-000000000410")!
+
+        let trace = ClusterProposalTrace()
+        trace.recordFormed([proposal(clipIds: [a, b, c], proposedName: "Sparrow Quarry")])
+        let formedLine = try? #require(trace.lines.first { $0.contains("FORMED") })
+
+        let rendered = formedLine ?? ""
+        #expect(
+            !rendered.isEmpty,
+            "the FORMED line must exist, or this test passes by matching nothing"
+        )
+        // Three distinct clips must read as three distinct strings.
+        let inside = rendered.drop { $0 != "[" }.prefix { $0 != "]" }
+        let printed = inside.dropFirst().split(separator: ",").map(String.init)
+        #expect(printed.count == 3, "three clips, three rendered ids — got: \(printed)")
+        #expect(
+            Set(printed).count == 3,
+            """
+            Three DIFFERENT clip ids rendered identically as \(printed). Under QA \
+            fixtures the trace cannot then distinguish three distinct ids from three \
+            colliding ones — structurally blind to B25's class, which is the defect \
+            this instrument exists to investigate.
+            """
+        )
+    }
+
+    /// **The other population must still be legible.** A fix that printed the
+    /// whole UUID would satisfy the test above and make the line unreadable;
+    /// one that switched to the tail alone would break random ids, which differ
+    /// in the head. Both halves are load-bearing.
+    @Test
+    func randomIdsRemainDistinguishableAndShort() {
+        let ids = [UUID(), UUID(), UUID()]
+        let trace = ClusterProposalTrace()
+        trace.recordFormed([proposal(clipIds: ids, proposedName: "Harbor Lantern")])
+        let rendered = trace.lines.first { $0.contains("FORMED") } ?? ""
+
+        let inside = rendered.drop { $0 != "[" }.prefix { $0 != "]" }
+        let printed = inside.dropFirst().split(separator: ",").map(String.init)
+        #expect(Set(printed).count == 3)
+        for p in printed {
+            #expect(p.count <= 16, "an id rendering must stay scannable in a log line — got \(p.count) chars: \(p)")
+        }
+    }
+
 }

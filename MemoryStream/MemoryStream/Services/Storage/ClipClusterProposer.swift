@@ -1016,8 +1016,33 @@ final class ClusterProposalTrace {
         ]
     }
 
+    /// **Head AND tail — a wider prefix would not have fixed this.**
+    ///
+    /// This printed `prefix(8)`, chosen when clip ids were random, where eight
+    /// hex characters make a collision vanishingly unlikely. The QA seeder then
+    /// took a *namespace*: every fixture id is
+    /// `5EED0002-0000-0000-0000-0000000000NN`, so the entire discriminating
+    /// part is the LAST segment and every seeded id rendered identically. A
+    /// cluster of three distinct clips printed as
+    /// `[5EED0002,5EED0002,5EED0002]` — indistinguishable from three *colliding*
+    /// ids, which is precisely the class B25 was (a sentinel id used as a
+    /// dictionary key). **The instrument reached for when identity is in doubt
+    /// was structurally blind to the one defect it would be reached for.**
+    ///
+    /// Head+tail discriminates both populations: random ids differ in the head,
+    /// namespaced ids differ in the tail. Guarded by
+    /// `ClusterProposalTraceTests.namespacedIdsAreDistinguishableInTheTrace`.
+    ///
+    /// *Found 2026-08-21 on device, reading a trace whose `ids=` column could
+    /// not have shown a collision. Same family as `[BinThumb]` logging only
+    /// failures, and the crash grep matching one phrasing of two: right
+    /// artifact, wrong pattern, invisible because the answer came back
+    /// well-formed.*
     private func shortIds(_ ids: [UUID]) -> String {
-        ids.map { String($0.uuidString.prefix(8)) }.joined(separator: ",")
+        ids.map { id -> String in
+            let s = id.uuidString
+            return "\(s.prefix(8))…\(s.suffix(4))"
+        }.joined(separator: ",")
     }
 
     private func describe(_ fate: Fate) -> String {
