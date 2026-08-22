@@ -79,6 +79,34 @@ import CoreData
 ///
 /// The principle behind it, which outranks any convenience in implementing it:
 /// **an artefact of syncing may never destroy something a person typed.**
+///
+/// **NIL `linkedAt` — RULED 2026-08-21, and it is not the obvious answer.**
+///
+/// "Oldest wins" has no answer when `linkedAt` is absent, and absent is a real
+/// state: the attribute is `optional="YES"` in the model and the Swift
+/// declaration is `Date?` **deliberately**, to retire the July 11 2026 crash at
+/// `JournalEntry.edgesArray`. So the policy as first written could not be built.
+///
+/// The codebase's existing convention would have decided it wrongly.
+/// `edgesArray` sorts with `($0.linkedAt ?? .distantPast)`, which sinks a nil to
+/// the bottom of a descending sort — and under "oldest wins" that would make
+/// **the unknown timestamp the winner**. Precisely backwards: a nil `linkedAt`
+/// carries *no claim* to being the original, so it must lose, not win. The
+/// `.distantPast` fallback is a sort convenience, not a statement about time,
+/// and reusing it as one would have let an edge with no recorded history
+/// outrank an edge that has some.
+///
+/// **The order, total by construction** (B21's lesson: any total order will do,
+/// the point is that it IS total):
+///  1. A **non-nil** `linkedAt` always beats a nil one.
+///  2. Among non-nil, **oldest wins**.
+///  3. Among all-nil, the **annotated** edge survives.
+///  4. Still tied — either. They are indistinguishable by every field we trust,
+///     and the annotation rule above means nothing a person typed is lost
+///     whichever is picked.
+///
+/// Stated as the principle it derives from: **an artefact may never outrank a
+/// record.** Same shape as the parent rule, one level down.
 @MainActor
 @Suite(.serialized)
 struct DuplicateEdgeConvergenceTests {
