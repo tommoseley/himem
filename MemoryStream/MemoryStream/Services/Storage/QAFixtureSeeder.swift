@@ -77,7 +77,8 @@ enum QAFixtureSeeder {
     /// is currently on the bench, because the state that needs clearing —
     /// review flags and stamps — outlives the rows themselves.
     static var allSeededIds: [UUID] {
-        [100, 101, 102, 200, 201, 202, 210, 300, 301, 302, 310, 311, 400, 410, 411].map(id)
+        [100, 101, 102, 200, 201, 202, 210, 300, 301, 302, 310, 311, 400, 410, 411,
+         500, 510, 511].map(id)
     }
 
     // MARK: - What gets built
@@ -97,6 +98,7 @@ enum QAFixtureSeeder {
         notes.append(seedClusterB(now: now, in: context))
         notes.append(seedClusterC(now: now, in: context))
         notes.append(seedLooseSession(now: now, in: context))
+        notes.append(seedVoicelessSittings(now: now, in: context))
         return notes.joined(separator: "\n\n")
     }
 
@@ -240,6 +242,53 @@ enum QAFixtureSeeder {
         """
     }
 
+    // MARK: - Voiceless sittings · B25's own shape (added 2026-08-21)
+
+    /// **TWO media-only sittings — the shape no fixture could previously make.**
+    ///
+    /// B25 was a sentinel used as a dictionary key: `projectGroup` keeps voice
+    /// only, so a media-only session projects to `ClipGroup(clips: [])`, whose
+    /// id is the fixed `ClipSessionGrouper.emptyGroupId`. Every voiceless
+    /// session therefore wrote one bucket and read back whatever the last
+    /// writer left.
+    ///
+    /// **Two, not one, and the count is the whole point.** A single voiceless
+    /// session agrees *by coincidence* — its own media is the only thing in the
+    /// bucket, so `0 + 1 == 1` and the collapse stays silent. Reproducing it
+    /// needs a second one to overwrite the first. One sitting would cover the
+    /// corrected bench header (B28, which only needs the sibling stack to be
+    /// non-empty) and would still leave B25 unreproducible from fixtures — the
+    /// exact gap this exists to close.
+    ///
+    /// **Different item counts, deliberately.** D holds one photo and E holds
+    /// two, so a collapse is visible as a wrong *number* and not merely as
+    /// wrong bytes: under the old code D would read back E's two.
+    ///
+    /// Placed at −2 h and −3 h — clear of every other sitting by far more than
+    /// the 10-minute idle gap, so `ClipSessionGrouper` keeps all four apart.
+    ///
+    /// **Not added to `seedFullyClusteredBench`**, whose premise is that every
+    /// drawn session is claimed by a proposal; an unclustered voiceless sitting
+    /// would falsify it.
+    @MainActor
+    private static func seedVoicelessSittings(now: Date, in context: NSManagedObjectContext) -> String {
+        // D — one photo alone. The case that agrees by coincidence.
+        insertPhotoRef(id: id(500), createdAt: now.addingTimeInterval(-2 * 3600), in: context)
+
+        // E — two photos, one sitting. The second writer into the collapsed
+        // bucket, and the one whose count made the disagreement visible.
+        let eBase = now.addingTimeInterval(-3 * 3600)
+        insertPhotoRef(id: id(510), createdAt: eBase, in: context)
+        insertPhotoRef(id: id(511), createdAt: eBase.addingTimeInterval(120), in: context)
+
+        return """
+        VOICELESS SITTINGS — D: 1 photo (~2 h ago) · E: 2 photos (~3 h ago), no voice in either.
+        Both draw in the sibling day-grouped stack, not as session cards.
+        For: B25 (needs TWO — one agrees by coincidence) and B28's header, \
+        which must count the stack as well as the cards.
+        """
+    }
+
     // MARK: - A loose mixed session (F37)
 
     /// One sitting with a voice clip, a photo and a note inside the window,
@@ -329,7 +378,11 @@ enum QAFixtureSeeder {
         transcript: String,
         coordinate: (lat: Double, lon: Double)?
     ) -> InboxClip {
-        let filename = "\(filePrefix)\(clipId.uuidString.prefix(8)).caf"
+        // `suffix(12)`, NOT `prefix(8)`: every id this seeder mints begins
+        // `5EED0002`, so a prefix-keyed name gave all ten voice clips ONE
+        // file. Same class as the trace's `shortIds` (fixed 2026-08-21) —
+        // a truncation chosen for random ids, invalidated by a namespace.
+        let filename = "\(filePrefix)\(clipId.uuidString.suffix(12)).caf"
         writeTone(to: InboxManifest.audioURL(for: filename))
         return InboxClip(
             clipId: clipId,
@@ -353,7 +406,8 @@ enum QAFixtureSeeder {
 
     @MainActor
     private static func insertPhotoRef(id refId: UUID, createdAt: Date, in context: NSManagedObjectContext) {
-        let filename = "\(filePrefix)\(refId.uuidString.prefix(8)).jpg"
+        // See the `.caf` note above — prefix(8) collides across this namespace.
+        let filename = "\(filePrefix)\(refId.uuidString.suffix(12)).jpg"
         writeSwatch(to: UbiquityStore.shared.photoURL(for: filename))
         let ref = MediaReference(context: context)
         ref.id = refId
