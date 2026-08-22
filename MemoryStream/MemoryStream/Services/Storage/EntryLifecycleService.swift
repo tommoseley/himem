@@ -897,15 +897,51 @@ final class EntryLifecycleService {
     /// `MemoryClipEdge` only. The clip itself survives, still attached
     /// to any other memories it's in; if this was its last edge, it
     /// returns to the Clips tab as unplaced evidence.
+    /// **Removal is scoped to the (memory, clip) PAIR, not to one row (B26).**
+    ///
+    /// A store that has converged from two devices can hold more than one
+    /// `MemoryClipEdge` for the same pair: each device's `createEdge` guard
+    /// reads only its own context, so neither can see the other's write, and
+    /// the model cannot forbid it — `NSPersistentCloudKitContainer` permits no
+    /// uniqueness constraints. Deleting a single row therefore left the clip
+    /// still attached: the button reported success and changed nothing on
+    /// screen, because `EntryMapper` dedupes `mediaItems` and renders one row
+    /// either way. That is the silent-no-op class the non-negotiables forbid.
+    ///
+    /// **One owner deliberately.** Both doors below express the same promise —
+    /// *this clip is not in this memory any more* — and the previous code
+    /// expressed it as a literal fetch at each call site, which is how one of
+    /// them kept `fetchLimit = 1`. An invariant with two literals is the shape
+    /// this codebase keeps paying for (F6a).
+    ///
+    /// Returns how many edges were dropped so a caller can distinguish
+    /// "nothing was attached" from "the remove ran".
+    @discardableResult
+    private func dropEveryEdge(memoryId: UUID, clipId: UUID) throws -> Int {
+        let req = NSFetchRequest<MemoryClipEdge>(entityName: "MemoryClipEdge")
+        req.predicate = NSPredicate(
+            format: "clipId == %@ AND memoryId == %@",
+            clipId as CVarArg,
+            memoryId as CVarArg
+        )
+        let edges = try storage.viewContext.fetch(req)
+        guard !edges.isEmpty else { return 0 }
+        for edge in edges { storage.viewContext.delete(edge) }
+        try storage.save(context: storage.viewContext)
+        return edges.count
+    }
+
     func removeClipFromMemory(edgeId: UUID) {
         do {
             let req = NSFetchRequest<MemoryClipEdge>(entityName: "MemoryClipEdge")
             req.predicate = NSPredicate(format: "id == %@", edgeId as CVarArg)
             req.fetchLimit = 1
             guard let edge = try storage.viewContext.fetch(req).first else { return }
+            // The edge the UI happens to hold identifies the PAIR; every edge
+            // for that pair goes, or the clip stays in the memory.
             let detachedRefId = edge.clipId
-            storage.viewContext.delete(edge)
-            try storage.save(context: storage.viewContext)
+            let fromMemoryId = edge.memoryId
+            guard try dropEveryEdge(memoryId: fromMemoryId, clipId: detachedRefId) > 0 else { return }
             // Mark the clip "was in a memory" (P7-3) — a user detach; the
             // Unconnected row's line only shows once it's at 0 edges.
             PreviouslyConnectedStore.record(detachedRefId)
@@ -927,16 +963,7 @@ final class EntryLifecycleService {
     /// is a placement action.
     func removeClipFromMemory(memoryId: UUID, refId: UUID) {
         do {
-            let edgeReq = NSFetchRequest<MemoryClipEdge>(entityName: "MemoryClipEdge")
-            edgeReq.predicate = NSPredicate(
-                format: "clipId == %@ AND memoryId == %@",
-                refId as CVarArg,
-                memoryId as CVarArg
-            )
-            edgeReq.fetchLimit = 1
-            guard let edge = try storage.viewContext.fetch(edgeReq).first else { return }
-            storage.viewContext.delete(edge)
-            try storage.save(context: storage.viewContext)
+            guard try dropEveryEdge(memoryId: memoryId, clipId: refId) > 0 else { return }
             PreviouslyConnectedStore.record(refId)
         } catch {
             ErrorState.shared.report(.deleteFailed(error.localizedDescription))
