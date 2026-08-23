@@ -54,9 +54,31 @@ enum PhoneCaptureBenchDispatcher {
                 longitude: nil,
                 source: phoneSourceLabel,
                 audioFilename: audioFilename,
-                transcriptionAttempted: !transcript.isEmpty,
+                // **"Ran and found nothing" is not "still running" (2026-08-22).**
+                // These were `!transcript.isEmpty` / `transcript.isEmpty ? .received : .transcribed`,
+                // which wrote `false` / `.received` in exactly the case
+                // `transcriptionAttempted` exists to record as true — its own doc:
+                // *"True after the iPhone-side speech recognizer has run for this
+                // clip, EVEN IF IT RETURNED NO TEXT. Combined with
+                // `transcript.isEmpty` this distinguishes 'still in flight' from
+                // 'ran, found no speech'."* The consequence was not cosmetic:
+                // `accidentalClips` needs `transcript.isEmpty && transcriptionAttempted`,
+                // so a no-speech phone clip could never be accidental, never
+                // rendered "N clips auto-excluded · no speech", and
+                // `collapsedBodyVariant` reported `.transcribing` — a finished
+                // recording presented as one still being worked on.
+                //
+                // Unconditional `true` is a precondition of arriving here, not an
+                // assumption: `SpeechService.startRecording` returns early — no
+                // recording, no file — unless `isAuthorized` AND the analyzer,
+                // transcriber and format are prepared, and phone capture
+                // transcribes live. Guarded by
+                // `PhoneCaptureBenchDispatcherTests.theDispatcherOnlyReceivesPostRecognizerItems`,
+                // which fails if a dispatch appears outside the two post-recording
+                // call sites.
+                transcriptionAttempted: true,
                 rollGroupId: nil,
-                status: transcript.isEmpty ? .received : .transcribed
+                status: .transcribed
             )
             inbox.acceptClip(clip)
 
@@ -86,9 +108,13 @@ enum PhoneCaptureBenchDispatcher {
                     longitude: c.longitude,
                     source: phoneSourceLabel,
                     audioFilename: c.audioFilename,
-                    transcriptionAttempted: !c.transcript.isEmpty,
+                    // Same fix as the `.voice` case above, and it must land in
+                    // both: the roll splitter re-transcribes every fragment, so
+                    // every fragment has been attempted. Fixing one site and not
+                    // the other is the near-duplicate-procedure shape F6a names.
+                    transcriptionAttempted: true,
                     rollGroupId: rollGroupId,
-                    status: c.transcript.isEmpty ? .received : .transcribed
+                    status: .transcribed
                 )
                 inbox.acceptClip(clip)
             }
