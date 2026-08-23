@@ -794,3 +794,161 @@ enum MentionMigration {
         return linked
     }
 }
+
+#if DEBUG
+/// **Does this store actually contain a row whose Swift-non-optional attribute
+/// is nil?** One-shot, read-only, DEBUG-only.
+///
+/// ## Why this exists
+///
+/// The 2026-08-21 SIGTRAP was a non-optional `@NSManaged` accessor read over a
+/// nil cell. Two routes produce that nil and they need different fixes:
+///
+///  * **Route A** — a row genuinely carrying a nil `id`. Persistent, queryable,
+///    a real live object.
+///  * **Route B** — an inaccessible fault nil'd by
+///    `shouldDeleteInaccessibleFaults`. Transient, context-scoped, findable by
+///    no query.
+///
+/// The root-cause commit named Route B. **That was disconfirmed 2026-08-22** by
+/// `InaccessibleFaultProbeTests`: `StorageService:165` sets the flag, but `:169`
+/// pins the query generation four lines later, and with the generation pinned a
+/// row deleted afterwards stays readable — the fault never becomes inaccessible
+/// and the flag never fires. Weight moved to Route A, which a query can answer.
+///
+/// ## It cannot trap while asking
+///
+/// Every read goes through `value(forKey:)`, never a generated accessor. Reading
+/// `ref.id` is the thing that traps; `ref.value(forKey: "id")` returns nil
+/// harmlessly. A probe that crashed the app while looking for the cause of a
+/// crash would be worse than no probe.
+///
+/// ## Deliberately a fresh background context
+///
+/// It carries no pinned query generation, so this reports what the store holds
+/// **now** rather than what `viewContext`'s snapshot held when it was pinned —
+/// the very difference the probe above measured.
+///
+/// ## Why it lives in this file
+///
+/// `MemoryStream/MemoryStream/` uses explicit `project.pbxproj` references (only
+/// the test targets are `PBXFileSystemSynchronizedRootGroup`s), so a new source
+/// file here is invisible to the target until the project file is edited — the
+/// F18 mixed-groups lesson that also caught the B23 memo. Housing it beside the
+/// container it queries costs nothing and needs no project-file surgery.
+enum NilAttributeScan {
+
+    /// Entity → attributes declared non-optional in Swift over `optional="YES"`.
+    /// The three `MediaReference` attributes the declaration fix targets, plus
+    /// the three `MemoryClipEdge` attributes read at `EntryLifecycleService:849`
+    /// and `:1136` through relationship traversal, which no predicate protects.
+    /// **Not** a sweep of all 44: per the 2026-08-21 ruling that shape is a
+    /// property of `NSPersistentCloudKitContainer` requiring every attribute
+    /// optional, not 44 defects.
+    static let targets: [(entity: String, attributes: [String])] = [
+        ("MediaReference", ["id", "mediaType", "osIdentifier"]),
+        ("MemoryClipEdge", ["id", "clipId", "memoryId"]),
+    ]
+
+    /// Enough to tell a live nil-valued row (Route A) from a nil'd inaccessible
+    /// fault (Route B) at the moment it was seen.
+    struct Row {
+        let entity: String
+        let nilAttribute: String
+        let isDeleted: Bool
+        let isFault: Bool
+        /// Every scanned attribute of this row, so one nil in a single place
+        /// (Route A) is distinguishable from nil in every place (Route B — the
+        /// flag nils the lot).
+        let allValues: [String: String]
+    }
+
+    struct Result {
+        let totals: [String: Int]
+        let rows: [Row]
+        var isClean: Bool { rows.isEmpty }
+    }
+
+    /// Never throws. A fetch that fails is reported as a fetch that failed, not
+    /// swallowed into a clean result — "0 findings" and "could not look" must
+    /// never render the same way.
+    static func run(container: NSPersistentContainer) -> Result {
+        let ctx = container.newBackgroundContext()
+        var totals: [String: Int] = [:]
+        var rows: [Row] = []
+
+        ctx.performAndWait {
+            for (entity, attributes) in targets {
+                let countReq = NSFetchRequest<NSManagedObject>(entityName: entity)
+                totals[entity] = (try? ctx.count(for: countReq)) ?? -1
+
+                for attribute in attributes {
+                    let req = NSFetchRequest<NSManagedObject>(entityName: entity)
+                    req.predicate = NSPredicate(format: "%K == nil", attribute)
+                    guard let hits = try? ctx.fetch(req) else {
+                        totals["\(entity).\(attribute) FETCH-FAILED"] = -1
+                        continue
+                    }
+                    for obj in hits {
+                        var values: [String: String] = [:]
+                        for a in attributes {
+                            values[a] = obj.value(forKey: a).map { "\($0)" } ?? "nil"
+                        }
+                        rows.append(Row(entity: entity,
+                                        nilAttribute: attribute,
+                                        isDeleted: obj.isDeleted,
+                                        isFault: obj.isFault,
+                                        allValues: values))
+                    }
+                }
+            }
+        }
+        return Result(totals: totals, rows: rows)
+    }
+
+    /// Emits the result under one greppable tag.
+    static func log(_ result: Result) {
+        // The scanned attributes are named in the artifact, not left to the
+        // reader's trust in a constant. A CLEAN verdict that does not say WHAT
+        // was scanned cannot be audited from the log alone — the same weakness
+        // as a completeness claim bounded by `head`.
+        let scope = targets
+            .map { "\($0.entity)[\($0.attributes.joined(separator: ","))]" }
+            .joined(separator: " ")
+        NSLog("[HiMem][NilScan] BEGIN · scanned \(scope) · \(totalsLine(result))")
+        if result.isClean {
+            NSLog("[HiMem][NilScan] CLEAN — no nil cell in any scanned attribute. Route A not present in this store.")
+        } else {
+            for r in result.rows {
+                let vals = r.allValues.sorted { $0.key < $1.key }
+                    .map { "\($0.key)=\($0.value)" }
+                    .joined(separator: " ")
+                NSLog("[HiMem][NilScan] HIT \(r.entity).\(r.nilAttribute) isDeleted=\(r.isDeleted) isFault=\(r.isFault) · \(vals)")
+            }
+            NSLog("[HiMem][NilScan] \(result.rows.count) row(s) with a nil cell. Nil in ONE attribute with the others populated is Route A — a real persisted row. Nil in EVERY attribute with isDeleted=true is Route B.")
+        }
+        NSLog("[HiMem][NilScan] END")
+    }
+
+    static func totalsLine(_ result: Result) -> String {
+        result.totals
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+    }
+
+    /// Built here rather than inside the Settings `ViewBuilder`: interpolating
+    /// the sorted/mapped/joined chain inline pushed that Section past the Swift
+    /// type-checker's budget ("unable to type-check this expression in
+    /// reasonable time"), which is a build failure, not a style note.
+    static func summary(_ result: Result) -> String {
+        if result.isClean {
+            return "The predicate matched nothing. No nil cell in any of the six scanned attributes.\n\nScanned: \(totalsLine(result))"
+        }
+        let lines = result.rows.prefix(5)
+            .map { "• \($0.entity).\($0.nilAttribute) — isDeleted=\($0.isDeleted) isFault=\($0.isFault)" }
+            .joined(separator: "\n")
+        return "\(result.rows.count) row(s) with a nil cell:\n\n\(lines)\n\nFull detail is in the device console under [HiMem][NilScan]."
+    }
+}
+#endif

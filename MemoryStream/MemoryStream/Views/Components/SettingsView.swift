@@ -46,6 +46,8 @@ struct SettingsView: View {
     @State private var showResetTutorialAlert = false
     @State private var showAggregateScanAlert = false
     @State private var aggregateScanResult = ""
+    @State private var showNilScanAlert = false
+    @State private var nilScanResult = ""
     // RH-8 orphaned-blob sweep (destructive; deliberate trigger only).
     @State private var showSweepAlert = false
     @State private var sweepPlan: [URL] = []
@@ -362,6 +364,36 @@ struct SettingsView: View {
                     }
                     .tint(Crucible.Color.accent)
 
+                    // SIGTRAP provenance (2026-08-22): read-only scan for a row
+                    // whose Swift-non-optional attribute is actually nil.
+                    // Mutates nothing, and cannot trap while asking — every
+                    // read goes through `value(forKey:)`, never a generated
+                    // accessor, because the generated accessor IS the trap.
+                    //
+                    // It answers Route A ("a real persisted row carries a nil
+                    // id") against Route B ("an inaccessible fault was nil'd").
+                    // Route B was the root cause named on 2026-08-21 and was
+                    // DISCONFIRMED on 2026-08-22 by `InaccessibleFaultProbeTests`:
+                    // `StorageService:169` pins the query generation four lines
+                    // after `:165` sets the flag, and with it pinned the fault
+                    // never becomes inaccessible. So Route A is what remains,
+                    // and a query is what settles it.
+                    Button {
+                        let result = NilAttributeScan.run(container: StorageService.shared.container)
+                        NilAttributeScan.log(result)
+                        nilScanResult = NilAttributeScan.summary(result)
+                        showNilScanAlert = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "questionmark.circle.fill")
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Text("Scan for nil id / mediaType / osIdentifier (read-only)")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
                     // Finding 1 evidence step (2026-07-16): read-only scan for
                     // already-stored aggregate `.note` artifacts. Mutates
                     // nothing — proves the cleanup predicate matches a real
@@ -534,6 +566,14 @@ struct SettingsView: View {
                     Button("OK", role: .cancel) { }
                 } message: {
                     Text(aggregateScanResult)
+                }
+                .alert("Nil-cell scan", isPresented: $showNilScanAlert) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    // F22 EXEMPT: this reports the RESULT of a scan the user
+                    // just ran — "the predicate matched nothing" — not a claim
+                    // about how much they have.
+                    Text(nilScanResult)
                 }
                 .alert("Orphaned media sweep", isPresented: $showSweepAlert) {
                     // F22 EXEMPT: `sweepPlan` is a computed maintenance plan,
