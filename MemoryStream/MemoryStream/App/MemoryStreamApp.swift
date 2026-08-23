@@ -1,6 +1,7 @@
 import SwiftUI
 import AppIntents
 import UserNotifications
+import os
 
 @MainActor
 final class QuickActionState: ObservableObject {
@@ -21,6 +22,51 @@ final class OrientationLock {
     /// Read by `AppDelegate.application(_:supportedInterfaceOrientationsFor:)`.
     var portraitOnly: Bool = false
     private init() {}
+}
+
+/// Diagnostic lines that must survive to the DEVICE PERSISTENT LOG STORE.
+///
+/// **Why this exists rather than `NSLog`.** iOS elides a third-party app's log
+/// message bodies to `<private>` **at write time** unless the value is
+/// explicitly public. So an `NSLog` line is not merely *hidden* in a collected
+/// archive — it was never recorded, and there is no post-hoc recovery.
+/// Measured 2026-08-23 while staging the ④ out-of-range provocation: a
+/// `log collect --device-udid … --last 15m` archive carried **21 bare
+/// `(Foundation) <private>` entries** from HiMem and **zero** readable ones,
+/// including the build stamp.
+///
+/// A logging configuration profile also unredacts, and was rejected: it is a
+/// device-wide setting nobody reads, it has to be present *before* the events
+/// are logged, and the next person to run ④ hits the same wall. Putting the
+/// publicness at the source removes the failure mode instead of asking someone
+/// to remember it (CLAUDE.md — *where a rule can be replaced by a mechanism,
+/// replace it*).
+///
+/// **Level matters as much as privacy, and this is the easy half to get
+/// wrong.** `Logger`'s `.debug` is never persisted and `.info` is held only in
+/// memory — neither survives a `log collect`. Swapping `NSLog` for `.info`
+/// would yield lines that are readable in a live stream and still absent from
+/// the archive: the same instrument fault wearing a new coat. **Every call
+/// here logs at `.notice`**, which is what `NSLog` mapped to.
+///
+/// **Publicness is a per-CALL-SITE decision, not a file-wide sweep.** Routing a
+/// line through `DeviceLog` makes that entire line public. Only lines whose
+/// payload is diagnostic — ids, counts, booleans, durations, byte sizes,
+/// formats, error descriptions — belong here. **Anything carrying transcript
+/// text, note bodies, titles or summaries stays on `NSLog` and stays private**
+/// (Tom, 2026-08-23). `WatchSessionDelegate.outcomeLabel` already reduces a
+/// transcript to `textLen=<count>` and is safe on that basis.
+enum DeviceLog {
+    private static let wcLogger    = Logger(subsystem: "com.himem.app", category: "WC")
+    private static let inboxLogger = Logger(subsystem: "com.himem.app", category: "Inbox")
+    private static let buildLogger = Logger(subsystem: "com.himem.app", category: "Build")
+
+    /// WatchConnectivity: reachability transitions, transfer/ack, dedup verdicts.
+    static func wc(_ message: String)    { wcLogger.notice("\(message, privacy: .public)") }
+    /// Inbox manifest and sweep accounting: counts, ids, tombstones.
+    static func inbox(_ message: String) { inboxLogger.notice("\(message, privacy: .public)") }
+    /// The build stamp — which binary produced the evidence.
+    static func build(_ message: String) { buildLogger.notice("\(message, privacy: .public)") }
 }
 
 /// **Which build is this?** — logged first thing at launch.
@@ -46,7 +92,7 @@ enum BuildStamp {
             f.dateFormat = "yyyy-MM-dd HH:mm:ss"
             built = f.string(from: date)
         }
-        NSLog("[HiMem][Build] v\(version) (\(build)) · binary built \(built)")
+        DeviceLog.build("[HiMem][Build] v\(version) (\(build)) · binary built \(built)")
     }
 }
 

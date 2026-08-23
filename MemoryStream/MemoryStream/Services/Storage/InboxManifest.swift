@@ -582,7 +582,7 @@ final class InboxManifest: ObservableObject {
         replace(with: next)
         WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: clipId)
         emitAcks(actions)
-        NSLog("[HiMem][Inbox] remove(clipId:) emitted \(actions.count) ack(s) for clipId=\(clipId), tombstones=\(disposedClips.count)")
+        DeviceLog.inbox("[HiMem][Inbox] remove(clipId:) emitted \(actions.count) ack(s) for clipId=\(clipId), tombstones=\(disposedClips.count)")
     }
 
     /// Removes a batch — used when the user creates a memory from N clips
@@ -604,7 +604,7 @@ final class InboxManifest: ObservableObject {
             WatchInboxNotificationCoordinator.shared.clipRemoved(clipId: id)
         }
         emitAcks(actions)
-        NSLog("[HiMem][Inbox] removeBatch emitted \(actions.count) ack(s) for \(clipIds.count) clipId(s), tombstones=\(disposedClips.count)")
+        DeviceLog.inbox("[HiMem][Inbox] removeBatch emitted \(actions.count) ack(s) for \(clipIds.count) clipId(s), tombstones=\(disposedClips.count)")
     }
 
     // MARK: - Recently Deleted (P8b, July 20 2026 — uniform clip bin)
@@ -1057,7 +1057,7 @@ final class InboxManifest: ObservableObject {
                 !FileManager.default.fileExists(atPath: Self.audioURL(for: clip.audioFilename).path)
             }.count
             if missingCount > 0 {
-                NSLog("[HiMem][Inbox] load() — \(missingCount) of \(active.count) active clip(s) have no local audio yet; keeping them so iCloud can catch up")
+                DeviceLog.inbox("[HiMem][Inbox] load() — \(missingCount) of \(active.count) active clip(s) have no local audio yet; keeping them so iCloud can catch up")
             }
             // Age out old tombstones. Active rows pass through.
             let agedDisposed = Self.pruned(disposed, olderThan: Self.defaultPruneDays, now: Date())
