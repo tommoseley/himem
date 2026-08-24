@@ -65,6 +65,8 @@ final class FirstImportState: ObservableObject {
     static let shared = FirstImportState()
 
     @Published private(set) var phase: Phase
+    /// When `begin` armed the watch — the origin for every elapsed time below.
+    private var armedAt: Date?
 
     /// True while surfaces must withhold an empty-state claim. The single
     /// question every empty state asks.
@@ -94,6 +96,26 @@ final class FirstImportState: ObservableObject {
     func begin(container: NSPersistentContainer, timeout: TimeInterval = 3.0) {
         guard phase == .importing else { return }
 
+        // **THE FLOOR IS MEASURED HERE, NOT AT `storageReady`** (2026-08-23).
+        //
+        // A wiped-install pass read `[LifeDx] storageReady` — 40ms after
+        // scene-active — and it was a well-formed reading of the WRONG
+        // QUANTITY. `storageReady` fires when the LOCAL Core Data stack opens;
+        // `LaunchScreenView` says as much two lines above it, deferring
+        // `FragmentMigration` precisely because CloudKit's import has NOT
+        // settled at that point. The ~17–21s in
+        // `docs/architecture/cloudkit-cold-launch-investigation.md` is a
+        // different thing: CloudKit's per-zone SETUP, measured as cold launch
+        // to first-record-visible.
+        //
+        // So every CloudKit event is logged with its elapsed time — including
+        // `setup` (type 0), which is where the floor actually goes and which
+        // nothing observed before. The arc, not a latch: a settle is readable
+        // as events stopping, which is honest in a way an invented
+        // "settled" flag would not be.
+        armedAt = Date()
+        DeviceLog.launch("[HiMem][LifeDx] first-import watch armed (timeout=\(timeout)s)")
+
         observer = NotificationCenter.default.addObserver(
             forName: NSPersistentCloudKitContainer.eventChangedNotification,
             object: container,
@@ -101,13 +123,16 @@ final class FirstImportState: ObservableObject {
         ) { [weak self] note in
             guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
                 as? NSPersistentCloudKitContainer.Event else { return }
+            let ms = Int((Date().timeIntervalSince(self?.armedAt ?? Date())) * 1000)
+            // 0 == setup, 1 == import, 2 == export.
+            DeviceLog.launch("[HiMem][LifeDx] ck event type=\(event.type.rawValue) succeeded=\(event.succeeded) ended=\(event.endDate != nil) +\(ms)ms")
             // type 1 == .import. Matching the existing observer's form.
             guard event.type.rawValue == 1, event.succeeded else { return }
-            MainActor.assumeIsolated { self?.markComplete() }
+            MainActor.assumeIsolated { self?.markComplete(cause: "import event") }
         }
 
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.markComplete() }
+            MainActor.assumeIsolated { self?.markComplete(cause: "3s fallback — no import event arrived") }
         }
         fallback = work
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: work)
@@ -115,8 +140,15 @@ final class FirstImportState: ObservableObject {
 
     /// Latches. Idempotent — later batches are welcome to add content, they
     /// just don't change this fact.
-    func markComplete() {
+    func markComplete(cause: String = "direct") {
         guard phase == .importing else { return }
+        let ms = Int((Date().timeIntervalSince(armedAt ?? Date())) * 1000)
+        // **`.complete` is NOT "the sync finished."** It latches on the FIRST
+        // successful import event, or on the 3s fallback for an account with
+        // nothing to import. The cause is logged because those two mean very
+        // different things about the floor, and a reader cannot tell them
+        // apart from the phase alone.
+        DeviceLog.launch("[HiMem][LifeDx] first-import phase → complete (\(cause)) +\(ms)ms")
         phase = .complete
         defaults.set(true, forKey: defaultsKey)
         fallback?.cancel()
