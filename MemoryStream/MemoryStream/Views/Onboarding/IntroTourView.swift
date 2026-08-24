@@ -422,6 +422,14 @@ private struct TourScaffold<Content: View>: View {
                     .frame(height: 52)
                     .background(Crucible.Color.accent)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
+                    // The button Tom could only tap on its words (device,
+                    // 2026-08-23). The fill IS inside the label, which is why
+                    // F17 cleared this shape — so the mechanism here is NOT
+                    // the same as F29's outside-decoration one, and the
+                    // suspected difference (`.buttonStyle(.plain)` removing
+                    // the implicit hit region) is UNVERIFIED. `contentShape`
+                    // is correct regardless and changes nothing on screen.
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -559,6 +567,7 @@ private struct TourModalityCallout: View {
                         .frame(height: 52)
                         .background(Crucible.Color.accent)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 26)

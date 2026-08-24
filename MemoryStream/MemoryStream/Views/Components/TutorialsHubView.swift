@@ -66,6 +66,7 @@ struct TutorialsHubView: View {
                 if let leadingTopic {
                     Button { showingLeadingTopic = true } label: {
                         TutorialsHubRow(entry: TutorialCatalog.entry(for: leadingTopic))
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .background(Crucible.Color.card)
@@ -117,6 +118,10 @@ struct TutorialsHubView: View {
             dismiss()
         } label: {
             TutorialsHubRow(entry: TutorialCatalog.introTour)
+                // F29 SEQUEL: the fill and stroke below attach to the BUTTON,
+                // not to this label, so without a shape the row taps only
+                // where its text is drawn.
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(Crucible.Color.card)
@@ -148,6 +153,9 @@ struct TutorialsHubView: View {
             dismiss()
         } label: {
             TutorialsHubRow(entry: TutorialCatalog.tour)
+                // Same shape, PRE-EXISTING — this row shipped defective and
+                // the guard cleared it. Convicted retroactively 2026-08-23.
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(Crucible.Color.card)

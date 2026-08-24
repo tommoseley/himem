@@ -184,6 +184,112 @@ struct ButtonHitRegionTests {
                 "The HStack's background is not this button's fill.")
     }
 
+
+    // MARK: - F29-sequel self-tests (the extension must be able to fail)
+
+    /// The shipped shape: a closure-label button whose fill and stroke attach
+    /// to the Button. This is `tourCard` as it shipped.
+    @Test func scanner_flagsAClosureLabelWithOutsideDecoration() {
+        let shipped = """
+        Button {
+            WalkthroughOrchestrator.shared.start()
+            dismiss()
+        } label: {
+            TutorialsHubRow(entry: TutorialCatalog.tour)
+        }
+        .buttonStyle(.plain)
+        .background(Crucible.Color.card)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Crucible.Color.hairline, lineWidth: 1)
+        )
+        """
+        #expect(Self.isOffendingClosureLabelOutsideDecoration(block: shipped),
+                "Decoration outside a closure label leaves the tap region at the glyphs — the F29 mechanism.")
+    }
+
+    /// The fix is accepted, so the guard cannot fail permanently.
+    @Test func scanner_acceptsAnOutsideDecoratedButtonWithAShapedLabel() {
+        let fixed = """
+        Button {
+            act()
+        } label: {
+            TutorialsHubRow(entry: TutorialCatalog.tour)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(Crucible.Color.card)
+        """
+        #expect(!Self.isOffendingClosureLabelOutsideDecoration(block: fixed))
+    }
+
+    /// And the converse: decoration INSIDE the label is the shape F17 verified
+    /// as hit-testable. It must not be convicted by this scanner, or the
+    /// extension re-reports everything F17 cleared.
+    @Test func scanner_ignoresDecorationInsideTheLabel() {
+        let inside = """
+        Button {
+            act()
+        } label: {
+            Text("Save")
+                .frame(maxWidth: .infinity)
+                .background(Crucible.Color.accent)
+        }
+        .buttonStyle(.plain)
+        """
+        #expect(!Self.isOffendingClosureLabelOutsideDecoration(block: inside))
+    }
+
+
+    /// **The over-report this scanner committed on its first run.** A label
+    /// whose own `HStack` carries the fill and stroke is CORRECT — the
+    /// decoration is inside the label. Convicting it flags five shipped views
+    /// that were never defective.
+    @Test func scanner_doesNotConvictALabelOfItsOwnInnerDecoration() {
+        let correct = """
+        Button {
+            act()
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "plus")
+                Text("New project")
+            }
+            .padding(.horizontal, 10)
+            .background(Crucible.Color.card)
+            .overlay(Capsule().stroke(Crucible.Color.hairline, lineWidth: 1))
+        }
+        """
+        #expect(!Self.isOffendingClosureLabelOutsideDecoration(block: correct),
+                "The HStack's own decoration is inside the label — this is the correct shape, not a defect.")
+    }
+
+
+    /// **The second over-report.** `Button { act() } label: {` opens and closes
+    /// its action closure on one line; the label's fill lives on the ENCLOSING
+    /// container, not on the button. Convicting it repeats the
+    /// container-attribution error the String-label scanner already guards
+    /// against — SearchView's "When" chip, 2026-08-23.
+    @Test func scanner_doesNotConvictAOneLineButtonOfItsContainersFill() {
+        let chip = """
+            Button { showWhen = true } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "calendar")
+                    Text("When")
+                }
+                .padding(.leading, 12)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showWhen) {
+                WhenPopover(viewModel: viewModel, isPresented: $showWhen)
+            }
+        }
+        .background(active ? Crucible.Color.accent : Crucible.Color.sunk)
+        .clipShape(Capsule())
+        """
+        #expect(!Self.isOffendingClosureLabelOutsideDecoration(block: chip),
+                "The enclosing HStack's background is not this button's fill.")
+    }
+
     // MARK: - Scanner
 
     /// The predicate, isolated so the two scanner tests above can exercise it
@@ -234,6 +340,86 @@ struct ButtonHitRegionTests {
         return decorated && !chain.contains("contentShape")
     }
 
+
+    /// **F29 SEQUEL · the intersection two guards each had a reason to pass.**
+    ///
+    /// F17 cleared closure-label buttons on the finding that they *"fill inside
+    /// the label, so the whole pill already carries taps"* — and encoded that
+    /// as `isOffending`'s exoneration on ANY `.background(`. F29 then found
+    /// that decoration attaching to the **Button** rather than its label leaves
+    /// the tap region at the glyphs, and fixed it — but only for **String**
+    /// labels, because that was the shape in front of it.
+    ///
+    /// Nobody covered **closure label + decoration outside the label**. It fell
+    /// between the two: `isOffending` sees a fill and exonerates,
+    /// `isOffendingStringLabelButton` sees no `Button("` and declines. The
+    /// shipped `tourCard` in the Learn hub had this shape and both guards
+    /// cleared it for as long as it has existed.
+    ///
+    /// Shape: `Button { … } label: { … }` where the closing `}` of the label is
+    /// followed by a modifier chain carrying a fill or stroke, and neither the
+    /// label nor the chain declares a `contentShape`.
+    static func isOffendingClosureLabelOutsideDecoration(block: String) -> Bool {
+        let lines = block.components(separatedBy: "\n")
+        guard let head = lines.first,
+              head.range(of: #"\bButton\s*\{"#, options: .regularExpression) != nil
+        else { return false }
+        guard let labelIdx = lines.firstIndex(where: {
+            $0.range(of: #"\}\s*label:\s*\{"#, options: .regularExpression) != nil
+        }) else { return false }
+
+        // **Find the label's close by BRACE DEPTH, not by the first line that
+        // looks like a closing brace.** The naive version took the inner
+        // `HStack`'s `}` as the label's end and then read the label's OWN
+        // `.background`/`.overlay` as the Button's chain — convicting five
+        // shipped views that decorate correctly inside their labels
+        // (`EntryExpandedView`, `CreateMemoryFromClipsSheet`, `SessionListView`,
+        // `ClipAtomView`, `ProjectDetailView`). That is the same over-report
+        // F17 hit at 16→7 and F29 at 11→2, and the same remedy applies:
+        // check the candidate, never trust the count.
+        var depth = 0
+        var closeIdx: Int? = nil
+        for i in labelIdx..<lines.count {
+            let line = lines[i]
+            let openers = line.filter { $0 == "{" }.count
+            let closers = line.filter { $0 == "}" }.count
+            if i == labelIdx {
+                // **Count only what follows `label: {` on this line.** The
+                // one-line form `Button { act() } label: {` opens and closes
+                // the ACTION closure before the label even begins, so counting
+                // the whole line starts the depth two too high and the label
+                // never appears to close — which convicted SearchView's "When"
+                // chip of its enclosing HStack's fill, the same
+                // container-attribution error the String-label scanner already
+                // guards against.
+                guard let r = line.range(of: #"label:\s*\{"#, options: .regularExpression)
+                else { return false }
+                let tail = line[r.upperBound...]
+                depth = 1 + tail.filter { $0 == "{" }.count - tail.filter { $0 == "}" }.count
+            } else {
+                depth += openers - closers
+            }
+            if depth <= 0 { closeIdx = i; break }
+        }
+        guard let close = closeIdx, close + 1 < lines.count else { return false }
+
+        let labelBody = lines[(labelIdx + 1)...close].joined(separator: "\n")
+        if labelBody.contains("contentShape") { return false }
+
+        var chain = ""
+        for line in lines[(close + 1)...] {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.isEmpty || t.hasPrefix("//") { continue }
+            guard t.hasPrefix(".") else { break }
+            chain += t + "\n"
+        }
+        let decorated = chain.range(
+            of: #"\.background\(|\.fill\(|\.stroke\(|\.strokeBorder\("#,
+            options: .regularExpression
+        ) != nil
+        return decorated && !chain.contains("contentShape")
+    }
+
     static func isOffending(block: String) -> Bool {
         let stroked = block.range(of: #"\.stroke\(|\.strokeBorder\("#, options: .regularExpression) != nil
         // ANY fill counts, including a ternary — `.background(isActive ? a : b)`.
@@ -258,7 +444,9 @@ struct ButtonHitRegionTests {
                 // A button's label rarely exceeds ~32 lines; a wider window
                 // starts bleeding into the next declaration and under-reports.
                 let block = lines[i..<min(i + 32, lines.count)].joined(separator: "\n")
-                if isOffending(block: block) || isOffendingStringLabelButton(block: block) {
+                if isOffending(block: block)
+                    || isOffendingStringLabelButton(block: block)
+                    || isOffendingClosureLabelOutsideDecoration(block: block) {
                     out.append(Offender(file: url.lastPathComponent, line: i + 1))
                 }
             }
