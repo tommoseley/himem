@@ -58,8 +58,9 @@ struct DebouncedTriggerTests {
         // Waiting for each action to land also GUARANTEES the spacing this
         // test is about, rather than assuming the clock provided it.
         for expected in 1...3 {
-            trigger.fire { callCount += 1 }
-            try await Self.waitUntil { callCount >= expected }
+            await Self.awaitingAction("spaced fire #\(expected)") { done in
+                trigger.fire { callCount += 1; done() }
+            }
         }
         #expect(callCount == 3)
     }
@@ -81,7 +82,7 @@ struct DebouncedTriggerTests {
         // and passed the same commit in isolation (F23, 2026-07-31). Same
         // deterministic wait the burst test adopted on 2026-07-15 — the fix
         // was applied to one instance then, not to the class.
-        try await Self.waitUntil { callCount >= 1 }
+        try await Self.waitUntil("the coalesced action ran") { callCount >= 1 }
         #expect(callCount == 1)
     }
 
@@ -93,13 +94,103 @@ struct DebouncedTriggerTests {
     /// not what any of these tests mean and is not something a parallel test
     /// run can promise. `.serialized` on the suite doesn't help — the
     /// contention is global CPU load, not intra-suite parallelism.
+
+    /// A one-shot latch the debounce's action resolves. **This is the
+    /// deterministic half** (2026-08-23).
+    ///
+    /// The tests used to poll `callCount` against a 3-second wall clock. The
+    /// action is scheduled on a `Task` that sleeps for the interval, so under a
+    /// full parallel run its dispatch can be starved well past any bound — the
+    /// file already said so in 2026-07-15 — and the test then failed on a
+    /// property that was never in question. Waiting on the ACTION ITSELF is
+    /// correct whether or not the machine is loaded: the test completes when
+    /// the thing it is about actually happens.
+    ///
+    /// The watchdog resolves the SAME latch, so the continuation is resumed
+    /// exactly once on either path — no leak, and no second waiter.
+    @MainActor
+    final class ActionLatch {
+        private(set) var ranForReal = false
+        private var finished = false
+        private var waiter: CheckedContinuation<Void, Never>?
+
+        func resolve(ranForReal: Bool) {
+            guard !finished else { return }
+            finished = true
+            if ranForReal { self.ranForReal = true }
+            waiter?.resume()
+            waiter = nil
+        }
+
+        func wait() async {
+            if finished { return }
+            await withCheckedContinuation { waiter = $0 }
+        }
+    }
+
+    /// Fire `body`, then wait for its action to run. Fails loudly, naming the
+    /// leg, only if the watchdog wins — which means starvation, never a
+    /// swallowed signal.
+    static func awaitingAction(
+        _ leg: String,
+        watchdog: Duration = .seconds(30),
+        sourceLocation: SourceLocation = #_sourceLocation,
+        _ body: (@escaping () -> Void) -> Void
+    ) async {
+        let latch = ActionLatch()
+        body { latch.resolve(ranForReal: true) }
+        let guardTask = Task { @MainActor in
+            try? await Task.sleep(for: watchdog)
+            latch.resolve(ranForReal: false)
+        }
+        await latch.wait()
+        guardTask.cancel()
+        if !latch.ranForReal {
+            Issue.record(
+                """
+                WAIT EXPIRED after \(watchdog) — "\(leg)" never ran.
+
+                This is NOT evidence that the debounce swallowed a signal. The
+                action is scheduled on a Task that sleeps for the interval; \
+                under a full parallel run that dispatch can be CPU-starved. \
+                Read THIS line before any count mismatch below it.
+                """,
+                sourceLocation: sourceLocation
+            )
+        }
+    }
+
+    /// Poll until `condition` holds, and **fail loudly naming the expiry** if
+    /// it doesn't.
+    ///
+    /// **The silent return was the diagnostic weakness** (2026-08-23). This
+    /// used to return normally on timeout, leaving the caller's
+    /// `#expect(callCount == 3)` to report the failure — which says *what* was
+    /// wrong and hides *why*. A reader saw a bare count mismatch and had no
+    /// signal that a wait had expired, so the obvious reading was "the debounce
+    /// swallowed a signal", i.e. a production bug that isn't there. The next
+    /// unrelated diff that tips this test should get a message naming the
+    /// cause, not a number someone will misdiagnose.
     static func waitUntil(
+        _ leg: String,
         timeout: TimeInterval = 3.0,
+        sourceLocation: SourceLocation = #_sourceLocation,
         _ condition: () -> Bool
     ) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition() && Date() < deadline {
             try await Task.sleep(nanoseconds: 10_000_000)  // 10ms
+        }
+        if !condition() {
+            Issue.record(
+                """
+                WAIT EXPIRED after \(timeout)s — "\(leg)" never happened.
+
+                This is NOT evidence that the debounce swallowed a signal. The
+                action is scheduled on a Task that sleeps for the interval;                 under a full parallel run that dispatch can be CPU-starved well                 past any wall-clock bound. The assertion that follows will                 report a count mismatch — read THIS line first.
+                """,
+                sourceLocation: sourceLocation
+            )
         }
     }
 
