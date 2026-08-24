@@ -217,6 +217,10 @@ struct MemoryStreamApp: App {
     /// the wizard for reinstalled users who needed to re-grant
     /// permissions.
     @State private var onboardingComplete: Bool = AuthService.shared.hasCompletedOnboardingWizard
+    /// The intro tour runs once, straight after the wizard, above the tab
+    /// shell. Read once at App-struct creation like `onboardingComplete`, so a
+    /// returning user never mounts it.
+    @State private var introTourComplete: Bool = IntroTourStore.hasSeen
     @Environment(\.scenePhase) private var scenePhase
     /// User's appearance choice. Drives the root
     /// `.preferredColorScheme(...)` modifier below; default is
@@ -325,6 +329,32 @@ struct MemoryStreamApp: App {
                         // structurally reachable from those surfaces,
                         // which is what we don't want.
                         .tutorialAutoFireOverlay()
+                        // Replay from the `?` on any screen, or Settings →
+                        // Learn. The root owns presentation so one view serves
+                        // both first-run and replay.
+                        .onReceive(IntroTourReplayBus.shared.$replayRequested) { requested in
+                            guard requested else { return }
+                            IntroTourReplayBus.shared.replayRequested = false
+                            withAnimation(.easeInOut(duration: 0.3)) { introTourComplete = false }
+                        }
+                }
+
+                // Intro tour — once, after the wizard, above the tab shell.
+                // Mounted here rather than inside the wizard so the same view
+                // serves the replay entry from `?` and Settings → Learn.
+                if storageReady && onboardingComplete && !introTourComplete {
+                    IntroTourView(
+                        onFinish: {
+                            IntroTourStore.markSeenAndRetireDuplicates()
+                            withAnimation(.easeInOut(duration: 0.3)) { introTourComplete = true }
+                        },
+                        onStartWalkthrough: {
+                            IntroTourStore.markSeenAndRetireDuplicates()
+                            withAnimation(.easeInOut(duration: 0.3)) { introTourComplete = true }
+                            WalkthroughOrchestrator.shared.startAtFirstBeat()
+                        }
+                    )
+                    .transition(.opacity)
                 }
 
                 // Splash always runs — does storage warm + post-storage
@@ -345,11 +375,19 @@ struct MemoryStreamApp: App {
                 }
 
                 // Permission wizard — overlays everything for fresh
-                // installs. Runs immediately (no splash gate) so the
-                // ~17-21s CloudKit setup happens during the user's
-                // natural pace through 7 permission pages. See
-                // docs/architecture/cloudkit-cold-launch-investigation.md
-                // for why the pacing is the cover. Returning users have
+                // installs. Runs immediately (no splash gate).
+                //
+                // **It is no longer the CloudKit cover** (ruled 2026-08-23).
+                // The ~17-21s floor is O(1) in record count and hits
+                // populated-account users; a genuinely new account's zone is
+                // empty and the spike measured ~1.5s against one. The cover
+                // and the wait were on opposite branches — returning users,
+                // the only ones who need it, already bypass the cascade for
+                // the honest live-count restore screen. So the wizard is four
+                // steps (apple · name · mic · speech) and nothing branches on
+                // a prediction: CloudKit reveals itself, and the restore
+                // screen shows if activity appears. See
+                // docs/architecture/cloudkit-cold-launch-investigation.md. Returning users have
                 // onboardingComplete=true at App-struct creation, so
                 // this branch is dead for them.
                 if !onboardingComplete {

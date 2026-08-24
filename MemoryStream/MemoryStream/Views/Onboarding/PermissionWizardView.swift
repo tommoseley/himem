@@ -2,10 +2,7 @@ import SwiftUI
 import AuthenticationServices
 import AVFoundation
 import CoreData
-import Photos
 import Speech
-import CoreLocation
-import UserNotifications
 
 // MARK: - Public entry point
 //
@@ -28,7 +25,6 @@ struct PermissionWizardView: View {
 
     @State private var step: WizardStep = .apple
     @State private var editedName: String = ""
-    @State private var notifyClipsOn: Bool = true   // Channel A (Captured Clips), locked default ON
     @State private var blockedReason: RequiredPermission? = nil
 
     // Restore flow state — populated on the reinstall path. The
@@ -75,18 +71,6 @@ struct PermissionWizardView: View {
                     case .name:         ScrW1Name(name: $editedName, onContinue: nameComplete)
                     case .mic:          micPage()
                     case .speech:       speechPage()
-                    case .photos:       photosPage()
-                    case .camera:       cameraPage()
-                    case .location:     locationPage()
-                    case .notifications: ScrW7Notifications(
-                                            clipsOn: $notifyClipsOn,
-                                            onBack: { withWizardAnim { step = .location } },
-                                            onSkip: { withWizardAnim { step = .land } },
-                                            onContinue: handleNotifications)
-                    case .land:         ScrWLand(
-                                            name: auth.userName,
-                                            onCaptureFirst: handleLandCaptureFirst,
-                                            onLookAround: onComplete)
                     case .restoring:    ScrReinstallRestore(
                                             name: auth.userName,
                                             count: restoredCount,
@@ -145,48 +129,6 @@ struct PermissionWizardView: View {
             onBack: { withWizardAnim { step = .mic } },
             onSkip: nil,
             onCta: { Task { await handleSpeech() } }
-        )
-    }
-
-    @ViewBuilder private func photosPage() -> some View {
-        WizardPage(
-            step: 4, glyph: G.photos, tint: .accent, required: false,
-            title: "Let a picture ride along with the thought.",
-            why: "Add photos from your library to any memory.",
-            example: "The recipe you photographed, kept beside the note about it.",
-            cta: "Allow photo access",
-            showBack: true,
-            onBack: { withWizardAnim { step = .speech } },
-            onSkip: { withWizardAnim { step = .camera } },
-            onCta: { Task { await handlePhotos() } }
-        )
-    }
-
-    @ViewBuilder private func cameraPage() -> some View {
-        WizardPage(
-            step: 5, glyph: G.camera, tint: .accent, required: false,
-            title: "Catch the moment, not just the words for it.",
-            why: "Take a photo or video straight into a memory.",
-            example: "Snap the whiteboard before it\u{2019}s erased — it lands in HiMem.",
-            cta: "Allow camera",
-            showBack: true,
-            onBack: { withWizardAnim { step = .photos } },
-            onSkip: { withWizardAnim { step = .location } },
-            onCta: { Task { await handleCamera() } }
-        )
-    }
-
-    @ViewBuilder private func locationPage() -> some View {
-        WizardPage(
-            step: 6, glyph: G.location, tint: .accent, required: false,
-            title: "Let a memory remember where you were.",
-            why: "HiMem tags captures with a place — only while you\u{2019}re using it.",
-            example: "Months later, a note still says \u{201C}Marsh Walk, Murrells Inlet.\u{201D}",
-            cta: "Allow location while using",
-            showBack: true,
-            onBack: { withWizardAnim { step = .camera } },
-            onSkip: { withWizardAnim { step = .notifications } },
-            onCta: { Task { await handleLocation() } }
         )
     }
 
@@ -285,72 +227,52 @@ struct PermissionWizardView: View {
             SFSpeechRecognizer.requestAuthorization { status in cont.resume(returning: status) }
         }
         if status == .authorized {
-            await advance(to: .photos)
+            // END OF THE WIZARD (ruled 2026-08-23). Photos, camera, location
+            // and notifications are deferred to first use — which is not a new
+            // policy but the one this file's own restore branch already
+            // follows, and the one `JournalView` adopted on 2026-06-02 for
+            // speech and photos. Every deferred permission already has an
+            // in-context requester: `CameraService.savePhoto/saveVideo`
+            // (photos), `UIImagePickerController` presentation (camera),
+            // `LocationService.requestWhenInUseAuthorization` from
+            // `VoiceCaptureScreen`/`EntryLifecycleService` (location), and
+            // `MemoryStreamApp.promptForNotificationsIfFirstTime` on scene
+            // activation (notifications). Deferring removes duplicate asks
+            // rather than creating gaps.
+            //
+            // `.land` went with them: the intro tour's page 7 is the closer.
+            onComplete()
         } else {
             withWizardAnim { blockedReason = .speech }
         }
     }
 
-    private func handlePhotos() async {
-        _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
-        // Optional permission — advance regardless of grant.
-        await advance(to: .camera)
-    }
-
-    private func handleCamera() async {
-        _ = await AVCaptureDevice.requestAccess(for: .video)
-        await advance(to: .location)
-    }
-
-    private func handleLocation() async {
-        // No async API for location; request and move on. iOS shows the
-        // system dialog. Status is read elsewhere when location is used.
-        await MainActor.run {
-            CLLocationManager().requestWhenInUseAuthorization()
-        }
-        try? await Task.sleep(nanoseconds: 200_000_000) // brief beat so the user sees the dialog before the transition
-        await advance(to: .notifications)
-    }
-
-    private func handleNotifications() async {
-        // RH-1 (July 20 2026): the toggle is now a real persisted control the
-        // coordinator consults before every passive push (was cosmetic).
-        // Channel B retired 2026-07-07.
-        NotificationPreference.arrivalsEnabled = notifyClipsOn
-        if notifyClipsOn {
-            _ = try? await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound, .badge])
-        }
-        await advance(to: .land)
-    }
-
     // MARK: - Auto-skip helper
     //
-    // Forward-only transitions route through `advance(to:)` which
-    // recursively skips any permission step that's already granted —
-    // on reinstall iOS keeps mic/speech/photos/camera/location/
-    // notification grants, so re-asking them is empty friction.
-    // Back navigation and skip-tap navigation should set `step`
-    // directly so the user can still review earlier pages on demand.
+    // Forward-only transitions route through `advance(to:)`, which steps over
+    // a permission page whose grant iOS already has. Back navigation and
+    // skip-tap navigation set `step` directly so earlier pages stay
+    // reviewable.
 
-    /// Async transition that recursively skips already-granted steps.
-    /// Lands on the first step that genuinely needs user action, or
-    /// `.land` if all permissions on the way are already granted.
+    /// Transition, stepping over `.mic` when it is already granted.
+    ///
+    /// **This used to recurse and no longer needs to** (2026-08-23). It walked
+    /// a chain of six permission steps, any run of which could be pre-granted
+    /// on reinstall. With photos, camera, location and notifications deferred
+    /// to first use, exactly one skip survives — mic → speech — so the loop
+    /// can iterate at most once and a plain condition says the same thing
+    /// honestly. A recursive skip helper with nothing left to skip is
+    /// machinery pretending to have a job, and the next reader would assume it
+    /// earns its keep.
     private func advance(to nextStep: WizardStep) async {
-        var current = nextStep
-        while let skipped = await stepIfShouldSkip(current) {
-            current = skipped
-        }
+        let target = await stepIfShouldSkip(nextStep) ?? nextStep
         await MainActor.run {
-            withWizardAnim { step = current }
+            withWizardAnim { step = target }
         }
     }
 
-    /// Returns the next step if `current` should be skipped (permission
-    /// already granted), or nil if `current` is the right step to land
-    /// on. Notifications is skipped once iOS auth is granted — no
-    /// per-channel preference to capture now that Channel B is
-    /// retired (2026-07-07).
+    /// Returns the step to land on instead of `current` when `current`'s
+    /// permission is already granted, or nil to land on `current` itself.
     ///
     /// **Debug bypass.** When `AuthService.debugForceFullWizard` is set
     /// (via Settings → Debug → Reset onboarding), this returns nil for
@@ -363,34 +285,14 @@ struct PermissionWizardView: View {
         }
         switch current {
         case .mic:
+            // THE ONLY SURVIVING SKIP. With photos/camera/location/
+            // notifications deferred to first use, mic is the one step that
+            // can be pre-granted and worth stepping over — a reinstall user
+            // who still has mic starts at speech.
             return AVAudioApplication.shared.recordPermission == .granted ? .speech : nil
-        case .speech:
-            return SFSpeechRecognizer.authorizationStatus() == .authorized ? .photos : nil
-        case .photos:
-            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-            return (status == .authorized || status == .limited) ? .camera : nil
-        case .camera:
-            return AVCaptureDevice.authorizationStatus(for: .video) == .authorized ? .location : nil
-        case .location:
-            let status = CLLocationManager().authorizationStatus
-            return (status == .authorizedWhenInUse || status == .authorizedAlways) ? .notifications : nil
-        case .notifications:
-            let settings = await UNUserNotificationCenter.current().notificationSettings()
-            return settings.authorizationStatus == .authorized ? .land : nil
-        case .apple, .name, .land, .restoring, .restoreDone:
+        case .apple, .name, .speech, .restoring, .restoreDone:
             return nil
         }
-    }
-
-    /// Wired to the Land screen's primary "Capture your first memory"
-    /// CTA. Sets CaptureRequestBus.pendingVoiceRecord BEFORE dismissing
-    /// the wizard so the JournalView's onAppear (which checks the bus)
-    /// auto-opens the voice composer the moment it mounts. Net effect:
-    /// the user's first tap after onboarding lands them already
-    /// recording, matching the spec note "capture is the invitation."
-    private func handleLandCaptureFirst() {
-        CaptureRequestBus.shared.pendingVoiceRecord = true
-        onComplete()
     }
 
     // MARK: - Restore state machine
@@ -555,9 +457,12 @@ struct PermissionWizardView: View {
             }
         case .speech:
             if SFSpeechRecognizer.authorizationStatus() == .authorized {
-                await MainActor.run {
-                    withWizardAnim { blockedReason = nil; step = .photos }
-                }
+                // SECOND CALLER of the same decision as `handleSpeech`'s
+                // success branch — the user was blocked, granted speech in
+                // Settings, and came back. Cutting the chain in `handleSpeech`
+                // alone would have left this one live, walking them into the
+                // deferred steps. (Guard the caller, not just the owner.)
+                await MainActor.run { onComplete() }
             }
         }
     }
@@ -576,17 +481,22 @@ enum WizardStep {
     case name
     case mic
     case speech
-    case photos
-    case camera
-    case location
-    case notifications
-    case land
     /// Returning-user-only steps: reinstall on the same Apple ID.
     /// Bypass the permission cascade per the locked spec — anything
     /// iOS revoked on uninstall is re-asked in context at first
-    /// capture, not as a fresh wall of 7 pages.
+    /// capture, not as a fresh wall of permission pages.
     case restoring
     case restoreDone
+
+    /// How many steps the rail counts up to. **Derived, not typed.** It read
+    /// "of 7" while the wizard had three visible steps, because the four
+    /// deferred permission pages were removed and the literal was not — the
+    /// exact shape of the 2026-08-10 lock, *a count must describe the thing it
+    /// sits on*. Computing it from the cases means the next step added or
+    /// removed cannot leave the rail lying.
+    static var totalDisplayedSteps: Int {
+        [WizardStep.apple, .name, .mic, .speech].map(\.displayedStep).max() ?? 1
+    }
 
     /// Visible step number on the progress rail (Apple + Name are both step 1).
     /// Restore screens don't render the progress rail (they have their own
@@ -596,11 +506,6 @@ enum WizardStep {
         case .apple, .name: return 1
         case .mic: return 2
         case .speech: return 3
-        case .photos: return 4
-        case .camera: return 5
-        case .location: return 6
-        case .notifications: return 7
-        case .land: return 7
         case .restoring, .restoreDone: return 1
         }
     }
@@ -648,7 +553,7 @@ enum WizardTint {
 
 // MARK: - Shared scaffolding
 
-/// Top bar with back chevron, "N of 7" centered count, optional Skip,
+/// Top bar with back chevron, "N of M" centered count, optional Skip,
 /// and the 7-segment progress rail. Bar is constant height (~50pt) so
 /// switching between pages doesn't jiggle the icon.
 struct WizardTopBar: View {
@@ -674,7 +579,7 @@ struct WizardTopBar: View {
                 }
                 .frame(width: 50, alignment: .leading)
 
-                Text("\(step) of 7")
+                Text("\(step) of \(WizardStep.totalDisplayedSteps)")
                     .font(.system(size: 12.5, weight: .semibold))
                     .tracking(0.2)
                     .foregroundStyle(Crucible.Color.ink3)
@@ -837,18 +742,6 @@ enum G {
         Image(systemName: "waveform")
             .font(.system(size: 30, weight: .semibold))
     ))
-    static let photos = GlyphRef(image: AnyView(
-        Image(systemName: "photo.fill.on.rectangle.fill")
-            .font(.system(size: 28, weight: .semibold))
-    ))
-    static let camera = GlyphRef(image: AnyView(
-        Image(systemName: "camera.fill")
-            .font(.system(size: 28, weight: .semibold))
-    ))
-    static let location = GlyphRef(image: AnyView(
-        Image(systemName: "mappin.and.ellipse")
-            .font(.system(size: 28, weight: .semibold))
-    ))
     static let bell = GlyphRef(image: AnyView(
         Image(systemName: "bell.fill")
             .font(.system(size: 28, weight: .semibold))
@@ -862,7 +755,7 @@ struct ScrW1Apple: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // No WizardTopBar on the entry page — the "N of 7" progress
+            // No WizardTopBar on the entry page — the "N of M" progress
             // rail makes a hard promise about flow length before we know
             // whether the user is heading down the 7-step fresh-user path
             // or the 2-step reinstall restore. The counter starts on
@@ -1014,208 +907,6 @@ struct ScrW1Name: View {
             .padding(.bottom, 30)
         }
         .onAppear { fieldFocused = true }
-    }
-}
-
-// MARK: - Page 7 · Notifications (Captured Clips only)
-
-/// Channel B (inactivity nudge) retired 2026-07-07 per `CLAUDE.md`
-/// §Notifications — Kingfisher forbids the app raising the skipped
-/// thing. The page collapsed from a two-channel picker to a single
-/// Captured Clips toggle.
-struct ScrW7Notifications: View {
-    @Binding var clipsOn: Bool
-    let onBack: () -> Void
-    let onSkip: () -> Void
-    let onContinue: () async -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            WizardTopBar(step: 7, skippable: true, showBack: true, onBack: onBack, onSkip: onSkip)
-
-            VStack(alignment: .leading, spacing: 0) {
-                RoundedRectangle(cornerRadius: 19)
-                    .fill(Crucible.Color.accentTint)
-                    .frame(width: 68, height: 68)
-                    .overlay(G.bell.image.foregroundStyle(Crucible.Color.accent))
-                    .padding(.top, 36)
-
-                Text("A quiet ping when your Watch clips land.")
-                    .font(.system(size: 26, design: .serif))
-                    .fontWeight(.regular)
-                    .lineSpacing(2)
-                    .foregroundStyle(Crucible.Color.ink)
-                    .padding(.top, 20)
-
-                VStack(spacing: 9) {
-                    channelRow(
-                        on: $clipsOn,
-                        title: "When clips arrive",
-                        body: "A silent note on the lock screen when Watch clips are ready to review. No buzz, no streaks."
-                    )
-                }
-                .padding(.top, 18)
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 26)
-
-            VStack(spacing: 10) {
-                Text("iOS will ask once. You can change either of these in Settings later.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Crucible.Color.ink3)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(3)
-                    .padding(.horizontal, 8)
-
-                Button(action: { Task { await onContinue() } }) {
-                    Text("Turn on notifications")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(RoundedRectangle(cornerRadius: 14).fill(Crucible.Color.accent))
-                        .foregroundStyle(Crucible.Color.accentInk)
-                }
-            }
-            .padding(.horizontal, 26)
-            .padding(.bottom, 30)
-        }
-    }
-
-    private func channelRow(on: Binding<Bool>, title: String, body: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Crucible.Color.ink)
-                Text(body)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Crucible.Color.ink2)
-                    .lineSpacing(3)
-            }
-            Toggle("", isOn: on)
-                .labelsHidden()
-                // Toggle on-state per CLAUDE.md (June 10 2026, global
-                // rule (e)): ochre, never iOS green. Green is
-                // semantic-only (confirmed/success); an enabled
-                // setting is a user state, not a success.
-                .tint(Crucible.Color.accent)
-                .padding(.top, 1)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 13)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Crucible.Color.card)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Crucible.Color.hairline, lineWidth: 1)
-                )
-        )
-    }
-}
-
-// MARK: - Land
-
-/// Spec update 2026-06-03: action-first footer. Replaces the earlier
-/// FAB-hint+text-link footer with a two-button stack — ochre primary
-/// "Capture your first memory" (wires to CaptureRequestBus so the
-/// voice composer auto-opens in JournalView) and outlined secondary
-/// "Later — let me look around" (just dismisses the wizard to the
-/// empty Today). The body copy + prompt-card eyebrow also shifted.
-struct ScrWLand: View {
-    let name: String
-    let onCaptureFirst: () -> Void
-    let onLookAround: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Empty name → "You're all set." (no trailing comma + bare
-            // period). Filled name → "You're all set, Tom." with italic
-            // ochre on the name.
-            Group {
-                // F22 EXEMPT: form validation on the name field the user is
-                // typing into — not a collection from the store.
-                if name.isEmpty {
-                    Text("You\u{2019}re all set.")
-                        .foregroundColor(Crucible.Color.ink)
-                } else {
-                    Text("You\u{2019}re all set, ").foregroundColor(Crucible.Color.ink)
-                    + Text("\(name).").italic().foregroundColor(Crucible.Color.accent)
-                }
-            }
-            .font(.system(size: 30, design: .serif))
-            .lineSpacing(2)
-            .padding(.top, 58)
-
-            Text("HiMem works best when capture is easy. Start with the thought closest to your tongue — or look around first.")
-                .font(.system(size: 14.5))
-                .foregroundStyle(Crucible.Color.ink2)
-                .lineSpacing(4)
-                .padding(.top, 12)
-                .frame(maxWidth: 280, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 9) {
-                Text("TO GET YOU GOING")
-                    .font(.system(size: 10, weight: .bold))
-                    .tracking(1.3)
-                    .foregroundStyle(Crucible.Color.ink3)
-                Text("\u{201C}What\u{2019}s something you don\u{2019}t want to forget today?\u{201D}")
-                    .font(.system(size: 18, design: .serif))
-                    .italic()
-                    .foregroundStyle(Crucible.Color.ink)
-                    .lineSpacing(3)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Crucible.Color.card)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Crucible.Color.hairline, lineWidth: 1)
-                    )
-            )
-            .padding(.top, 26)
-
-            Spacer(minLength: 0)
-
-            // Action-first footer. Primary: ochre fill + mic + shadow.
-            // Secondary: hairline-outlined transparent. Stacked, 12pt gap.
-            VStack(spacing: 12) {
-                Button(action: onCaptureFirst) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 19, weight: .semibold))
-                        Text("Capture your first memory")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
-                    .background(
-                        RoundedRectangle(cornerRadius: 15)
-                            .fill(Crucible.Color.accent)
-                    )
-                    .foregroundStyle(Crucible.Color.accentInk)
-                    .shadow(color: Crucible.Color.accent.opacity(0.28), radius: 12, x: 0, y: 8)
-                }
-
-                Button(action: onLookAround) {
-                    Text("Later — let me look around")
-                        .font(.system(size: 15, weight: .medium))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(
-                            RoundedRectangle(cornerRadius: 15)
-                                .stroke(Crucible.Color.hairline, lineWidth: 1)
-                        )
-                        .foregroundStyle(Crucible.Color.ink2)
-                }
-            }
-            .padding(.bottom, 28)
-        }
-        .padding(.horizontal, 26)
-        .frame(maxWidth: .infinity)
     }
 }
 
@@ -1411,9 +1102,14 @@ private extension BlockedCopy.BlockedFix {
 // fullName + iCloud KV had a stored userName). The permission cascade
 // is bypassed entirely per the locked spec — anything iOS revoked on
 // uninstall is re-requested in context at first capture, not as a
-// fresh wall of 7 pages. The restore screen honestly covers the
+// fresh wall of permission pages. The restore screen honestly covers the
 // CloudKit catch-up window by showing the user the true thing:
 // memories coming back, counted as they land.
+
+/// Restoring state — live count + indeterminate progress bar. Auto-
+/// advances to ScrReinstallRestoreDone when 5s pass with no
+/// `NSPersistentStoreRemoteChange` events; the parent runs that state
+/// machine via `.task { runRestoreStateMachine() }`.
 
 /// Restoring state — live count + indeterminate progress bar. Auto-
 /// advances to ScrReinstallRestoreDone when 5s pass with no

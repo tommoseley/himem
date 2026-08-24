@@ -45,6 +45,15 @@ struct TutorialsHubView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 14)
 
+                // "Start from the beginning" sits ABOVE the walkthrough card
+                // (ruled 2026-08-23): the tour precedes the walkthrough in the
+                // product, and it is the answer to "I wasn't sure what was
+                // going on" — so it must be reachable from the `?` on any
+                // screen, never a one-time-only explanation.
+                introTourCard
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+
                 tourCard
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
@@ -65,6 +74,26 @@ struct TutorialsHubView: View {
         .background(Crucible.Color.sunk)
         .navigationTitle("Learn")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The intro tour — the seven-page "what is this" sequence, replayed from
+    /// page 1. An ACTION, not a navigation: the root presents it, so this row
+    /// asks via `IntroTourReplayBus` and dismisses the hub.
+    @ViewBuilder
+    private var introTourCard: some View {
+        Button {
+            IntroTourReplayBus.shared.requestReplay()
+            dismiss()
+        } label: {
+            TutorialsHubRow(entry: TutorialCatalog.introTour)
+        }
+        .buttonStyle(.plain)
+        .background(Crucible.Color.card)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Crucible.Color.hairline, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     /// The tour row on its own — anchored coachmark walkthrough, set
@@ -194,6 +223,18 @@ enum TutorialCatalog {
     /// coachmark cards this originally restored were retired 2026-07-27 (F8 +
     /// F7c cover the ground). The row is an action, not a navigation, so
     /// `destination` is unused.
+    /// The seven-page intro tour. Distinct from `tour` below, which relaunches
+    /// the do-it-with-me walkthrough — this one explains, that one does.
+    static let introTour = TutorialCatalogEntry(
+        id: "intro-tour",
+        title: "Start from the beginning",
+        subtitle: "What HiMem is, in seven pages",
+        systemImage: "book.pages",
+        tint: .accent,
+        isPlusOnly: false,
+        destination: AnyView(EmptyView())
+    )
+
     static let tour = TutorialCatalogEntry(
         id: "screen-tour",
         title: "Show me around",

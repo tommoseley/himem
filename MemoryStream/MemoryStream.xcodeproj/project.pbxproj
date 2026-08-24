@@ -56,7 +56,6 @@
 		A100000070 /* LaunchScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000070 /* LaunchScreenView.swift */; };
 		A100000071 /* EpigraphService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000071 /* EpigraphService.swift */; };
 		A100000072 /* epigraphs.json in Resources */ = {isa = PBXBuildFile; fileRef = B100000072 /* epigraphs.json */; };
-		A100000080 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000080 /* OnboardingView.swift */; };
 		A100000081 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000081 /* AuthService.swift */; };
 		A100000090 /* ScopeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000090 /* ScopeParser.swift */; };
 		A100000091 /* VoiceIntentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000091 /* VoiceIntentParser.swift */; };
@@ -142,6 +141,7 @@
 		A100000762 /* ProjectSuggestionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000762 /* ProjectSuggestionsViewModel.swift */; };
 		A100000763 /* ProjectAssistViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000763 /* ProjectAssistViewModel.swift */; };
 		A100000770 /* LaunchSignposter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000770 /* LaunchSignposter.swift */; };
+		A100000781 /* IntroTourView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000781 /* IntroTourView.swift */; };
 		A100000780 /* PermissionWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000780 /* PermissionWizardView.swift */; };
 		A100000790 /* AddExistingClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000790 /* AddExistingClipsSheet.swift */; };
 		A100000802 /* WatchTransferAudioTranscoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000801 /* WatchTransferAudioTranscoder.swift */; };
@@ -341,7 +341,6 @@
 		B100000070 /* LaunchScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreenView.swift; sourceTree = "<group>"; };
 		B100000071 /* EpigraphService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpigraphService.swift; sourceTree = "<group>"; };
 		B100000072 /* epigraphs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = epigraphs.json; sourceTree = "<group>"; };
-		B100000080 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		B100000081 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		B100000090 /* ScopeParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopeParser.swift; sourceTree = "<group>"; };
 		B100000091 /* VoiceIntentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceIntentParser.swift; sourceTree = "<group>"; };
@@ -422,6 +421,7 @@
 		B100000762 /* ProjectSuggestionsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSuggestionsViewModel.swift; sourceTree = "<group>"; };
 		B100000763 /* ProjectAssistViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectAssistViewModel.swift; sourceTree = "<group>"; };
 		B100000770 /* LaunchSignposter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSignposter.swift; sourceTree = "<group>"; };
+		B100000781 /* IntroTourView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroTourView.swift; sourceTree = "<group>"; };
 		B100000780 /* PermissionWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionWizardView.swift; sourceTree = "<group>"; };
 		B100000790 /* AddExistingClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddExistingClipsSheet.swift; sourceTree = "<group>"; };
 		B100000801 /* WatchTransferAudioTranscoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WatchTransferAudioTranscoder.swift; path = Shared/WatchTransferAudioTranscoder.swift; sourceTree = "<group>"; };
@@ -918,7 +918,7 @@
 		G100000080 /* Onboarding */ = {
 			isa = PBXGroup;
 			children = (
-				B100000080 /* OnboardingView.swift */,
+				B100000781 /* IntroTourView.swift */,
 				B100000780 /* PermissionWizardView.swift */,
 			);
 			path = Onboarding;
@@ -1409,6 +1409,7 @@
 				A100000762 /* ProjectSuggestionsViewModel.swift in Sources */,
 				A100000763 /* ProjectAssistViewModel.swift in Sources */,
 				A100000770 /* LaunchSignposter.swift in Sources */,
+				A100000781 /* IntroTourView.swift in Sources */,
 				A100000670 /* MinClipDebouncer.swift in Sources */,
 				A100000671 /* NextClipController.swift in Sources */,
 				A100000602 /* StoreKitService.swift in Sources */,
@@ -1540,7 +1541,6 @@
 				A100000035 /* MediaThumbnailView.swift in Sources */,
 				A100000070 /* LaunchScreenView.swift in Sources */,
 				A100000071 /* EpigraphService.swift in Sources */,
-				A100000080 /* OnboardingView.swift in Sources */,
 				A100000780 /* PermissionWizardView.swift in Sources */,
 				A100000081 /* AuthService.swift in Sources */,
 				A100000090 /* ScopeParser.swift in Sources */,

@@ -31,7 +31,23 @@ struct ProjectListView: View {
     }
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
+            // Projects was the only browsing tab with no `?` (2026-08-23) —
+            // an omission rather than a decision, and it became load-bearing
+            // when the intro tour retired the `projectsConcept` coachmark.
+            // The net moved here rather than disappearing: the panel's first
+            // clause is that coachmark's sentence, answerable one tap from the
+            // screen where "what is a project for" is actually asked. Section-
+            // anchored per F7c, so it sits in every branch below including the
+            // empty states — which is where a first-time user reads it.
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                SectionHelpButton(topic: .projectsConcept)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+
+            Group {
             // F22 · one of the three surfaces that speak while the first
             // import is running. Projects sync from the private DB like
             // everything else, so "No projects yet" mid-import is the same
@@ -126,8 +142,9 @@ struct ProjectListView: View {
         // Item 2 · teach what a project IS on first arrival — the walkthrough
         // covers clips→memories, not projects. One card, non-blocking, once
         // per device; re-armed with the walkthrough from Settings → Learn.
-        .onAppear { OneShotCoachmark.projectsConcept.armIfEligible() }
-        .overlay(alignment: .top) { CoachmarkBanner(coachmark: .projectsConcept) }
+            .onAppear { OneShotCoachmark.projectsConcept.armIfEligible() }
+            .overlay(alignment: .top) { CoachmarkBanner(coachmark: .projectsConcept) }
+        }
         .sheet(isPresented: $showNewProject) {
             NewProjectSheet(
                 name: $newProjectName,

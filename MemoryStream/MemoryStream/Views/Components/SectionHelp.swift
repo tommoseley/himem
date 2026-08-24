@@ -23,6 +23,11 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     case memoryClip
     case memoryOrganize
     case editClip
+    /// Projects LIST — "what is a project for", asked from the screen where
+    /// the question actually occurs. Added 2026-08-23 when the intro tour
+    /// retired the `projectsConcept` coachmark: the net moves here rather than
+    /// disappearing, and Projects stops being the one browsing tab with no `?`.
+    case projectsConcept
     // Project Detail (F7c, both surfaces · 2026-07-27)
     case projectGoal
     case projectMemories
@@ -39,6 +44,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .memoryClip:     return "Clips"
         case .memoryOrganize: return "Organize"
         case .editClip:       return "Editing a clip"
+        case .projectsConcept:    return "Projects"
         case .projectGoal:        return "Goal"
         case .projectMemories:    return "Memories"
         case .projectFindThread:  return "Find the thread"
@@ -63,6 +69,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             return "Organize reads this memory's parts and writes a title and summary. It only uses what's in your clips — it never adds anything that isn't there."
         case .editClip:
             return "This is a single clip — the smallest thing you capture. What you change here changes the clip everywhere it's used."
+        case .projectsConcept:
+            return "A project is something you're working on over time. It connects related memories — the same one can be in several projects, or none."
         case .projectGoal:
             return "The goal names what this project is building toward — a line you write for yourself."
         case .projectMemories:
@@ -87,6 +95,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             return "Run it from the Organize card. Add more clips later, then Reorganize to fold them in."
         case .editClip:
             return "Re-transcribe it, add a note, add it to a memory, or delete it."
+        case .projectsConcept:
+            return "Tap + to start one. Give it a name and a line about what you're building toward, then add memories to it whenever they turn up."
         case .projectGoal:
             return "Tap it to write or change it — one line about what you're working toward."
         case .projectMemories:
@@ -112,6 +122,8 @@ enum HelpTopic: String, CaseIterable, Identifiable {
             return "You decide when it runs; nothing is rewritten on its own. Re-run it anytime from here."
         case .editClip:
             return "A clip is stored once and shared across memories. The In N memories line shows where it lives; deleting it removes it from all of them."
+        case .projectsConcept:
+            return "Nothing is filed away twice — a memory stays everywhere it already was. Adding it here doesn't move it."
         case .projectGoal:
             return "It's yours — the app never changes it."
         case .projectMemories:
@@ -253,6 +265,21 @@ final class OneShotCoachmark: ObservableObject {
     }
 
     func dismiss() { visible = false }
+
+    /// Mark seen WITHOUT the user seeing it, because something else now
+    /// teaches the same thing. Mirrors
+    /// `TutorialOrchestrator.retireOnePagersReplacedByWalkthrough()`, which
+    /// does exactly this for the one-pagers the F8 walkthrough replaced.
+    /// Used by the intro tour for `projectsConcept`, whose card page 5
+    /// carries near-verbatim (ruled 2026-08-23).
+    ///
+    /// This exists so the seen-key lives in ONE place. The caller having to
+    /// know the literal `"himem.projectsCoachmark.seen"` is how a rename
+    /// silently stops retiring anything.
+    func retireBecauseSomethingElseTeachesIt() {
+        UserDefaults.standard.set(true, forKey: seenKey)
+        visible = false
+    }
 
     /// Re-armed from "? → Show me around" so every card re-teaches alongside the
     /// relaunched walkthrough — one recoverability entry, not several.

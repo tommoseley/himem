@@ -131,9 +131,35 @@ final class WalkthroughOrchestrator: ObservableObject {
 
     /// Offer on first run — once, after onboarding, unless already completed or
     /// skipped. No-op if a walkthrough is already active.
+    ///
+    /// **Suppressed once the intro tour has been seen, accepted OR skipped**
+    /// (ruled 2026-08-23). Page 7 asks this exact question — *"Want to try it
+    /// together?"* — so firing `.offer` afterwards asks it twice: once in the
+    /// tour, once again seconds later on the tab shell's first appear. And a
+    /// user who reached page 7 and chose to start on her own, or who skipped
+    /// at page 2, has already answered. **The tour is the invitation now.**
     func offerIfFirstRun() {
-        guard !hasCompleted, activeBeat == nil else { return }
+        guard !IntroTourStore.hasSeen, !hasCompleted, activeBeat == nil else { return }
         activeBeat = .offer
+    }
+
+    /// Start the walkthrough at **beat 1**, skipping `.offer` entirely.
+    ///
+    /// The cold entry point for intro-tour page 7's primary action. `.offer`
+    /// exists to ask whether she wants guidance; page 7 already asked and she
+    /// tapped *"Walk me through it"*, so re-asking would be the double-offer
+    /// this was ruled to remove. `beginFromOffer()` cannot serve here — it
+    /// guards on `activeBeat == .offer` and would no-op from a cold machine.
+    ///
+    /// Everything else matches accepting the offer, including the announced
+    /// switch to Clips: the script is written for the ad-hoc pipeline (record
+    /// → the clip lands on the bench → Start a Memory), and on Memories the
+    /// FAB creates a `JournalEntry` directly so `clipDidLand()` would never
+    /// fire and the machine would sit on `record` forever (F26).
+    func startAtFirstBeat() {
+        guard activeBeat == nil else { return }
+        pendingClipsTabSwitch = true
+        activeBeat = .record
     }
 
     /// Explicit relaunch from "? → Show me around". Always starts fresh at the
