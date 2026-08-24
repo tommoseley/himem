@@ -27,7 +27,20 @@ import WatchConnectivity
 /// one per session, max one per day, defer overlaps, never mid-task")
 /// is a separate orchestrator slice.
 struct TutorialsHubView: View {
+    /// A screen-specific panel to lead with, when the hub is opened from a
+    /// screen that has one. Projects passes `.projectsConcept` so "what is a
+    /// project for" is the first thing in the hub rather than something to
+    /// hunt for — the answer stays close to where the question is asked,
+    /// without the `?` on that tab behaving differently from the other two.
+    ///
+    /// **Why not a per-screen sheet.** Three tabs whose `?` does two different
+    /// things teaches only that the glyph is unreliable, and promoting the
+    /// tour row into every per-screen sheet would put the same row in three
+    /// places — the duplication the tour exists to remove (Tom, 2026-08-23).
+    var leadingTopic: HelpTopic? = nil
+
     @Environment(\.dismiss) private var dismiss
+    @State private var showingLeadingTopic = false
 
     var body: some View {
         // Layout matches `docs/design/screens-settings.jsx` §ScrTutorialsHub:
@@ -50,6 +63,24 @@ struct TutorialsHubView: View {
                 // product, and it is the answer to "I wasn't sure what was
                 // going on" — so it must be reachable from the `?` on any
                 // screen, never a one-time-only explanation.
+                if let leadingTopic {
+                    Button { showingLeadingTopic = true } label: {
+                        TutorialsHubRow(entry: TutorialCatalog.entry(for: leadingTopic))
+                    }
+                    .buttonStyle(.plain)
+                    .background(Crucible.Color.card)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Crucible.Color.hairline, lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .sheet(isPresented: $showingLeadingTopic) {
+                        SectionHelpSheet(topic: leadingTopic)
+                    }
+                }
+
                 introTourCard
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
@@ -223,6 +254,21 @@ enum TutorialCatalog {
     /// coachmark cards this originally restored were retired 2026-07-27 (F8 +
     /// F7c cover the ground). The row is an action, not a navigation, so
     /// `destination` is unused.
+    /// A hub row standing in for a screen-specific help panel. Title and
+    /// subtitle come from the `HelpTopic` itself, so the row cannot drift from
+    /// the panel it opens.
+    static func entry(for topic: HelpTopic) -> TutorialCatalogEntry {
+        TutorialCatalogEntry(
+            id: "help-\(topic.rawValue)",
+            title: "What \(topic.title.lowercased()) are for",
+            subtitle: "On this screen",
+            systemImage: "questionmark.circle",
+            tint: .accent,
+            isPlusOnly: false,
+            destination: AnyView(EmptyView())
+        )
+    }
+
     /// The seven-page intro tour. Distinct from `tour` below, which relaunches
     /// the do-it-with-me walkthrough — this one explains, that one does.
     static let introTour = TutorialCatalogEntry(

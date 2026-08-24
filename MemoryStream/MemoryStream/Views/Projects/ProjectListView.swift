@@ -30,6 +30,8 @@ struct ProjectListView: View {
         return projectVM.projects.filter { $0.topicNames.contains(topic) }
     }
 
+    @State private var showLearn = false
+
     var body: some View {
         VStack(spacing: 0) {
             // Projects was the only browsing tab with no `?` (2026-08-23) —
@@ -42,10 +44,17 @@ struct ProjectListView: View {
             // empty states — which is where a first-time user reads it.
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
-                SectionHelpButton(topic: .projectsConcept)
+                Button { showLearn = true } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.body)
+                        .foregroundStyle(Crucible.Color.ink)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Learn")
             }
             .padding(.horizontal, 16)
-            .padding(.top, 4)
 
             Group {
             // F22 · one of the three surfaces that speak while the first
@@ -144,6 +153,12 @@ struct ProjectListView: View {
         // per device; re-armed with the walkthrough from Settings → Learn.
             .onAppear { OneShotCoachmark.projectsConcept.armIfEligible() }
             .overlay(alignment: .top) { CoachmarkBanner(coachmark: .projectsConcept) }
+        }
+        // The `?` opens the Learn hub, exactly as it does on Clips and
+        // Memories — one glyph, one meaning. Projects leads the hub with its
+        // own panel so the answer stays close to the question.
+        .sheet(isPresented: $showLearn) {
+            NavigationStack { TutorialsHubView(leadingTopic: .projectsConcept) }
         }
         .sheet(isPresented: $showNewProject) {
             NewProjectSheet(
