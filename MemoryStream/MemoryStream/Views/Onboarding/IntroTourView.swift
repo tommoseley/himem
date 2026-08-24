@@ -485,7 +485,14 @@ private struct TourModalityRow: View {
         HStack(spacing: 11) {
             Image(systemName: modality.sfSymbol)
                 .font(.system(size: 14))
-                .foregroundStyle(modality.color)
+                // **Ochre, not `modality.color`** (ruled 2026-08-23). Binding
+                // to `CaptureModality` was right for `sfSymbol` — the tour must
+                // show the iconography she'll see on her own clips — and wrong
+                // for the tint: it imported five decorative hues onto one page,
+                // including a green that Crucible reserves as semantic-only for
+                // *confirmed* and which here would mean "photo".
+                // Differentiation is the label and the symbol, never hue.
+                .foregroundStyle(Crucible.Color.accent)
                 .frame(width: 26, height: 26)
                 .background(Crucible.Color.accentTint2)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -531,7 +538,7 @@ private struct TourModalityCallout: View {
                 HStack(spacing: 11) {
                     Image(systemName: modality.sfSymbol)
                         .font(.system(size: 17))
-                        .foregroundStyle(modality.color)
+                        .foregroundStyle(Crucible.Color.accent)   // see TourModalityRow
                         .frame(width: 38, height: 38)
                         .background(Crucible.Color.accentTint2)
                         .clipShape(RoundedRectangle(cornerRadius: 11))
