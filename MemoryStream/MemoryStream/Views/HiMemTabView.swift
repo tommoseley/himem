@@ -395,10 +395,12 @@ struct HiMemTabView: View {
             if selection == .clips && inbox.hasUnseenArrivals {
                 InboxManifest.shared.markAllSeen()
             }
-            // F8 · offer the guided walkthrough on first run (post-onboarding —
-            // the tab shell only appears once onboarding completes). Once, then
-            // never re-offered; always retrievable from ? → Show me around.
-            walkthrough.offerIfFirstRun()
+            // F8's first-run offer was RETIRED 2026-08-23. This `.onAppear`
+            // fires when the tab shell mounts — which on a fresh install is
+            // BEHIND the intro tour, before it has been seen. Arming `.offer`
+            // there put the walkthrough's invitation underneath a tour that
+            // was still asking the same question. The tour is the invitation;
+            // page 7 enters at beat 1 via `startAtFirstBeat()`.
             if captureRequests.pendingVoiceRecord {
                 captureRequests.pendingVoiceRecord = false
                 captureSource = .handsFree // Siri cold-launch → ad-hoc, lands on bench

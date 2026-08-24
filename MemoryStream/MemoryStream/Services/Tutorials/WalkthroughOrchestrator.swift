@@ -129,19 +129,21 @@ final class WalkthroughOrchestrator: ObservableObject {
 
     // MARK: - Lifecycle
 
-    /// Offer on first run — once, after onboarding, unless already completed or
-    /// skipped. No-op if a walkthrough is already active.
+    /// **`offerIfFirstRun()` IS RETIRED** (2026-08-23, found on device).
     ///
-    /// **Suppressed once the intro tour has been seen, accepted OR skipped**
-    /// (ruled 2026-08-23). Page 7 asks this exact question — *"Want to try it
-    /// together?"* — so firing `.offer` afterwards asks it twice: once in the
-    /// tour, once again seconds later on the tab shell's first appear. And a
-    /// user who reached page 7 and chose to start on her own, or who skipped
-    /// at page 2, has already answered. **The tour is the invitation now.**
-    func offerIfFirstRun() {
-        guard !IntroTourStore.hasSeen, !hasCompleted, activeBeat == nil else { return }
-        activeBeat = .offer
-    }
+    /// It could never legitimately fire once the intro tour existed: if the
+    /// tour is unseen it is about to invite her, and if it has been seen the
+    /// offer is suppressed. Worse, its suppression guard read
+    /// `!IntroTourStore.hasSeen` — which is FALSE only *after* the tour, so on
+    /// a fresh install the tab shell mounted behind the tour, `.onAppear`
+    /// fired while `hasSeen` was still false, and `.offer` armed underneath a
+    /// tour that was still on screen. Page 7 then no-opped and dismissing the
+    /// tour revealed *"Walk through it together?"* — the question she had just
+    /// answered by tapping the button.
+    ///
+    /// A wider guard would have been the wrong fix: the call had no correct
+    /// moment left. `.offer` itself stays — "Show me around" in the Learn hub
+    /// is its remaining honest use, via `start()`.
 
     /// Start the walkthrough at **beat 1**, skipping `.offer` entirely.
     ///
@@ -156,9 +158,14 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// → the clip lands on the bench → Start a Memory), and on Memories the
     /// FAB creates a `JournalEntry` directly so `clipDidLand()` would never
     /// fire and the machine would sit on `record` forever (F26).
+    /// **Authoritative, not guarded on `nil`** (2026-08-23). It previously
+    /// bailed when a beat was already active, which is exactly the state the
+    /// retired first-run offer left behind — so the one caller that matters
+    /// silently did nothing. Page 7 is an explicit choice; it overrides
+    /// whatever the machine was showing.
     func startAtFirstBeat() {
-        guard activeBeat == nil else { return }
         pendingClipsTabSwitch = true
+        currentBannerRetired = false
         activeBeat = .record
     }
 

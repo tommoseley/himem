@@ -31,16 +31,21 @@ struct WalkthroughOrchestratorTests {
 
     // MARK: - Lifecycle
 
-    @Test func firstRun_offersOnce_thenNotAfterComplete() {
+    /// **`firstRun_offersOnce_thenNotAfterComplete` is RETIRED** (2026-08-23).
+    /// It guarded "a first run offers the walkthrough once", which the intro
+    /// tour retired by ruling: the tour is the invitation, and
+    /// `offerIfFirstRun()` no longer exists. The half worth keeping — that
+    /// skip completes and closes — is asserted here; the seam it used to cover
+    /// is now `IntroTourHandoffTests`, which asserts the CALLER ordering that
+    /// this test could not see.
+    @Test func skip_completesAndCloses() {
         reset()
-        o.offerIfFirstRun()
-        #expect(o.activeBeat == .offer, "first run offers the walkthrough")
+        o.start()
+        #expect(o.activeBeat == .offer)
 
         o.skip()
         #expect(o.activeBeat == nil && o.hasCompleted, "skip completes + closes")
-
-        o.offerIfFirstRun()
-        #expect(o.activeBeat == nil, "not re-offered once completed/skipped")
+        reset()
     }
 
     @Test func showMeAround_relaunches_evenAfterComplete() {
@@ -55,7 +60,7 @@ struct WalkthroughOrchestratorTests {
 
     @Test func happyPath_advancesThroughTheFiveStepsInOrder() {
         reset()
-        o.offerIfFirstRun();      #expect(o.activeBeat == .offer)
+        o.start();                #expect(o.activeBeat == .offer)   // "Show me around" — offerIfFirstRun retired
         o.beginFromOffer();       #expect(o.activeBeat == .record, "step 1 · record")
         o.recordingDidStart();    #expect(o.activeBeat == .onARoll, "mic hot → on-a-roll tip (un-numbered)")
         o.clipDidLand();          #expect(o.activeBeat == .clipLanded, "step 2 · saved")
