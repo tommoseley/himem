@@ -59,7 +59,8 @@ final class OrientationLock {
 enum DeviceLog {
     private static let wcLogger    = Logger(subsystem: "com.himem.app", category: "WC")
     private static let inboxLogger = Logger(subsystem: "com.himem.app", category: "Inbox")
-    private static let buildLogger = Logger(subsystem: "com.himem.app", category: "Build")
+    private static let buildLogger  = Logger(subsystem: "com.himem.app", category: "Build")
+    private static let launchLogger = Logger(subsystem: "com.himem.app", category: "Launch")
 
     /// WatchConnectivity: reachability transitions, transfer/ack, dedup verdicts.
     static func wc(_ message: String)    { wcLogger.notice("\(message, privacy: .public)") }
@@ -67,6 +68,12 @@ enum DeviceLog {
     static func inbox(_ message: String) { inboxLogger.notice("\(message, privacy: .public)") }
     /// The build stamp — which binary produced the evidence.
     static func build(_ message: String) { buildLogger.notice("\(message, privacy: .public)") }
+    /// Launch lifecycle: storage readiness, scene phase, backstop decisions.
+    /// Added 2026-08-23 for the wiped-install pass — a cold-launch reading
+    /// taken by stopwatch is fine on its own, but the number is far more
+    /// useful sitting in the same archive as the sync events that explain it,
+    /// and `NSLog` would have put `<private>` there instead.
+    static func launch(_ message: String) { launchLogger.notice("\(message, privacy: .public)") }
 }
 
 /// **Which build is this?** — logged first thing at launch.
@@ -367,7 +374,7 @@ struct MemoryStreamApp: App {
                 if !splashComplete {
                     LaunchScreenView(
                         onStorageReady: {
-                            NSLog("[HiMem][LifeDx] storageReady → true")
+                            DeviceLog.launch("[HiMem][LifeDx] storageReady → true")
                             storageReady = true
                         },
                         onComplete:     { splashComplete = true }
@@ -423,7 +430,7 @@ struct MemoryStreamApp: App {
             }
             #endif
             .onChange(of: storageReady) { _, ready in
-                NSLog("[HiMem][LifeDx] storageReady onChange → \(ready)")
+                DeviceLog.launch("[HiMem][LifeDx] storageReady onChange → \(ready)")
                 guard ready else { return }
                 // Money 2026-06-18: cold-launch race — `.onChange(of:
                 // scenePhase)` fires once at the first `.active`
@@ -436,7 +443,7 @@ struct MemoryStreamApp: App {
                 Task { await retryPendingInboxTranscriptions() }
             }
             .onChange(of: scenePhase) { _, newPhase in
-                NSLog("[HiMem][LifeDx] scenePhase → \(newPhase) storageReady=\(storageReady)")
+                DeviceLog.launch("[HiMem][LifeDx] scenePhase → \(newPhase) storageReady=\(storageReady)")
                 guard newPhase == .active else { return }
                 // Refresh auth from Keychain on foreground —
                 // recovers a stale `isAuthenticated=false` if the
@@ -446,10 +453,10 @@ struct MemoryStreamApp: App {
                 // guard since Keychain is independent of Core Data.
                 auth.refresh()
                 guard storageReady else {
-                    NSLog("[HiMem][LifeDx] scene-active backstop SKIPPED — storage not ready yet")
+                    DeviceLog.launch("[HiMem][LifeDx] scene-active backstop SKIPPED — storage not ready yet")
                     return
                 }
-                NSLog("[HiMem][LifeDx] scene-active backstop firing retry path")
+                DeviceLog.launch("[HiMem][LifeDx] scene-active backstop firing retry path")
                 Task { await retryPendingInboxTranscriptions() }
                 Task { await promptForNotificationsIfFirstTime() }
                 // Re-assert inbox clips to the watch so any ack that was
