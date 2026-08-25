@@ -83,7 +83,15 @@ final class FirstImportState: ObservableObject {
         self.defaults = defaults
         // A previous launch already saw the first import through: never show
         // the importing phase again on this install.
-        self.phase = defaults.bool(forKey: defaultsKey) ? .complete : .importing
+        let alreadyComplete = defaults.bool(forKey: defaultsKey)
+        self.phase = alreadyComplete ? .complete : .importing
+        // **Log the DECISION, with the value that made it** (2026-08-25). A
+        // wiped install produced none of the import-arc lines at all, because
+        // both of them sat behind `guard phase == .importing` — the instrument
+        // went silent on the branch that actually happened, which is worse than
+        // no instrument. `himem.firstImportComplete` being true on a fresh
+        // install is itself the finding; it must be visible, not inferred.
+        DeviceLog.launch("[HiMem][LifeDx] first-import init: \(defaultsKey)=\(alreadyComplete) → phase=\(alreadyComplete ? "complete" : "importing")")
     }
 
     /// Begins observing CloudKit import events and arms the fallback. No-op if
@@ -94,7 +102,14 @@ final class FirstImportState: ObservableObject {
     ///   - timeout: the no-event fallback. Matches `LaunchScreenView`'s proven
     ///     3-second net.
     func begin(container: NSPersistentContainer, timeout: TimeInterval = 3.0) {
-        guard phase == .importing else { return }
+        // The silent branch, now audible. This is the one that fired on the
+        // 2026-08-25 wiped-install pass and produced an archive with no import
+        // arc in it — indistinguishable, from the log alone, from "the import
+        // never started".
+        guard phase == .importing else {
+            DeviceLog.launch("[HiMem][LifeDx] first-import: already complete, not arming — no ck events will be logged this launch")
+            return
+        }
 
         // **THE FLOOR IS MEASURED HERE, NOT AT `storageReady`** (2026-08-23).
         //
@@ -141,7 +156,10 @@ final class FirstImportState: ObservableObject {
     /// Latches. Idempotent — later batches are welcome to add content, they
     /// just don't change this fact.
     func markComplete(cause: String = "direct") {
-        guard phase == .importing else { return }
+        guard phase == .importing else {
+            DeviceLog.launch("[HiMem][LifeDx] first-import: markComplete(\(cause)) ignored — already complete")
+            return
+        }
         let ms = Int((Date().timeIntervalSince(armedAt ?? Date())) * 1000)
         // **`.complete` is NOT "the sync finished."** It latches on the FIRST
         // successful import event, or on the 3s fallback for an account with
