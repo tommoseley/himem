@@ -100,11 +100,45 @@ enum Crucible {
         // Capture colors — semantic, used across FAB, cards, filters
         // Modality tokens — Append spec v1. Each value also dots the
         // entry-head in the detail timeline so the modality reads at a glance.
-        static let captureAudio  = SwiftUI.Color(hex: 0xC64A1C) // voice ochre (= accent)
-        static let captureText   = SwiftUI.Color(hex: 0x1F8FB3) // note teal
-        static let capturePhoto  = SwiftUI.Color(hex: 0x2F9E6B) // photo green
-        static let captureVideo  = SwiftUI.Color(hex: 0xB8328F) // video magenta
-        static let captureAttach = SwiftUI.Color(hex: 0x5B6BF5) // attach indigo
+        //
+        // **These RESOLVE. They used to be literals, and that was the defect**
+        // (2026-08-24). `Himem · Append.html` — the spec these cite — maps every
+        // modality onto an existing Crucible token and authorises no new colour:
+        //
+        //     --m-voice: var(--accent);   --m-photo: var(--topic-forest);
+        //     --m-video: var(--topic-plum); --m-note: var(--topic-ocean);
+        //     --m-attach: var(--topic-slate);
+        //
+        // The implementation replaced those references with hand-picked hex, and
+        // not one of the five shipped values matched its spec. Two of the tokens
+        // it names — `--topic-forest` and `--topic-ocean` — HAVE NEVER EXISTED in
+        // `crucible.css` or the topic palette spec; they read like plausible
+        // names for moss/pine and sea/tide. `plum` and `slate` were real and
+        // still went unused, because all five were replaced at once rather than
+        // the two unresolvable ones being raised.
+        //
+        // The consequences were not cosmetic. Literals carry no dark variant, so
+        // every one of these rendered its LIGHT value on black across memory
+        // detail, memory cards, media tiles, both search surfaces and the FAB —
+        // and `captureAudio` hardcoded `0xC64A1C`, which is verbatim the
+        // deviation the design system names ("a surface showing #C64A1C on black
+        // is the deviation"). **That wrongness was a symptom; the defect was
+        // writing a literal where the spec said `var(--accent)`** (Tom).
+        //
+        // The two never-existent slugs resolved by ruling (Tom, 2026-08-24):
+        // photo → `pine`, the darker green, so it reads as its own swatch rather
+        // than nearly-confirmed-green — which also softens the semantic
+        // collision without inventing anything; note → `tide`, further from the
+        // ochre family, and notes are the quietest modality.
+        //
+        // All five are catalog-backed and carry dark variants. Changing a
+        // modality colour now means editing `crucible.css` and the matching
+        // colorset — which is the contract these bypassed in both directions.
+        static let captureAudio  = accent                        // voice   · --accent
+        static let captureText   = SwiftUI.Color("topic-tide")   // note    · --topic-tide
+        static let capturePhoto  = SwiftUI.Color("topic-pine")   // photo   · --topic-pine
+        static let captureVideo  = SwiftUI.Color("topic-plum")   // video   · --topic-plum
+        static let captureAttach = SwiftUI.Color("topic-slate")  // attach  · --topic-slate
 
         // Semantic — sourced from catalog (each has a dark variant).
         // `success`/`warning`/`info` map to the spec's
