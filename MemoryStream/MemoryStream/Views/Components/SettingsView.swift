@@ -325,6 +325,18 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
 
+                    NavigationLink {
+                        HitRegionProbeView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "hand.tap.fill")
+                                .foregroundStyle(Crucible.Color.ink2)
+                            Text("Hit-region probe")
+                                .foregroundStyle(Crucible.Color.ink)
+                            Spacer()
+                        }
+                    }
+
                     Button {
                         AuthService.shared.debugResetOnboardingState()
                         showResetOnboardingAlert = true
@@ -1069,3 +1081,93 @@ struct AppearanceSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
+
+
+#if DEBUG
+/// **Isolates whether `.buttonStyle(.plain)` removes a Button's implicit hit
+/// region** — the unmeasured half of the 2026-08-23 tap-target defect.
+///
+/// The intro tour's full-width primary tapped only on its words. Its fill is
+/// INSIDE the label, which is the shape F17 verified as hit-testable, so the
+/// mechanism was never established. `.contentShape(Rectangle())` fixed it and
+/// is correct regardless of why — but if `.buttonStyle(.plain)` is the cause,
+/// then every filled `.plain` button in the app is suspect and that is a wide
+/// sweep worth knowing about deliberately rather than one dogfooder at a time.
+///
+/// The three rows are IDENTICAL except for the variable under test. Tap each
+/// one **near its left edge**, well away from the centred label:
+///
+///   A · default style, fill inside label, no contentShape
+///   B · `.buttonStyle(.plain)`, fill inside label, no contentShape  ← suspect
+///   C · `.buttonStyle(.plain)`, fill inside label, WITH contentShape ← the fix
+///
+/// **Reading it.** B not counting while A does confirms `.plain` as the
+/// mechanism and makes the sweep real. A and B both counting means `.plain` is
+/// exonerated and the tour's defect had another cause still unknown — which is
+/// a finding too, and the more uncomfortable one. C must always count; if it
+/// does not, the fix shipped in `f89357c` does not do what it claims.
+private struct HitRegionProbeView: View {
+    @State private var a = 0
+    @State private var b = 0
+    @State private var c = 0
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Tap each button near its LEFT EDGE, not on the words. A count that stays at zero means the hit region is the text.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Crucible.Color.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                row("A · default style", count: a) {
+                    Button { a += 1 } label: { pill("A — default") }
+                }
+                row("B · .plain (suspect)", count: b) {
+                    Button { b += 1 } label: { pill("B — plain") }
+                        .buttonStyle(.plain)
+                }
+                row("C · .plain + contentShape", count: c) {
+                    Button { c += 1 } label: { pill("C — plain + shape").contentShape(Rectangle()) }
+                        .buttonStyle(.plain)
+                }
+
+                Button("Reset counts") { a = 0; b = 0; c = 0 }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.aiBlue)
+                    .contentShape(Rectangle())
+            }
+            .padding(20)
+        }
+        .background(Crucible.Color.paper)
+        .navigationTitle("Hit-region probe")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The shape under test — identical to the intro tour's primary.
+    private func pill(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(Crucible.Color.accentInk)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(Crucible.Color.accent)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func row<V: View>(_ label: String, count: Int, @ViewBuilder _ button: () -> V) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink3)
+                Spacer()
+                Text("\(count)")
+                    .font(.system(size: 15, weight: .bold).monospacedDigit())
+                    .foregroundStyle(count > 0 ? Crucible.Color.confirmed : Crucible.Color.ink3)
+            }
+            button()
+        }
+    }
+}
+#endif
