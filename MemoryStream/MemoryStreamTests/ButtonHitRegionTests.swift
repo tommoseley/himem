@@ -290,6 +290,41 @@ struct ButtonHitRegionTests {
                 "The enclosing HStack's background is not this button's fill.")
     }
 
+
+    /// **THE SHAPE THAT CRASHED THE HOST** (2026-08-25). A button whose label
+    /// OPENS AND CLOSES ON THE SAME LINE makes `close == labelIdx`, so the
+    /// label-body slice became `lines[(n+1)...n]` — lower bound above upper
+    /// bound — and Swift traps: *"Range requires lowerBound <= upperBound"*.
+    ///
+    /// A trap is not an assertion failure. It kills the PROCESS, so 196
+    /// unrelated suites came down with it and the run reported 199 failures
+    /// for one defect.
+    ///
+    /// **The scanner never had to be pointed at anything — being read as source
+    /// text was enough.** `SettingsView.swift` is under `Views/`, which this
+    /// suite walks; a `#if DEBUG` probe that no test constructs supplied the
+    /// shape just by existing. *A scanner's input is not what runs; it is what
+    /// exists.*
+    @Test func scanner_survivesALabelThatOpensAndClosesOnOneLine() {
+        let oneLine = """
+        Button { a += 1 } label: { pill("A — default") }
+        """
+        // The assertion is that this RETURNS. Before the fix it trapped.
+        #expect(!Self.isOffendingClosureLabelOutsideDecoration(block: oneLine),
+                "A one-line label with no decoration on the button is not an offender.")
+    }
+
+    /// The same shape WITH outside decoration is a genuine offender and must
+    /// still be caught — bounding the slice must not blind the scanner.
+    @Test func scanner_flagsAOneLineLabelThatIsDecoratedOutside() {
+        let oneLineDecorated = """
+        Button { a += 1 } label: { pill("A") }
+        .buttonStyle(.plain)
+        .background(Crucible.Color.card)
+        """
+        #expect(Self.isOffendingClosureLabelOutsideDecoration(block: oneLineDecorated))
+    }
+
     // MARK: - Scanner
 
     /// The predicate, isolated so the two scanner tests above can exercise it
@@ -359,6 +394,24 @@ struct ButtonHitRegionTests {
     /// Shape: `Button { … } label: { … }` where the closing `}` of the label is
     /// followed by a modifier chain carrying a fill or stroke, and neither the
     /// label nor the chain declares a `contentShape`.
+
+    /// **A BOUNDED SLICE. Source scanners must not be able to trap.**
+    ///
+    /// A source-scanning guard walks every file under `Views/`, so its input is
+    /// *whatever anyone writes*, not what any test constructs. A malformed
+    /// index therefore does not misreport — it traps, and a trap kills the test
+    /// HOST, taking every unrelated suite with it. On 2026-08-25 one such slice
+    /// reported 199 failures across 110 suites for a single defect.
+    ///
+    /// Returns an empty array rather than trapping when the bounds are
+    /// nonsensical. A scanner that sees nothing under-reports, which a
+    /// self-test can catch; a scanner that traps takes down the run, which
+    /// nothing can.
+    static func slice(_ lines: [String], from lower: Int, through upper: Int) -> [String] {
+        guard lower <= upper, lower >= 0, upper < lines.count else { return [] }
+        return Array(lines[lower...upper])
+    }
+
     static func isOffendingClosureLabelOutsideDecoration(block: String) -> Bool {
         let lines = block.components(separatedBy: "\n")
         guard let head = lines.first,
@@ -403,7 +456,12 @@ struct ButtonHitRegionTests {
         }
         guard let close = closeIdx, close + 1 < lines.count else { return false }
 
-        let labelBody = lines[(labelIdx + 1)...close].joined(separator: "\n")
+        // `close == labelIdx` when the label opens AND closes on one line —
+        // `Button { a += 1 } label: { pill("A") }`. The body is then the tail of
+        // that same line, and the old `(labelIdx + 1)...close` was inverted.
+        let labelBody = close > labelIdx
+            ? Self.slice(lines, from: labelIdx + 1, through: close).joined(separator: "\n")
+            : String(lines[labelIdx][(lines[labelIdx].range(of: #"label:\s*\{"#, options: .regularExpression)?.upperBound ?? lines[labelIdx].startIndex)...])
         if labelBody.contains("contentShape") { return false }
 
         var chain = ""
