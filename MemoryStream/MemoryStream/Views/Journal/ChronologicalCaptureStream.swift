@@ -247,21 +247,54 @@ struct ChronologicalCaptureStream: View {
         Self.compactItems(from: entry.mediaItems)
     }
 
-    /// Pure helper — sorts the media items by createdAt and includes
-    /// every type. Static + Sendable so `CompactItemsTests` can
-    /// exercise the filter without building a SwiftUI environment.
-    static func compactItems(from items: [MediaDisplayItem]) -> [MediaDisplayItem] {
-        items.sorted { $0.createdAt < $1.createdAt }
+    /// **The one owner of "what order does a memory's parts render in".**
+    ///
+    /// The answer is: **the order they arrive in**, and the renderer does not
+    /// get an opinion. `EntryMapper` builds `mediaItems` from
+    /// `mediaReferencesArray` → `edgesArray`, which sorts by
+    /// `MemoryClipEdge.orderInMemory` — the only per-memory sequence the model
+    /// has, and the one `EvidenceEdgeReadWriteTests` pins as authoritative
+    /// ("respect each memory's per-edge `orderInMemory` — **not**
+    /// `ref.createdAt`").
+    ///
+    /// **Both renderers used to re-sort by `createdAt` here, and that discarded
+    /// it.** The consequence was live rather than theoretical: the write side
+    /// appends (*"New clips append in `orderInMemory`/`capturedAt` order"*,
+    /// `Memory Detail · unified editing model.md` §"Adding clips to a memory"),
+    /// so adding an older clip to a memory put it last — and the renderer then
+    /// moved it to the top by capture date. "Append" was unobservable.
+    ///
+    /// **Why an identity function earns its place rather than deleting two
+    /// `sorted` calls.** Two call sites each deciding order independently is
+    /// how they diverged in the first place; this gives the decision one home,
+    /// one doc, and one test. A future caller that wants a different order has
+    /// to change this and face the tests, instead of quietly sorting locally.
+    ///
+    /// Named for what it *is* — this type is still called
+    /// `ChronologicalCaptureStream`, which is now a misnomer. Renaming it
+    /// touches explicit `project.pbxproj` references (the F18 `git mv` lesson);
+    /// logged rather than done in passing.
+    static func orderedItems(from items: [MediaDisplayItem]) -> [MediaDisplayItem] {
+        items
     }
 
-    /// Walks the entry's fragments in `createdAt` order, grouping contiguous
-    /// image/video MediaReferences into a single grid panel and emitting
+    /// Pure helper — the Compact index's items, in the memory's order, every
+    /// type included. Static + Sendable so `CompactItemsFilterTests` can
+    /// exercise it without building a SwiftUI environment.
+    static func compactItems(from items: [MediaDisplayItem]) -> [MediaDisplayItem] {
+        orderedItems(from: items)
+    }
+
+    /// Walks the entry's fragments **in the memory's own order** — see
+    /// `orderedItems(from:)`, which is the one owner of that decision and the
+    /// reason this no longer re-sorts by `createdAt`. Groups contiguous
+    /// image/video MediaReferences into a single grid panel and emits
     /// voice/note as their own panels. Every fragment kind is now a
     /// `MediaDisplayItem`; the legacy `TextSegment`-flavored note path is
     /// gone.
     private var panels: [Panel] {
         var result: [Panel] = []
-        let sorted = entry.mediaItems.sorted { $0.createdAt < $1.createdAt }
+        let sorted = Self.orderedItems(from: entry.mediaItems)
         for media in sorted {
             switch media.mediaType {
             case .voice: result.append(Panel(kind: .voice(media)))
