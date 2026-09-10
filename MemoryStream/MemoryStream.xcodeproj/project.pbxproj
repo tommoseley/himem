@@ -200,6 +200,7 @@
 		A2000000FB /* FABHandednessSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000FB /* FABHandednessSync.swift */; };
 		A200000401 /* CaptureUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000401 /* CaptureUnavailableView.swift */; };
 		A200000402 /* FirstImportState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000402 /* FirstImportState.swift */; };
+		A200000407 /* CloudKitArcLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000407 /* CloudKitArcLog.swift */; };
 		A200000403 /* SilentCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000403 /* SilentCapture.swift */; };
 		A200000404 /* SilentCaptureBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000404 /* SilentCaptureBanner.swift */; };
 		A200000405 /* RenderedBench.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000405 /* RenderedBench.swift */; };
@@ -478,6 +479,7 @@
 		B2000000FB /* FABHandednessSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FABHandednessSync.swift; path = MemoryStream/Services/FABHandednessSync.swift; sourceTree = SOURCE_ROOT; };
 		B200000401 /* CaptureUnavailableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureUnavailableView.swift; path = MemoryStream/Views/Components/CaptureUnavailableView.swift; sourceTree = SOURCE_ROOT; };
 		B200000402 /* FirstImportState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FirstImportState.swift; path = MemoryStream/Services/Storage/FirstImportState.swift; sourceTree = SOURCE_ROOT; };
+		B200000407 /* CloudKitArcLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CloudKitArcLog.swift; path = MemoryStream/Services/Storage/CloudKitArcLog.swift; sourceTree = SOURCE_ROOT; };
 		B200000403 /* SilentCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SilentCapture.swift; path = MemoryStream/Services/AI/SilentCapture.swift; sourceTree = SOURCE_ROOT; };
 		B200000404 /* SilentCaptureBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SilentCaptureBanner.swift; path = MemoryStream/Views/Components/SilentCaptureBanner.swift; sourceTree = SOURCE_ROOT; };
 		B200000405 /* RenderedBench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenderedBench.swift; path = MemoryStream/Services/Storage/RenderedBench.swift; sourceTree = SOURCE_ROOT; };
@@ -761,6 +763,7 @@
 				B200000094 /* WalkthroughOverlay.swift */,
 				B200000095 /* SectionHelp.swift */,
 				B200000402 /* FirstImportState.swift */,
+				B200000407 /* CloudKitArcLog.swift */,
 				B200000404 /* SilentCaptureBanner.swift */,
 				B200000403 /* SilentCapture.swift */,
 				B200000405 /* RenderedBench.swift */,
@@ -1489,6 +1492,7 @@
 				A200000094 /* WalkthroughOverlay.swift in Sources */,
 				A200000095 /* SectionHelp.swift in Sources */,
 				A200000402 /* FirstImportState.swift in Sources */,
+				A200000407 /* CloudKitArcLog.swift in Sources */,
 				A200000404 /* SilentCaptureBanner.swift in Sources */,
 				A200000403 /* SilentCapture.swift in Sources */,
 				A200000405 /* RenderedBench.swift in Sources */,

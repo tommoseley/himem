@@ -240,6 +240,17 @@ struct LaunchScreenView: View {
         // network, nothing to import). Cheap by design — one observer and one
         // work item, no I/O, so the cold-launch budget is untouched.
         FirstImportState.shared.begin(container: StorageService.shared.container)
+        // The import arc, armed beside the latch and deliberately NOT sharing
+        // its lifetime. `FirstImportState` answers "may a surface claim to be
+        // empty?" as early as it honestly can, and `markComplete` removes its
+        // observer when it does — correct for that job, fatal for measurement:
+        // on 2026-08-25 the 3s fallback fired at +3149ms and took the only
+        // observer with it, ~15s before CloudKit's per-zone setup had anything
+        // to say, so the archive carried zero `ck event` lines. This one never
+        // latches, never disarms, and does not inherit `begin`'s
+        // `guard phase == .importing` — so it also speaks on the relaunch
+        // branch, which is the branch a populated account actually takes.
+        CloudKitArcLog.shared.begin(container: StorageService.shared.container)
 
         storageLoaded = true
         onStorageReady()
