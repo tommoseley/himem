@@ -104,6 +104,40 @@ final class UbiquityStore: @unchecked Sendable {
         return sandboxDocuments
     }
 
+    /// The `NSMetadataQuery` search scope that corresponds to `documentsRoot`.
+    ///
+    /// **This lives here, beside the layout, because it is a fact ABOUT the
+    /// layout — not an independent choice.** The SDK defines the two ubiquity
+    /// scopes as complements:
+    ///
+    /// - `NSMetadataQueryUbiquitousDocumentsScope` — *"The `Documents`
+    ///   subdirectory in the application's Ubiquity container."*
+    /// - `NSMetadataQueryUbiquitousDataScope` — *"The application's Ubiquity
+    ///   container, **excluding** the `Documents` subdirectory."*
+    ///
+    /// Every file this app writes lives under `documentsRoot`, i.e. under
+    /// `Documents/`. So the Data scope is, by definition, the one part of the
+    /// container that contains **none** of our files.
+    ///
+    /// **B29 is what that cost.** `WatchSessionDelegate.awaitDownloads` armed
+    /// its `NSMetadataQuery` on the *Data* scope while waiting for audio in
+    /// `Documents/Inbox/`. The query could never match, so
+    /// `NSMetadataQueryDidUpdate` could never fire, and three clips sat in
+    /// `awaitingBytes` byte-identical across four sweeps of an 8.5-minute
+    /// device run — every sweep `trigger=arrival`, never `trigger=ubiquity`.
+    /// Nothing pulled them forward except an unrelated new capture.
+    ///
+    /// The literal is retired into this constant so the scope is a **decision
+    /// with an owner** rather than a value typed at a call site, and
+    /// `UbiquityMetadataScopeTests` pins it to the layout so the two cannot
+    /// drift apart.
+    ///
+    /// *Sandbox-fallback note:* when the container is unavailable
+    /// `documentsRoot` is the sandbox `Documents`, where no metadata query
+    /// applies at all — but nothing is awaiting iCloud bytes there either, so
+    /// there is no second case to handle.
+    static let metadataSearchScope = NSMetadataQueryUbiquitousDocumentsScope
+
     // MARK: - Subdirectory paths
 
     /// `Documents/Audio/` — voice recordings (master and split clips).

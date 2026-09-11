@@ -554,7 +554,14 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
         guard downloadWatcher == nil else { return }
 
         let query = NSMetadataQuery()
-        query.searchScopes = [NSMetadataQueryUbiquitousDataScope]
+        // B29: this was `NSMetadataQueryUbiquitousDataScope` — which the SDK
+        // defines as the container EXCLUDING `Documents/`, and every file we
+        // write lives under `Documents/`. The query could never match the
+        // audio it was waiting for, so `NSMetadataQueryDidUpdate` could never
+        // fire and a stranded clip was only ever re-examined by an unrelated
+        // new capture. The scope now comes from the type that owns the layout,
+        // so it cannot drift from where the files actually are.
+        query.searchScopes = [UbiquityStore.metadataSearchScope]
         query.predicate = NSPredicate(format: "%K LIKE %@", NSMetadataItemFSNameKey, "*")
         downloadObserver = NotificationCenter.default.addObserver(
             forName: .NSMetadataQueryDidUpdate, object: query, queue: .main
