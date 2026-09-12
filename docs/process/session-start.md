@@ -33,6 +33,16 @@ Known traps, each of which has cost a session:
 - A simulator launch denial that **survives** a shutdown is device-specific — switch simulators. One that **clears** after a shutdown was just busy state — re-run.
 - The working directory does not survive a `cd` in an earlier command; pass the project path explicitly.
 
+## 2b · Verify the toolchain before trusting any number
+
+**A gate number is only comparable to the last one if the thing that produced it has not moved.** Check, do not assume — and record the answer either way, because "nothing changed" is a claim that needs a comparison behind it.
+
+- **The active developer directory** — the gates run under an explicit `DEVELOPER_DIR` override precisely because the system-wide setting points somewhere else. **If a toolchain install repoints it, the failure mode inverts:** an invocation that forgets the override stops erroring and starts silently succeeding against a different toolchain. Confirm which state you are in, and say so if the loud guard is gone.
+- **The OS build, the SDK builds, and the simulator runtimes** — against the values in the most recent log. The SDK build is what a store upload's acceptance was measured against; the runtime pin is what makes the deliberate-failure count mean the same thing as last time.
+- **Any of these moving makes the next gate a NEW BASELINE, not a confirmation.** Say that explicitly. Counts that coincide across a toolchain change are a coincidence, not continuity — that has happened here and was recorded as such.
+
+Where a value must not drift, prefer erasing and recreating on the same version over switching to a different one. "Grab whatever is available" is how a pin is lost inside a routine step nobody thinks of as a decision.
+
 ## 3 · Take the next item
 
 From the punch list, in the order the ruling set — not the order that looks cheapest. If the next item is ambiguous, ask before building; a raised question is cheap and a silent reinterpretation is a day.
