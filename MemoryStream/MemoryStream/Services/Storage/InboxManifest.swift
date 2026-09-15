@@ -4,8 +4,21 @@ import CoreData
 import UserNotifications
 
 /// One row in the inbox manifest — represents an unorganized clip that
-/// arrived from the watch. Lives at `Documents/Inbox/manifest.json`. Audio
-/// payload lives next to it at `Documents/Inbox/audio/<clipId>.caf`.
+/// arrived from the watch.
+///
+/// **The manifest and the audio do NOT live together, and neither lives at
+/// `Documents/Inbox/`.** That path is owned by WatchConnectivity — see the
+/// warning on `inboxRoot`, which exists to keep us out of it.
+///
+/// - Manifest: sandbox `Documents/ClipInbox/manifest.json`, via `inboxRoot`.
+///   Per-device sync state, deliberately not user content and not synced.
+/// - Audio: the iCloud ubiquity container's `Documents/Inbox/`, via
+///   `audioDirectory` (`UbiquityStore.inboxDirectory`). The legacy sandbox
+///   layout was `Documents/ClipInbox/audio/`, migrated on first launch by
+///   `UbiquityStore.migrateSandboxFilesIfNeeded()`.
+///
+/// Treat `inboxRoot` and `audioDirectory` as the authorities on both paths;
+/// this comment names them rather than restating a literal that can drift.
 ///
 /// Once the user promotes a clip into a memory (Create memory / Add to
 /// memory), the audio file moves to the iOS-side voice store and the row
