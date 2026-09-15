@@ -56,6 +56,110 @@ final class OrientationLock {
 /// text, note bodies, titles or summaries stays on `NSLog` and stays private**
 /// (Tom, 2026-08-23). `WatchSessionDelegate.outcomeLabel` already reduces a
 /// transcript to `textLen=<count>` and is safe on that basis.
+/// **The device-readable mirror of `DeviceLog`.**
+///
+/// WHY THIS EXISTS. On 2026-09-15 five separate attempts to collect a device
+/// reading failed. `log collect --device-udid` returned `Device not configured`
+/// against a locked phone, an unlocked phone and a wired one — and nothing on
+/// record shows it ever having worked on this machine. A sysdiagnose did work,
+/// and its 2.3 GB archive contained **no third-party subsystem lines at all**
+/// for the window we needed, while carrying 138,522 Apple-subsystem lines from
+/// those same twenty minutes. The app was provably emitting throughout: the
+/// identical line appeared live over a `devicectl --console` bridge.
+///
+/// So the reading was lost in the **collection path**, not in the instrument.
+/// A file inside the app container deletes that path: `devicectl device copy
+/// from` reads it with no sudo, no password, no retention window, and no
+/// dependency on how iOS chooses to persist third-party log data. Per the
+/// CLAUDE.md non-negotiable — *where a rule can be replaced by a mechanism,
+/// replace it* — this replaces "collect the archive within hours".
+///
+/// **Written unconditionally, and that is the point.** It does not mirror
+/// whatever `Logger` decided to persist, and it is not `#if DEBUG`-gated: a
+/// reading that exists only in a debug build cannot answer a question about a
+/// TestFlight build. (2026-08-26: `.debug` is never persisted and `.info`
+/// lives only in memory, so a line readable live can be absent from a
+/// collection. A file sidesteps that only if it is written on its own terms.)
+///
+/// **Privacy: this carries exactly what `DeviceLog` carries, and nothing more.**
+/// Every `DeviceLog` line is already `privacy: .public` and structural by the
+/// 2026-08-23 rule — counts, ids, formats, error descriptions. Content
+/// (transcripts, note bodies, titles, summaries) stays on `NSLog` and is never
+/// teed here. Adding a call site that logs content is the one way to break it.
+enum DeviceLogFile {
+    /// Rotation threshold. One rollover file is kept, so the worst case on
+    /// disk is `2 * maxBytes`.
+    static let maxBytes = 1 * 1024 * 1024
+
+    /// Test seam. Production resolves to `Library/Logs` — deliberately **not**
+    /// `Documents/`, which is WatchConnectivity's staging tree (see the warning
+    /// on `InboxManifest.inboxRoot`) and would also put a diagnostic file in
+    /// the user-facing document scope.
+    nonisolated(unsafe) static var directoryOverride: URL?
+
+    /// Guards the whole size-check → rotate → append sequence. That compound
+    /// operation is the unit that must be atomic — no single call in it is
+    /// wrong on its own, which is exactly what makes an interleaved tear
+    /// invisible (CLAUDE.md § Test Concurrency).
+    private static let lock = NSLock()
+
+    static var directory: URL {
+        if let directoryOverride { return directoryOverride }
+        let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
+        return library.appendingPathComponent("Logs", isDirectory: true)
+    }
+    static var fileURL: URL { directory.appendingPathComponent("device.log") }
+    static var rotatedURL: URL { directory.appendingPathComponent("device.1.log") }
+
+    /// Appends one timestamped line. Best-effort by design: a diagnostic sink
+    /// must never be able to take down the thing it is observing, so every
+    /// failure here is swallowed rather than surfaced.
+    static func append(category: String, _ message: String) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let fm = FileManager.default
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        rotateIfNeededLocked(fm)
+
+        let line = "\(Self.stamp()) [\(category)] \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+
+        if !fm.fileExists(atPath: fileURL.path) {
+            fm.createFile(atPath: fileURL.path, contents: nil)
+            excludeFromBackupLocked()
+        }
+        guard let handle = try? FileHandle(forWritingTo: fileURL) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: data)
+    }
+
+    private static func rotateIfNeededLocked(_ fm: FileManager) {
+        guard let attrs = try? fm.attributesOfItem(atPath: fileURL.path),
+              let size = attrs[.size] as? Int, size >= maxBytes else { return }
+        try? fm.removeItem(at: rotatedURL)
+        try? fm.moveItem(at: fileURL, to: rotatedURL)
+    }
+
+    private static func excludeFromBackupLocked() {
+        var url = fileURL
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+    }
+
+    /// Sortable, and directly comparable against a unified-log timestamp so a
+    /// file reading and an archive reading can be laid side by side.
+    private static func stamp(_ now: Date = Date()) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone.current
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        return f.string(from: now)
+    }
+}
+
 enum DeviceLog {
     private static let wcLogger    = Logger(subsystem: "com.himem.app", category: "WC")
     private static let inboxLogger = Logger(subsystem: "com.himem.app", category: "Inbox")
@@ -63,17 +167,29 @@ enum DeviceLog {
     private static let launchLogger = Logger(subsystem: "com.himem.app", category: "Launch")
 
     /// WatchConnectivity: reachability transitions, transfer/ack, dedup verdicts.
-    static func wc(_ message: String)    { wcLogger.notice("\(message, privacy: .public)") }
+    static func wc(_ message: String) {
+        wcLogger.notice("\(message, privacy: .public)")
+        DeviceLogFile.append(category: "WC", message)
+    }
     /// Inbox manifest and sweep accounting: counts, ids, tombstones.
-    static func inbox(_ message: String) { inboxLogger.notice("\(message, privacy: .public)") }
+    static func inbox(_ message: String) {
+        inboxLogger.notice("\(message, privacy: .public)")
+        DeviceLogFile.append(category: "Inbox", message)
+    }
     /// The build stamp — which binary produced the evidence.
-    static func build(_ message: String) { buildLogger.notice("\(message, privacy: .public)") }
+    static func build(_ message: String) {
+        buildLogger.notice("\(message, privacy: .public)")
+        DeviceLogFile.append(category: "Build", message)
+    }
     /// Launch lifecycle: storage readiness, scene phase, backstop decisions.
     /// Added 2026-08-23 for the wiped-install pass — a cold-launch reading
     /// taken by stopwatch is fine on its own, but the number is far more
     /// useful sitting in the same archive as the sync events that explain it,
     /// and `NSLog` would have put `<private>` there instead.
-    static func launch(_ message: String) { launchLogger.notice("\(message, privacy: .public)") }
+    static func launch(_ message: String) {
+        launchLogger.notice("\(message, privacy: .public)")
+        DeviceLogFile.append(category: "Launch", message)
+    }
 }
 
 /// **Which build is this?** — logged first thing at launch.
