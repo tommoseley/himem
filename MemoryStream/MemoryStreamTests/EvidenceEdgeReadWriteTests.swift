@@ -52,16 +52,15 @@ struct EvidenceEdgeReadWriteTests {
             createdAt: Date(timeIntervalSinceNow: -100)
         )
 
-        // Attach the same ref to memory B via a second edge — the
-        // schema move that makes "one clip cited by many memories"
-        // possible. Uses the storage helper directly since v1 UI
-        // doesn't yet expose this affordance.
-        try StorageService.createEdge(
-            from: memB,
-            to: ref,
-            linkedAt: Date(),
-            in: storage.viewContext
-        )
+        // Attach the same ref to memory B via a second edge.
+        //
+        // This is now PRE-INVARIANT DATA, not a move the app would make:
+        // F2 (2026-09-16) made "a part belongs to exactly one memory" a
+        // write-side invariant, so `createEdge` refuses this. The row it
+        // produces still exists on real devices and must keep reading
+        // correctly — which is exactly what this test guards — so the fixture
+        // manufactures history rather than routing around the guard ad hoc.
+        try HistoricalEdgeFixture.attach(ref, to: memB, in: storage.viewContext)
         try storage.save(context: storage.viewContext)
 
         let refs = try storage.viewContext.fetch(NSFetchRequest<MediaReference>(entityName: "MediaReference"))
@@ -192,8 +191,8 @@ struct EvidenceEdgeReadWriteTests {
         // set memA's edge to ~now, which would race with memC's
         // linkedAt.
         let base = Date(timeIntervalSinceReferenceDate: 800_000_000)
-        try StorageService.createEdge(from: memB, to: ref, linkedAt: base.addingTimeInterval(100), in: storage.viewContext)
-        try StorageService.createEdge(from: memC, to: ref, linkedAt: base.addingTimeInterval(200), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(ref, to: memB, in: storage.viewContext, linkedAt: base.addingTimeInterval(100))
+        try HistoricalEdgeFixture.attach(ref, to: memC, in: storage.viewContext, linkedAt: base.addingTimeInterval(200))
 
         // Stamp memA's auto-created edge with a distinct timestamp.
         let memAEdges = try fetchEdges(memoryId: memA.id, clipId: ref.id, in: storage)

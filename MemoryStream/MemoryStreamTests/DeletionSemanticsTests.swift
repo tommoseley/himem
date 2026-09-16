@@ -52,7 +52,7 @@ struct DeletionSemanticsTests {
             audioFilename: "shared.caf",
             transcript: "shared"
         )
-        try StorageService.createEdge(from: memB, to: ref, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(ref, to: memB, in: storage.viewContext, linkedAt: Date())
         try storage.save(context: storage.viewContext)
 
         let edgeA = try #require(memA.edgesArray.first)
@@ -102,7 +102,7 @@ struct DeletionSemanticsTests {
             audioFilename: "s.caf",
             transcript: "s"
         )
-        try StorageService.createEdge(from: memB, to: shared, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(shared, to: memB, in: storage.viewContext, linkedAt: Date())
         _ = try storage.createVoiceFragment(for: memA, audioFilename: "unique.caf", transcript: "u")
         try storage.save(context: storage.viewContext)
 
@@ -131,7 +131,7 @@ struct DeletionSemanticsTests {
             audioFilename: "shared.caf",
             transcript: "shared"
         )
-        try StorageService.createEdge(from: memB, to: ref, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(ref, to: memB, in: storage.viewContext, linkedAt: Date())
         try storage.save(context: storage.viewContext)
 
         service.removeClipFromMemory(memoryId: memA.id, refId: ref.id)
@@ -161,7 +161,7 @@ struct DeletionSemanticsTests {
             audioFilename: "victim.caf",
             transcript: "v"
         )
-        try StorageService.createEdge(from: memB, to: ref, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(ref, to: memB, in: storage.viewContext, linkedAt: Date())
         try storage.save(context: storage.viewContext)
 
         service.recycleClip(refId: ref.id)
@@ -287,7 +287,7 @@ struct DeletionSemanticsTests {
             audioFilename: "b26-remove-scope.caf",
             transcript: "the tide had already turned"
         )
-        try StorageService.createEdge(from: memB, to: ref, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(ref, to: memB, in: storage.viewContext, linkedAt: Date())
         try storage.save(context: storage.viewContext)
         try seedDuplicateEdge(in: storage, memory: memA, clip: ref)
         #expect(ref.edgeCount == 3, "precondition: two edges to memA, one to memB")
@@ -328,8 +328,8 @@ struct MediaReferenceReferencedInTests {
             audioFilename: "shared.caf",
             transcript: "x"
         )
-        try StorageService.createEdge(from: memB, to: ref, linkedAt: Date(), in: storage.viewContext)
-        try StorageService.createEdge(from: memC, to: ref, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(ref, to: memB, in: storage.viewContext, linkedAt: Date())
+        try HistoricalEdgeFixture.attach(ref, to: memC, in: storage.viewContext, linkedAt: Date())
         try storage.save(context: storage.viewContext)
 
         #expect(ref.referencingMemoryCount == 3)
@@ -348,8 +348,8 @@ struct MediaReferenceReferencedInTests {
         )
         // Stamp memA's edge with the oldest linkedAt so ordering is deterministic.
         let base = Date(timeIntervalSinceReferenceDate: 800_000_000)
-        try StorageService.createEdge(from: memB, to: ref, linkedAt: base.addingTimeInterval(100), in: storage.viewContext)
-        try StorageService.createEdge(from: memC, to: ref, linkedAt: base.addingTimeInterval(200), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(ref, to: memB, in: storage.viewContext, linkedAt: base.addingTimeInterval(100))
+        try HistoricalEdgeFixture.attach(ref, to: memC, in: storage.viewContext, linkedAt: base.addingTimeInterval(200))
         let memAEdges = ((memA.edges as? Set<MemoryClipEdge>) ?? [])
         try #require(memAEdges.first).linkedAt = base
         try storage.save(context: storage.viewContext)

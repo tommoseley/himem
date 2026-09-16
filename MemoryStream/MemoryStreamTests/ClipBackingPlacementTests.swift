@@ -41,7 +41,7 @@ struct ClipBackingPlacementTests {
         let target = try storage.createEntry(content: "", inputType: .typed, title: "First")
         let ref = try storage.createVoiceFragment(for: target, audioFilename: "a.m4a", transcript: "hi")
         let other = try storage.createEntry(content: "", inputType: .typed, title: "Other")
-        try StorageService.createEdge(from: other, to: ref, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(ref, to: other, in: storage.viewContext, linkedAt: Date())
         try storage.viewContext.save()
         #expect(ref.referencingMemoryCount == 2, "managed clip placed into a second memory via an edge")
     }

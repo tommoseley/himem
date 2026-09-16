@@ -121,7 +121,7 @@ struct DuplicateEdgeHonestCountTests {
 
         let second = try storage.createEntry(content: "", inputType: .typed)
         second.title = "Thistle Beacon"
-        try StorageService.createEdge(from: second, to: clip, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(clip, to: second, in: storage.viewContext, linkedAt: Date())
         try storage.save(context: storage.viewContext)
 
         #expect(clip.referencingMemoryCount == 2, "two real memories are two — the dedupe must not collapse distinct ones")

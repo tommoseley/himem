@@ -72,7 +72,7 @@ struct ClipSearchTests {
 
         // Cite the same clip in a second memory → "in 2 memories".
         let b = try s.createEntry(content: "", inputType: .typed)
-        try StorageService.createEdge(from: b, to: ref, linkedAt: Date(), in: s.viewContext)
+        try HistoricalEdgeFixture.attach(ref, to: b, in: s.viewContext, linkedAt: Date())
         try s.viewContext.save()
         hits = try e.searchClips(parsed: ScopeParser.parse("basil"))
         #expect(hits.first?.status == "in 2 memories")

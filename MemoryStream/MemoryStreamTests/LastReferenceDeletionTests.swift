@@ -43,7 +43,7 @@ struct LastReferenceDeletionTests {
         // C_only: single edge to memA. C_shared: edges to memA AND memB.
         let cOnly = try storage.createVoiceFragment(for: memA, audioFilename: "only.caf", transcript: "only")
         let cShared = try storage.createVoiceFragment(for: memA, audioFilename: "shared.caf", transcript: "shared")
-        try StorageService.createEdge(from: memB, to: cShared, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(cShared, to: memB, in: storage.viewContext, linkedAt: Date())
         try storage.save(context: storage.viewContext)
 
         service.recycle(entryId: memA.id)
@@ -92,7 +92,7 @@ struct LastReferenceDeletionTests {
         let memA = try seedMemory(in: storage, title: "A")
         let memB = try seedMemory(in: storage, title: "B")
         let shared = try storage.createVoiceFragment(for: memA, audioFilename: "s.caf", transcript: "s")
-        try StorageService.createEdge(from: memB, to: shared, linkedAt: Date(), in: storage.viewContext)
+        try HistoricalEdgeFixture.attach(shared, to: memB, in: storage.viewContext, linkedAt: Date())
         try storage.save(context: storage.viewContext)
 
         service.recycle(entryId: memA.id)

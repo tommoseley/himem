@@ -56,8 +56,20 @@ struct PlaceClipSheetSilentSuccessTests {
     /// everywhere would pass the money test.
     @Test func addToExisting_whenTheTargetResolves_reportsPlaced_andCreatesTheEdge() throws {
         let storage = StorageService(inMemory: true)
-        let home = try storage.createEntry(content: "", inputType: .typed, title: "Home")
-        let ref = try storage.createVoiceFragment(for: home, audioFilename: "a.m4a", transcript: "hi")
+        // A LOOSE part, not one already living in another memory. The subject
+        // here is silent-success reporting, and the part's prior home was
+        // always incidental to it — but under F2 (a part belongs to exactly
+        // one memory) placing an already-placed part is refused, which would
+        // make this test fail for a reason that has nothing to do with what it
+        // guards. Loose is also what the app now offers: the paperclip only
+        // ever lists parts that are in no memory.
+        let ref = MediaReference(context: storage.viewContext)
+        ref.id = UUID()
+        ref.osIdentifier = "a.m4a"
+        ref.mediaType = MediaReference.MediaType.voice.rawValue
+        ref.transcript = "hi"
+        ref.isAccessible = true
+        ref.createdAt = Date()
         let target = try storage.createEntry(content: "", inputType: .typed, title: "Target")
         try storage.viewContext.save()
 

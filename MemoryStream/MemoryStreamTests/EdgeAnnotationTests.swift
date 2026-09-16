@@ -48,19 +48,26 @@ struct EdgeAnnotationTests {
         #expect(edge.annotation == nil, "whitespace-only clears the annotation")
     }
 
-    @Test func updateEdgeAnnotation_independentAcrossMemories() throws {
-        let (storage, service) = makeStore()
-        let memA = try seedMemory(in: storage, title: "A")
-        let memB = try seedMemory(in: storage, title: "B")
-        let shared = try storage.createVoiceFragment(for: memA, audioFilename: "s.caf", transcript: "T")
-        try StorageService.createEdge(from: memB, to: shared, linkedAt: Date(), in: storage.viewContext)
-        try storage.save(context: storage.viewContext)
-        let edgeA = try #require(shared.edgesArray.first { $0.memoryId == memA.id })
-        let edgeB = try #require(shared.edgesArray.first { $0.memoryId == memB.id })
-
-        service.updateEdgeAnnotation(edgeId: edgeA.id, annotation: "means X in A")
-
-        #expect(edgeA.annotation == "means X in A")
-        #expect(edgeB.annotation == nil, "the same clip's annotation in memory B is independent (per-edge context)")
-    }
+    // `updateEdgeAnnotation_independentAcrossMemories` was RETIRED by the F2
+    // ruling (Tom, 2026-09-16), not deleted for convenience.
+    //
+    // It asserted that one clip's annotation in memory A is independent of the
+    // same clip's annotation in memory B — per-edge context, which was the
+    // point of the annotation under clip↔memory many-to-many. The vocabulary
+    // retirement supersedes that ontology: **a part belongs to exactly one
+    // memory**, so "across memories" has no referent. This is a test of a
+    // CAPABILITY THE RULING REMOVES, not of data the ruling preserves — the
+    // distinction that decided it. Keeping it against historical rows via
+    // `HistoricalEdgeFixture` would guard a behaviour nothing can produce.
+    //
+    // CONSEQUENCE, stated plainly because someone will ask: existing
+    // annotations STAY IN THE STORE and become unread. `annotation` is still on
+    // `MemoryClipEdge` (F2 is write-side only — no schema change, no
+    // migration), `createEdge` has always written it nil, and the sole reader
+    // is `ClipEditorModal:912`, which I2 deletes with the clip-atom editor.
+    // Nothing displays them; nothing destroys them. That is the honest
+    // position, and it is deliberate rather than overlooked.
+    //
+    // The two surviving tests above still guard `updateEdgeAnnotation` itself
+    // (trimming, whitespace-clears-to-nil) for as long as the writer exists.
 }

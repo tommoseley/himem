@@ -551,6 +551,40 @@ final class StorageService {
     ///
     /// Until that reconcile exists, `MediaReference.memoriesArray` dedupes so
     /// the duplicate cannot be *counted* twice at the delete warning.
+    /// Refusals from `createEdge`.
+    enum EdgeError: LocalizedError {
+        /// The part is already live in a different memory. Under the F2
+        /// single-memory invariant this attach cannot be honoured.
+        case partAlreadyInAnotherMemory(clipId: UUID, existingMemoryId: UUID)
+
+        var errorDescription: String? {
+            switch self {
+            case .partAlreadyInAnotherMemory:
+                // Crucible: describe the state, never blame. Surfaced through
+                // `ErrorState` by `attachExistingClips`; unreachable from the
+                // UI, which only ever offers parts that are in no memory.
+                return "That recording is already in another memory."
+            }
+        }
+    }
+
+    /// **F2 · WRITE-SIDE ONLY. THIS IS NOT A READ-SIDE INVARIANT.**
+    ///
+    /// A part belongs to exactly one memory (Tom, 2026-09-16), and that is
+    /// enforced HERE, at the single place edges are created — not in the
+    /// schema, not at fetch time. `MemoryClipEdge` is unchanged, **existing
+    /// multi-memory rows stay and must keep rendering and counting**, there is
+    /// no migration and no Production CloudKit deploy. The schema collapse
+    /// waits for a batch it can ride.
+    ///
+    /// **Do not turn this into a fetch-time assertion.** Real devices carry
+    /// parts with several memories, created before this ruling and preserved
+    /// by it deliberately. A `#expect`/`assert` on `referencingMemoryCount <= 1`
+    /// anywhere on the read path would fail on that data — the invariant is a
+    /// promise about what we CREATE from now on, never a claim about what is
+    /// already stored. `SingleMemoryPerPartTests` pins both halves, and its
+    /// last three tests exist specifically to fail if someone makes this
+    /// read-side.
     static func createEdge(
         from entry: JournalEntry,
         to ref: MediaReference,
@@ -559,6 +593,26 @@ final class StorageService {
     ) throws {
         if entry.edgesArray.contains(where: { $0.clipId == ref.id }) {
             return
+        }
+        // F2 · a part belongs to exactly one memory (Tom, 2026-09-16).
+        //
+        // Ordered AFTER the idempotency check on purpose: asking for an edge
+        // that already exists is a no-op because the desired end state already
+        // holds, and that must keep working even for a part which
+        // historically has several memories.
+        //
+        // Refusal THROWS rather than returning quietly. A silent return here
+        // would be the `PlaceClipSheet` silent-success defect (F23 T1.2)
+        // exactly — the caller would believe the attach happened and confirm
+        // a move that did not occur.
+        //
+        // `memoriesArray` is recycled-aware, which is load-bearing rather than
+        // incidental: the Let Go lock promises *"The clips stay — they'll be
+        // available to start other memories."* Counting edges to recycled
+        // memories would orphan a part forever, which is a data-reachability
+        // failure wearing an invariant's clothes.
+        if let occupant = ref.memoriesArray.first(where: { $0.id != entry.id }) {
+            throw EdgeError.partAlreadyInAnotherMemory(clipId: ref.id, existingMemoryId: occupant.id)
         }
         let edge = MemoryClipEdge(context: ctx)
         edge.id = UUID()
