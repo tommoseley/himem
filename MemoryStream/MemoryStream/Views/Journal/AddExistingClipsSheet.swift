@@ -29,6 +29,13 @@ struct AddExistingClipsSheet: View {
     @State private var selected: [UUID] = []
     /// F22 · the one fact this view reads before it claims to be empty.
     @ObservedObject private var firstImport = FirstImportState.shared
+    /// Watch recordings still in flight. The manifest is the only place that
+    /// knows about a recording which has not yet become a `MediaReference`,
+    /// so it is read here rather than inferred from the absence of rows.
+    @ObservedObject private var inbox = InboxManifest.shared
+
+    /// The foot-of-sheet state line, or nil when nothing is arriving.
+    private var arriving: String? { Self.arrivingLine(clips: inbox.clips) }
 
     init(onAdd: @escaping ([UUID]) -> Void) {
         self.onAdd = onAdd
@@ -42,15 +49,29 @@ struct AddExistingClipsSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                // F22: `looseClips` is a live fetch over CloudKit-synced
-                // `MediaReference`s, so on a fresh install it is empty until
-                // the import lands. Secondary surface — say nothing while
-                // importing rather than claiming every clip is already placed.
-                if !looseClips.isEmpty {
-                    clipList
-                } else if firstImport.mayAssertEmpty {
-                    emptyState
+            VStack(spacing: 0) {
+                Group {
+                    // F22: `looseClips` is a live fetch over CloudKit-synced
+                    // `MediaReference`s, so on a fresh install it is empty until
+                    // the import lands. Secondary surface — say nothing while
+                    // importing rather than claiming every clip is already placed.
+                    if !looseClips.isEmpty {
+                        clipList
+                    } else if firstImport.mayAssertEmpty && arriving == nil {
+                        // `arriving == nil` extends the SAME F22 rule the
+                        // `mayAssertEmpty` gate encodes: don't assert emptiness
+                        // while something is still on its way. Without it the
+                        // empty state reads "Every clip you've captured is
+                        // already in a memory" *while recordings are arriving*
+                        // — a confident falsehood, the F6i `0:00` class. The
+                        // arriving line below carries the true state instead.
+                        emptyState
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if let arriving {
+                    arrivingFooter(arriving)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -96,6 +117,41 @@ struct AddExistingClipsSheet: View {
         selected.isEmpty ? "Add" : "Add \(selected.count)"
     }
 
+    /// The quiet foot-of-sheet line naming recordings that exist but are not
+    /// yet selectable.
+    ///
+    /// **Why it exists.** This sheet lists zero-edge `MediaReference`s, and a
+    /// Watch recording only becomes one once it has fully arrived and
+    /// transcribed (`ArrivedClipMaterializer`). A recording still in flight is
+    /// therefore absent from the list — which was fine while the bench showed
+    /// arrival state, and is not fine once the bench is gone: she recorded
+    /// something, it is not in the list, and nothing explains why. That is the
+    /// "safe but unseen" failure in miniature (Tom, 2026-09-16).
+    ///
+    /// Posture matches the missing-media rule — **name the state, don't
+    /// apologise for it**, and don't dramatise it: no spinner, no progress bar,
+    /// no call to action. Returns `nil` when nothing is arriving, so the line
+    /// is absent rather than reading "0".
+    ///
+    /// In-flight is every live manifest status except `.transcribed` (which
+    /// drains into a ref and appears in the list above) and `.disposed` (a
+    /// tombstone, not a recording).
+    static func arrivingLine(clips: [InboxClip]) -> String? {
+        // Exhaustive switch with no `default` ON PURPOSE: a new
+        // `InboxClip.Status` must not silently pick a side here. Adding a case
+        // breaks the build and forces the decision, rather than defaulting a
+        // future state into (or out of) the count — the mechanism-over-rule
+        // non-negotiable.
+        let arriving = clips.filter { clip in
+            switch clip.status {
+            case .announced, .received, .transcribing: return true
+            case .transcribed, .disposed:              return false
+            }
+        }.count
+        guard arriving > 0 else { return nil }
+        return "\(arriving) still arriving"
+    }
+
     private var clipList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
@@ -126,6 +182,28 @@ struct AddExistingClipsSheet: View {
             selected.append(id)
         }
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+    }
+
+    /// The quiet state line for recordings that exist but are not yet
+    /// selectable. Deliberately inert: no spinner, no progress bar, no action —
+    /// it names the state and stops, per the missing-media posture (*"This
+    /// recording was moved or deleted"*), which describes rather than
+    /// apologises. Muted ink so it reads as a fact about the list, not a
+    /// notice competing with it.
+    private func arrivingFooter(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13))
+            .foregroundStyle(Crucible.Color.ink3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 19)
+            .padding(.vertical, 13)
+            .background(Crucible.Color.paper)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(Crucible.Color.hairline)
+                    .frame(height: 1)
+            }
+            .accessibilityLabel(text)
     }
 
     /// Gated by the caller on `firstImport.mayAssertEmpty` — this claim
