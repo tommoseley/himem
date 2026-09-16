@@ -73,10 +73,12 @@ struct CaptureLandingAtTapTimeTests {
         #expect(nav.currentProjectId == nil)
     }
 
-    /// Hands-free capture must keep landing on the bench regardless of
-    /// context — the locked "capture is never forced into a memory"
-    /// invariant, which the fix must not disturb.
-    @Test @MainActor func handsFree_stillLandsOnBench_insideAProject() {
+    /// Hands-free capture lands identically regardless of context — the
+    /// property this test has always guarded. Only the destination moved:
+    /// F3 (2026-09-16) retired the bench-forcing branch when the bench itself
+    /// was retired, and a hands-free capture now creates a memory of one voice
+    /// part. **A live project context must still not capture it.**
+    @Test @MainActor func handsFree_ignoresProjectContext_andCreatesAPlainMemory() {
         let nav = ProjectsNavigationContext.shared
         nav.debugReset()
         defer { nav.debugReset() }
@@ -84,7 +86,7 @@ struct CaptureLandingAtTapTimeTests {
         #expect(
             CaptureLandingRouter.route(
                 tab: .projects, projectContext: nav.currentProjectId, source: .handsFree
-            ) == .dropOnBench
+            ) == .createMemory
         )
     }
 
