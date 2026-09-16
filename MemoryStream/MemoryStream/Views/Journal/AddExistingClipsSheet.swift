@@ -55,6 +55,22 @@ struct AddExistingClipsSheet: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Crucible.Color.paper)
+            .onAppear {
+                // Refresh the thing that is about to be READ, rather than
+                // relying on whatever happened to be running (CLAUDE.md §
+                // Quieting a Busy Path). `looseClips` fetches zero-edge
+                // `MediaReference`s; a Watch recording only becomes one once
+                // the drain has run. The launch hook
+                // (`LaunchScreenView.runMigration`) owns the one-shot
+                // migration, but it runs once per launch and post-settle — so
+                // a recording that finishes transcribing mid-session, and
+                // whose on-arrival materialize did not land, would otherwise
+                // not appear here until the next cold start.
+                //
+                // Cheap and idempotent: only `.transcribed` rows are
+                // eligible and each is guarded by `refExists`.
+                ArrivedClipMaterializer.materializeAll(in: StorageService.shared.viewContext)
+            }
             .navigationTitle("Add clips")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

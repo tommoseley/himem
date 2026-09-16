@@ -338,6 +338,30 @@ struct LaunchScreenView: View {
         // from a memory as loose refs (device pass 2026-07-27). Post-settle so
         // historical refs are present; own flag, idempotent no-op once done.
         BenchReviewBackfillMigration.runIfNeeded(in: StorageService.shared)
+        // Drain every fully-transcribed manifest row into a zero-edge
+        // `MediaReference` — the P0-3 one-shot upgrade migration AND the
+        // catch-up for any clip that finished transcribing while nothing was
+        // looking.
+        //
+        // **Why it is here and not only on a rendering surface.** Its only
+        // caller was `SessionListView.onAppear` (`:263`), so the drain ran
+        // *because the bench rendered* and had no trigger of its own — the
+        // passenger shape in CLAUDE.md § *Quieting a Busy Path Reveals What
+        // Was Riding On It*. The vocabulary retirement deletes that bench, and
+        // an undrained `.transcribed` row never becomes a `MediaReference`,
+        // which makes it invisible to BOTH consumers that survive: the
+        // paperclip (`AddExistingClipsSheet`, which fetches
+        // `edges.@count == 0`) and Search (which reads `MediaReference`).
+        // The user's own words would become unreachable. Fix the trigger, not
+        // the silence.
+        //
+        // This hook is the right owner because the drain is exactly the kind
+        // of thing it already carries — idempotent, cheap once complete, and
+        // required to run post-CloudKit-settle so historical refs are present
+        // (`feedback_inboxmanifest_launch_gating`). Guarded by
+        // `MaterializerDrainOwnerTests`, which fails if the only caller is
+        // ever again inside the bench directory.
+        ArrivedClipMaterializer.materializeAll(in: StorageService.shared.viewContext)
         // Run both Core Data migrations on the same background context.
         // Each has its own UserDefaults-backed completion flag and is a
         // cheap no-op when its flag is set, so we don't need an outer
