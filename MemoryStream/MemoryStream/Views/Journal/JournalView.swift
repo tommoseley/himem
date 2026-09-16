@@ -46,14 +46,6 @@ struct JournalView: View {
     /// `finish()`, so keying off it gives exactly the right window and matches
     /// the promise `done` already makes: "You'll find it under Memories
     /// anytime."
-    /// Tells the walkthrough its memory is visible in the list, so step 3 can
-    /// re-anchor from the View toast to her ringed row. Guarded inside the
-    /// orchestrator; safe to call repeatedly.
-    private func announceIfWalkthroughRow(_ entry: EntryDisplayModel) {
-        guard entry.id == walkthrough.walkthroughMemoryId else { return }
-        walkthrough.memoriesListDidShowWalkthroughMemory()
-    }
-
     private var walkthroughTargetId: UUID? {
         walkthrough.isRunning ? walkthrough.walkthroughMemoryId : nil
     }
@@ -445,24 +437,19 @@ struct JournalView: View {
                     Section {
                         ForEach(group.entries) { entry in
                             EntryCardView(entry: entry)
-                            // F16 · she reached the list rather than the View
-                            // toast. Swap step 3's anchor from the toast to her
-                            // row. Per-row `onAppear` rather than a list-level
-                            // one because a PreferenceKey does not propagate out
-                            // of a `List` (device-only bug, 2026-07) — the row
-                            // appearing IS the signal that it is on screen.
-                            // F20b · `onAppear` fires when the row mounts. If the
-                            // Memories list was already rendered behind the flow
-                            // — the normal case — it fired long before the beat
-                            // armed and never fires again, so the list-side
-                            // anchor could not engage. Watch the beat as well:
-                            // whichever happens second is the one that matters.
-                            // `memoriesListDidShowWalkthroughMemory` no-ops
-                            // unless step 3 is open, so both calls are safe.
-                            .onAppear { announceIfWalkthroughRow(entry) }
-                            .onChange(of: walkthrough.activeBeat) { _, _ in
-                                announceIfWalkthroughRow(entry)
-                            }
+                            // I3 · the list-side ANNOUNCE is gone with the beat
+                            // it re-anchored. F16 added it because step 3 had
+                            // two possible anchors — the "Memory created · View"
+                            // toast and her row — and she could reach the list
+                            // without the toast. Capture now lands in a memory
+                            // directly: there is no toast, so the row is the
+                            // only anchor, `openMemory` is already the live
+                            // beat, and there is nothing to swap.
+                            //
+                            // The RING below is unaffected and still required:
+                            // it renders off `walkthroughTargetId`, not off any
+                            // announce, and F20a keeps it visible through
+                            // `done`.
                             // F16 · the target identifies itself. The walkthrough
                             // overlay has no anchoring primitive (no
                             // anchorPreference / GeometryReader / spotlight), so

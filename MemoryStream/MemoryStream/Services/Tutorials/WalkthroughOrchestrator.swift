@@ -2,8 +2,15 @@ import Foundation
 import SwiftUI
 
 /// F8 · the guided first walkthrough — a **do-it-with-me** sequence. The user
-/// records a real first capture with guidance at each beat, on the ad-hoc path
-/// (Clips **+** → bench → Start a Memory).
+/// records a real first capture with guidance at each beat: **+ → record → her
+/// memory appears → open it → organize → done.**
+///
+/// **I3 rebuild (2026-09-16).** The flow used to run on the ad-hoc path
+/// (Clips + → the clip lands on the bench → Start a Memory → View), which is
+/// the promotion arc the vocabulary retirement removes. Capture now lands in a
+/// memory directly, so two beats (`clipLanded`, `makeMemory`) and one anchor
+/// (`memoryInList`) are gone and the count is **4 steps, not 5**. The flow no
+/// longer switches tabs, because there is no tab to switch to.
 ///
 /// **F10 + F13 rebuild (2026-07-28).** Round-2 dogfood regressed to "you
 /// abandoned me after step one." Two changes, one rebuild:
@@ -13,10 +20,9 @@ import SwiftUI
 ///    "ontology" closer ("that's the shape of HiMem"), and a parts-preamble on
 ///    beat 1. All cut. The ontology stays invisible; its copy moves to pulled
 ///    homes (the section-`?` `memoryClip` panel; the `projectsConcept`
-///    coachmark). The flow is now five *task* steps:
-///      1 Record · 2 Saved · 3 Make it a memory · 4 Let the app write a title
-///      and summary · 5 Done. ("Start a Memory → View" is one intention, so it
-///      is one numbered step spanning two taps — Tom 2026-07-28.)
+///    coachmark). The flow is *task* steps, now four (I3):
+///      1 Record · 2 Open your memory · 3 Let the app write a title and
+///      summary · 4 Done.
 /// 2. **Three channels she named (F10).** The old flow was silent between beats,
 ///    so any pause read as abandonment. Added: **progress** (`stepNumber` /
 ///    `progressLabel` — a quiet "Step N of 5", never a scold), **confirmation**
@@ -26,14 +32,14 @@ import SwiftUI
 ///    never on idle time, no timers).
 ///
 /// **Pipeline invariant (unchanged, money-tested).** `record` / `onARoll` /
-/// `makeMemory` / `openMemory` / `organize` advance ONLY on a real pipeline
-/// signal, never on a tap — guidance never gets ahead of the user. `offer` /
-/// `clipLanded` / `done` (and `organize` once it's already done on Plus) advance
-/// on a tap. `rolling` is a silent hold.
+/// `openMemory` / `organize` advance ONLY on a real pipeline signal, never on a
+/// tap — guidance never gets ahead of the user. `offer` / `detailTour` / `done`
+/// (and `organize` once it's already done on Plus) advance on a tap. `rolling`
+/// is a silent hold.
 ///
 /// The state machine is the spine (this file). The anchored overlay UI and the
 /// signal wiring that calls `recordingDidStart()` / `nextClipStarted()` /
-/// `recordingDidCancel()` / `clipDidLand()` / `memoryDidStart()` /
+/// `recordingDidCancel()` / `memoryDidStart()` /
 /// `memoryDidOpen()` / `organizeDidComplete()` live in `WalkthroughOverlay` +
 /// `VoiceCaptureScreen` + `EntryExpandedView`. Beat 1b (`onARoll`) renders
 /// in-composer (the recording screen is presented over the root overlay) and is
@@ -47,31 +53,39 @@ import SwiftUI
 final class WalkthroughOrchestrator: ObservableObject {
     static let shared = WalkthroughOrchestrator()
 
-    /// The beats, in order. Numbered task steps map many→one onto the five the
+    /// The beats, in order. Numbered task steps map many→one onto the four the
     /// progress channel shows (see `stepNumber`). `concept` and `ontology` (the
     /// old model-teaching beats) are retired.
+    ///
+    /// **I3 · the promotion arc is gone, and the flow got shorter** (Tom,
+    /// 2026-09-16). `clipLanded` ("Saved. Here it is.") and `makeMemory`
+    /// ("Open your clip and tap Start a Memory") taught clip→memory promotion.
+    /// Under the vocabulary retirement there is no promotion to teach: she
+    /// captures **into** a memory. Both are retired with the surface they
+    /// described, and `memoryInList` folded into `openMemory` (below).
     enum Beat: Int, CaseIterable, Identifiable {
         case offer       // pre-flow invite (no step number)
         case record      // step 1 — "record something you don't want to forget"
         case onARoll     // in-composer, UN-numbered tip inside step 1 (1b)
         case rolling     // silent hold (still step 1) — retired after a Next tap
-        case clipLanded  // step 2 — "Saved. Here it is." (confirmation)
-        case makeMemory  // step 3 — "Open your clip and tap Start a Memory"
-        case openMemory  // step 3 — "Tap View" (same intention, second tap)
-        /// step 3, ALTERNATIVE anchor to `openMemory` — not a later step. F16:
-        /// she missed the View toast and landed on the Memories list with her
-        /// new memory unhighlighted, guessing which row she'd just made. Fires
-        /// only if the list appears while step 3 is still open; if she taps
-        /// View it never fires, because she doesn't need it. Sequencing it
-        /// after `openMemory` would mean sending her back to the list, which
-        /// the no-navigation rule forbids.
-        case memoryInList
+        /// step 2 — her new memory is in the Memories list; the ring on its row
+        /// does the pointing.
+        ///
+        /// **`memoryInList` FOLDED IN HERE (2026-09-16).** It existed as an
+        /// *alternative* anchor for F16's case: she missed the "Memory created ·
+        /// View" toast and landed on the list guessing which row she'd made.
+        /// With capture landing directly in a memory there is no toast and no
+        /// second path — she is already on the list, so the ringed row is the
+        /// only anchor and this is the only beat. Naming a control that no
+        /// longer exists would be phantom copy, so the toast sentence went and
+        /// `memoryInList`'s survived.
+        case openMemory
         /// UN-numbered orientation beat on Memory Detail arrival (F16). Not a
         /// step — there is nothing to do — so it carries no step number, same
         /// treatment as `onARoll`.
         case detailTour
-        case organize    // step 4 — "let the app write a title and summary"
-        case done        // step 5 — "that's a memory · find it under Memories"
+        case organize    // step 3 — "let the app write a title and summary"
+        case done        // step 4 — "that's a memory · find it under Memories"
 
         var id: Int { rawValue }
     }
@@ -100,9 +114,9 @@ final class WalkthroughOrchestrator: ObservableObject {
     @Published var deviationMessage: String? = nil
 
     /// True once the walkthrough's memory is already organized when it opens —
-    /// on Plus the organize pass ran automatically at creation, so step 4 is a
+    /// on Plus the organize pass ran automatically at creation, so step 3 is a
     /// *confirmation* the user taps through, not an instruction she performs
-    /// (keeps the 5-step progress coherent on both tiers). Set by
+    /// (keeps the 4-step progress coherent on both tiers). Set by
     /// `memoryDidOpen(alreadyOrganized:)`.
     private(set) var organizeAlreadyDone = false
 
@@ -115,11 +129,6 @@ final class WalkthroughOrchestrator: ObservableObject {
     private let completedKey = "himem.walkthrough.completed"
 
     private init() {}
-
-    /// Set when the walkthrough begins: the flow runs on Clips, because that
-    /// is where the pipeline it teaches actually lands (F26). Announced in the
-    /// offer copy so she is never teleported without explanation.
-    @Published private(set) var pendingClipsTabSwitch = false
 
     var isRunning: Bool { activeBeat != nil }
 
@@ -164,7 +173,6 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// silently did nothing. Page 7 is an explicit choice; it overrides
     /// whatever the machine was showing.
     func startAtFirstBeat() {
-        pendingClipsTabSwitch = true
         currentBannerRetired = false
         activeBeat = .record
     }
@@ -191,14 +199,7 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// **announced** in the offer copy, never silent.
     func beginFromOffer() {
         guard activeBeat == .offer else { return }
-        pendingClipsTabSwitch = true
         activeBeat = .record
-    }
-
-    /// Consumed by `HiMemTabView` to put the flow on Clips. One-shot.
-    func consumeClipsTabSwitch() -> Bool {
-        defer { pendingClipsTabSwitch = false }
-        return pendingClipsTabSwitch
     }
 
     /// Skip / dismiss at any beat. Marks complete so first-run won't re-offer;
@@ -212,7 +213,7 @@ final class WalkthroughOrchestrator: ObservableObject {
     /// invariant untouched — Tom 2026-07-27).
     func gotIt() {
         switch activeBeat {
-        case .clipLanded, .detailTour, .done:
+        case .detailTour, .done:
             advance()
         case .organize:
             // Free: organize is a signal beat (waits for the real Organize tap →
@@ -220,7 +221,7 @@ final class WalkthroughOrchestrator: ObservableObject {
             // already done, so the card is a confirmation the user reads and
             // continues.
             if organizeAlreadyDone { advance() } else { currentBannerRetired = true }
-        case .record, .makeMemory, .openMemory, .memoryInList:
+        case .record, .openMemory:
             currentBannerRetired = true
         case .offer, .onARoll, .rolling, .none:
             break
@@ -242,13 +243,6 @@ final class WalkthroughOrchestrator: ObservableObject {
         activeBeat = nil
         walkthroughMemoryId = nil
         organizeAlreadyDone = false
-        // Every piece of walkthrough state dies here, including an
-        // unconsumed tab request — a stale flag surviving termination is the
-        // same family as the stuck ring this item exists to fix, and would
-        // yank the user to Clips long after the flow ended. (Caught by
-        // `beginningTheFlow_requestsTheClipsTab` failing on a dirty
-        // singleton, which is the leak reproducing itself.)
-        pendingClipsTabSwitch = false
         UserDefaults.standard.set(true, forKey: completedKey)
         // F8 owns first-run teaching. On completion OR abandonment, retire the
         // legacy one-pagers it replaced (.capture / .organizing) so they never
@@ -263,12 +257,10 @@ final class WalkthroughOrchestrator: ObservableObject {
     func advance() {
         switch activeBeat {
         case .offer:      activeBeat = .record   // also reachable via beginFromOffer
-        case .clipLanded:  activeBeat = .makeMemory
         case .detailTour:  activeBeat = .organize
         case .organize:    if organizeAlreadyDone { activeBeat = .done }
         case .done:        finish()
-        case .record, .onARoll, .rolling, .makeMemory, .openMemory,
-             .memoryInList, .none: break
+        case .record, .onARoll, .rolling, .openMemory, .none: break
         }
     }
 
@@ -304,51 +296,40 @@ final class WalkthroughOrchestrator: ObservableObject {
         }
     }
 
-    /// The clip finished recording and materialized on the bench. Reachable from
-    /// `record` (stopped before the tip rendered — defensive), `onARoll` (stopped
-    /// without Next), or `rolling` (Next then stop).
-    func clipDidLand() {
-        switch activeBeat {
-        case .record, .onARoll, .rolling: activeBeat = .clipLanded
-        default: break
-        }
-    }
-
-    /// The user created a memory from the clip (Start a Memory). Advances to
-    /// `openMemory` (still step 3) — Start a Memory returns to the calm Clips
-    /// list with a "Memory created · View" toast (no-teleport spec); organize/
-    /// done point at controls that only exist on Memory Detail, so they wait
-    /// until the user opens it (`memoryDidOpen`).
+    /// **The capture produced a memory.** Advances step 1 → step 2
+    /// (`openMemory`) and records which memory, so the ring can mark her row.
+    ///
+    /// **I3 · this absorbed `clipDidLand()` + the `makeMemory` step.** The old
+    /// flow needed both because capture landed a *clip on the bench* and a
+    /// separate act promoted it; the walkthrough had to confirm the landing,
+    /// then ask for the promotion. Capture now lands in a memory directly, so
+    /// one signal covers what two used to. Reachable from `record` (stopped
+    /// before the tip rendered — defensive), `onARoll` (stopped without Next),
+    /// or `rolling` (Next then stop) — the same three origins `clipDidLand()`
+    /// accepted, preserved deliberately.
     func memoryDidStart(id: UUID? = nil) {
-        if activeBeat == .makeMemory {
+        switch activeBeat {
+        case .record, .onARoll, .rolling:
             walkthroughMemoryId = id
             activeBeat = .openMemory
+        default:
+            break
         }
     }
 
-    /// The walkthrough's memory opened on Memory Detail. Arms step 4 (`organize`)
-    /// on both tiers so the progress stays coherent: on Plus it's a confirmation
-    /// (`organizeAlreadyDone`), on Free an instruction that waits for the real
-    /// Organize tap.
+    /// The walkthrough's memory opened on Memory Detail. Arms step 3
+    /// (`organize`) on both tiers so the progress stays coherent: on Plus it's a
+    /// confirmation (`organizeAlreadyDone`), on Free an instruction that waits
+    /// for the real Organize tap.
     func memoryDidOpen(alreadyOrganized: Bool) {
-        // Either step-3 anchor may be live: the View toast (`openMemory`) or her
-        // ringed row in the list (`memoryInList`). Both mean "she reached the
-        // memory", so both hand off here.
-        guard activeBeat == .openMemory || activeBeat == .memoryInList else { return }
+        // One anchor now — her ringed row in the list. The second (`memoryInList`,
+        // the fallback for a missed "View" toast) folded into `openMemory` with
+        // the toast it existed to cover.
+        guard activeBeat == .openMemory else { return }
         organizeAlreadyDone = alreadyOrganized
         // F16: orient her to the screen BEFORE asking for the Organize tap. The
-        // tour is un-numbered and tap-advances into step 4.
+        // tour is un-numbered and tap-advances into step 3.
         activeBeat = .detailTour
-    }
-
-    /// The Memories list is on screen and the walkthrough's memory is in it —
-    /// she reached the list rather than the View toast (F16). Swaps step 3's
-    /// anchor from the toast to her ringed row; the ring is rendered by the row
-    /// itself (`JournalView`), so this only supplies the confirming copy.
-    /// No-op once she's past step 3.
-    func memoriesListDidShowWalkthroughMemory() {
-        guard activeBeat == .openMemory else { return }
-        activeBeat = .memoryInList
     }
 
     /// The memory's organize pass completed (its title + summary now exist). On
@@ -360,27 +341,28 @@ final class WalkthroughOrchestrator: ObservableObject {
 
 extension WalkthroughOrchestrator.Beat {
     /// Total numbered task steps the progress indicator counts.
-    static let totalSteps = 5
+    static let totalSteps = 4
 
-    /// The numbered task step this beat belongs to (1...5), or nil for the
+    /// The numbered task step this beat belongs to (1...4), or nil for the
     /// pre-flow offer. Many beats share one step: `record`/`onARoll`/`rolling`
-    /// are all "recording" (step 1); `makeMemory`/`openMemory` are one intention,
-    /// "make it a memory" (step 3). The count is intentions, not taps
+    /// are all "recording" (step 1). The count is intentions, not taps
     /// (Tom 2026-07-28).
+    ///
+    /// **I3 · 5 → 4 (2026-09-16).** The promotion arc's two steps ("Saved" and
+    /// "make it a memory") collapsed into one — capture now lands in a memory,
+    /// so there is nothing between recording it and opening it.
     var stepNumber: Int? {
         switch self {
         case .offer:                       return nil
         case .record, .onARoll, .rolling:  return 1
-        case .clipLanded:                  return 2
-        case .makeMemory, .openMemory,
-             .memoryInList:                return 3
+        case .openMemory:                  return 2
         case .detailTour:                  return nil   // orientation, not a step
-        case .organize:                    return 4
-        case .done:                        return 5
+        case .organize:                    return 3
+        case .done:                        return 4
         }
     }
 
-    /// "Step N of 5" — a quiet indicator, never a scold. Nil for the offer and
+    /// "Step N of 4" — a quiet indicator, never a scold. Nil for the offer and
     /// for the un-numbered in-composer on-a-roll tip (the overlay renders it only
     /// on the numbered root-overlay beats; the composer never shows a number).
     var progressLabel: String? {
@@ -388,12 +370,13 @@ extension WalkthroughOrchestrator.Beat {
         return "Step \(n) of \(WalkthroughOrchestrator.Beat.totalSteps)"
     }
 
-    /// Whether this beat *confirms a step just landed* (confirmation channel) —
-    /// the Saved beat and the Done beat. The organize beat also reads as a
+    /// Whether this beat *confirms a step just landed* (confirmation channel).
+    /// The Saved beat (`clipLanded`) carried this with the promotion arc; only
+    /// Done remains. The organize beat also reads as a
     /// confirmation once it's already done (Plus); the overlay ORs that in via
     /// `organizeAlreadyDone`.
     var isConfirmation: Bool {
-        self == .clipLanded || self == .done
+        self == .done
     }
 
     /// Which edge the banner pins to.
@@ -405,7 +388,12 @@ extension WalkthroughOrchestrator.Beat {
     /// variant: one less state, and moving the card near its referent closes
     /// part of the missing-anchoring problem without inventing an anchoring
     /// primitive (which F16 ruled out).
-    var pinsToBottom: Bool { stepNumber == 3 }
+    ///
+    /// **Anchored to the BEAT, not the step index (I3, 2026-09-16).** It read
+    /// `stepNumber == 3`, which silently became the *organize* beat when the
+    /// renumber landed — pinning a card to the wrong edge with nothing failing.
+    /// Layout must not key off an ordinal that can shift underneath it.
+    var pinsToBottom: Bool { self == .openMemory }
 }
 
 // MARK: - Copy (design-authority · drafted cold for Judi, F7e · no "evidence", F7g)
@@ -429,10 +417,13 @@ extension WalkthroughOrchestrator.Beat {
             // Task framing, no ontology (F13): promise the process she asked for
             // ("walk me through the whole process step by step"), name the ~minute
             // and the per-step guidance. No "part".
-            // F26 · name the tab move rather than performing it silently
-            // (ruled 2026-08-01). "Clips" is a handle she can point at (J1),
-            // not an ontology lesson (F13) — it says where we're going and why.
-            return "I'll guide you through making your first memory — you record it, then the app writes a title and summary. We'll start on Clips, where your recordings land. About a minute, and I'll point at each step."
+            // I3 · the "We'll start on Clips, where your recordings land."
+            // sentence is GONE with the tab. F26 added it to announce a tab
+            // move rather than perform it silently; there is no move to
+            // announce now, and naming a tab that does not exist is the
+            // phantom-copy shape. The rest is unchanged and already
+            // ontology-free (F13).
+            return "I'll guide you through making your first memory — you record it, then the app writes a title and summary. About a minute, and I'll point at each step."
         case .record:
             // Step 1. The parts-preamble is CUT (F13) — say what to DO, not what
             // things are. The FAB illustration (see the overlay) makes "tap +,
@@ -444,32 +435,36 @@ extension WalkthroughOrchestrator.Beat {
             return "Still talking? Tap Next to start a new clip without stopping. They'll stay together."
         case .rolling:
             return ""   // silent hold — never rendered
-        case .clipLanded:
-            // Step 2 · confirmation. Stripped to exactly this (F13): the bench /
-            // "what a part is" teaching moves to pulled homes; the beat's job is
-            // to say the recording landed (F10 confirmation channel).
-            return "Saved. Here it is."
-        case .makeMemory:
-            // Step 3 · the ontology tail ("your clip becomes the first part…") is
-            // cut; name the action only.
-            return "Open your clip and tap Start a Memory."
         case .openMemory:
-            // Step 3, second tap. Names the toast's control (no-teleport spec).
-            return "Your memory is saved. Tap View to open it."
-        case .memoryInList:
-            // Step 3 alternative. The RING on her row does the pointing (the
-            // target identifies itself — there is no overlay anchoring
-            // primitive and inventing one was ruled out); this copy only
-            // confirms what the ring marks. "The one you just made" names it by
-            // her action, not by our noun for it.
+            // Step 2. The RING on her row does the pointing (the target
+            // identifies itself — there is no overlay anchoring primitive and
+            // inventing one was ruled out); this copy only confirms what the
+            // ring marks. "The one you just made" names it by her action, not
+            // by our noun for it.
+            //
+            // I3 · this is `memoryInList`'s sentence, kept. `openMemory`'s own
+            // line was "Your memory is saved. Tap View to open it." — it named
+            // the "Memory created · View" toast, which the promotion arc
+            // produced and which no longer exists. Naming a control that is
+            // gone is phantom copy, so the toast line went and this one
+            // survived.
             return "The one you just made. Tap it to open."
         case .detailTour:
             // Orientation, not curriculum (F13 holds): describes what the
-            // screen is FOR in her words. No ontology nouns — "recordings",
-            // never "parts", because this beat is describing rather than
-            // labelling a thing she'll tap. Section order matches the shipped
-            // layout: title/summary → topics → projects → mentions → clips.
-            return "The title and summary are up top, then your recordings. Below those: ways to find this again later — topics, projects, and anyone you mentioned."
+            // screen is FOR in her words. Section order matches the shipped
+            // layout: title/summary → parts → topics → projects → mentions.
+            //
+            // **"recordings" → "parts" is a SUPERSESSION BY THE VOCABULARY
+            // RULING, not an inference from it** (Tom, 2026-09-16). F16 chose
+            // "recordings" *because* this beat describes the screen rather than
+            // labelling something she taps, and at the time "recordings" was
+            // the generic word. The vocabulary retirement made **parts** the
+            // user-facing name for exactly what is on this screen, and reserved
+            // **recordings** for the Watch's transient holding — so F16's
+            // reasoning inverted rather than survived: the safe generic word
+            // now names a different object than the beat means. F16 is not
+            // quietly reversed; the word it picked changed owners.
+            return "The title and summary are up top, then your parts. Below those: ways to find this again later — topics, projects, and anyone you mentioned."
         case .organize:
             // Step 4. Honest Label: the app writes the title/summary — its
             // sentences, not the user's words; it draws only on the clip.

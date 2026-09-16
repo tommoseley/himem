@@ -40,8 +40,7 @@ struct WalkthroughTerminationTests {
     /// ochre ring stays on her memory forever.
     @Test @MainActor func endingFromAnyBeat_clearsTheRingWindow() {
         for beat in [WalkthroughOrchestrator.Beat.record,
-                     .clipLanded, .makeMemory, .openMemory,
-                     .memoryInList, .detailTour, .organize, .done] {
+                     .openMemory, .detailTour, .organize, .done] {
             let o = fresh()
             o.start()
             o.beginFromOffer()
@@ -73,24 +72,26 @@ struct WalkthroughTerminationTests {
         #expect(o.walkthroughMemoryId == nil)
     }
 
-    // MARK: - A · the flow runs on Clips, and says so
+    // MARK: - A · the flow no longer moves her anywhere
 
-    @Test @MainActor func beginningTheFlow_requestsTheClipsTab() {
-        let o = fresh()
-        o.start()
-        #expect(o.pendingClipsTabSwitch == false)
-        o.beginFromOffer()
-        #expect(o.pendingClipsTabSwitch == true, "The flow must move to the tab whose pipeline it teaches.")
-        #expect(o.consumeClipsTabSwitch() == true)
-        #expect(o.consumeClipsTabSwitch() == false, "One-shot — a re-consume would fight the user's own tab taps.")
-    }
+    // `beginningTheFlow_requestsTheClipsTab` and `offerCopy_namesTheTabItMovesTo`
+    // are RETIRED BY SUPERSESSION (I3, Tom 2026-09-16), not deleted for
+    // convenience. Both guarded F26's announced tab move: the flow ran on Clips
+    // because that is where the pipeline it taught landed, and the offer copy
+    // named the move so she was never teleported silently. The vocabulary
+    // retirement removes that pipeline AND that tab — capture lands in a memory
+    // from wherever she is — so there is no move to make and none to announce.
+    // They guarded a BEHAVIOUR THE RULING REMOVES, not a promise it preserves.
+    //
+    // The promise underneath them — *never teleport her without saying so* —
+    // did not retire and is not orphaned: it is now carried structurally,
+    // because the flow performs no navigation at all.
 
-    /// The move is announced, never silent. Ruled 2026-08-01: she is not
-    /// teleported without explanation.
-    @Test func offerCopy_namesTheTabItMovesTo() {
+    /// The offer must still promise the outcome she is here for.
+    @Test func offerCopy_promisesTheOutcome() {
         let offer = WalkthroughOrchestrator.Beat.offer.body(alreadyOrganized: false)
-        #expect(offer.contains("Clips"), "The offer must name where the flow starts.")
-        #expect(offer.contains("first memory"), "It must still promise the outcome she's here for.")
+        #expect(offer.contains("first memory"))
+        #expect(offer.contains("Clips") == false, "The tab is gone; naming it would be phantom copy.")
     }
 
     /// F13 holds: naming the destination is orientation, not curriculum. The
@@ -101,18 +102,25 @@ struct WalkthroughTerminationTests {
         #expect(offer.contains("evidence") == false)   // F7g — never in UI copy
     }
 
-    // MARK: - B · step 3 pins where its referents are
+    // MARK: - B · the beat pins where its referent is
 
-    @Test func stepThreeBeats_pinToTheBottom() {
-        for beat in [WalkthroughOrchestrator.Beat.makeMemory, .openMemory, .memoryInList] {
-            #expect(beat.stepNumber == 3)
-            #expect(beat.pinsToBottom, "\(beat) references something low on screen and must not cover it.")
-        }
+    /// `openMemory` points at her row in the Memories list — low on screen — so
+    /// its card must pin to the bottom or it covers the thing it references
+    /// (F26).
+    ///
+    /// **This asserts the BEAT, not the step index.** `pinsToBottom` used to
+    /// read `stepNumber == 3`; under I3's renumber that silently became the
+    /// *organize* beat, which would have pinned the wrong card to the wrong
+    /// edge with nothing failing. A layout rule keyed to an ordinal breaks
+    /// invisibly when the ordinal moves.
+    @Test func theBeatThatPointsLow_pinsToTheBottom() {
+        #expect(WalkthroughOrchestrator.Beat.openMemory.pinsToBottom)
+        #expect(WalkthroughOrchestrator.Beat.openMemory.stepNumber == 2)
     }
 
     @Test func otherBeats_stayPinnedToTheTop() {
-        for beat in [WalkthroughOrchestrator.Beat.record, .clipLanded, .organize, .done] {
-            #expect(beat.pinsToBottom == false)
+        for beat in [WalkthroughOrchestrator.Beat.record, .organize, .done] {
+            #expect(beat.pinsToBottom == false, "\(beat) must not pin low")
         }
     }
 

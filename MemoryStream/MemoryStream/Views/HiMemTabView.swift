@@ -276,25 +276,21 @@ struct HiMemTabView: View {
     /// capture modality) but collectively at the CC-30 line when inline.
     private func tabRoutingObservers(_ content: some View) -> some View {
         content
-        // F26 · the walkthrough runs on Clips, because that is where the
-        // pipeline it teaches actually lands. Announced in the offer copy, so
-        // this is a stated move rather than a teleport.
-        .onChange(of: walkthrough.pendingClipsTabSwitch) { _, pending in
-            if pending, walkthrough.consumeClipsTabSwitch() {
-                selection = .clips
-            }
-        }
+        // I3 · F26's Clips tab switch is GONE. The walkthrough used to move
+        // the user to Clips because the pipeline it taught landed there; the
+        // vocabulary retirement removes that pipeline, and capture now lands in
+        // a memory from wherever she is. (The `pendingReturnToClips` tab switch
+        // below is I1's to remove — this slice only breaks the WALKTHROUGH's
+        // dependency on it, which is what made the tab a non-leaf.)
         .onChange(of: captureLanding.pendingReturnToClips) { _, pending in
             if pending {
                 selection = .clips
                 captureLanding.pendingReturnToClips = false
-                // F8 · the recorded clip returned to Clips and lands on the bench.
-                walkthrough.clipDidLand()
             }
         }
-        // F8 · the user created a memory from their clip (Start a Memory) —
-        // advance to the organize beat and track the memory so we can watch it
-        // organize below.
+        // F8 · the capture produced a memory — advance to step 2 and track the
+        // memory so we can watch it organize below. I3: this one signal now
+        // does what `clipDidLand()` + the `makeMemory` step used to.
         .onChange(of: memoryNavigation.justCreatedMemoryId) { _, newId in
             if let newId { walkthrough.memoryDidStart(id: newId) }
         }

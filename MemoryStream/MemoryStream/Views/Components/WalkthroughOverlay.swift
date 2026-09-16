@@ -27,8 +27,7 @@ struct WalkthroughOverlay: View {
             switch beat {
             case .offer:
                 modalCard(beat)
-            case .record, .clipLanded, .makeMemory, .openMemory,
-                 .memoryInList, .detailTour, .organize, .done:
+            case .record, .openMemory, .detailTour, .organize, .done:
                 // "Got it." on a signal beat retires its banner; the walkthrough
                 // stays armed for the real signal.
                 if orchestrator.currentBannerRetired {
