@@ -163,7 +163,7 @@ final class WatchInboxNotificationCoordinator {
         let count = InboxManifest.shared.count
         let content = UNMutableNotificationContent()
         content.title = "HiMem"
-        content.body = passiveBody(count: count)
+        content.body = Self.arrivalBody(multiple: count > 1)
         content.categoryIdentifier = Self.categoryIdentifier
         content.userInfo = ["reason": "arrival"]
         content.sound = nil
@@ -201,10 +201,30 @@ final class WatchInboxNotificationCoordinator {
 
     // MARK: - Copy
 
-    /// Source-agnostic per `CLAUDE.md` §Phone (clips arrive from +, Watch,
-    /// Siri) — the headline names no source.
-    private func passiveBody(count: Int) -> String {
-        count <= 1 ? "There are new clips you can review" : "\(count) voice clips waiting"
+    /// The arrival body. Source-agnostic — captures arrive from more than one
+    /// place, so source is per-item metadata and never the headline.
+    ///
+    /// **Stripped back 2026-09-16 (Tom).** It read
+    /// *"There are new clips you can review"* / *"N voice clips waiting"*.
+    /// Three faults, and only the third is vocabulary:
+    ///
+    /// 1. **It counted.** *"N … waiting"* is the guilt-inbox this product
+    ///    rejects — a number implies an obligation to zero it out. Presence,
+    ///    not arithmetic.
+    /// 2. **It created an obligation.** *"waiting"* and *"you can review"*
+    ///    describe a queue. A recording arriving safely is **reassurance**:
+    ///    nothing is waiting for her, nothing needs review.
+    /// 3. It used *clips*, which has left the user's vernacular.
+    ///
+    /// **The parameter is a GRAMMATICAL fact, not a count, and that is the
+    /// mechanism rather than the manners:** with no number in scope there is
+    /// nothing to interpolate, so re-introducing one means changing this
+    /// signature — a visible act, not a quiet edit inside a string.
+    /// `ArrivalNotificationCopyTests` fails to *build* if the shape regresses.
+    /// `nonisolated` because it is a pure function of its argument — it touches
+    /// no coordinator state and inherited `@MainActor` only by living here.
+    nonisolated static func arrivalBody(multiple: Bool) -> String {
+        multiple ? "Your recordings are here." : "Your recording is here."
     }
 
     // MARK: - UserDefaults accessors

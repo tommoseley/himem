@@ -160,12 +160,11 @@ struct JournalView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
         }
-        // Captured Clips notification tap routes to the Clips tab per
-        // spec v4 (no standalone modal). Same rule as the arrival
-        // banner: deep-link into the tab, don't push a sheet.
-        .onReceive(NotificationCenter.default.publisher(for: NotificationService.openInboxNotification)) { _ in
-            CaptureLandingBus.shared.pendingReturnToClips = true
-        }
+        // The arrival notification's destination moved to the SHELL
+        // (`HiMemTabView`) on 2026-09-16. Which tab a tap lands on is a
+        // shell concern; this view is tab *content* and was reaching sideways
+        // to set it. It now lands on Memories — see the shell's observer for
+        // why that, and why not a memory.
         // Per the Watch → Memory flow spec (2026-05-14): the iPhone app
         // always lands on Today. No auto-open of the inbox; the
         // inboxBanner pinned above the topic filter chips is the only

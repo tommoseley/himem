@@ -320,6 +320,21 @@ struct HiMemTabView: View {
                 selection = .memories
             }
         }
+        // **The arrival notification lands on Memories** (Tom, 2026-09-16).
+        //
+        // It used to deep-link to Clips, set from inside `JournalView` — tab
+        // content reaching sideways to choose a tab. Which tab a tap lands on
+        // is a shell concern, so it is owned here now, and Memories is the
+        // only home left.
+        //
+        // **Deliberately NOT a memory.** She tapped a notification saying her
+        // recording arrived; she did not ask to be put inside anything. The
+        // July 10 no-teleport rationale — that moving her after a capture is
+        // the magic, not reading the tab — applies equally to moving her after
+        // a tap.
+        .onReceive(NotificationCenter.default.publisher(for: NotificationService.openInboxNotification)) { _ in
+            selection = .memories
+        }
         // Topic read-chip tapped on an opened memory → route to the
         // Memories tab so its JournalView can apply the topic filter
         // (unified associations read model). The id is NOT cleared here;
