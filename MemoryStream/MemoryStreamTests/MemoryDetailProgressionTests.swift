@@ -85,17 +85,36 @@ import Foundation
                 "The status pill is back on Memory Detail.")
     }
 
-    /// **The FAB steps aside for the Organize card unconditionally.**
+    /// **The capture stack steps aside for the Organize card unconditionally.**
     /// The old `!topAnchorVisible` qualifier meant "only after a
     /// deliberate scroll" — but a short memory shows the top anchor AND
     /// the card at once, so the FAB sat on top of it. F33 makes
     /// unorganized memories shorter, which is what surfaced it.
-    @Test func theFabStepsAsideForOrganizeWithoutRequiringAScroll() throws {
-        let src = try Self.source()
-        #expect(src.contains("&& !organizeOnScreen"),
-                "The FAB no longer yields to the Organize card on its own — it will overlap on a short memory.")
-        #expect(src.contains("(letGoOnScreen || organizeOnScreen) && !topAnchorVisible") == false,
-                "The old coupled condition is back; Organize is again gated on a scroll.")
+    ///
+    /// **The promise is unchanged; the instrument moved (2026-09-17).** This
+    /// asserted the literal `"&& !organizeOnScreen"` in the view source,
+    /// because a condition buried in three booleans inside a SwiftUI `if` could
+    /// not be tested any other way. That condition now has an owner —
+    /// `MemoryDetailFAB.mode` — so the property is asserted directly instead of
+    /// through a string match on the file that happens to contain it.
+    ///
+    /// **It also stopped being the whole truth.** Suppressing the FAB *entirely*
+    /// here removed the paperclip, which after the vocabulary retirement is the
+    /// only way a Watch recording enters a memory — and a new memory is exactly
+    /// the state this rule fires in. F33's concern was the capture stack
+    /// covering the card, and `.paperclipOnly` satisfies it; the fuller
+    /// behaviour is pinned in `MemoryDetailFABModeTests`.
+    @Test func theCaptureStackStepsAsideForOrganizeWithoutRequiringAScroll() throws {
+        // No scroll required: `topAnchorVisible` is irrelevant to the outcome.
+        #expect(MemoryDetailFAB.mode(isEditing: false, organizeOnScreen: true,
+                                     letGoOnScreen: false, topAnchorVisible: true) != .full)
+        #expect(MemoryDetailFAB.mode(isEditing: false, organizeOnScreen: true,
+                                     letGoOnScreen: false, topAnchorVisible: false) != .full)
+        // And the old coupled condition — Organize gated on a scroll — must not
+        // return: the two anchors decide independently.
+        #expect(MemoryDetailFAB.mode(isEditing: false, organizeOnScreen: false,
+                                     letGoOnScreen: true, topAnchorVisible: true) == .full,
+                "an unscrolled Let Go must not suppress anything")
     }
 
     // MARK: - Source access

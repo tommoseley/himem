@@ -581,9 +581,25 @@ struct EntryExpandedView: View {
             // F33 makes unorganized memories shorter, which is what surfaced
             // it. Let-Go keeps the scroll qualifier: it lives at the very
             // bottom and can only be reached by scrolling.
-            if !editCoordinator.isAnyEditing
-                && !organizeOnScreen
-                && !(letGoOnScreen && !topAnchorVisible) {
+            switch MemoryDetailFAB.mode(
+                isEditing: editCoordinator.isAnyEditing,
+                organizeOnScreen: organizeOnScreen,
+                letGoOnScreen: letGoOnScreen,
+                topAnchorVisible: topAnchorVisible
+            ) {
+            case .hidden:
+                EmptyView()
+
+            case .paperclipOnly:
+                // The Organize card owns the bottom of the screen, so the
+                // capture stack steps aside — but adding something she already
+                // has stays reachable. One tap, no stack to open: this is the
+                // state a NEW memory is in, and the paperclip is the only way a
+                // Watch recording gets into one.
+                AddExistingPill(onTap: { showAddExistingClips = true })
+                    .padding(.bottom, -tabBarInset)
+
+            case .full:
                 AppendFAB(
                     onSelect: { modality in
                         appendCoordinator.activeCaptureModality = modality
@@ -1842,3 +1858,58 @@ private struct MediaFragmentEditorStack: ViewModifier {
     }
 }
 
+
+// MARK: - Memory Detail FAB mode
+
+/// Which append affordance Memory Detail shows, as a **pure decision** rather
+/// than three booleans fighting inside a view condition.
+///
+/// **Why it is a type (2026-09-17).** The old inline condition removed the
+/// whole FAB whenever the Organize card was on screen (F33, to stop the 60pt
+/// button covering the card). That was correct when the paperclip was a
+/// convenience — and became a defect the moment the paperclip was the only way
+/// a Watch recording enters a memory, because a freshly-created memory is
+/// short, so the Organize card is on screen at rest and the FAB is gone from
+/// the moment she opens it. She could not reach the one affordance that
+/// matters on exactly the memories it matters for.
+///
+/// Three booleans in a view's `if` cannot be tested and cannot be read. This
+/// can be both.
+enum MemoryDetailFAB {
+
+    enum Mode: Equatable {
+        /// The capture stack plus the paperclip — the normal state.
+        case full
+        /// **The paperclip alone.** The Organize card owns the bottom of the
+        /// screen, so the capture stack steps aside — but adding something she
+        /// already has must stay reachable.
+        case paperclipOnly
+        /// Nothing: an active text edit (the FAB must never sit over the caret
+        /// line) or the Let Go footer, which she reached by scrolling and which
+        /// owns the full width.
+        case hidden
+    }
+
+    /// Ordered by precedence, and the order is the rule:
+    ///
+    /// 1. **Editing wins outright.** Nothing may sit over the caret line.
+    /// 2. **Let Go wins over the stack**, but only after a deliberate scroll —
+    ///    it lives at the very bottom and cannot be reached any other way.
+    /// 3. **The Organize card demotes rather than hides.** This is the fix:
+    ///    `.paperclipOnly`, not `.hidden`.
+    static func mode(
+        isEditing: Bool,
+        organizeOnScreen: Bool,
+        letGoOnScreen: Bool,
+        topAnchorVisible: Bool
+    ) -> Mode {
+        if isEditing { return .hidden }
+        // The scroll qualifier is what separates "she scrolled to the
+        // destructive footer" from "the memory is short enough to show
+        // everything at once" — which is the same distinction F33 got wrong
+        // for the Organize card.
+        if letGoOnScreen && !topAnchorVisible { return .hidden }
+        if organizeOnScreen { return .paperclipOnly }
+        return .full
+    }
+}

@@ -283,3 +283,68 @@ private struct PillEnter: ViewModifier, Animatable {
             .offset(y: (1 - progress) * 12)
     }
 }
+
+// MARK: - Standalone "Add existing" pill
+
+/// The paperclip on its own, for when the capture stack has stepped aside but
+/// adding something she already has must stay reachable
+/// (`MemoryDetailFAB.Mode.paperclipOnly`).
+///
+/// **Styled from `AppendFAB.leadingActionPill`, deliberately** — same height,
+/// same capsule, same ink glyph in the same 36pt chip, same shadow pair. It is
+/// the identical affordance in a different arrangement, so it must not read as
+/// a different control. Sized to its content rather than stretched, because
+/// nothing sits beside it here.
+///
+/// Width is the one difference from the stacked pill, and it is forced: the
+/// stacked version fills a 188pt column. A lone `maxWidth: .infinity` pill
+/// would span the screen and read as a primary action, which this is not.
+struct AddExistingPill: View {
+    let onTap: () -> Void
+    var label: String = "Add existing"
+    var systemImage: String = "tray.and.arrow.down"
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            onTap()
+        } label: {
+            HStack(spacing: 0) {
+                Text(label)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Crucible.Color.ink)
+                    .padding(.leading, 18)
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 10)
+                ZStack {
+                    Circle()
+                        .fill(Crucible.Color.ink2.opacity(0.10))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: systemImage)
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(Crucible.Color.ink2)
+                }
+                .padding(.trailing, 6)
+            }
+            .frame(height: 52)
+            .background(Crucible.Color.card)
+            .clipShape(Capsule())
+            .shadow(
+                color: Color(red: 40/255, green: 25/255, blue: 15/255).opacity(0.10),
+                radius: 12, x: 0, y: 8
+            )
+            .shadow(color: .black.opacity(0.06), radius: 1, x: 0, y: 1)
+            // F17 · a capsule-decorated button hit-tests only its drawn
+            // content; the shape is the hit region.
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .padding(.trailing, 22)
+        .padding(.bottom, 28)
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
+    }
+}
