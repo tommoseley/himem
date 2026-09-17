@@ -613,14 +613,10 @@ struct JournalView: View {
         if case .note = item, newId != nil {
             pendingNoteForNewEntry = nil
         }
-        // Per `HiMem · evidence and context.md:143` (July 10 2026):
-        // "capture returns to Clips … never to Memories and never
-        // into a forced memory." So we do NOT navigate to the new
-        // memory's detail; we surface the Clips tab so the user
-        // sees where their thought landed.
-        if newId != nil {
-            CaptureLandingBus.shared.pendingReturnToClips = true
-        }
+        // The July 10 clause this used to serve — "capture returns to Clips …
+        // never to Memories" — is superseded: capture lands in a memory now,
+        // and she stays where she is. We still do NOT navigate to the new
+        // memory's detail; that half of the no-teleport rule survives.
     }
 
     /// Tutorial #5 (Watch discovery). App-side gate per spec:

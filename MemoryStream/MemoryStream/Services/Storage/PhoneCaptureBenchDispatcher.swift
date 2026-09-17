@@ -73,7 +73,7 @@ enum PhoneCaptureBenchDispatcher {
                 // recording, no file — unless `isAuthorized` AND the analyzer,
                 // transcriber and format are prepared, and phone capture
                 // transcribes live. Guarded by
-                // `PhoneCaptureBenchDispatcherTests.theDispatcherOnlyReceivesPostRecognizerItems`,
+                // `PhoneCaptureBenchDispatcherTests.theDispatcherHasNoProductionCaller`,
                 // which fails if a dispatch appears outside the two post-recording
                 // call sites.
                 transcriptionAttempted: true,

@@ -1,29 +1,33 @@
 import SwiftUI
 import CoreData
 
-/// The three-tab root shell. Cold launch lands on Memories; the last-
-/// used tab is remembered only while the app stays alive (`@State`,
-/// not `@AppStorage`).
+/// The **two-tab** root shell — Memories · Projects. Cold launch lands on
+/// Memories; the last-used tab is remembered only while the app stays alive
+/// (`@State`, not `@AppStorage`).
 ///
-/// Per `HiMem · evidence and context.md:143` (locked 2026-07-10):
+/// **I1a (2026-09-17).** Clips retired as a user-facing surface, so the July 10
+/// lock's second half — *"Capture returns to Clips (record → the thought lands
+/// as a new clip on the Clips bench), never to Memories"* — is superseded: a
+/// capture now lands in a memory. **Its first half survives untouched and is
+/// why this file exists:**
 ///
-/// > "The three tabs share one chrome, and capture is on every one.
-/// > The capture FAB floats on every tab, in the same position —
-/// > capture is one tap from anywhere, per the perishability first
-/// > principle; a tab where capture isn't one tap away fails the
-/// > core promise. Capture returns to Clips (record → the thought
-/// > lands as a new clip on the Clips bench), never to Memories and
-/// > never into a forced memory."
+/// > "The tabs share one chrome, and capture is on every one. The capture FAB
+/// > floats on every tab, in the same position — capture is one tap from
+/// > anywhere, per the perishability first principle; a tab where capture
+/// > isn't one tap away fails the core promise."
 ///
-/// So the FAB and capture-flow host live at THIS level, not inside
-/// any one tab. Tapping the FAB from any tab presents the composer
-/// sheet (no tab switch mid-record); on successful commit we route
-/// through `CaptureLandingBus.pendingReturnToClips = true` so the
-/// user lands on Clips.
+/// So the FAB and capture-flow host still live at THIS level, not inside any
+/// one tab. Tapping the FAB from any tab presents the composer sheet (no tab
+/// switch mid-record), and the completed capture is routed by
+/// `CaptureLandingRouter` without moving her anywhere.
 struct HiMemTabView: View {
 
+    /// **Two tabs (I1a, 2026-09-17).** `clips` retired with the surface it
+    /// named. `ClipsTabView` and `SessionListView` remain ON DISK but
+    /// UNREACHABLE — deliberately, and TEMPORARILY: a two-tab shell that can be
+    /// reviewed on device and reverted in one commit is worth a short-lived
+    /// decoy, before ~21,000 lines are deleted in I2. They go in that slice.
     enum Tab: Hashable {
-        case clips
         case memories
         case projects
     }
@@ -31,17 +35,10 @@ struct HiMemTabView: View {
     @State private var selection: Tab = .memories
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
     @State private var activeCaptureModality: CaptureModality? = nil
-    /// How the in-flight capture was initiated. `.handsFree` (Siri) forces the
-    /// completed capture onto the bench regardless of the visible tab — ad-hoc
-    /// capture is never forced into a memory (locked invariant). Set at each
+    /// How the in-flight capture was initiated. `.handsFree` (Siri) lands the
+    /// completed capture in a memory from every screen (F3). Set at each
     /// capture-initiation point; reset after the capture is handled.
     @State private var captureSource: CaptureSource = .manual
-    /// Non-nil while the Clips status sheet is presented (Active
-    /// Navigation Tap → sheet per `CLAUDE.md` §Phone, locked July 10
-    /// 2026). Snapshot fields carried by the enum so the sheet reads
-    /// the counts that were live the moment the user tapped, rather
-    /// than a re-fetch after the sheet animation.
-    @State private var clipsStatusSheet: ClipsStatusData? = nil
     @StateObject private var speechService = SpeechService()
     @ObservedObject private var captureLanding = CaptureLandingBus.shared
     @ObservedObject private var captureRequests = CaptureRequestBus.shared
@@ -95,15 +92,7 @@ struct HiMemTabView: View {
     /// it's an opened item, not a capture surface."
     @ObservedObject private var clipDetailPresence = ClipDetailPresentationContext.shared
     @ObservedObject private var projectSummaryActions = ProjectSummaryActionsPresence.shared
-    /// True while Clips multi-select is active — the bottom action bar
-    /// (Add to a memory… / Delete N) owns the bottom of the screen, so the
-    /// capture FAB steps aside (it overlaps Delete otherwise). Scoped to
-    /// the Clips tab below so other tabs keep their FAB.
-    @ObservedObject private var clipsSelection = ClipsSelection.shared
-    /// Signals "open Memory Detail for this id" — the Create-one-
-    /// memory flow (`CreateMemoryFromClipsSheet`) sets it after a
-    /// successful save so the user lands on the freshly-created
-    /// memory instead of the calm Clips list.
+    /// Signals "open Memory Detail for this id".
     @ObservedObject private var memoryNavigation = MemoryNavigationBus.shared
     /// Routes a topic read-chip tap (from any tab's Memory Detail) to the
     /// Memories tab's topic filter (unified associations read model).
@@ -114,23 +103,13 @@ struct HiMemTabView: View {
     /// Routes a mention read-chip tap to the Memories tab's mention filter.
     @ObservedObject private var mentionFilter = MentionFilterBus.shared
 
-    /// Custom binding that intercepts every tab tap — including taps
-    /// on the already-active tab, which SwiftUI's `$selection` handles
-    /// by simply re-setting the same value. Repeat taps on the Clips
-    /// tab fire the Active Navigation Tap behavior (status sheet); on
-    /// other tabs today they're a no-op (spec allows their own status
-    /// sheets later).
-    private var selectionBinding: Binding<Tab> {
-        Binding(
-            get: { selection },
-            set: { newValue in
-                if newValue == selection && newValue == .clips {
-                    clipsStatusSheet = ClipsStatusDataSource.snapshot()
-                }
-                selection = newValue
-            }
-        )
-    }
+    // The custom `selectionBinding` is GONE with the Clips status sheet.
+    // It existed to intercept a repeat tap on the ACTIVE tab — which SwiftUI's
+    // `$selection` treats as a no-op — so Clips could present its Active
+    // Navigation Tap sheet. Memories and Projects keep their own sheets as a
+    // decision (`CLAUDE.md` §Phone); neither has one built, so an interception
+    // point with nothing to intercept is a speculative abstraction. `$selection`
+    // is used directly; restore the wrapper when a surface actually needs it.
 
     var body: some View {
         // CRAP 2026-07-26: the observer cluster + presentation modifiers are
@@ -146,19 +125,6 @@ struct HiMemTabView: View {
                     captureSource: captureSource,
                     onCaptured: handleCapturedItem
                 )
-                .sheet(isPresented: Binding(
-                    get: { clipsStatusSheet != nil },
-                    set: { presented in if !presented { clipsStatusSheet = nil } }
-                )) {
-                    if let data = clipsStatusSheet {
-                        ClipsStatusSheet(data: data) {
-                            clipsStatusSheet = nil
-                        }
-                        .presentationDetents([.medium, .large])
-                        .presentationDragIndicator(.hidden)
-                        .presentationBackground(Crucible.Color.paper)
-                    }
-                }
         )
         // F8 · the guided walkthrough renders above the live tab content. Modal
         // beats block; action beats are a non-blocking banner so the real
@@ -172,17 +138,7 @@ struct HiMemTabView: View {
         // dot self-positions (GeometryReader + `.position`) so it's unaffected;
         // the TabView fills. Only the FAB moves. See `FABHandedness`.
         ZStack(alignment: FABHandedness.containerAlignment(leftHanded: fabHandednessLeft)) {
-            TabView(selection: selectionBinding) {
-                ClipsTabView(learnPresented: Binding(get: { learnOpenOn == .clips }, set: { learnOpenOn = $0 ? .clips : nil }))
-                    .tabItem { Label("Clips", systemImage: "waveform") }
-                    .tag(Tab.clips)
-                // No native `.badge()` — SwiftUI TabView badges are red
-                // (semantic danger in Crucible), and a red dot reads as
-                // "something is wrong," not "something arrived." Per
-                // `CLAUDE.md` §Phone (July 10 2026), the dot must sit
-                // in ochre as presence-not-alert. The dot is drawn as
-                // an overlay below.
-
+            TabView(selection: $selection) {
                 JournalView(initialMode: .memories, hidesModeToggle: true,
                             learnPresented: Binding(get: { learnOpenOn == .memories }, set: { learnOpenOn = $0 ? .memories : nil }))
                     .tabItem { Label("Memories", systemImage: "book.closed") }
@@ -205,8 +161,9 @@ struct HiMemTabView: View {
             // Projects at the list level + opens the New Project
             // sheet (no modality picker), on every other case +
             // opens the ad-hoc modality stack.
+            // The bench's multi-select suppression is gone with the bench:
+            // `ClipsSelection` only ever reported selecting on Clips.
             if memoryDetailPresence.currentMemoryId == nil && clipDetailPresence.currentClipId == nil
-                && !(clipsSelection.selecting && selection == .clips)
                 && !projectSummaryActions.actionsOnScreen {
                 switch currentIntent {
                 case .openNewProjectSheet:
@@ -233,18 +190,6 @@ struct HiMemTabView: View {
                         accessibilityLabel: currentFabAccessibilityLabel
                     )
                 }
-            }
-
-            // Ochre presence dot on the Clips tab item. Drawn as an
-            // overlay so we avoid TabView's red native badge, which
-            // reads as danger in Crucible. Positioned relative to the
-            // Clips tab center (index 0 of 3, so `width/6`) and just
-            // above the tab bar. Hit-testing off so it never blocks a
-            // tap on the tab. Removed entirely when there are no
-            // unseen arrivals.
-            if inbox.hasUnseenArrivals {
-                ClipsTabPresenceDot()
-                    .allowsHitTesting(false)
             }
 
             // The capture gate's message, drawn at the shell so it reaches
@@ -276,18 +221,9 @@ struct HiMemTabView: View {
     /// capture modality) but collectively at the CC-30 line when inline.
     private func tabRoutingObservers(_ content: some View) -> some View {
         content
-        // I3 · F26's Clips tab switch is GONE. The walkthrough used to move
-        // the user to Clips because the pipeline it taught landed there; the
-        // vocabulary retirement removes that pipeline, and capture now lands in
-        // a memory from wherever she is. (The `pendingReturnToClips` tab switch
-        // below is I1's to remove — this slice only breaks the WALKTHROUGH's
-        // dependency on it, which is what made the tab a non-leaf.)
-        .onChange(of: captureLanding.pendingReturnToClips) { _, pending in
-            if pending {
-                selection = .clips
-                captureLanding.pendingReturnToClips = false
-            }
-        }
+        // I3 · F26's Clips tab switch is GONE, and I1a removed the
+        // `pendingReturnToClips` switch that followed it. Capture lands in a
+        // memory from wherever she is, and the flow moves her nowhere.
         // F8 · the capture produced a memory — advance to step 2 and track the
         // memory so we can watch it organize below. I3: this one signal now
         // does what `clipDidLand()` + the `makeMemory` step used to.
@@ -365,26 +301,6 @@ struct HiMemTabView: View {
             // surface reached from a `?`, not a place the user was working;
             // leaving the tab is leaving it.
             learnOpenOn = nil
-            // Clear the arrival dot on Clips per `CLAUDE.md` §Phone —
-            // "the dot represents new, unseen arrivals and clears when
-            // the user opens Clips."
-            if newTab == .clips {
-                InboxManifest.shared.markAllSeen()
-            }
-        }
-        // Cold-launch onto Clips + arrivals while Clips is already
-        // visible (July 12 2026 stuck-dot fix). The `.onChange(of:
-        // selection)` above only fires on tab CHANGE — if the app
-        // boots straight onto Clips or the user records via the
-        // phone FAB while already on Clips (the July 10 lock:
-        // "capture returns to Clips"), the selection doesn't
-        // change and the dot never cleared. Observing the manifest
-        // flag lets us clear the moment it flips true while the
-        // user is looking at the bench.
-        .onChange(of: inbox.hasUnseenArrivals) { _, hasUnseen in
-            if hasUnseen && selection == .clips {
-                InboxManifest.shared.markAllSeen()
-            }
         }
         // Siri backward-compat: `StartVoiceRecordingIntent` still sets
         // `pendingVoiceRecord`. Route it through the shared modality
@@ -393,19 +309,11 @@ struct HiMemTabView: View {
         .onChange(of: captureRequests.pendingVoiceRecord) { _, pending in
             if pending {
                 captureRequests.pendingVoiceRecord = false
-                captureSource = .handsFree // Siri → ad-hoc, lands on bench
+                captureSource = .handsFree // Siri → a memory of one part (F3)
                 activeCaptureModality = .voice
             }
         }
         .onAppear {
-            // Cold-launch onto Clips: the `.onChange(of: selection)`
-            // above only fires on a change, and cold-launch may init
-            // `selection` straight to `.clips` (last-used tab). Clear
-            // the arrival dot here so a boot straight into Clips
-            // doesn't leave it stuck.
-            if selection == .clips && inbox.hasUnseenArrivals {
-                InboxManifest.shared.markAllSeen()
-            }
             // F8's first-run offer was RETIRED 2026-08-23. This `.onAppear`
             // fires when the tab shell mounts — which on a fresh install is
             // BEHIND the intro tour, before it has been seen. Arming `.offer`
@@ -414,7 +322,7 @@ struct HiMemTabView: View {
             // page 7 enters at beat 1 via `startAtFirstBeat()`.
             if captureRequests.pendingVoiceRecord {
                 captureRequests.pendingVoiceRecord = false
-                captureSource = .handsFree // Siri cold-launch → ad-hoc, lands on bench
+                captureSource = .handsFree // Siri cold-launch → a memory of one part (F3)
                 DispatchQueue.main.async { activeCaptureModality = .voice }
             }
             if let modality = captureRequests.pendingModality {
@@ -459,7 +367,6 @@ struct HiMemTabView: View {
     /// tab identifiers.
     private func routerTab(for tab: Tab) -> CaptureLandingRouter.Tab {
         switch tab {
-        case .clips:    return .clips
         case .memories: return .memories
         case .projects: return .projects
         }
@@ -470,7 +377,10 @@ struct HiMemTabView: View {
     /// VoiceOver users hear the actual outcome, not a generic +.
     private var currentFabAccessibilityLabel: String {
         switch currentIntent {
-        case .dropOnBench:              return "Add clip"
+        case .dropOnBench:
+            // Unproducible: no tab routes here (I1a). Kept so the switch stays
+            // exhaustive until I2 removes the case from `CaptureLandingIntent`.
+            return "Add memory"
         case .createMemory:             return "Add memory"
         case .createMemoryInProject:    return "Add memory to this project"
         case .openNewProjectSheet:      return "New project"
@@ -553,13 +463,25 @@ struct HiMemTabView: View {
 
         switch landing {
         case .dropOnBench:
-            PhoneCaptureBenchDispatcher.dispatch(item)
-            // "The new clip drops into the list already in view
-            // (recognition, no navigation)" — no tab switch needed;
-            // we're already on Clips. The manifest publish will
-            // trigger `SessionListView` to re-render with the new
-            // card in place.
-            CaptureLandingBus.shared.pendingReturnToClips = true
+            // **UNPRODUCIBLE AFTER I1a, AND MADE LOUD RATHER THAN TRUSTED.**
+            // `.dropOnBench` came from one place — `tab == .clips` — and that
+            // tab is gone; `.handsFree` stopped routing here at F3. So nothing
+            // can reach this.
+            //
+            // "Unreachable" is precisely the claim that cost this project a P0
+            // (F25, at `.openNewProjectSheet` below, where a `break` under a
+            // FALSE unreachability comment silently destroyed captures). Same
+            // treatment, same reason: DEBUG fails at the moment and place it
+            // happens; Release falls back to the safest real landing rather
+            // than dropping her recording.
+            //
+            // The fallback is `createMemory`, NOT the bench: the bench is
+            // unreachable, so dispatching there would hide the capture instead
+            // of losing it — which is worse, because it looks like success.
+            assertionFailure(
+                "CapturedItem reached .dropOnBench — no tab produces it after I1a."
+            )
+            createMemory(from: item)
 
         case .createMemory:
             let coordinator = JournalCaptureCoordinator()
@@ -572,8 +494,8 @@ struct HiMemTabView: View {
                 lifecycle: lifecycle,
                 seedNote: nil
             )
-            // Stay on Memories — the user came here to build a memory,
-            // not to be teleported to Clips.
+            // Stay put. Moving her after a capture is the magic, not reading
+            // the tab (July 10, and it survives the retirement intact).
 
         case .createMemoryInProject(let projectId):
             let coordinator = JournalCaptureCoordinator()
@@ -603,17 +525,25 @@ struct HiMemTabView: View {
             // trusted.
             //
             // DEBUG: fail the assertion, at the moment and place it happens.
-            // Release: land the clip on the bench rather than destroy it.
-            // Nothing is lost there — the bench IS the designed escape
-            // hatch, and the consolidation ladder exists to give an
-            // unfiled capture a home. Better than an error the user can
-            // do nothing with, and far better than silence.
+            // Release: land the capture in a memory rather than destroy it.
+            // The bench was the escape hatch when this was written; with it
+            // gone, a memory is the only place a capture can land and still
+            // be found.
             assertionFailure(
                 "CapturedItem reached .openNewProjectSheet — the landing intent was not captured at tap time (F25)."
             )
-            PhoneCaptureBenchDispatcher.dispatch(item)
-            CaptureLandingBus.shared.pendingReturnToClips = true
+            createMemory(from: item)
         }
+    }
+
+    /// The safe landing every fallback uses. Extracted so the two
+    /// "this should be unreachable" branches cannot drift apart from the real
+    /// one — near-duplicate recovery procedures are how a fallback quietly
+    /// stops matching what it is recovering to.
+    private func createMemory(from item: CapturedItem) {
+        let coordinator = JournalCaptureCoordinator()
+        let lifecycle = EntryLifecycleService(storage: .shared, processingEngine: .shared)
+        _ = coordinator.createNewMemory(from: item, lifecycle: lifecycle, seedNote: nil)
     }
 
     /// Attach a freshly-created memory to a project. Mirrors the
@@ -637,42 +567,6 @@ struct HiMemTabView: View {
     }
 }
 
-/// 8pt ochre circle drawn above the Clips tab item — the presence-only
-/// arrival dot per `CLAUDE.md` §Phone (July 10 2026): "the dot answers
-/// 'should I look?' — presence, not a count." The `card`-colored ring
-/// around it prevents the ochre from smearing into the tab-bar
-/// background at small sizes.
-///
-/// Positioned with `GeometryReader` because `TabView.tabItem` gives us
-/// no way to place chrome inside a specific item. Numbers below match
-/// the iOS-26 system tab bar layout: three tabs of equal width, icon
-/// centered above label, tab-bar height ~49pt content + safe-area
-/// bottom inset.
-private struct ClipsTabPresenceDot: View {
-    var body: some View {
-        GeometryReader { geo in
-            Circle()
-                .fill(Crucible.Color.accent)
-                .overlay(
-                    Circle().stroke(Crucible.Color.card, lineWidth: 1.5)
-                )
-                .frame(width: 8, height: 8)
-                .position(
-                    // Clips is index 0 of 3 → horizontal center at
-                    // width/6. Offset ~10pt right so the dot sits at
-                    // the top-right of the tab icon rather than dead
-                    // center on it.
-                    x: geo.size.width / 6 + 10,
-                    // Vertical: the tab bar content area sits above
-                    // the safe-area bottom inset by roughly 45pt.
-                    // Placing the dot ~45pt above the safe-area bottom
-                    // lines it up with the top edge of the tab icon.
-                    y: geo.size.height - geo.safeAreaInsets.bottom - 45
-                )
-        }
-        .accessibilityLabel("New arrivals in Clips")
-    }
-}
 
 /// Session-scoped signal used by any capture surface (arrival banner,
 /// notification tap, tab-level FAB) to request "return to Clips" per
@@ -681,6 +575,10 @@ private struct ClipsTabPresenceDot: View {
 @MainActor
 final class CaptureLandingBus: ObservableObject {
     static let shared = CaptureLandingBus()
-    @Published var pendingReturnToClips: Bool = false
+    // `pendingReturnToClips` RETIRED with the tab it named (I1a). Its last
+    // writer was `JournalView`'s post-create path, which set it under the July
+    // 10 clause "capture returns to Clips … never to Memories" — a clause F3
+    // had already contradicted by routing captures into memories. So this is a
+    // CONTRADICTION RESOLVING, not a behaviour lost.
     private init() {}
 }

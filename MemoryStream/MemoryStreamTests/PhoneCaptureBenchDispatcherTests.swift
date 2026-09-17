@@ -173,7 +173,7 @@ struct PhoneCaptureBenchDispatcherTests {
     /// transcribes live during the recording. So a `.voice` item reaching this
     /// dispatcher *always* comes from a session where the recogniser ran;
     /// "attempted" is not a guess here, it is a precondition of arriving.
-    /// Guarded by `theDispatcherOnlyReceivesPostRecognizerItems` below.
+    /// Guarded by `theDispatcherHasNoProductionCaller` below.
     @Test func voice_whenTheRecognizerFoundNoWords_isAttemptedNotPending() async {
         await ManifestTestLock.shared.acquire()
         defer { ManifestTestLock.shared.release() }
@@ -255,10 +255,24 @@ struct PhoneCaptureBenchDispatcherTests {
 
     /// **Guards the inference, not the owner** (CLAUDE.md § Guard the Caller).
     /// The fix is only correct while every `.voice`/`.voiceSession` item reaches
-    /// the dispatcher from a completed recording. If a future caller dispatches
-    /// a voice item that has NOT been through the recogniser, "attempted = true"
-    /// becomes a lie and this test names where to look.
-    @Test func theDispatcherOnlyReceivesPostRecognizerItems() throws {
+    /// the dispatcher from a completed recording. If a caller dispatches a voice
+    /// item that has NOT been through the recogniser, "attempted = true" becomes
+    /// a lie and this test names where to look.
+    ///
+    /// **I1a · THE EXPECTED COUNT IS NOW ZERO, AND THAT IS A FINDING RATHER
+    /// THAN A RELAXATION.** The two call sites were both in `HiMemTabView`'s
+    /// `.dropOnBench` landing; the Clips tab is gone, so nothing routes there
+    /// and `PhoneCaptureBenchDispatcher` HAS NO PRODUCTION CALLER. It is dead
+    /// code pending its deletion in I2 — this guard is what established that,
+    /// by failing.
+    ///
+    /// The assertion is kept rather than retired **because zero is the property
+    /// worth holding**: a re-wired caller would silently resurrect a bench path
+    /// that no surface can display, and this fails the moment one appears. The
+    /// walk-reached-source check below is what stops it passing by inspecting
+    /// nothing — without it, "0 call sites" and "0 files scanned" are the same
+    /// green.
+    @Test func theDispatcherHasNoProductionCaller() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()      // MemoryStreamTests
             .deletingLastPathComponent()      // MemoryStream
@@ -279,8 +293,13 @@ struct PhoneCaptureBenchDispatcherTests {
         }
         // The walk must reach source, or it passes by matching nothing.
         #expect(scanned > 50, "the source walk found only \(scanned) files — it did not reach the app target")
-        #expect(callSites.count == 2,
-                "expected the two known HiMemTabView call sites, both post-recording; found \(callSites.count):\n\(callSites.joined(separator: "\n"))")
+        #expect(callSites.isEmpty, """
+            `PhoneCaptureBenchDispatcher` has a production caller again. The \
+            bench it dispatches to is unreachable (I1a) and the type is slated \
+            for deletion in I2, so a caller here lands a capture somewhere no \
+            surface can show it. Found:
+            \(callSites.joined(separator: "\n"))
+            """)
         #expect(callSites.allSatisfy { $0.hasPrefix("HiMemTabView.swift") },
                 "a dispatch from outside HiMemTabView may not have been through the recogniser: \(callSites)")
     }

@@ -137,8 +137,14 @@ struct CaptureLandingAtTapTimeTests {
     }
 
     /// The residual `.openNewProjectSheet` case must never silently drop
-    /// a CapturedItem again. Loud in DEBUG, bench in release — nothing
-    /// is destroyed either way.
+    /// a CapturedItem again. Loud in DEBUG, a real landing in release —
+    /// nothing is destroyed either way.
+    ///
+    /// **I1a moved the LANDING, not the promise.** The fallback used to
+    /// dispatch to the bench, which was then the designed escape hatch for an
+    /// unfiled capture. The bench is unreachable now, so dispatching there
+    /// would HIDE the capture rather than lose it — worse, because it looks
+    /// like success. The safe landing is a memory.
     @Test func newProjectSheetCase_neverSilentlyDropsACapture() throws {
         let body = try Self.functionBody(named: "private func handleCapturedItem(", in: Self.shellSource())
         guard let caseAt = body.range(of: "case .openNewProjectSheet:")?.upperBound else {
@@ -147,8 +153,10 @@ struct CaptureLandingAtTapTimeTests {
         }
         let tail = String(body[caseAt...])
         #expect(tail.contains("assertionFailure"), "No assertionFailure — a stray capture would be silent in DEBUG.")
-        #expect(tail.contains("PhoneCaptureBenchDispatcher.dispatch"),
-                "No bench dispatch — a stray capture would be DESTROYED in release. This is the F25 drop.")
+        #expect(tail.contains("createMemory(from: item)"),
+                "No safe landing — a stray capture would be DESTROYED in release. This is the F25 drop.")
+        #expect(!tail.contains("PhoneCaptureBenchDispatcher"),
+                "The bench is unreachable after I1a; landing there would hide the capture, not save it.")
     }
 
     /// Self-test: the guard must reject the shipped `break`, or it is

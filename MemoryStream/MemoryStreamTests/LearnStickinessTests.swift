@@ -61,7 +61,9 @@ import Foundation
     /// once. The optional-Tab shape is load-bearing, not incidental.
     @Test func learnOwnershipIsPerTab_notOneSharedFlag() throws {
         let src = try Self.source("MemoryStream/Views/HiMemTabView.swift")
-        for tab in ["clips", "memories", "projects"] {
+        // I1a · two tabs. The SUBJECT is unchanged — each tab binds its own
+        // Learn slot rather than sharing one flag — and only the tab list moved.
+        for tab in ["memories", "projects"] {
             #expect(src.contains("learnOpenOn == .\(tab)"),
                     "The \(tab) tab is not bound to its own Learn slot.")
         }
