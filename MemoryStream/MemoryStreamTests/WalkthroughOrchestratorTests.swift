@@ -324,11 +324,26 @@ struct WalkthroughOrchestratorTests {
 
     @Test func de_ontology_beat1IsTaskOnly() {
         // F13: beat 1 drops the "a memory is made of one or more parts" preamble —
-        // it says what to DO, not what things are.
+        // it says what to DO, not what things are. THAT is what this guards.
+        //
+        // **The modality moved, the rule did not (2026-09-18).** This asserted
+        // `contains("voice") && contains("record")` — using the specific tool as
+        // a proxy for "names a task". Beat 1 now teaches WRITING, because voice
+        // is a recording mechanism rather than the product's centre of gravity.
+        // Pinning the tool made an emphasis decision look like a copy
+        // regression, so the assertion now pins the PROPERTY: a concrete verb,
+        // the control that starts it, and no ontology.
         let record = Beat.record.body(alreadyOrganized: false).lowercased()
         #expect(!record.contains("part"), "no parts preamble on beat 1")
-        #expect(record.contains("voice") && record.contains("record"), "names the task")
+        #expect(!record.contains("clip"), "'clip' has left the user's vernacular")
         #expect(record.contains("+"), "names the + control")
+
+        // Names one concrete thing to do. Enumerated rather than sampled so a
+        // future reword cannot quietly leave the beat with no verb at all —
+        // which is the failure F13 exists to prevent.
+        let verbs = ["write", "record", "type", "photograph"]
+        #expect(verbs.contains { record.contains($0) },
+                "beat 1 must name an action she performs; got: \(record)")
     }
 
     @Test func de_ontology_conceptAndOntologyBeatsAreGone() {

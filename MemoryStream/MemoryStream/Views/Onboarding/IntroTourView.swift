@@ -593,7 +593,7 @@ private struct TourModalityCallout: View {
 private enum TourModalityCopy {
     static func note(for m: CaptureModality) -> String {
         switch m {
-        case .voice:  return "one tap, no typing"
+        case .voice:  return "it writes itself down"
         case .photo:  return "with a description"
         case .video:  return "with a description"
         case .note:   return "type it out"
@@ -603,7 +603,7 @@ private enum TourModalityCopy {
 
     static func headline(for m: CaptureModality) -> String {
         switch m {
-        case .voice:  return "Talk and it writes itself down."
+        case .voice:  return "For when typing isn't practical."
         case .photo:  return "A picture, and why it mattered."
         case .video:  return "For when a picture isn't enough."
         case .note:   return "When you'd rather type."

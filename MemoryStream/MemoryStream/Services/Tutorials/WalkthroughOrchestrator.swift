@@ -426,9 +426,17 @@ extension WalkthroughOrchestrator.Beat {
             return "I'll guide you through making your first memory — you record it, then the app writes a title and summary. About a minute, and I'll point at each step."
         case .record:
             // Step 1. The parts-preamble is CUT (F13) — say what to DO, not what
-            // things are. The FAB illustration (see the overlay) makes "tap +,
-            // then Voice" recognizable.
-            return "Tap +, then Voice, and record something you don't want to forget."
+            // things are.
+            //
+            // **Teaches WRITING first (Tom, 2026-09-18).** It said "Tap +, then
+            // Voice, and record something…" — step 1 of the whole product
+            // instructing her to use the microphone, which is the voice-first
+            // centre of gravity the retirement moves away from. Voice is a
+            // recording mechanism, like video; the centre is writing, with
+            // things in it. The beat is still named `record` internally — the
+            // machine advances on `memoryDidStart`, which a committed note
+            // fires exactly as a finished recording does, so no wiring changes.
+            return "Tap +, then Note, and write something you don't want to forget."
         case .onARoll:
             // 1b — un-numbered tip inside step 1, shown while recording, anchored
             // to Next. Enrichment, not a step (Tom 2026-07-28).

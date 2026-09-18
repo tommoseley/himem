@@ -12,7 +12,6 @@ struct SettingsView: View {
     @State private var showNewTopicSheet = false
     @State private var editingTopic: Topic? = nil
     @State private var refreshID = UUID()
-    @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
     /// Hands-free (Siri) recording cap in minutes; `0` = No limit. Default 10.
     @AppStorage("handsFreeRecordingLimitMinutes") private var handsFreeLimitMinutes = 10
@@ -224,8 +223,13 @@ struct SettingsView: View {
                 // v4 — "there is no 'Settings → Captured Clips' entry —
                 // the page is a tab." The Clips tab is the surface now.
                 Section {
-                    Toggle("Save voice recordings", isOn: $saveVoiceEntries)
-                        .tint(Crucible.Color.accent)
+                    // "Save voice recordings" DELETED 2026-09-18. It was
+                    // declared in three files, bound to this one toggle, and
+                    // read by NOTHING — it gated no code path and never had.
+                    // Worse than dead: a switch promising control over
+                    // something the app never did, about the exact behaviour
+                    // now being retired (audio is not stored, anywhere). Third
+                    // decoy this project has removed.
                     Picker("Recording limit", selection: $handsFreeLimitMinutes) {
                         Text("5 minutes").tag(5)
                         Text("10 minutes").tag(10)

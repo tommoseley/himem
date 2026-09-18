@@ -205,7 +205,6 @@ struct EntryExpandedView: View {
     @State private var editingClip: ClipEditorModal.Source? = nil
     /// Drives in-place voice playback + the row's play/stop glyph (cycle 2/3).
     @ObservedObject private var audioPlayer = AudioPlayerService.shared
-    @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
     /// The tab bar's contribution to this pushed page's bottom safe area.
     /// The tab-shell FABs (Clips/Memories/Projects) are `TabView` siblings, so

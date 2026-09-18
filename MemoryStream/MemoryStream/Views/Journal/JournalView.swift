@@ -13,7 +13,6 @@ struct JournalView: View {
     /// F16 · drives the walkthrough ring on the row she just made.
     @ObservedObject private var walkthrough = WalkthroughOrchestrator.shared
     @EnvironmentObject private var quickAction: QuickActionState
-    @AppStorage("saveVoiceEntries") private var saveVoiceEntries = true
     @State private var viewMode: ViewMode
 
     /// When true, `JournalHeaderView` hides its Memories/Projects

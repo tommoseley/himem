@@ -11,9 +11,23 @@ enum CaptureModality: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// Pill order, top → bottom in the open stack. Voice sits closest to the
-    /// FAB (bottom of the column, last in the array) per the Append spec.
-    static let stackOrder: [CaptureModality] = [.attach, .note, .video, .photo, .voice]
+    /// Pill order, top → bottom in the open stack — so the **last element sits
+    /// closest to the FAB**, and is the first thing her thumb reaches.
+    ///
+    /// **Reordered 2026-09-18 (Tom): voice is a recording MECHANISM, like
+    /// video — not the product's centre of gravity.** The centre is writing,
+    /// with things in it: she writes, and photographs and video sit in the
+    /// flow. Voice held the closest-to-thumb slot because the product was
+    /// conceived voice-first; `.note` holds it now and voice moves into the
+    /// column.
+    ///
+    /// **This constant is the single owner of that emphasis.** `AppendFAB`
+    /// renders it directly and the intro tour renders it `.reversed()`
+    /// (per B31, which ruled that page 2 must be DRIVEN by `stackOrder` →
+    /// `sfSymbol` + `color` rather than translating canvas glyphs by eye). So
+    /// reordering here moves the FAB and the tour together, and nothing else
+    /// needs to know.
+    static let stackOrder: [CaptureModality] = [.attach, .video, .photo, .voice, .note]
 
     var label: String {
         switch self {
