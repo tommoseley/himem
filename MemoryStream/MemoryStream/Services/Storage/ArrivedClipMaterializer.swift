@@ -29,31 +29,40 @@ enum ArrivedClipMaterializer {
     static func materialize(
         _ clip: InboxClip,
         in context: NSManagedObjectContext,
-        moveAudio: (String) -> Bool = moveAudioToVoiceStore
+        deleteAudio: (String) -> Bool = deleteArrivedAudio
     ) -> UUID? {
-        if refExists(id: clip.clipId, in: context) { return clip.clipId }
-        guard moveAudio(clip.audioFilename) else { return nil }
+        if entryExists(id: clip.clipId, in: context) { return clip.clipId }
 
-        let ref = MediaReference(context: context)
-        ref.id = clip.clipId                    // KEY: dedup + cross-device convergence
-        ref.osIdentifier = clip.audioFilename
-        ref.mediaType = MediaReference.MediaType.voice.rawValue
-        ref.createdAt = clip.capturedAt
-        ref.transcript = clip.transcript
-        ref.rollGroupId = clip.rollGroupId
-        ref.latitude = clip.latitude.map { NSNumber(value: $0) }
-        ref.longitude = clip.longitude.map { NSNumber(value: $0) }
-        ref.sourceDevice = clip.source
-        ref.isAccessible = true
+        let entry = JournalEntry(context: context)
+        // **KEY: the memory takes the CLIP's id**, exactly as the ref used to,
+        // and for the same two reasons. The drain can run repeatedly without
+        // duplicating, and two devices materializing the same arrival converge
+        // on ONE CloudKit record rather than racing to create two memories.
+        // `StorageService.createEntry` mints its own UUID, so this path builds
+        // the entry directly rather than calling it — the id is the invariant,
+        // not the convenience.
+        entry.id = clip.clipId
+        entry.content = clip.transcript
+        entry.inputType = JournalEntry.InputType.voiceInApp.rawValue
+        entry.sourceDevice = clip.source
+        entry.createdAt = clip.capturedAt
+        // `title` is DELIBERATELY NOT TOUCHED, not even to nil. This is an
+        // automatic path, and `TitleAuthorshipTests.noAutomaticPathWritesTheTitle`
+        // scans for any write to `entry.title` outside a user-initiated one —
+        // there is no `titleUserEdited` marker to fall back on, so that scan is
+        // the only guarantee. Writing nil would satisfy the intent and still
+        // break the property the scanner reports. Core Data leaves it nil;
+        // Organize names the memory, when she asks.
         try? context.save()
 
-        // Per-device `reviewed` carries into the ref-keyed store (stays
-        // per-device by design — risk-2, not synced).
-        if clip.reviewed { BenchClipReviewStore.markReviewed(clip.clipId) }
-        // Cache the payload duration (the ref has no duration attribute) so the
-        // bench card shows real session length on the originating device.
-        BenchClipDurationStore.record(clip.clipId, clip.duration)
-        // Demote the manifest active row → ref is now the source of truth.
+        // **The audio is discarded — this is the point of the change.** It was
+        // moved into the voice store here; now it is deleted, because the words
+        // are the artifact and the recording is how they arrived. Ordered AFTER
+        // the save so a crash between the two loses the file rather than the
+        // words, which is the survivable direction.
+        _ = deleteAudio(clip.audioFilename)
+
+        // Demote the manifest active row → the memory is now the only record.
         // Tombstones the clip, gating a late watch redelivery (risk-3).
         InboxManifest.shared.removeBatch(clipIds: [clip.clipId])
         return clip.clipId
@@ -75,11 +84,11 @@ enum ArrivedClipMaterializer {
     @MainActor
     static func materializeAll(
         in context: NSManagedObjectContext,
-        moveAudio: (String) -> Bool = moveAudioToVoiceStore
+        deleteAudio: (String) -> Bool = deleteArrivedAudio
     ) -> Int {
         let transcribed = InboxManifest.shared.clips.filter { $0.status == .transcribed }
         var count = 0
-        for clip in transcribed where materialize(clip, in: context, moveAudio: moveAudio) != nil { count += 1 }
+        for clip in transcribed where materialize(clip, in: context, deleteAudio: deleteAudio) != nil { count += 1 }
         return count
     }
 
@@ -127,6 +136,15 @@ enum ArrivedClipMaterializer {
         )
     }
 
+    /// True when a memory with this id already exists — the idempotency guard,
+    /// and the belt against a double-materialize or a cross-device race.
+    static func entryExists(id: UUID, in context: NSManagedObjectContext) -> Bool {
+        let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        return ((try? context.count(for: req)) ?? 0) > 0
+    }
+
     /// True when a `MediaReference` with this id already exists — the
     /// idempotency guard (also the belt against a double-materialize).
     static func refExists(id: UUID, in context: NSManagedObjectContext) -> Bool {
@@ -134,6 +152,31 @@ enum ArrivedClipMaterializer {
         req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         req.fetchLimit = 1
         return ((try? context.count(for: req)) ?? 0) > 0
+    }
+
+    /// **Discard the arrived audio.** It has been transcribed; the words are in
+    /// the memory; the recording has done its job.
+    ///
+    /// Supersedes `moveAudioToVoiceStore`, which moved the file `Inbox/ →
+    /// Audio/` so a voice ref could resolve it. There is no voice ref and no
+    /// playback: *audio is not stored, anywhere* (2026-09-17, retiring "audio
+    /// is the source of truth"). A bad transcription is corrected by editing
+    /// the text.
+    ///
+    /// Tries both locations because a redelivery can land a fresh copy in
+    /// `Inbox/` after an earlier pass, and historical installs may still hold
+    /// files under `Audio/`. Returns true when nothing remains either way —
+    /// absence is success here, not failure.
+    @discardableResult
+    static func deleteArrivedAudio(_ filename: String) -> Bool {
+        guard !filename.isEmpty else { return true }
+        // `removeFromStore` refuses anything outside our own store root, which
+        // is the guard that keeps this from ever reaching a foreign URL.
+        for url in [InboxManifest.audioURL(for: filename), SpeechService.audioURL(for: filename)]
+        where FileManager.default.fileExists(atPath: url.path) {
+            UbiquityStore.shared.removeFromStore(at: url)
+        }
+        return true
     }
 
     /// Move the clip's audio `Inbox/ → Audio/` so `MediaResolver` finds it

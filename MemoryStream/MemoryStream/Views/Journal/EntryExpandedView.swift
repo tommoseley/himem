@@ -1912,3 +1912,41 @@ enum MemoryDetailFAB {
         return .full
     }
 }
+
+// MARK: - Empty writing invite
+
+/// What the writing slot says when a memory has no words yet.
+///
+/// **§4 · honest absence for a recording that found no speech** (Tom,
+/// 2026-09-17). She spoke, we heard nothing, and the memory exists anyway —
+/// not an error and not a discard. *We never discard work the user walked away
+/// from* still holds; what we kept is the memory, not the silence.
+///
+/// **Copy, not schema — and that constraint shaped this.** The distinction
+/// between *ran and heard nothing* and *deliberately left blank* is read from
+/// state the entry ALREADY carries (`sourceDevice` + `inputType` + an empty
+/// body), so nothing new is stored to remember it. It is also why the sentence
+/// is an INVITE rather than the entry's content: writing it into `content`
+/// would satisfy "says something true" and then make her delete our words
+/// before typing her own.
+enum EmptyWritingInvite {
+
+    /// Nil when no invite belongs — the memory already has writing, or it is
+    /// blank because she left it blank.
+    static func text(
+        isEmpty: Bool,
+        sourceDevice: JournalEntry.SourceDevice,
+        inputType: JournalEntry.InputType
+    ) -> String? {
+        guard isEmpty else { return nil }
+        // A recording is the only thing that can arrive empty without her
+        // having chosen emptiness.
+        let cameFromARecording = sourceDevice == .watch
+            && (inputType == .voiceInApp || inputType == .siri)
+        guard cameFromARecording else { return nil }
+        // Crucible: describe the state, never blame, never an error register.
+        // "We didn't catch" owns it on our side; "write what you meant to"
+        // hands her the next action rather than describing a failure.
+        return "We didn't catch any words. Write what you meant to."
+    }
+}
