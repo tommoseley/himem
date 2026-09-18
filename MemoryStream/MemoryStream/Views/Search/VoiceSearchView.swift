@@ -23,7 +23,10 @@ struct VoiceSearchView: View {
         }
         .onAppear {
             speechService.transcribedText = ""
-            speechService.startRecording()
+            // Dictating a query needs the WORDS, never the audio. This
+            // surface has never read `lastRecordingPath`; before §5 it was
+            // silently leaving a `.caf` on disk for every search.
+            speechService.startRecording(retainingAudio: false)
             startSilenceWatcher()
         }
         .onDisappear {

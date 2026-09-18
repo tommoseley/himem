@@ -288,7 +288,27 @@ final class SpeechService: ObservableObject {
 
     // MARK: - Recording
 
-    func startRecording() {
+    /// Start the microphone and the live transcriber.
+    ///
+    /// **`retainingAudio` IS THE SEAM** (§5, 2026-09-18), and it has no default
+    /// ON PURPOSE. Two surfaces run this engine for opposite reasons:
+    ///
+    /// - **voice search** wants the WORDS. It reads `transcribedText` live and
+    ///   never touches the file — it has no business writing one, and never
+    ///   did.
+    /// - **the voice composer** wants the FILE. `lastRecordingPath` exists for
+    ///   it and has exactly three readers, all inside `VoiceCaptureScreen`.
+    ///
+    /// Those are the two halves the phone-voice retirement cuts between, so the
+    /// line is drawn here BEFORE the deletion rather than carved out during it.
+    /// Omitting a default is the mechanism rather than the manners: a caller
+    /// cannot inherit file-writing by saying nothing, which is precisely how a
+    /// surface that only wanted words would end up leaving audio on disk.
+    ///
+    /// When §5.4 removes the composer this parameter becomes one-valued, and
+    /// then — per the `CaptureSource` lesson — the parameter goes with it
+    /// rather than sitting defaulted.
+    func startRecording(retainingAudio: Bool) {
         NSLog("[HiMem][Speech] startRecording entered authorized=\(isAuthorized) modelReady=\(isModelReady)")
         guard isAuthorized else {
             NSLog("[HiMem][Speech] aborted: not authorized")
@@ -341,8 +361,9 @@ final class SpeechService: ObservableObject {
         // surfaces compose cleanly (none today, but cheap insurance).
         WakeLock.shared.acquire()
 
-        let filename = UUID().uuidString + ".caf"
-        let fileURL = Self.audioDirectory.appendingPathComponent(filename)
+        let fileURL: URL? = retainingAudio
+            ? Self.audioDirectory.appendingPathComponent(UUID().uuidString + ".caf")
+            : nil
         currentRecordingURL = fileURL
 
         let engine = AVAudioEngine()
@@ -351,12 +372,18 @@ final class SpeechService: ObservableObject {
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         NSLog("[HiMem][Speech] engine input format: \(recordingFormat)")
 
-        do {
-            audioFile = try AVAudioFile(forWriting: fileURL, settings: recordingFormat.settings)
-            let existsAfterInit = FileManager.default.fileExists(atPath: fileURL.path)
-            NSLog("[HiMem][Speech][fileTrace] audio file init OK filename=\(filename) exists=\(existsAfterInit) path=\(fileURL.path)")
-        } catch {
-            NSLog("[HiMem][Speech][fileTrace] audio file init FAILED filename=\(filename) error=\(error.localizedDescription) path=\(fileURL.path)")
+        if let fileURL {
+            do {
+                audioFile = try AVAudioFile(forWriting: fileURL, settings: recordingFormat.settings)
+                let existsAfterInit = FileManager.default.fileExists(atPath: fileURL.path)
+                NSLog("[HiMem][Speech][fileTrace] audio file init OK filename=\(fileURL.lastPathComponent) exists=\(existsAfterInit) path=\(fileURL.path)")
+            } catch {
+                NSLog("[HiMem][Speech][fileTrace] audio file init FAILED filename=\(fileURL.lastPathComponent) error=\(error.localizedDescription) path=\(fileURL.path)")
+                audioFile = nil
+            }
+        } else {
+            // Transcribe-only: no file is created, so there is nothing to
+            // clean up and nothing for `lastRecordingPath` to report.
             audioFile = nil
         }
 

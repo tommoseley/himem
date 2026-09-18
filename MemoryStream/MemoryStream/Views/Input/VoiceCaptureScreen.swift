@@ -785,7 +785,10 @@ struct VoiceCaptureScreen: View {
     // Siri recording.
 
     private func startRecording() {
-        speechService.startRecording()
+        // The composer is the FILE side of the seam: `lastRecordingPath` is
+        // read three times in this file and nowhere else. §5.4 removes this
+        // surface, and the file-writing branch goes with it.
+        speechService.startRecording(retainingAudio: true)
         // VoiceRecordingController owns the elapsed counter +
         // waveform buffer + their reset/lifecycle. See
         // `Views/Input/VoiceRecordingController.swift`.
