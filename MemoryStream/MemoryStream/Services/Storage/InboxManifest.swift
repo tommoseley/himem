@@ -755,14 +755,6 @@ final class InboxManifest: ObservableObject {
     private func replace(with next: [InboxClip]) {
         let previousIds = Set(clips.map(\.clipId))
         let nextIds = Set(next.map(\.clipId))
-        // New arrivals = ids in `next` that weren't there before.
-        // Presence, not count — per `CLAUDE.md` §Phone (July 10 2026)
-        // "the dot represents new, unseen arrivals and clears when
-        // the user opens Clips."
-        if !nextIds.subtracting(previousIds).isEmpty {
-            hasUnseenArrivals = true
-            UserDefaults.standard.set(true, forKey: Self.unseenArrivalsKey)
-        }
         clips = next
         // Prune-on-write hook: any dismissed-cluster record whose
         // clipIds are no longer all in the inbox becomes dead
@@ -1262,26 +1254,27 @@ final class InboxManifest: ObservableObject {
         syncIconBadge(to: 0)
     }
 
-    // MARK: - Unseen-arrivals dot (presence, not count)
-
-    /// Persistent key for the "there are new arrivals the user hasn't
-    /// seen yet" flag.
-    private static let unseenArrivalsKey = "himem.inbox.hasUnseenArrivals"
-
-    /// User has arrivals they haven't reviewed since the last time
-    /// they opened the Clips tab. Drives the presence dot on the
-    /// Clips tab item per `CLAUDE.md` §Phone (July 10 2026) — never
-    /// a count.
-    @Published var hasUnseenArrivals: Bool = UserDefaults.standard.bool(forKey: InboxManifest.unseenArrivalsKey)
-
-    /// Clears the presence-dot flag. HiMemTabView calls this when the
-    /// user selects the Clips tab. Persistent so a re-launch remembers
-    /// the "seen" state.
-    func markAllSeen() {
-        guard hasUnseenArrivals else { return }
-        hasUnseenArrivals = false
-        UserDefaults.standard.set(false, forKey: Self.unseenArrivalsKey)
-    }
+    // THE UNSEEN-ARRIVALS DOT IS RETIRED (I1b, 2026-09-18) — `hasUnseenArrivals`,
+    // `markAllSeen()` and the `himem.inbox.hasUnseenArrivals` key.
+    //
+    // It answered "should I look?" about the Clips tab, as presence rather than
+    // a count, because a number reintroduces the guilt-inbox this product
+    // rejects. I1a removed the tab it marked and the dot that drew it; this
+    // removes the state behind them — the half that reached into a service
+    // surviving the retirement, which is why it was split out.
+    //
+    // **The question it answered has no surface left.** A Watch recording no
+    // longer waits to be looked at: it transcribes on arrival and becomes a
+    // memory (§1), so nothing is unseen to point at. Channel A still says a
+    // recording arrived — that is reassurance about something that already
+    // landed, not a marker on a pile.
+    //
+    // *Residue, named because it is invisible:* the UserDefaults key stays set
+    // on any device that has it. Nothing reads it, and it is a lone Bool rather
+    // than id-keyed state, so it cannot one day answer a question about a row
+    // that no longer exists (CLAUDE.md § Per-Device State Keyed by Content Id).
+    // Left rather than migrated — a launch-time delete would be more code than
+    // the stale byte it removes.
 
     #if DEBUG
     /// Test seam — replaces the manifest's `clips` and
