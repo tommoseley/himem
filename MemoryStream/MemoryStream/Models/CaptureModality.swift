@@ -27,7 +27,14 @@ enum CaptureModality: String, CaseIterable, Identifiable {
     /// `sfSymbol` + `color` rather than translating canvas glyphs by eye). So
     /// reordering here moves the FAB and the tour together, and nothing else
     /// needs to know.
-    static let stackOrder: [CaptureModality] = [.attach, .video, .photo, .voice, .note]
+    ///
+    /// **The order is fixed by the TOUR's sequence, not the FAB's** (Tom,
+    /// 2026-09-18). Reversed, this reads **pen → camera → camera → microphone
+    /// → paperclip**, and the tour is where she learns the order. Putting the
+    /// cameras ahead of the microphone IS the demotion — an arrangement that
+    /// left voice second would have moved it off the thumb while still
+    /// teaching it first, which is half a change.
+    static let stackOrder: [CaptureModality] = [.attach, .voice, .video, .photo, .note]
 
     var label: String {
         switch self {
