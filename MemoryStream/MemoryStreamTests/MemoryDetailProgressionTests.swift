@@ -100,7 +100,7 @@ import Foundation
     ///
     /// **It also stopped being the whole truth.** Suppressing the FAB *entirely*
     /// here removed the paperclip, which after the vocabulary retirement is the
-    /// only way a Watch recording enters a memory — and a new memory is exactly
+    /// only way a photo or video enters a memory — and a new memory is exactly
     /// the state this rule fires in. F33's concern was the capture stack
     /// covering the card, and `.paperclipOnly` satisfies it; the fuller
     /// behaviour is pinned in `MemoryDetailFABModeTests`.

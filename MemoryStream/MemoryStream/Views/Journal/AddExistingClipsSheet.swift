@@ -2,11 +2,18 @@ import SwiftUI
 import CoreData
 import UIKit
 
-/// Memory Detail FAB · path 2: add existing loose clips from the bench
-/// into this memory (`Memory Detail · unified editing model.md` §"Adding
-/// clips to a memory"). Lists every unconnected bench clip
-/// (`edges.@count == 0`, not recycled) for multi-select; confirming
-/// attaches them via new `MemoryClipEdge`s in the tapped order.
+/// Memory Detail FAB · path 2: add something she already has into this memory
+/// (`Memory Detail · unified editing model.md` §"Adding clips to a memory").
+/// Lists every unplaced part (`edges.@count == 0`, not recycled) for
+/// multi-select; confirming attaches them via new `MemoryClipEdge`s in the
+/// tapped order.
+///
+/// **§1 (2026-09-18): this serves PHOTOS, VIDEO AND NOTES.** A Watch recording
+/// no longer waits here — it transcribes on arrival and becomes a memory of its
+/// own, because a transcript IS writing and has no reason to wait for a
+/// decision. A photo is not writing, so it has a genuine reason to sit until
+/// she says where it belongs. Different objects, different needs; one rule was
+/// flattening them.
 ///
 /// The attach itself runs in the host's `onAdd` callback (which owns the
 /// `EntryLifecycleService`) via `attachExistingClips` — that regenerates
@@ -29,13 +36,6 @@ struct AddExistingClipsSheet: View {
     @State private var selected: [UUID] = []
     /// F22 · the one fact this view reads before it claims to be empty.
     @ObservedObject private var firstImport = FirstImportState.shared
-    /// Watch recordings still in flight. The manifest is the only place that
-    /// knows about a recording which has not yet become a `MediaReference`,
-    /// so it is read here rather than inferred from the absence of rows.
-    @ObservedObject private var inbox = InboxManifest.shared
-
-    /// The foot-of-sheet state line, or nil when nothing is arriving.
-    private var arriving: String? { Self.arrivingLine(clips: inbox.clips) }
 
     init(onAdd: @escaping ([UUID]) -> Void) {
         self.onAdd = onAdd
@@ -57,22 +57,11 @@ struct AddExistingClipsSheet: View {
                     // importing rather than claiming every clip is already placed.
                     if !looseClips.isEmpty {
                         clipList
-                    } else if firstImport.mayAssertEmpty && arriving == nil {
-                        // `arriving == nil` extends the SAME F22 rule the
-                        // `mayAssertEmpty` gate encodes: don't assert emptiness
-                        // while something is still on its way. Without it the
-                        // empty state reads "Every clip you've captured is
-                        // already in a memory" *while recordings are arriving*
-                        // — a confident falsehood, the F6i `0:00` class. The
-                        // arriving line below carries the true state instead.
+                    } else if firstImport.mayAssertEmpty {
                         emptyState
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                if let arriving {
-                    arrivingFooter(arriving)
-                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Crucible.Color.paper)
@@ -92,7 +81,7 @@ struct AddExistingClipsSheet: View {
                 // eligible and each is guarded by `refExists`.
                 ArrivedClipMaterializer.materializeAll(in: StorageService.shared.viewContext)
             }
-            .navigationTitle("Add clips")
+            .navigationTitle("Add existing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -117,16 +106,22 @@ struct AddExistingClipsSheet: View {
         selected.isEmpty ? "Add" : "Add \(selected.count)"
     }
 
-    /// The quiet foot-of-sheet line naming recordings that exist but are not
-    /// yet selectable.
+    /// The quiet line naming recordings that exist but are not yet visible.
     ///
-    /// **Why it exists.** This sheet lists zero-edge `MediaReference`s, and a
-    /// Watch recording only becomes one once it has fully arrived and
-    /// transcribed (`ArrivedClipMaterializer`). A recording still in flight is
-    /// therefore absent from the list — which was fine while the bench showed
-    /// arrival state, and is not fine once the bench is gone: she recorded
-    /// something, it is not in the list, and nothing explains why. That is the
-    /// "safe but unseen" failure in miniature (Tom, 2026-09-16).
+    /// **NOT RENDERED HERE ANY MORE (§1, 2026-09-18), and this is a factual
+    /// correction rather than a style change.** A recording no longer becomes a
+    /// part — it becomes a MEMORY — so counting in-flight recordings on THIS
+    /// sheet described things that would never appear in this list. Rewording
+    /// it to be about media instead would have been falser still: media refs
+    /// are created synchronously (`PhoneCaptureBenchDispatcher.insertUnplacedRef`),
+    /// so nothing is ever in flight toward the paperclip.
+    ///
+    /// **The promise it was built for is intact and now unhomed.** She records
+    /// on her Watch, and there is a window in which nothing shows it — the
+    /// safe-but-unseen failure. That window moved to the Memories surface along
+    /// with the recording. The function and its tests are kept so re-homing it
+    /// is a one-line re-wire rather than a rebuild; where it belongs is a
+    /// surface decision, raised not assumed.
     ///
     /// Posture matches the missing-media rule — **name the state, don't
     /// apologise for it**, and don't dramatise it: no spinner, no progress bar,
@@ -155,7 +150,7 @@ struct AddExistingClipsSheet: View {
     private var clipList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
-                Text("Clips not yet in any memory")
+                Text("Not yet in a memory")
                     .font(.system(size: 12, weight: .semibold))
                     .tracking(0.4)
                     .foregroundStyle(Crucible.Color.ink3)
@@ -184,28 +179,6 @@ struct AddExistingClipsSheet: View {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
-    /// The quiet state line for recordings that exist but are not yet
-    /// selectable. Deliberately inert: no spinner, no progress bar, no action —
-    /// it names the state and stops, per the missing-media posture (*"This
-    /// recording was moved or deleted"*), which describes rather than
-    /// apologises. Muted ink so it reads as a fact about the list, not a
-    /// notice competing with it.
-    private func arrivingFooter(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 13))
-            .foregroundStyle(Crucible.Color.ink3)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 19)
-            .padding(.vertical, 13)
-            .background(Crucible.Color.paper)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(Crucible.Color.hairline)
-                    .frame(height: 1)
-            }
-            .accessibilityLabel(text)
-    }
-
     /// Gated by the caller on `firstImport.mayAssertEmpty` — this claim
     /// ("every clip is already in a memory") is only true once the import has
     /// finished looking.
@@ -214,10 +187,10 @@ struct AddExistingClipsSheet: View {
             Image(systemName: "tray")
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(Crucible.Color.ink4)
-            Text("No unconnected clips")
+            Text("Nothing loose")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Crucible.Color.ink)
-            Text("Every clip you've captured is already in a memory. New clips — from +, your Watch, or Siri — show up here to add.")
+            Text("Everything you've captured is already in a memory. Photos and videos you haven't placed yet show up here.")
                 .font(.system(size: 14))
                 .foregroundStyle(Crucible.Color.ink3)
                 .multilineTextAlignment(.center)

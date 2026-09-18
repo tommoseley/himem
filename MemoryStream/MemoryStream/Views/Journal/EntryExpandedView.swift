@@ -1867,10 +1867,15 @@ private struct MediaFragmentEditorStack: ViewModifier {
 /// whole FAB whenever the Organize card was on screen (F33, to stop the 60pt
 /// button covering the card). That was correct when the paperclip was a
 /// convenience — and became a defect the moment the paperclip was the only way
-/// a Watch recording enters a memory, because a freshly-created memory is
+/// **a photo or video** enters a memory, because a freshly-created memory is
 /// short, so the Organize card is on screen at rest and the FAB is gone from
 /// the moment she opens it. She could not reach the one affordance that
 /// matters on exactly the memories it matters for.
+///
+/// *(Corrected 2026-09-18: this read "a Watch recording" when written. §1 made
+/// a recording become a memory of its own, so it never passes through here.
+/// The defect and the fix are unchanged — only the object that would have been
+/// stranded.)*
 ///
 /// Three booleans in a view's `if` cannot be tested and cannot be read. This
 /// can be both.

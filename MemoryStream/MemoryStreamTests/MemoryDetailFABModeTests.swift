@@ -21,7 +21,8 @@ import Foundation
 ///
 /// **F33's rule was right when written and became wrong when the paperclip
 /// became load-bearing.** After the vocabulary retirement it is the only route
-/// by which a Watch recording enters a memory. Ruled (Tom, 2026-09-17): the
+/// by which a photo or video enters a memory (a recording transcribes on
+/// arrival and becomes a memory of its own — §1). Ruled (Tom, 2026-09-17): the
 /// Organize card **demotes** the FAB to the paperclip alone rather than hiding
 /// it.
 @Suite struct MemoryDetailFABModeTests {
