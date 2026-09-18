@@ -45,68 +45,28 @@ struct CaptureLandingRouterTests {
         #expect(intent == .createMemoryInProject(projectId))
     }
 
-    // MARK: - Hands-free (Siri) source
+    // THE HANDS-FREE SUITE IS RETIRED BY SUPERSESSION (2026-09-18), and this
+    // time the SUBJECT went, not just the answer.
     //
-    // **F3 · the answer changed; the question did not** (Tom, 2026-09-16).
+    //   handsFree_on_memories_createsAMemory
+    //   handsFree_insideAProject_createsAPlainMemory_notOneInThatProject
+    //   handsFree_onProjectsList_createsAMemory_neverTheNewProjectSheet
+    //   handsFree_hasOneDestinationFromEveryScreen
     //
-    // These tests used to assert `.dropOnBench` for every hands-free capture —
-    // the July 2026 lock that ad-hoc capture is *never forced into a memory*,
-    // because the bench was the alternative destination. The vocabulary
-    // retirement deletes the bench, so that invariant's PREMISE EXPIRED: with
-    // no second destination there is nothing left for the rule to protect.
-    // (Same shape as D1's expired premise — the rule did not become wrong, the
-    // world it described moved.)
+    // F3 rewrote these rather than retiring them, because the question — *where
+    // does a hands-free capture land?* — still had an answer; only the answer
+    // had moved. The intent fold removes the question: `StartVoiceRecordingIntent`
+    // is now `CreateEntryIntent`, which writes a memory directly and never opens
+    // a recorder, so no capture is hands-free and `CaptureSource` is gone.
     //
-    // `StartVoiceRecordingIntent` now creates a memory of one voice part.
-    // The subject of these tests — *where does a hands-free capture land?* —
-    // is unchanged, so they are REWRITTEN rather than retired; only the
-    // expected answer moved.
-    //
-    // The branch is INVERTED, not deleted. Falling through to the tab would
-    // route a Siri recording made on the Projects list to
-    // `.openNewProjectSheet` — a sheet that cannot hold a recording, and with
-    // the bench gone there is no fallback to catch it. Hands-free capture has
-    // one destination, and it is the same one from every screen.
+    // Nothing is left unguarded. A Siri capture's landing is now asserted where
+    // it happens — `CreateEntryIntent` calls `createEntry(content:inputType:)`
+    // — rather than through a routing table it no longer consults.
 
-    @Test func handsFree_on_memories_createsAMemory() {
-        let intent = CaptureLandingRouter.route(tab: .memories, projectContext: nil, source: .handsFree)
-        #expect(intent == .createMemory)
-    }
-
-    @Test func handsFree_insideAProject_createsAPlainMemory_notOneInThatProject() {
-        // She is not filing; she is catching a thought hands-free. The memory
-        // is discovered in the Memories list, newest first — it does not
-        // silently join whatever project happened to be on screen.
-        let intent = CaptureLandingRouter.route(tab: .projects, projectContext: UUID(), source: .handsFree)
-        #expect(intent == .createMemory)
-    }
-
-    @Test func handsFree_onProjectsList_createsAMemory_neverTheNewProjectSheet() {
-        // The hole that makes this an inversion rather than a deletion: a
-        // recording cannot land in a name-and-goal sheet.
-        let intent = CaptureLandingRouter.route(tab: .projects, projectContext: nil, source: .handsFree)
-        #expect(intent == .createMemory)
-    }
-
-    @Test func handsFree_hasOneDestinationFromEveryScreen() {
-        // The property, stated once: the visible tab does not influence a
-        // hands-free landing at all. Enumerated rather than sampled, so a new
-        // tab cannot quietly acquire its own hands-free behaviour.
-        let everyScreen: [(CaptureLandingRouter.Tab, UUID?)] = [
-            (.clips, nil), (.memories, nil), (.projects, nil), (.projects, UUID())
-        ]
-        for (tab, project) in everyScreen {
-            #expect(
-                CaptureLandingRouter.route(tab: tab, projectContext: project, source: .handsFree) == .createMemory,
-                "hands-free must land identically from every screen; \(tab) differed"
-            )
-        }
-    }
-
-    @Test func manual_source_is_the_default_and_unchanged() {
-        // Explicit `.manual` matches the default-param behavior the existing
-        // tests exercise — the tab still decides.
-        #expect(CaptureLandingRouter.route(tab: .memories, projectContext: nil, source: .manual) == .createMemory)
+    /// The tab decides, and it is the ONLY thing that decides. Kept as the
+    /// positive statement of what replaced the source parameter.
+    @Test func theTabIsTheOnlyInput() {
         #expect(CaptureLandingRouter.route(tab: .memories, projectContext: nil) == .createMemory)
+        #expect(CaptureLandingRouter.route(tab: .clips, projectContext: nil) == .dropOnBench)
     }
 }

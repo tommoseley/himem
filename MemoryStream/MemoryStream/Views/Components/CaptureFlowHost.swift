@@ -22,10 +22,6 @@ struct CaptureFlowHost: ViewModifier {
     /// the append composer is identical to direct-voice plus this
     /// pill. Pass `nil` for capture-new flows.
     let appendingTo: String?
-    /// How the capture was initiated — threaded to the voice composer so a
-    /// hands-free (Siri) recording gets the recording cap and a held one
-    /// doesn't. See `CaptureSource`.
-    var captureSource: CaptureSource = .manual
     let onCaptured: (CapturedItem) -> Void
 
     @State private var isMountingCamera = false
@@ -60,8 +56,7 @@ struct CaptureFlowHost: ViewModifier {
                     },
                     onCancel: {},
                     speechService: speechService,
-                    appendingTo: appendingTo,
-                    captureSource: captureSource
+                    appendingTo: appendingTo
                 )
             }
             .sheet(isPresented: noteBinding) {
@@ -229,14 +224,12 @@ extension View {
         activeModality: Binding<CaptureModality?>,
         speechService: SpeechService,
         appendingTo: String? = nil,
-        captureSource: CaptureSource = .manual,
         onCaptured: @escaping (CapturedItem) -> Void
     ) -> some View {
         modifier(CaptureFlowHost(
             activeModality: activeModality,
             speechService: speechService,
             appendingTo: appendingTo,
-            captureSource: captureSource,
             onCaptured: onCaptured
         ))
     }

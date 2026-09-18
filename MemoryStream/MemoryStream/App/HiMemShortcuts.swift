@@ -4,83 +4,24 @@ import Combine
 
 // MARK: - Capture-request bus
 
-/// In-process signal that something (today: a Siri AppIntent) asked
-/// HiMem to open its voice composer. `JournalView` observes
-/// `pendingVoiceRecord` and, when it flips true, presents the voice
-/// composer (which auto-starts recording on appear). View clears the
-/// flag after handling so the next intent invocation re-triggers.
+/// In-process signal that a shared surface asked HiMem to open a composer.
 ///
-/// Lives in-process because AppIntents with `openAppWhenRun: true`
-/// run in the app's main process after launch — no cross-process /
-/// UserDefaults plumbing is necessary.
+/// **The Siri RECORDING flags are gone (2026-09-18).** `pendingVoiceRecord`,
+/// `stopRequested` and `lastSavedMinutes` existed for
+/// `StartVoiceRecordingIntent` / `StopVoiceRecordingIntent`, which folded into
+/// `CreateEntryIntent` — Siri already transcribes, so a spoken capture keeps
+/// the words and discards the recording, which is what `CreateEntryIntent`
+/// has always done.
+///
+/// Lives in-process because AppIntents with `openAppWhenRun: true` run in the
+/// app's main process after launch — no cross-process plumbing needed.
 @MainActor
 final class CaptureRequestBus: ObservableObject {
     static let shared = CaptureRequestBus()
-    /// Legacy Siri flag — kept for the `StartVoiceRecordingIntent`
-    /// backward-compat path. New code should prefer `pendingModality`
-    /// which carries the modality explicitly.
-    @Published var pendingVoiceRecord: Bool = false
-    /// Any modality request from a shared surface (the tab-level
-    /// AppendFAB, Siri, App Shortcuts). The HiMemTabView owns the
-    /// capture flow now — per the July 10 2026 lock in
-    /// `HiMem · evidence and context.md:143`, capture floats on
-    /// every tab and returns to Clips on commit.
+    /// Any modality request from a shared surface (the tab-level AppendFAB,
+    /// App Shortcuts). `HiMemTabView` owns the capture flow.
     @Published var pendingModality: CaptureModality? = nil
-    /// Set by `StopVoiceRecordingIntent` ("Hey Siri, stop recording in HiMem")
-    /// so the phone isn't the only way to stop a hands-free recording. The live
-    /// voice composer observes this and stops-and-saves (never discards). No-op
-    /// when no recording is in flight.
-    @Published var stopRequested: Bool = false
-    /// Stamped by the composer the moment it stops-and-saves a hands-free
-    /// recording (Siri stop or cap), so `StopVoiceRecordingIntent` can speak the
-    /// real duration. Rounded minutes (min 1). Nil = nothing saved yet.
-    var lastSavedMinutes: Int? = nil
     private init() {}
-}
-
-// MARK: - Start Voice Recording Intent
-
-struct StartVoiceRecordingIntent: AppIntent {
-    static var title: LocalizedStringResource = "Record a memory in HiMem"
-    static var description: IntentDescription = "Open HiMem and start recording a voice memory."
-    static var openAppWhenRun: Bool = true
-
-    @MainActor
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        CaptureRequestBus.shared.pendingVoiceRecord = true
-        return .result(dialog: "Recording.")
-    }
-}
-
-// MARK: - Stop Voice Recording Intent
-
-/// "Hey Siri, stop recording in HiMem" — stops and saves the in-flight voice
-/// recording (never discards, same rule as watch wrist-off). `openAppWhenRun`
-/// so the intent runs in the app process and the in-memory `CaptureRequestBus`
-/// reaches the live composer; the app is already foreground while recording, so
-/// this doesn't yank the user anywhere.
-struct StopVoiceRecordingIntent: AppIntent {
-    static var title: LocalizedStringResource = "Stop recording in HiMem"
-    static var description: IntentDescription = "Stop and save the voice recording HiMem is capturing."
-    static var openAppWhenRun: Bool = true
-
-    @MainActor
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        let bus = CaptureRequestBus.shared
-        bus.lastSavedMinutes = nil
-        bus.stopRequested = true
-        // Wait briefly for the live composer to stop-and-stamp the duration, so
-        // the spoken confirmation carries the real length (same string a
-        // cap-triggered save uses — the limit never reads as an error).
-        for _ in 0..<30 {
-            if let minutes = bus.lastSavedMinutes {
-                return .result(dialog: "\(VoiceCaptureScreen.savedConfirmation(minutes: minutes))")
-            }
-            try? await Task.sleep(nanoseconds: 50_000_000) // 50 ms × 30 = 1.5 s
-        }
-        // Nothing was recording — don't claim a save.
-        return .result(dialog: "Nothing was recording.")
-    }
 }
 
 // MARK: - Create Entry Intent
@@ -126,28 +67,15 @@ struct CreateEntryIntent: AppIntent {
 struct HiMemShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
-            intent: StartVoiceRecordingIntent(),
-            phrases: [
-                "Record in \(.applicationName)",
-                "Record a memory in \(.applicationName)",
-                "Start recording in \(.applicationName)",
-                "Voice memo in \(.applicationName)",
-            ],
-            shortTitle: "Record a memory",
-            systemImageName: "mic.fill"
-        )
-        AppShortcut(
-            intent: StopVoiceRecordingIntent(),
-            phrases: [
-                "Stop recording in \(.applicationName)",
-                "Stop the recording in \(.applicationName)",
-                "Finish recording in \(.applicationName)",
-            ],
-            shortTitle: "Stop recording",
-            systemImageName: "stop.fill"
-        )
-        AppShortcut(
             intent: CreateEntryIntent(),
+            // **The recording phrases folded in here (2026-09-18).** They
+            // belonged to `StartVoiceRecordingIntent`, which opened the app and
+            // ran the recorder. The words are the artifact and Siri already
+            // transcribes, so "Record in HiMem" and "Capture in HiMem" are one
+            // operation — and this one is BETTER at it: `openAppWhenRun: false`
+            // means it works from the lock screen without HiMem coming
+            // forward, which is closer to the perishability principle than
+            // launching an app to hold a microphone.
             phrases: [
                 "Capture in \(.applicationName)",
                 "Log in \(.applicationName)",
@@ -155,6 +83,9 @@ struct HiMemShortcuts: AppShortcutsProvider {
                 "Remember in \(.applicationName)",
                 "Note in \(.applicationName)",
                 "New entry in \(.applicationName)",
+                "Record in \(.applicationName)",
+                "Record a memory in \(.applicationName)",
+                "Voice memo in \(.applicationName)",
             ],
             shortTitle: "Capture a thought",
             systemImageName: "text.bubble"

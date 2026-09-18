@@ -14,7 +14,6 @@ struct SettingsView: View {
     @State private var refreshID = UUID()
     @AppStorage("voiceSilenceMode") private var voiceSilenceModeRaw = VoiceSilenceMode.standard.rawValue
     /// Hands-free (Siri) recording cap in minutes; `0` = No limit. Default 10.
-    @AppStorage("handsFreeRecordingLimitMinutes") private var handsFreeLimitMinutes = 10
     @AppStorage("tagMemoriesWithLocation") private var tagMemoriesWithLocation = true
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
     @AppStorage("appearance") private var appearanceRaw: String = Appearance.system.rawValue
@@ -230,13 +229,10 @@ struct SettingsView: View {
                     // something the app never did, about the exact behaviour
                     // now being retired (audio is not stored, anywhere). Third
                     // decoy this project has removed.
-                    Picker("Recording limit", selection: $handsFreeLimitMinutes) {
-                        Text("5 minutes").tag(5)
-                        Text("10 minutes").tag(10)
-                        Text("30 minutes").tag(30)
-                        Text("60 minutes").tag(60)
-                        Text("No limit").tag(0)
-                    }
+                    // "Recording limit" RETIRED 2026-09-18 with the
+                    // hands-free cap it set. It bounded an unattended Siri
+                    // recording; Siri no longer records. A picker whose value
+                    // nothing reads is the "Save voice recordings" shape again.
                     Picker("Voice search pace", selection: $voiceSilenceModeRaw) {
                         ForEach(VoiceSilenceMode.allCases) { mode in
                             Text("\(mode.label) · \(mode.subtitle)").tag(mode.rawValue)

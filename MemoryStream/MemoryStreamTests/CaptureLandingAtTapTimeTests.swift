@@ -41,7 +41,7 @@ struct CaptureLandingAtTapTimeTests {
 
         // At FAB-tap time, inside the project:
         let atTap = CaptureLandingRouter.route(
-            tab: .projects, projectContext: nav.currentProjectId, source: .manual
+            tab: .projects, projectContext: nav.currentProjectId
         )
         #expect(atTap == .createMemoryInProject(projectId))
 
@@ -51,7 +51,7 @@ struct CaptureLandingAtTapTimeTests {
 
         // At completion, same tab, same user intent — different answer.
         let atCompletion = CaptureLandingRouter.route(
-            tab: .projects, projectContext: nav.currentProjectId, source: .manual
+            tab: .projects, projectContext: nav.currentProjectId
         )
         #expect(atCompletion == .openNewProjectSheet)
         #expect(atTap != atCompletion, "This inequality IS the defect: routing at completion loses the project.")
@@ -73,22 +73,12 @@ struct CaptureLandingAtTapTimeTests {
         #expect(nav.currentProjectId == nil)
     }
 
-    /// Hands-free capture lands identically regardless of context — the
-    /// property this test has always guarded. Only the destination moved:
-    /// F3 (2026-09-16) retired the bench-forcing branch when the bench itself
-    /// was retired, and a hands-free capture now creates a memory of one voice
-    /// part. **A live project context must still not capture it.**
-    @Test @MainActor func handsFree_ignoresProjectContext_andCreatesAPlainMemory() {
-        let nav = ProjectsNavigationContext.shared
-        nav.debugReset()
-        defer { nav.debugReset() }
-        nav.enter(projectId: UUID())
-        #expect(
-            CaptureLandingRouter.route(
-                tab: .projects, projectContext: nav.currentProjectId, source: .handsFree
-            ) == .createMemory
-        )
-    }
+    // `handsFree_ignoresProjectContext_andCreatesAPlainMemory` RETIRED with
+    // `CaptureSource` (2026-09-18). It guarded that a live project context
+    // could not capture a hands-free recording; there are no hands-free
+    // captures now. The F25 defect this suite exists for — the landing being
+    // decided at COMPLETION from navigation state the capture flow destroys —
+    // is untouched and still guarded below.
 
     // MARK: - Caller guards (the reproduction)
 

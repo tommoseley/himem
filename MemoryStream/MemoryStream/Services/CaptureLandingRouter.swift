@@ -32,31 +32,18 @@ enum CaptureLandingIntent: Equatable {
     case openNewProjectSheet
 }
 
-/// How a capture session was initiated. A property of *intent*, not
-/// platform — it decides whether the completed capture is routed by the
-/// visible tab (manual) or forced onto the bench (ad-hoc/hands-free).
-enum CaptureSource: Equatable {
-    /// User-initiated in-app capture — the tab-level FAB or a composer the
-    /// user is actively holding. Routes by the visible tab per the July 10
-    /// context-aware-FAB lock.
-    case manual
-
-    /// Hands-free capture (Siri / "Hey Siri" App Intent). It creates a memory
-    /// of one voice part, identically from every screen — the visible tab and
-    /// any live project context are ignored (F3, Tom 2026-09-16). It used to
-    /// force the capture onto the Clips bench; that rule's premise expired
-    /// with the bench.
-    ///
-    /// **THIS CASE HAS A SECOND JOB, AND IT IS NOT THE ROUTING ONE.** It also
-    /// gates the hands-free recording cap — `VoiceCaptureScreen
-    /// .shouldAutoSaveAtLimit` caps `.handsFree` and never `.manual`, because a
-    /// recording nobody is holding must stop on its own. Do not delete this
-    /// case on the grounds that its routing use has changed or gone: that
-    /// would silently disable the walk-away cap with every routing test still
-    /// green. `RecordingCapTests` is what bites, and it is mutation-verified
-    /// against exactly that deletion.
-    case handsFree
-}
+// `CaptureSource` RETIRED 2026-09-18, and it collapsed rather than shrank.
+//
+// It had two cases. `.handsFree` marked a Siri capture, and did two unrelated
+// jobs: it forced the landing (bench first, then — after F3 — a memory from
+// every screen), and it gated the walk-away recording cap. The intent fold
+// removed the only producer of `.handsFree`: `StartVoiceRecordingIntent` is
+// now `CreateEntryIntent`, which writes a memory directly and never opens a
+// recorder, so no capture is hands-free any more.
+//
+// **A one-valued enum threaded through the router is a decoy the moment it
+// exists** (Tom, 2026-09-18), so the parameter went with the case rather than
+// being left defaulted. The routing is the tab's alone again.
 
 enum CaptureLandingRouter {
 
@@ -72,28 +59,7 @@ enum CaptureLandingRouter {
     /// Return the intent for `tab` given the current project context
     /// (`nil` unless the user has a project detail on screen) and how the
     /// capture was initiated.
-    static func route(tab: Tab, projectContext: UUID?, source: CaptureSource = .manual) -> CaptureLandingIntent {
-        // **F3 · hands-free capture creates a memory of one voice part** (Tom,
-        // 2026-09-16), from every screen, regardless of the visible tab.
-        //
-        // This branch used to return `.dropOnBench` under the July 2026 lock
-        // that ad-hoc capture is *never forced into a memory*. **That rule's
-        // premise expired rather than the rule being wrong:** it existed
-        // because the bench was the alternative destination, and the
-        // vocabulary retirement removes the bench. With no second destination
-        // there is nothing left for it to protect. (The same shape as D1 —
-        // the world the rule described moved.)
-        //
-        // INVERTED, not deleted. Falling through to the tab would route a Siri
-        // recording made on the Projects list to `.openNewProjectSheet` — a
-        // name-and-goal sheet that cannot hold a recording — and with the
-        // bench gone there is no fallback to catch it. A live project context
-        // is ignored for the same reason it is ignored on the Memories tab:
-        // she is catching a thought hands-free, not filing one. The memory is
-        // discovered in the Memories list, newest first.
-        if source == .handsFree {
-            return .createMemory
-        }
+    static func route(tab: Tab, projectContext: UUID?) -> CaptureLandingIntent {
         switch tab {
         case .clips:
             return .dropOnBench

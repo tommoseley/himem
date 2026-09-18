@@ -35,10 +35,6 @@ struct HiMemTabView: View {
     @State private var selection: Tab = .memories
     @AppStorage("fabHandednessLeft") private var fabHandednessLeft = false
     @State private var activeCaptureModality: CaptureModality? = nil
-    /// How the in-flight capture was initiated. `.handsFree` (Siri) lands the
-    /// completed capture in a memory from every screen (F3). Set at each
-    /// capture-initiation point; reset after the capture is handled.
-    @State private var captureSource: CaptureSource = .manual
     @StateObject private var speechService = SpeechService()
     @ObservedObject private var captureLanding = CaptureLandingBus.shared
     @ObservedObject private var captureRequests = CaptureRequestBus.shared
@@ -122,7 +118,6 @@ struct HiMemTabView: View {
                 .captureFlowHost(
                     activeModality: $activeCaptureModality,
                     speechService: speechService,
-                    captureSource: captureSource,
                     onCaptured: handleCapturedItem
                 )
         )
@@ -302,17 +297,6 @@ struct HiMemTabView: View {
             // leaving the tab is leaving it.
             learnOpenOn = nil
         }
-        // Siri backward-compat: `StartVoiceRecordingIntent` still sets
-        // `pendingVoiceRecord`. Route it through the shared modality
-        // pipeline. Cold-launch case (Siri set the flag before the view
-        // existed) is handled by the `.onAppear` drain below.
-        .onChange(of: captureRequests.pendingVoiceRecord) { _, pending in
-            if pending {
-                captureRequests.pendingVoiceRecord = false
-                captureSource = .handsFree // Siri → a memory of one part (F3)
-                activeCaptureModality = .voice
-            }
-        }
         .onAppear {
             // F8's first-run offer was RETIRED 2026-08-23. This `.onAppear`
             // fires when the tab shell mounts — which on a fresh install is
@@ -320,11 +304,6 @@ struct HiMemTabView: View {
             // there put the walkthrough's invitation underneath a tour that
             // was still asking the same question. The tour is the invitation;
             // page 7 enters at beat 1 via `startAtFirstBeat()`.
-            if captureRequests.pendingVoiceRecord {
-                captureRequests.pendingVoiceRecord = false
-                captureSource = .handsFree // Siri cold-launch → a memory of one part (F3)
-                DispatchQueue.main.async { activeCaptureModality = .voice }
-            }
             if let modality = captureRequests.pendingModality {
                 captureRequests.pendingModality = nil
                 // Same decision point as a FAB tap: pin the landing now,
@@ -414,27 +393,23 @@ struct HiMemTabView: View {
     /// presentation style clears what, only on reading the context while
     /// the user is demonstrably still inside the project.
     private func beginCapture(_ modality: CaptureModality) {
-        captureSource = .manual // FAB = user-initiated
         pendingLanding = CaptureLandingRouter.route(
             tab: routerTab(for: selection),
-            projectContext: projectsNav.currentProjectId,
-            source: .manual
+            projectContext: projectsNav.currentProjectId
         )
         activeCaptureModality = modality
     }
 
     private func handleCapturedItem(_ item: CapturedItem) {
         // Prefer the intent captured when the user tapped the FAB (F25).
-        // Fall back to a live route for captures that never touched the
-        // FAB — Siri / hands-free — where `source == .handsFree` already
-        // short-circuits to the bench regardless of the visible tab.
+        // The fallback covers a capture that never touched the FAB; since the
+        // intent fold there is no hands-free capture, so the live route is the
+        // tab's alone.
         let landing = pendingLanding ?? CaptureLandingRouter.route(
             tab: routerTab(for: selection),
-            projectContext: projectsNav.currentProjectId,
-            source: captureSource
+            projectContext: projectsNav.currentProjectId
         )
         defer {
-            captureSource = .manual // reset for the next capture
             pendingLanding = nil
         }
 
