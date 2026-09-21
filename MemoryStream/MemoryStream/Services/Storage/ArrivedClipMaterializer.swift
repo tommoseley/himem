@@ -21,9 +21,30 @@ import CoreData
 ///   manifest is retained purely as a tombstone ledger).
 enum ArrivedClipMaterializer {
 
-    /// Materialize `clip`. Returns the ref id (== clipId) on success, nil if the
-    /// audio can't be located anywhere (nothing to materialize). Safe to call
-    /// repeatedly — a second call no-ops via the id lookup.
+    /// Materialize `clip` into a memory, joining its **roll** if it has one.
+    /// Returns the memory's id, or nil if there was nothing to materialize.
+    /// Safe to call repeatedly.
+    ///
+    /// **A roll is one memory** (`On a roll · spec.md`, CURRENT): every tap of
+    /// *Next* commits a recording and starts another without stopping the
+    /// waveform, and all of them share a `rollGroupId` stamped at session
+    /// start. On arrival that id is *"a deterministic override of the time/place
+    /// session heuristics — same roll, same memory"*, and the tap boundaries
+    /// become paragraph breaks, which is what she meant by tapping.
+    ///
+    /// **The defect this replaces.** §1 created one memory per arrived clip and
+    /// never read `rollGroupId`, so four taps of Next produced five memories —
+    /// the feature that exists to keep one train of thought together was the
+    /// thing that scattered it. Money-tested by
+    /// `WatchRollArrivesAsOneMemoryTests`.
+    ///
+    /// **Why the roll key is the memory's id.** Each tap is its own transfer
+    /// unit with no transaction around the roll, so taps land one at a time and
+    /// *"if 3 of 5 arrive, they form the memory and the remaining 2 join it
+    /// when they land."* Keying the memory on `rollGroupId` makes that join a
+    /// lookup rather than a reconciliation: whichever tap lands first creates
+    /// the memory, every later one finds it. Keying on the first clip's id
+    /// could not — "first" is not known until the roll is complete.
     @discardableResult
     @MainActor
     static func materialize(
@@ -31,28 +52,43 @@ enum ArrivedClipMaterializer {
         in context: NSManagedObjectContext,
         deleteAudio: (String) -> Bool = deleteArrivedAudio
     ) -> UUID? {
-        if entryExists(id: clip.clipId, in: context) { return clip.clipId }
+        let memoryId = memoryId(for: clip)
 
-        let entry = JournalEntry(context: context)
-        // **KEY: the memory takes the CLIP's id**, exactly as the ref used to,
-        // and for the same two reasons. The drain can run repeatedly without
-        // duplicating, and two devices materializing the same arrival converge
-        // on ONE CloudKit record rather than racing to create two memories.
-        // `StorageService.createEntry` mints its own UUID, so this path builds
-        // the entry directly rather than calling it — the id is the invariant,
-        // not the convenience.
-        entry.id = clip.clipId
-        entry.content = clip.transcript
-        entry.inputType = JournalEntry.InputType.voiceInApp.rawValue
-        entry.sourceDevice = clip.source
-        entry.createdAt = clip.capturedAt
-        // `title` is DELIBERATELY NOT TOUCHED, not even to nil. This is an
-        // automatic path, and `TitleAuthorshipTests.noAutomaticPathWritesTheTitle`
-        // scans for any write to `entry.title` outside a user-initiated one —
-        // there is no `titleUserEdited` marker to fall back on, so that scan is
-        // the only guarantee. Writing nil would satisfy the intent and still
-        // break the property the scanner reports. Core Data leaves it nil;
-        // Organize names the memory, when she asks.
+        if let existing = entry(id: memoryId, in: context) {
+            // **An un-rolled clip whose memory already exists is a REPLAY**,
+            // and there is no other way for that memory to exist — its id is
+            // this clip's id. Return without side effects, exactly as the
+            // pre-roll code did: `idempotentPassDoesNotRedelete` caught the
+            // first version of this fix deleting the audio a second time.
+            guard clip.rollGroupId != nil else { return memoryId }
+
+            // A later tap of a roll she is still on. Append rather than skip —
+            // returning here is what would make taps 2..n vanish once the
+            // first had created the memory.
+            append(clip, to: existing)
+        } else {
+            let entry = JournalEntry(context: context)
+            // **KEY: the memory takes the ROLL's id, or the clip's own when
+            // there is no roll**, for the two reasons the clip id was used
+            // before — the drain can run repeatedly without duplicating, and
+            // two devices materializing the same arrival converge on ONE
+            // CloudKit record rather than racing to create two memories.
+            // `StorageService.createEntry` mints its own UUID, so this path
+            // builds the entry directly: the id is the invariant, not the
+            // convenience.
+            entry.id = memoryId
+            entry.content = clip.transcript
+            entry.inputType = JournalEntry.InputType.voiceInApp.rawValue
+            entry.sourceDevice = clip.source
+            entry.createdAt = clip.capturedAt
+            // `title` is DELIBERATELY NOT TOUCHED, not even to nil. This is an
+            // automatic path, and `TitleAuthorshipTests.noAutomaticPathWritesTheTitle`
+            // scans for any write to `entry.title` outside a user-initiated one —
+            // there is no `titleUserEdited` marker to fall back on, so that scan is
+            // the only guarantee. Writing nil would satisfy the intent and still
+            // break the property the scanner reports. Core Data leaves it nil;
+            // Organize names the memory, when she asks.
+        }
         try? context.save()
 
         // **The audio is discarded — this is the point of the change.** It was
@@ -65,7 +101,66 @@ enum ArrivedClipMaterializer {
         // Demote the manifest active row → the memory is now the only record.
         // Tombstones the clip, gating a late watch redelivery (risk-3).
         InboxManifest.shared.removeBatch(clipIds: [clip.clipId])
-        return clip.clipId
+        return memoryId
+    }
+
+    /// Materialize a batch, **sorted so a roll's paragraphs land in capture
+    /// order** rather than in whatever order the transfers completed. Arrival
+    /// order is not a promise the transport makes; capture time is.
+    @MainActor
+    static func materialize(
+        _ clips: [InboxClip],
+        in context: NSManagedObjectContext,
+        deleteAudio: (String) -> Bool = deleteArrivedAudio
+    ) {
+        for clip in clips.sorted(by: { $0.capturedAt < $1.capturedAt }) {
+            _ = materialize(clip, in: context, deleteAudio: deleteAudio)
+        }
+    }
+
+    /// The memory a clip belongs to. **Pure** — the whole roll rule in one
+    /// line, so it can be asserted without a Core Data stack.
+    static func memoryId(for clip: InboxClip) -> UUID {
+        clip.rollGroupId ?? clip.clipId
+    }
+
+    /// Adds a later tap's words to the roll's memory as a new paragraph.
+    ///
+    /// - **A silent tap adds nothing.** An empty transcript would otherwise
+    ///   open a blank paragraph — a gap she did not make.
+    /// - **Already-present text is not re-appended.** The drain is safe to call
+    ///   repeatedly by design, and a replayed tap must not double its words.
+    ///   Matched on whole paragraphs, the same shape of dedup
+    ///   `FragmentMigration` uses, because there is nowhere to store a
+    ///   per-paragraph ledger without a CloudKit schema change — and that
+    ///   change costs a Production deploy and a migration to buy nothing the
+    ///   user can see.
+    ///
+    ///   **The limit, stated rather than discovered later:** two taps in one
+    ///   roll whose transcripts are byte-identical ("okay" … "okay") collapse
+    ///   to one paragraph. Replay-safety is load-bearing and this edge is not,
+    ///   so the trade is deliberate.
+    /// - **An out-of-order tap pulls `createdAt` back.** The memory is stamped
+    ///   when the roll began, not when its stragglers landed. Its words still
+    ///   append at the end; within a single batch that never arises, because
+    ///   the batch path sorts first.
+    @MainActor
+    private static func append(_ clip: InboxClip, to entry: JournalEntry) {
+        let words = clip.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let already = entry.content.components(separatedBy: "\n\n").contains(words)
+        if !words.isEmpty && !already {
+            entry.content = entry.content.isEmpty ? words : entry.content + "\n\n" + words
+        }
+        if clip.capturedAt < entry.createdAt { entry.createdAt = clip.capturedAt }
+    }
+
+    /// The memory with this id, if it exists.
+    @MainActor
+    private static func entry(id: UUID, in context: NSManagedObjectContext) -> JournalEntry? {
+        let req = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        return (try? context.fetch(req))?.first
     }
 
     /// Drain every fully-transcribed manifest row into a zero-edge ref. This is
@@ -86,7 +181,14 @@ enum ArrivedClipMaterializer {
         in context: NSManagedObjectContext,
         deleteAudio: (String) -> Bool = deleteArrivedAudio
     ) -> Int {
-        let transcribed = InboxManifest.shared.clips.filter { $0.status == .transcribed }
+        // **Sorted by capture time**, because this is the path that drains a
+        // whole roll at once — the launch migration and the catch-up after the
+        // app was closed while taps were landing. Feeding it in manifest order
+        // would join a roll's paragraphs in whatever order the rows happen to
+        // sit in `manifest.json`.
+        let transcribed = InboxManifest.shared.clips
+            .filter { $0.status == .transcribed }
+            .sorted { $0.capturedAt < $1.capturedAt }
         var count = 0
         for clip in transcribed where materialize(clip, in: context, deleteAudio: deleteAudio) != nil { count += 1 }
         return count
