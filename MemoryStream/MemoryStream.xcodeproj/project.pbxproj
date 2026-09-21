@@ -79,6 +79,7 @@
 		A100000305 /* CaptureFlowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000305 /* CaptureFlowHost.swift */; };
 		A100000310 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
 		A100000311 /* InboxManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000311 /* InboxManifest.swift */; };
+		A100000A03 /* RecordingsExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000A03 /* RecordingsExport.swift */; };
 		A100000312 /* WatchSessionDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000312 /* WatchSessionDelegate.swift */; };
 		A100000313 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
 		A100000315 /* CreateMemoryFromClipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000315 /* CreateMemoryFromClipsSheet.swift */; };
@@ -367,6 +368,7 @@
 		B100000305 /* CaptureFlowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFlowHost.swift; sourceTree = "<group>"; };
 		B100000310 /* ClipMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipMetadata.swift; path = Shared/ClipMetadata.swift; sourceTree = "<group>"; };
 		B100000311 /* InboxManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxManifest.swift; sourceTree = "<group>"; };
+		B100000A03 /* RecordingsExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingsExport.swift; sourceTree = "<group>"; };
 		B100000312 /* WatchSessionDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionDelegate.swift; sourceTree = "<group>"; };
 		B100000315 /* CreateMemoryFromClipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateMemoryFromClipsSheet.swift; sourceTree = "<group>"; };
 		B100000316 /* ExistingMemoryPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingMemoryPickerView.swift; sourceTree = "<group>"; };
@@ -807,6 +809,7 @@
 				B100000734 /* EntryQueryService.swift */,
 				B100000744 /* InboxArrivalTracker.swift */,
 				B100000311 /* InboxManifest.swift */,
+				B100000A03 /* RecordingsExport.swift */,
 				B100000900 /* UbiquityStore.swift */,
 				B100000901 /* MediaResolver.swift */,
 				B100000902 /* MediaReferenceUbiquityMigration.swift */,
@@ -1382,6 +1385,7 @@
 				A100000749 /* SyncStrip.swift in Sources */,
 				A100000750 /* AcceptanceCriticalSection.swift in Sources */,
 				A100000311 /* InboxManifest.swift in Sources */,
+				A100000A03 /* RecordingsExport.swift in Sources */,
 				A100000900 /* UbiquityStore.swift in Sources */,
 				A100000901 /* MediaResolver.swift in Sources */,
 				A100000902 /* MediaReferenceUbiquityMigration.swift in Sources */,

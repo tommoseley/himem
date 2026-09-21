@@ -39,6 +39,18 @@ struct SettingsView: View {
     /// on appear and when the bin sheet closes (deletes/restores there change
     /// it), so we don't re-fetch every render.
     @State private var recycledCount = 0
+
+    // "Save a copy of your recordings" — Release, and these four MUST stay
+    // outside the `#if DEBUG` below. The first draft of this feature put them
+    // inside it, one line under `showSweepAlert`, purely because that is where
+    // the other state lives: the row would then have failed to compile in the
+    // only configuration it matters in.
+    @State private var isSavingRecordings = false
+    @State private var saveRecordingsMessage = ""
+    @State private var showSaveRecordingsAlert = false
+    @State private var savedRecordingsFolder: URL?
+    @State private var showRecordingsShareSheet = false
+
     #if DEBUG
     @State private var showResetOnboardingAlert = false
     @State private var showResetTutorialAlert = false
@@ -301,6 +313,54 @@ struct SettingsView: View {
                     Text("Storage")
                 }
 
+                // MARK: - Your data: save a copy of your recordings
+                //
+                // **RELEASE, DELIBERATELY — do not move this inside the
+                // `#if DEBUG` below.** Every other data tool in this file is
+                // DEBUG-only, so the gravity here is all one way. The export
+                // exists because of Judi's library, Judi is on TestFlight, and
+                // TestFlight ships Release: behind `#if DEBUG` this row would
+                // build, test, demo and review perfectly while being
+                // structurally incapable of reaching the only library it was
+                // built for. Guarded by
+                // `RecordingsExportReleaseReachabilityTests`.
+                //
+                // Copy ruled by Tom 2026-09-21, and the label is the July 28
+                // lock: when a label names something precious it must leave
+                // zero doubt whether the thing survives. "Export" invites
+                // "to where, and does it delete anything?"; "Save a copy"
+                // answers both in three words. The second sub-line is the
+                // Let Go lesson — say the thing she'd otherwise have to guess.
+                Section {
+                    Button {
+                        Task { await saveACopyOfRecordings() }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                if isSavingRecordings {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "square.and.arrow.down")
+                                        .foregroundStyle(Crucible.Color.accent)
+                                }
+                                Text("Save a copy of your recordings")
+                                    .foregroundStyle(Crucible.Color.ink)
+                                Spacer()
+                            }
+                            Text("A folder of your recordings and what they say, saved wherever you like. Nothing is removed from HiMem.")
+                                .font(.footnote)
+                                .foregroundStyle(Crucible.Color.ink2)
+                                .lineSpacing(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSavingRecordings)
+                } header: {
+                    Text("Your data")
+                }
+
                 #if DEBUG
                 // MARK: - Debug (stripped from Release builds)
                 Section {
@@ -538,6 +598,24 @@ struct SettingsView: View {
                 #endif
             }
             .navigationTitle("Settings")
+            // "Save a copy of your recordings" — Release. Attached HERE, on
+            // the List, rather than onto the Debug section's modifier chain
+            // where the other alerts hang: that chain is inside `#if DEBUG`.
+            .alert("Save a copy", isPresented: $showSaveRecordingsAlert) {
+                if savedRecordingsFolder != nil {
+                    Button("Save\u{2026}") { showRecordingsShareSheet = true }
+                    Button("Not now", role: .cancel) { }
+                } else {
+                    Button("OK", role: .cancel) { }
+                }
+            } message: {
+                Text(saveRecordingsMessage)
+            }
+            .sheet(isPresented: $showRecordingsShareSheet) {
+                if let folder = savedRecordingsFolder {
+                    ShareSheet(items: [folder])
+                }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -615,6 +693,41 @@ struct SettingsView: View {
     /// to .onSubmit (Return key), Done toolbar button, and
     /// .onDisappear so name changes save regardless of how the user
     /// leaves Settings.
+    /// Runs the export and reports honestly — including what iCloud did not
+    /// hand over. Never a silent short folder, and never the word "failed":
+    /// an undownloaded recording is a thing that needs Wi-Fi, not a fault.
+    @MainActor
+    private func saveACopyOfRecordings() async {
+        isSavingRecordings = true
+        defer { isSavingRecordings = false }
+
+        let snapshot = RecordingsExport.snapshot(
+            context: storage.viewContext,
+            manifestClips: InboxManifest.shared.clips
+        )
+        let folder = RecordingsExport.destination()
+
+        // Off the main actor: the copy forces iCloud downloads and waits on a
+        // bounded deadline, which must not be done on the thread drawing the
+        // spinner that says it is happening.
+        let outcome: RecordingsExport.Outcome? = await Task.detached(priority: .userInitiated) {
+            try? RecordingsExport.write(snapshot, into: folder)
+        }.value
+
+        guard let outcome else {
+            saveRecordingsMessage = "That copy couldn\u{2019}t be made. Your recordings are untouched \u{2014} try again in a moment."
+            savedRecordingsFolder = nil
+            showSaveRecordingsAlert = true
+            return
+        }
+        saveRecordingsMessage = RecordingsExport.completionMessage(
+            savedCount: outcome.savedCount,
+            unavailableCount: outcome.unavailableCount
+        )
+        savedRecordingsFolder = outcome.savedCount > 0 ? outcome.folderURL : nil
+        showSaveRecordingsAlert = true
+    }
+
     private func commitDisplayName() {
         AuthService.shared.setUserName(displayName)
     }
