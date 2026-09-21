@@ -10,12 +10,24 @@ These rules are derived from battle-tested governance in The Combine (`~/dev/The
 
 ## Design Authority (read first)
 
-**The designs and specs in `docs/design/` are decisions, not suggestions.** You build what they specify. Your latitude is *how*, never *what*: view structure, state plumbing, file organization, internal naming, the mechanics of making the specified behavior work. Behavior, copy, verbs, ontology, layout intent, and interaction model are already decided.
+**The designs and specs are decisions, not suggestions.** You build what they specify. Your latitude is *how*, never *what*: view structure, state plumbing, file organization, internal naming, the mechanics of making the specified behavior work. Behavior, copy, verbs, ontology, layout intent, and interaction model are already decided.
 
 - **Raise concerns, don't deviate.** If a spec looks wrong, impossible, contradictory, or costly, stop and say so with reasoning, and wait for a ruling — that's wanted. Quietly building something different, "improving" a design in passing, or resolving an ambiguity by inventing a new *what* is not. A raised concern is cheap; a silent deviation gets caught in review three screens later and costs a day.
 - **Escalation chain: Agent → CC → Tom.** Sub-agents escalate to you. You resolve *implementation* questions inside the locked architecture (coherence fixes — wording/mechanics that make the build match an existing decision). Anything that changes a *what* — vocabulary, architecture, principle, ontology — goes to Tom.
 - **Two classes of edit:** a *coherence fix* (build matches an existing decision) is fine to apply; a *vocabulary / architecture / principle change* requires explicit approval, even when it seems obviously better.
 - **Definition of done:** first *"does this express the design as specified?"*, then *"does it work?"* A green build that deviates from the design is a regression, not done.
+
+**`docs/design/` NO LONGER EXISTS IN THIS REPO (2026-09-21).** Tom removed it
+so CC reads the design project directly rather than a checked-in copy that
+drifts. Every design document — specs, canvases, `crucible.css`, the design
+system's own `CLAUDE.md` — is reached through the design MCP, and the paths in
+this file name documents by title, not by repo path, because there is no repo
+path to name. **A design reference that still reads `docs/design/…` is stale by
+construction; seven such references were corrected in the same commit.**
+
+The operational consequence worth stating: `crucible.css` and the asset catalog
+must still change in the same PR, but only one side of that pair is now in this
+repo. The token contract is unchanged; the check is manual on the design side.
 
 Source of truth: **`DESIGN_AUTHORITY.md`, the allowlist.** It is **not in this repo** — it lives in the design project and is read through the design MCP. Named by role and location rather than by repo path deliberately: a path written here for a file that is not there is the phantom-reference class this project has already paid for. Only documents it lists CURRENT, plus the active ADRs it names, are implementation authority; everything under `archive/`, `research/`, `post-v1/` and `published/` is non-normative regardless of what it contains, and must not be used to fill a gap. **If CURRENT sources are silent or contradictory, stop and ask** (Tom, 2026-09-20). Multi-agent execution is orchestrated per `AGENTS.md` (repo root).
 
@@ -396,7 +408,7 @@ The watch transcodes every clip to **mono · 16 kHz · AAC (`.m4a`) before `tran
 - **Guard.** The file handed to `transferFile` MUST be mono / 16 kHz / AAC. An automated assertion (`WatchTransferAudioTranscoderTests`) enforces it; that test failing IS the oversized-transfer bug.
 - **Transport is WatchConnectivity, permanently.** The watch never writes to CloudKit or an iCloud container; the phone is the sole iCloud writer (media → iCloud Files, metadata → private DB), off the capture path. "Watch uploads to CloudKit" is retired, not deferred.
 
-Source of truth: `docs/design/Watch · spec.md §2` (CURRENT), `docs/architecture/2026-07-14-watch-audio-compression.md`. *(The `HiMem · Locked Decisions.html` citation was dropped 2026-09-21 — superseded, see § Design Authority.)*
+Source of truth: `Watch · spec.md §2` (CURRENT, design project), `docs/architecture/2026-07-14-watch-audio-compression.md`. *(The `HiMem · Locked Decisions.html` citation was dropped 2026-09-21 — superseded, see § Design Authority.)*
 
 ### Watch Capture Session Mode (locked 2026-07-15)
 
@@ -406,7 +418,7 @@ Source of truth: `docs/design/Watch · spec.md §2` (CURRENT), `docs/architectur
 - **Guard:** `WatchAudioSessionConfigTests` asserts the mode is `.default`, not `.measurement`. Real input energy needs mic hardware to measure (the `[Amp]` transcode log is that device-side check); this config-invariant test is the deterministic guard that a refactor can't silently revert the mode and re-break capture.
 - The transcode's **pick-hottest** N→1 downmix is **retained as defensive, tested code** for any future multichannel route — not ripped out even though `.default` now yields mono on device.
 
-Source of truth: `docs/architecture/2026-07-14-watch-audio-compression.md` §4e, `docs/design/Watch · spec.md §2`.
+Source of truth: `docs/architecture/2026-07-14-watch-audio-compression.md` §4e, `Watch · spec.md §2` (design project).
 
 ### Wake Lock (Idle Timer)
 
@@ -528,7 +540,7 @@ Session summaries are **immutable logs**. Never edit after writing.
 
 ---
 
-## Product Architecture (synced from `docs/design/CLAUDE.md`)
+## Product Architecture (synced from the design project's `CLAUDE.md`)
 
 The design-system CLAUDE.md is the source of truth for product architecture; this section mirrors its locked decisions so the two stay coherent. If a decision changes there, sync here in the same PR.
 
@@ -561,11 +573,11 @@ At each layer: messy input → recognition → structure. Brainstorming is messy
 
 ### Crucible token contract
 
-The single source of truth for design tokens (colors, topic palette) is `docs/design/crucible.css`. iOS asset-catalog entries under `Assets.xcassets/Crucible/*.colorset` mirror it byte-for-byte. When the spec changes, both sides change in the same PR.
+The single source of truth for design tokens (colors, topic palette) is `crucible.css` **in the design project**, read through the design MCP. iOS asset-catalog entries under `Assets.xcassets/Crucible/*.colorset` mirror it byte-for-byte. When the spec changes, both sides change in the same PR.
 
-**Every token is a `light-dark(<light>, <dark>)` pair — both modes are locked, not just light.** All 47 colorsets carry a Dark-Appearance variant. Dark applies to *all* surfaces (the reflective/operational split is not enforced at the token layer), designed to read as *"lamp-lit book at night," not "Netflix title card."* On dark: paper `#000000`, ink `#F0E9DC`, ochre `#EC7442`, AI blue `#5BA4D6`. **Judge a surface against its own column** — `#C64A1C` on black is the deviation. Default appearance is `.system` (`Settings → Appearance` overrides); the watch is dark-native and ignores it. Full table: `docs/design/CLAUDE.md` § Palette.
+**Every token is a `light-dark(<light>, <dark>)` pair — both modes are locked, not just light.** All 47 colorsets carry a Dark-Appearance variant. Dark applies to *all* surfaces (the reflective/operational split is not enforced at the token layer), designed to read as *"lamp-lit book at night," not "Netflix title card."* On dark: paper `#000000`, ink `#F0E9DC`, ochre `#EC7442`, AI blue `#5BA4D6`. **Judge a surface against its own column** — `#C64A1C` on black is the deviation. Default appearance is `.system` (`Settings → Appearance` overrides); the watch is dark-native and ignores it. Full table: the design project's `CLAUDE.md` § Palette.
 
-**Topic-slug strings are a cross-platform contract.** The 16-swatch palette names (`ember`, `terracotta`, `clay`, … `slate`) defined in `docs/design/Crucible · topic palette spec.md` must match the asset-catalog entries (`topic-ember.colorset` etc.) AND the `Topic.paletteKey` Core Data values AND the Swift `topicSlug(for:)` hash output. Drift in any of these silently mis-renders chips. If a slug needs renaming, that's a data migration on every device.
+**Topic-slug strings are a cross-platform contract.** The 16-swatch palette names (`ember`, `terracotta`, `clay`, … `slate`) defined in `Crucible · topic palette spec.md` (design project) must match the asset-catalog entries (`topic-ember.colorset` etc.) AND the `Topic.paletteKey` Core Data values AND the Swift `topicSlug(for:)` hash output. Drift in any of these silently mis-renders chips. If a slug needs renaming, that's a data migration on every device.
 
 ---
 
