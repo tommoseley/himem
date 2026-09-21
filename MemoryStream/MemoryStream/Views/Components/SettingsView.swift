@@ -49,8 +49,6 @@ struct SettingsView: View {
     // RH-8 orphaned-blob sweep (destructive; deliberate trigger only).
     @State private var showSweepAlert = false
     @State private var sweepPlan: [URL] = []
-    @State private var showSeedClusterAlert = false
-    @State private var seedClusterMessage = ""
     @AppStorage("himem.debug.useLeanOrganizerPrompt") private var useLeanOrganizerPrompt = false
     #endif
 
@@ -472,93 +470,6 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
-
-                    // Seeds a real multi-clip Sort cluster through the actual
-                    // grouping path so the cluster editor (and the aggregate
-                    // arbiter check that needs a multi-clip context) is
-                    // reproducible on demand — no waiting on organic dogfood.
-                    Button {
-                        InboxManifest.shared.debugSeedTestCluster()
-                        seedClusterMessage = "Seeded a 3-clip \u{201C}Kingfisher Wharf\u{201D} cluster onto the bench. Open Clips → the Sort proposal appears → tap Adjust to expand → tap a clip row to open the modal from a multi-clip context. Tap \u{201C}Clear test cluster\u{201D} when done."
-                        showSeedClusterAlert = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "square.stack.3d.up.fill")
-                                .foregroundStyle(Crucible.Color.accent)
-                            Text("Seed test cluster (Sort repro)")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        InboxManifest.shared.debugClearTestCluster()
-                        seedClusterMessage = "Cleared the seeded test-cluster clips. Your real bench clips are untouched."
-                        showSeedClusterAlert = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "square.stack.3d.up.slash.fill")
-                                .foregroundStyle(Crucible.Color.ink2)
-                            Text("Clear test cluster")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    // QA fixtures for the device checks that have stayed open
-                    // because their preconditions are hard to produce — one of
-                    // them (a ref-backed clip inside a cluster) cannot be made
-                    // by hand at all. Same precedent as the seed control above:
-                    // DEBUG-only, `5EED…` ids, non-destructive to real content,
-                    // and a Clear that removes exactly what it made.
-                    Button {
-                        seedClusterMessage = QAFixtureSeeder.seedFixtures(in: storage.viewContext)
-                        showSeedClusterAlert = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "testtube.2")
-                                .foregroundStyle(Crucible.Color.accent)
-                            Text("Seed QA fixtures (F37 · F41 · F43 · F44)")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    // Separate button, not a variant of the one above: "every
-                    // session is clustered" cannot be true while a loose
-                    // session exists, so the dropped-session-term case is only
-                    // reachable without one. One seed cannot produce both.
-                    Button {
-                        seedClusterMessage = QAFixtureSeeder.seedFullyClusteredBench(in: storage.viewContext)
-                        showSeedClusterAlert = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "square.stack.3d.down.right.fill")
-                                .foregroundStyle(Crucible.Color.accent)
-                            Text("Seed fully-clustered bench")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        QAFixtureSeeder.clear(in: storage.viewContext)
-                        seedClusterMessage = "Cleared every QA fixture — manifest rows, media refs and their files. Real bench content is untouched."
-                        showSeedClusterAlert = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "trash")
-                                .foregroundStyle(Crucible.Color.ink2)
-                            Text("Clear QA fixtures")
-                                .foregroundStyle(Crucible.Color.ink)
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
                 } header: {
                     Text("Debug")
                 } footer: {
@@ -601,11 +512,6 @@ struct SettingsView: View {
                     Text(sweepPlan.isEmpty
                          ? "No orphaned media blobs found — the container matches the live + recycled clips."
                          : "\(sweepPlan.count) orphaned blob(s) in iCloud Files aren't referenced by any live or recycled clip (older than the 1-hour age guard). Delete permanently? This can't be undone.")
-                }
-                .alert("Test cluster", isPresented: $showSeedClusterAlert) {
-                    Button("OK", role: .cancel) { }
-                } message: {
-                    Text(seedClusterMessage)
                 }
 
                 // MARK: - Plus override (DEBUG)

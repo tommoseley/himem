@@ -27,7 +27,7 @@ set -uo pipefail
 
 BUNDLE="${1:?usage: gate-report.sh <path.xcresult> [expected-failures.txt]}"
 EXPECTED="${2:-}"
-: "${DEVELOPER_DIR:=/Applications/Xcode-beta.app/Contents/Developer}"
+: "${DEVELOPER_DIR:=/Applications/Xcode.app/Contents/Developer}"
 export DEVELOPER_DIR
 
 [ -d "$BUNDLE" ] || { echo "FATAL: no result bundle at $BUNDLE"; exit 1; }

@@ -666,75 +666,6 @@ enum ClipsType: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-// MARK: - Shared segmented control
-
-/// The ochre-track segmented pill used by the Clips header status lens —
-/// factored out (July 20 2026) so Recently Deleted's type selector reuses
-/// the exact control, not a lookalike. Generic over any identifiable option
-/// with a display label. Selection language matches the Clips lock (Tom,
-/// 2026-07-12): accent fill + accentInk bold text when selected; ink2
-/// medium otherwise, on a `wash1` track.
-struct HiMemSegmentedControl<Option: Identifiable & Equatable>: View {
-    let options: [Option]
-    @Binding var selection: Option
-    let label: (Option) -> String
-    /// Optional per-option count. When provided, a small count pill renders
-    /// after the label for any option whose count is > 0. Omitted (nil) →
-    /// label-only, byte-identical to the pre-count control (the Clips-tab
-    /// status filter relies on that unchanged shape).
-    var count: ((Option) -> Int)? = nil
-
-    private var showsCounts: Bool { count != nil }
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(options) { opt in
-                segment(for: opt)
-            }
-        }
-        .padding(3)
-        .background(Crucible.Color.wash1, in: RoundedRectangle(cornerRadius: 10))
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private func segment(for opt: Option) -> some View {
-        let selected = selection == opt
-        let n = count?(opt)
-        return Button {
-            selection = opt
-        } label: {
-            HStack(spacing: 5) {
-                Text(label(opt))
-                    .font(.system(size: 13.5, weight: selected ? .bold : .medium))
-                    .tracking(-0.1)
-                    .foregroundStyle(selected ? Crucible.Color.accentInk : Crucible.Color.ink2)
-                if let n, n > 0 {
-                    Text("\(n)")
-                        .font(.system(size: 11, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(selected ? Crucible.Color.accentInk.opacity(0.9) : Crucible.Color.ink3)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(
-                            selected ? Color.white.opacity(0.28) : Crucible.Color.sunk,
-                            in: Capsule()
-                        )
-                }
-            }
-            .padding(.horizontal, showsCounts ? 13 : 20)
-            .frame(minHeight: 32)
-            .background(
-                selected ? Crucible.Color.accent : Color.clear,
-                in: RoundedRectangle(cornerRadius: 8)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(n.map { "\(label(opt)), \($0)" } ?? label(opt))
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
-    }
-}
-
 // MARK: - Home top bar (unified across every tab)
 
 /// The canonical top bar per `docs/design/screens-home.jsx` §HomeTopBar:
@@ -1152,28 +1083,6 @@ struct ClipsListItemRow: View {
     private func playAudio(_ ref: MediaReference) {
         if isPlaying(ref) { audioPlayer.stop() }
         else { audioPlayer.play(filename: ref.osIdentifier) }
-    }
-}
-
-/// The Photos-style selection circle (mock, July 2026): 22px, hairline
-/// ink4 ring at rest → accent fill + white check when selected. Shared by
-/// every selectable row/session on the Clips tab.
-struct SelectCircle: View {
-    let checked: Bool
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(checked ? Crucible.Color.accent : Color.clear)
-            Circle()
-                .strokeBorder(checked ? Crucible.Color.accent : Crucible.Color.ink4, lineWidth: 2)
-            if checked {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-        }
-        .frame(width: 22, height: 22)
-        .accessibilityLabel(checked ? "Selected" : "Not selected")
     }
 }
 
