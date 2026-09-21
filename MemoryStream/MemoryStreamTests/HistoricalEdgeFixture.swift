@@ -2,34 +2,34 @@ import Foundation
 import CoreData
 @testable import HiMem
 
-/// Builds a `MemoryClipEdge` **without** going through
-/// `StorageService.createEdge`, so a test can construct a part that belongs to
-/// more than one memory.
+/// Builds a `MemoryClipEdge` directly, without going through
+/// `StorageService.createEdge`.
 ///
-/// # This represents PRE-INVARIANT DATA. Never use it to test a new attachment.
+/// **THE NAME IS NOW HISTORICAL IN A SECOND SENSE — read this before using it.**
 ///
-/// F2 (Tom, 2026-09-16) made *a part belongs to exactly one memory* a
-/// **write-side** invariant: `createEdge` refuses a second live memory. The
-/// ruling deliberately preserves what is already stored — existing multi-memory
-/// rows stay, there is no migration and no Production CloudKit deploy — so a
-/// real device still carries parts with several memories, and the behaviour
-/// that reads them (Let Go keeping shared clips, the P8 last-reference rule,
-/// the honest connection count, the *"in N memories"* copy) must keep being
-/// testable.
+/// It was written for F2 (Tom, 2026-09-16), which made *a part belongs to
+/// exactly one memory* a write-side invariant: `createEdge` refused a second
+/// live memory, so a test that needed a part in two memories had to route
+/// around the guard, and this was the one sanctioned way to do it. Its
+/// docstring said, in bold, never to use it for a new attachment.
 ///
-/// That is the only thing this helper is for: **manufacturing history**.
+/// **F2 retired 2026-09-21** — `The descoping · synopsis.md` walks many-to-many
+/// back explicitly, and nothing refuses a second memory any more. So there is
+/// no longer any such thing as "pre-invariant data": a part in several memories
+/// is **ordinary data**, and `createEdge` will make one for you.
 ///
-/// - Use it when the subject under test is how the app *reads or deletes*
-///   data that already has several memories.
-/// - **Do not** use it to set up an attachment the app would make today. A
-///   test that wants a new edge must call `StorageService.createEdge` and get
-///   the invariant enforced; routing around the guard to make a test pass is
-///   how a guard stops guarding.
+/// It is kept because ten-plus suites build fixtures with it and rewriting
+/// those call sites would be churn with no behavioural content. But:
 ///
-/// It exists as one shared helper rather than a private copy in each suite
-/// because thirteen near-duplicate procedures is precisely the defect
-/// `Handoff · punch list` F6a names — and thirteen copies of a route *around*
-/// an invariant is the worst shape that defect takes.
+/// - **Prefer `StorageService.createEdge` in new tests.** It exercises the
+///   production path, including the pair idempotency that did *not* retire
+///   with F2, and this helper skips it.
+/// - **The old warning no longer applies**, and is removed rather than left to
+///   be obeyed out of habit — an instruction that has stopped being true is
+///   worse than none, because it is followed with confidence.
+/// - The name is left alone on purpose: renaming it would touch every call
+///   site, which is the churn keeping it was meant to avoid. This paragraph is
+///   the correction.
 enum HistoricalEdgeFixture {
 
     /// Attach `ref` to `entry` the way the store looks for data created before

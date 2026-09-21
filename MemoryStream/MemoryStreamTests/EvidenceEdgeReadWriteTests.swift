@@ -54,12 +54,12 @@ struct EvidenceEdgeReadWriteTests {
 
         // Attach the same ref to memory B via a second edge.
         //
-        // This is now PRE-INVARIANT DATA, not a move the app would make:
-        // F2 (2026-09-16) made "a part belongs to exactly one memory" a
-        // write-side invariant, so `createEdge` refuses this. The row it
-        // produces still exists on real devices and must keep reading
-        // correctly — which is exactly what this test guards — so the fixture
-        // manufactures history rather than routing around the guard ad hoc.
+        // An ordinary second memory for the same part. This comment used to
+        // say the row was "PRE-INVARIANT DATA" that `createEdge` refused,
+        // under F2 — **F2 retired 2026-09-21** and many-to-many is back, so
+        // nothing is being routed around here. The fixture is kept only
+        // because rewriting this call site would be churn; `createEdge` would
+        // now do the same thing.
         try HistoricalEdgeFixture.attach(ref, to: memB, in: storage.viewContext)
         try storage.save(context: storage.viewContext)
 

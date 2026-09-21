@@ -53,12 +53,19 @@ struct EdgeAnnotationTests {
     //
     // It asserted that one clip's annotation in memory A is independent of the
     // same clip's annotation in memory B — per-edge context, which was the
-    // point of the annotation under clip↔memory many-to-many. The vocabulary
-    // retirement supersedes that ontology: **a part belongs to exactly one
-    // memory**, so "across memories" has no referent. This is a test of a
-    // CAPABILITY THE RULING REMOVES, not of data the ruling preserves — the
-    // distinction that decided it. Keeping it against historical rows via
-    // `HistoricalEdgeFixture` would guard a behaviour nothing can produce.
+    // point of the annotation under clip↔memory many-to-many.
+    //
+    // **AMENDED 2026-09-21: F2 retired and many-to-many is back, so "across
+    // memories" HAS a referent again — but the test still does not come back,
+    // and for a different reason than before.** F2 removed the *ontology*;
+    // what keeps this retired now is that nothing writes or reads an
+    // annotation. `createEdge` has always written it nil and the sole reader
+    // is `ClipEditorModal:912`, which I2 deletes with the clip-atom editor.
+    // Reinstating the test would guard a capability that has no surface, which
+    // is the same mistake in the opposite direction.
+    //
+    // Recorded rather than quietly left: if a per-part note ever returns, this
+    // is the behaviour it needs, and the data is still there to support it.
     //
     // CONSEQUENCE, stated plainly because someone will ask: existing
     // annotations STAY IN THE STORE and become unread. `annotation` is still on
