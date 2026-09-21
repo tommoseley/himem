@@ -17,7 +17,9 @@ These rules are derived from battle-tested governance in The Combine (`~/dev/The
 - **Two classes of edit:** a *coherence fix* (build matches an existing decision) is fine to apply; a *vocabulary / architecture / principle change* requires explicit approval, even when it seems obviously better.
 - **Definition of done:** first *"does this express the design as specified?"*, then *"does it work?"* A green build that deviates from the design is a regression, not done.
 
-Source of truth: `docs/design/CLAUDE.md` PART 0 and `docs/design/HiMem · Locked Decisions.html` (Architectural Invariants). Multi-agent execution is orchestrated per `AGENTS.md` (repo root).
+Source of truth: **`DESIGN_AUTHORITY.md`, the allowlist.** It is **not in this repo** — it lives in the design project and is read through the design MCP. Named by role and location rather than by repo path deliberately: a path written here for a file that is not there is the phantom-reference class this project has already paid for. Only documents it lists CURRENT, plus the active ADRs it names, are implementation authority; everything under `archive/`, `research/`, `post-v1/` and `published/` is non-normative regardless of what it contains, and must not be used to fill a gap. **If CURRENT sources are silent or contradictory, stop and ask** (Tom, 2026-09-20). Multi-agent execution is orchestrated per `AGENTS.md` (repo root).
+
+**`HiMem · Locked Decisions.html` is SUPERSEDED and is NOT authority.** It was named here as source of truth for the Architectural Invariants until 2026-09-21; the manifest marks it superseded and calls it *"the project's most dangerous decoy"* — plausible, well-formed, and substantially wrong about the current product. It is recorded here rather than silently dropped so a reader who finds it on disk, or inherits a citation to it from an old commit, learns its standing instead of trusting its contents. The same applies to the handoff punch list and the action-items inventory: both are HISTORICAL — spent working files, not a backlog and not authority.
 
 ---
 
@@ -394,7 +396,7 @@ The watch transcodes every clip to **mono · 16 kHz · AAC (`.m4a`) before `tran
 - **Guard.** The file handed to `transferFile` MUST be mono / 16 kHz / AAC. An automated assertion (`WatchTransferAudioTranscoderTests`) enforces it; that test failing IS the oversized-transfer bug.
 - **Transport is WatchConnectivity, permanently.** The watch never writes to CloudKit or an iCloud container; the phone is the sole iCloud writer (media → iCloud Files, metadata → private DB), off the capture path. "Watch uploads to CloudKit" is retired, not deferred.
 
-Source of truth: `docs/design/Watch · spec.md §2`, `docs/design/HiMem · Locked Decisions.html`, `docs/architecture/2026-07-14-watch-audio-compression.md`.
+Source of truth: `docs/design/Watch · spec.md §2` (CURRENT), `docs/architecture/2026-07-14-watch-audio-compression.md`. *(The `HiMem · Locked Decisions.html` citation was dropped 2026-09-21 — superseded, see § Design Authority.)*
 
 ### Watch Capture Session Mode (locked 2026-07-15)
 

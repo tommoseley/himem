@@ -1,6 +1,6 @@
 # Session start
 
-Codifies the restart handoff. **This file does not describe the work** — the punch list is the single source for what to build, and duplicating it here creates a second copy to drift.
+Codifies the restart handoff. **This file does not describe the work** — the allowlist and the rulings on top of it are the source for what to build, and duplicating them here creates a second copy to drift.
 
 Files are referenced by **role**, never by filename. A filename in a process doc rots into the phantom-comment class the moment something is renamed.
 
@@ -14,7 +14,9 @@ In this order, before touching anything:
 - **The orchestration file** (repo root) — how work is divided when it is divided at all.
 - **The architectural invariants** and the **design-system governance file** — what may not be redesigned in passing.
 - **The latest session log** — where the previous session actually stopped, as opposed to where it planned to stop.
-- **The current punch list / action-items inventory** — the work itself.
+- **The design allowlist** — which documents are authority at all. Read it FIRST: it is an allowlist, so a document it does not list CURRENT has none, however specific and current that document reads. Where CURRENT sources are silent or contradictory, **stop and ask** rather than filling the gap from a superseded one.
+
+  *The handoff punch list and the action-items inventory are **HISTORICAL** as of 2026-09-21 — spent working files, not a backlog and not authority. They were named here as "the work itself" until then. The work now comes from the allowlist's own unresolved list plus the standing rulings, and a punch-list item carries no standing merely by being written down.*
 
 If any two of these disagree, that is a finding. Raise it; do not pick one silently.
 
@@ -82,7 +84,7 @@ Where a value must not drift, prefer erasing and recreating on the same version 
 
 ## 3 · Take the next item
 
-From the punch list, in the order the ruling set — not the order that looks cheapest. If the next item is ambiguous, ask before building; a raised question is cheap and a silent reinterpretation is a day.
+In the order the rulings set — not the order that looks cheapest. If the next item is ambiguous, ask before building; a raised question is cheap and a silent reinterpretation is a day.
 
 If an item's finding came from an audit or a prior session's report, **verify its enumeration before acting on it.** Findings have been wrong in both directions: counts short, and comments called stale that were accurate. Acting on a mischaracterised finding can turn a correct comment into a wrong one, which is worse than leaving it alone.
 

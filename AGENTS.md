@@ -6,7 +6,7 @@
 ## Where this sits in the hierarchy
 
 1. **`Kingfisher · North Star.md`** — company philosophy. Why HiMem exists.
-2. **`HiMem · Locked Decisions.html` (Architectural Invariants) + the design specs** — binding product authority. *What* to build. See `CLAUDE.md` PART 0: designs are decisions, not suggestions.
+2. **`DESIGN_AUTHORITY.md` (in the design project, read via the design MCP — not in this repo) and the documents it lists CURRENT, plus the ADRs it names** — binding product authority. *What* to build. See `CLAUDE.md` § Design Authority: designs are decisions, not suggestions, and the manifest is an **allowlist** — a document not listed CURRENT has no authority regardless of how specific it reads. *(This line named `HiMem · Locked Decisions.html` until 2026-09-21; it is superseded and must not be cited.)*
 3. **This file (`AGENTS.md`)** — how implementation work is orchestrated. *How* the team executes.
 4. **The current implementation plan** — the specific change set being executed right now.
 
