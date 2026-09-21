@@ -50,6 +50,9 @@ struct SettingsView: View {
     @State private var showSaveRecordingsAlert = false
     @State private var savedRecordingsFolder: URL?
     @State private var showRecordingsShareSheet = false
+    /// (done, total) while the copy runs. An export of a real library takes
+    /// minutes, and a bare spinner for minutes reads as a hang.
+    @State private var savingProgress: (Int, Int)? = nil
 
     #if DEBUG
     @State private var showResetOnboardingAlert = false
@@ -343,7 +346,7 @@ struct SettingsView: View {
                                     Image(systemName: "square.and.arrow.down")
                                         .foregroundStyle(Crucible.Color.accent)
                                 }
-                                Text("Save a copy of your recordings")
+                                Text(isSavingRecordings ? savingLabel : "Save a copy of your recordings")
                                     .foregroundStyle(Crucible.Color.ink)
                                 Spacer()
                             }
@@ -699,7 +702,8 @@ struct SettingsView: View {
     @MainActor
     private func saveACopyOfRecordings() async {
         isSavingRecordings = true
-        defer { isSavingRecordings = false }
+        savingProgress = nil
+        defer { isSavingRecordings = false; savingProgress = nil }
 
         let snapshot = RecordingsExport.snapshot(
             context: storage.viewContext,
@@ -707,11 +711,14 @@ struct SettingsView: View {
         )
         let folder = RecordingsExport.destination()
 
-        // Off the main actor: the copy forces iCloud downloads and waits on a
-        // bounded deadline, which must not be done on the thread drawing the
-        // spinner that says it is happening.
+        // Off the main actor: the copy waits on iCloud, per file, and may take
+        // minutes on a real library — it must not run on the thread drawing
+        // the progress that says it is happening.
+        let io = RecordingsExport.IO.live
         let outcome: RecordingsExport.Outcome? = await Task.detached(priority: .userInitiated) {
-            try? RecordingsExport.write(snapshot, into: folder)
+            try? RecordingsExport.write(snapshot, into: folder, io: io) { done, total in
+                Task { @MainActor in savingProgress = total > 0 ? (done, total) : nil }
+            }
         }.value
 
         guard let outcome else {
@@ -726,6 +733,14 @@ struct SettingsView: View {
         )
         savedRecordingsFolder = outcome.savedCount > 0 ? outcome.folderURL : nil
         showSaveRecordingsAlert = true
+    }
+
+    /// Names the scope while it works — "Saving 42 of 238…" rather than a
+    /// spinner that says only "something". The count is the result of an
+    /// operation she just started, which is the F22 exemption.
+    private var savingLabel: String {
+        guard let (done, total) = savingProgress, total > 0 else { return "Saving…" }
+        return "Saving \(done) of \(total)…"
     }
 
     private func commitDisplayName() {

@@ -102,25 +102,47 @@ import Foundation
         #expect(RecordingsExport.completionMessage(savedCount: 1, unavailableCount: 0) == "Saved 1 recording.")
     }
 
-    /// **The ruled sentence.** Pinned close to the literal because here the
-    /// wording *is* the promise (CLAUDE.md § Assert the Meaning, second
-    /// bullet): it must name how many were missed, say why, and say what to do
-    /// about it. A rewording that kept all three would pass; one that dropped
-    /// the remedy would not.
-    @Test("an incomplete run says what it missed and what to do")
+    /// **The ruled sentence, corrected 2026-09-21 after it said something
+    /// false on a device.** The first version reported *"108 couldn't be
+    /// downloaded from iCloud — try again when you're on Wi-Fi"* to someone
+    /// who was on Wi-Fi.
+    @Test("an incomplete run says what happened and what to do")
     func incompleteRunCopy() {
-        let msg = RecordingsExport.completionMessage(savedCount: 84, unavailableCount: 3)
-        #expect(msg.contains("Saved 84 recordings."))
-        #expect(msg.contains("3 couldn't be downloaded from iCloud"))
-        #expect(msg.contains("try again when you're on Wi-Fi"), "the remedy is the point — never report the shortfall alone")
+        let msg = RecordingsExport.completionMessage(savedCount: 22, unavailableCount: 108)
+        #expect(msg == "Saved 22 of 130 recordings. The rest are still in iCloud and haven't come down yet — run this again in a few minutes.")
     }
 
-    /// **Never "failed".** A recording iCloud has not brought down is a thing
-    /// that needs Wi-Fi, not a fault, and the difference is whether she thinks
-    /// her recordings are damaged. Tom, 2026-09-21.
+    /// **The count must be OF the total, not a bare saved figure.** The
+    /// device report read *"Saved 130 recordings. 108 couldn't…"* — two
+    /// numbers that do not obviously belong to one set, so it scans as
+    /// 130 successes plus 108 problems rather than 130 of 238 done.
+    @Test("the saved count is framed against the total")
+    func savedIsFramedAgainstTheTotal() {
+        let msg = RecordingsExport.completionMessage(savedCount: 130, unavailableCount: 108)
+        #expect(msg.hasPrefix("Saved 130 of 238 recordings."))
+    }
+
+    /// **THE MONEY TEST for the copy defect.** A completion line may report
+    /// what happened and what to do; it may not diagnose WHY. The app can see
+    /// that a file has not arrived and nothing more — every cause it could
+    /// name is a guess, and the guess it made was wrong.
+    @Test("the copy never asserts a cause")
+    func theCopyNeverAssertsACause() {
+        for (s, u) in [(22, 108), (0, 130), (130, 108), (1, 1), (5, 0), (0, 0), (0, 1)] {
+            let msg = RecordingsExport.completionMessage(savedCount: s, unavailableCount: u).lowercased()
+            for banned in ["wi-fi", "wifi", "offline", "connection", "network", "signal"] {
+                #expect(!msg.contains(banned),
+                        "\(s)/\(u) diagnosed the cause with \"\(banned)\": \(msg)")
+            }
+        }
+    }
+
+    /// **Never "failed".** A recording iCloud has not handed over yet is not
+    /// damaged, and the difference is whether she thinks her memories are
+    /// gone. Tom, 2026-09-21.
     @Test("no outcome is ever described as a failure")
     func neverSaysFailed() {
-        for (s, u) in [(84, 3), (0, 12), (5, 0), (0, 0), (1, 1)] {
+        for (s, u) in [(84, 3), (0, 12), (5, 0), (0, 0), (1, 1), (22, 108)] {
             let msg = RecordingsExport.completionMessage(savedCount: s, unavailableCount: u).lowercased()
             #expect(!msg.contains("fail"), "\(s)/\(u) reported a failure: \(msg)")
             #expect(!msg.contains("error"), "\(s)/\(u) reported an error: \(msg)")
@@ -128,12 +150,30 @@ import Foundation
         }
     }
 
+    /// Every incomplete outcome must name the action that actually works.
+    @Test("an incomplete run always offers the retry")
+    func incompleteAlwaysOffersTheRetry() {
+        for (s, u) in [(22, 108), (0, 130), (1, 1), (0, 1)] {
+            let msg = RecordingsExport.completionMessage(savedCount: s, unavailableCount: u)
+            #expect(msg.contains("run this again"),
+                    "\(s)/\(u) reported a shortfall with no action: \(msg)")
+        }
+    }
+
+    /// Nothing arrived at all: "the rest" has no referent, and "Saved 0 of
+    /// 130" reads as a failure report rather than a wait.
+    @Test("a run that got nothing still reads as waiting, not failing")
+    func nothingArrivedCopy() {
+        #expect(RecordingsExport.completionMessage(savedCount: 0, unavailableCount: 130)
+                == "Your 130 recordings are still in iCloud and haven't come down yet — run this again in a few minutes.")
+        #expect(RecordingsExport.completionMessage(savedCount: 0, unavailableCount: 1)
+                == "Your recording is still in iCloud and hasn't come down yet — run this again in a few minutes.")
+    }
+
     @Test("singulars are not pluralised")
     func singularCopy() {
-        let msg = RecordingsExport.completionMessage(savedCount: 1, unavailableCount: 1)
-        #expect(msg.contains("Saved 1 recording."))
-        #expect(msg.contains("1 couldn't be downloaded"))
-        #expect(!msg.contains("1 recordings"))
+        #expect(RecordingsExport.completionMessage(savedCount: 1, unavailableCount: 0) == "Saved 1 recording.")
+        #expect(!RecordingsExport.completionMessage(savedCount: 1, unavailableCount: 1).contains("1 recordings"))
     }
 
     @Test("an empty library says so rather than claiming a save")

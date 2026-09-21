@@ -46,7 +46,7 @@ import Foundation
     @Test("the row ships in Release")
     func theRowIsOutsideDebug() throws {
         let src = try Self.settingsSource()
-        #expect(Self.isOutsideDebug(#"Text("Save a copy of your recordings")"#, in: src), """
+        #expect(Self.isOutsideDebug(#""Save a copy of your recordings""#, in: src), """
             The "Save a copy of your recordings" row is inside `#if DEBUG`, or gone. \
             TestFlight ships Release, so a DEBUG-only export cannot reach the library \
             it was built to preserve — and it fails silently, with nothing on screen.
@@ -71,6 +71,12 @@ import Foundation
                 "the row must actually reach the exporter, not just render")
     }
 
+    /// **The needle is the copy, not `Text("…")`.** The label became a
+    /// ternary when the row grew a progress state — `Text(isSaving ? … : "Save
+    /// a copy of your recordings")` — and a guard keyed on the wrapper would
+    /// have gone red on a change that altered nothing it protects. Key on the
+    /// promise; the comment lines that quote it are skipped by the scanner.
+    ///
     /// **The label is the contract, so it is pinned literally** — this is the
     /// case CLAUDE.md § Assert the Meaning names as the exception, where the
     /// wording *is* the promise. Tom, 2026-09-21: *"Not 'Export.' Export
@@ -80,7 +86,7 @@ import Foundation
         let src = try Self.settingsSource()
         #expect(!src.contains(#"Text("Export"#),
                 "'Export' leaves open where it goes and whether the original survives — the July 28 lock")
-        #expect(src.contains(#"Text("Save a copy of your recordings")"#))
+        #expect(src.contains(#""Save a copy of your recordings""#))
         #expect(src.contains(#"Text("Your data")"#), "the section header Tom ruled")
     }
 
@@ -95,7 +101,7 @@ import Foundation
             #endif
         }
         """
-        #expect(Self.isOutsideDebug(#"Text("Save a copy of your recordings")"#, in: src) == false)
+        #expect(Self.isOutsideDebug(#""Save a copy of your recordings""#, in: src) == false)
     }
 
     @Test("the matcher accepts the shipping shape")
@@ -108,7 +114,7 @@ import Foundation
             #endif
         }
         """
-        #expect(Self.isOutsideDebug(#"Text("Save a copy of your recordings")"#, in: src))
+        #expect(Self.isOutsideDebug(#""Save a copy of your recordings""#, in: src))
     }
 
     /// The near-miss that a naive depth counter gets wrong: DEBUG nested one
@@ -123,7 +129,7 @@ import Foundation
         Text("visible")
         #endif
         """
-        #expect(Self.isOutsideDebug(#"Text("Save a copy of your recordings")"#, in: src) == false)
+        #expect(Self.isOutsideDebug(#""Save a copy of your recordings""#, in: src) == false)
         #expect(Self.isOutsideDebug(#"Text("visible")"#, in: src))
     }
 
@@ -139,7 +145,7 @@ import Foundation
         Text("Save a copy of your recordings")
         #endif
         """
-        #expect(Self.isOutsideDebug(#"Text("Save a copy of your recordings")"#, in: src))
+        #expect(Self.isOutsideDebug(#""Save a copy of your recordings""#, in: src))
     }
 
     /// **Prose about the row is not the row.** The source carries several
@@ -155,7 +161,7 @@ import Foundation
         /// nor here: Text("Save a copy of your recordings")
         #endif
         """
-        #expect(Self.isOutsideDebug(#"Text("Save a copy of your recordings")"#, in: src) == false)
+        #expect(Self.isOutsideDebug(#""Save a copy of your recordings""#, in: src) == false)
     }
 
     /// **A scanner's input is not what any test constructs — it is whatever

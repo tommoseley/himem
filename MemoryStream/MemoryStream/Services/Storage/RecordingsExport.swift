@@ -149,23 +149,40 @@ enum RecordingsExport {
 
     // MARK: - Completion copy (pure)
 
-    /// The completion state, in the voice Tom ruled on 2026-09-21.
+    /// The completion state, in the voice Tom ruled on 2026-09-21 and
+    /// **corrected the same day, after it told him something false.**
     ///
-    /// **It must never report a silent short folder, and it must never say
-    /// "failed".** A recording that iCloud has not brought down is not an
-    /// error — it is a thing that needs Wi-Fi — and the sentence says the next
-    /// action rather than naming a fault. This is the Let Go lesson applied to
-    /// a success path: say the thing she would otherwise have to guess.
+    /// The first version said: *"Saved 130 recordings. 108 couldn't be
+    /// downloaded from iCloud — try again when you're on Wi-Fi."* He was on
+    /// Wi-Fi. The sentence named a cause the app cannot know — it can see that
+    /// a file has not arrived, and nothing more — and the cause it guessed was
+    /// wrong, so the one action it offered was useless.
+    ///
+    /// **A completion line may report what happened and what to do. It may not
+    /// diagnose why.** Hence: no network, no connection, no Wi-Fi, no offline.
+    /// `theCopyNeverAssertsACause` forbids the words; this comment is the
+    /// reason, so a future rewrite knows the rule is about claims rather than
+    /// vocabulary.
+    ///
+    /// It must also never say "failed". A recording iCloud has not yet handed
+    /// over is not damaged, and the difference is whether she thinks her
+    /// memories are gone.
     static func completionMessage(savedCount: Int, unavailableCount: Int) -> String {
-        if savedCount == 0 && unavailableCount == 0 {
-            return "There are no recordings to save."
+        let total = savedCount + unavailableCount
+        if total == 0 { return "There are no recordings to save." }
+        guard unavailableCount > 0 else {
+            return savedCount == 1 ? "Saved 1 recording." : "Saved \(savedCount) recordings."
         }
-        let saved = savedCount == 1 ? "Saved 1 recording." : "Saved \(savedCount) recordings."
-        guard unavailableCount > 0 else { return saved }
-        let missed = unavailableCount == 1
-            ? "1 couldn't be downloaded from iCloud"
-            : "\(unavailableCount) couldn't be downloaded from iCloud"
-        return "\(saved) \(missed) — try again when you're on Wi-Fi."
+        // Nothing arrived at all — "the rest" would have no referent, and
+        // "Saved 0 of 130" reads like a failure report rather than a wait.
+        // The one line here Tom did not rule; flagged as mine.
+        guard savedCount > 0 else {
+            return total == 1
+                ? "Your recording is still in iCloud and hasn't come down yet — run this again in a few minutes."
+                : "Your \(total) recordings are still in iCloud and haven't come down yet — run this again in a few minutes."
+        }
+        let noun = total == 1 ? "recording" : "recordings"
+        return "Saved \(savedCount) of \(total) \(noun). The rest are still in iCloud and haven't come down yet — run this again in a few minutes."
     }
 
     // MARK: - Snapshot
@@ -253,6 +270,23 @@ enum RecordingsExport {
         let downloaded: Bool
     }
 
+    /// The environment `write` touches: iCloud status, the download request,
+    /// and the clock. Injected so the waiting policy is testable without a
+    /// real container and without a test that actually sleeps.
+    struct IO {
+        var status: (URL) -> UbiquityStore.DownloadStatus
+        var startDownload: (URL) -> Void
+        var now: () -> Date
+        var sleep: (TimeInterval) -> Void
+
+        @MainActor static var live: IO {
+            IO(status: { UbiquityStore.shared.downloadStatus(at: $0) },
+               startDownload: { UbiquityStore.shared.startDownload(at: $0) },
+               now: Date.init,
+               sleep: { Thread.sleep(forTimeInterval: $0) })
+        }
+    }
+
     /// Copies the snapshot into `folder`, forcing iCloud downloads and
     /// **reporting what it could not retrieve**.
     ///
@@ -260,14 +294,34 @@ enum RecordingsExport {
     /// sentence if the export says what wasn't readable — so an undownloaded
     /// file is counted and named in `index.json`, never skipped quietly.
     ///
-    /// The download wait is **bounded and started in one pass** rather than
-    /// polled per file: CLAUDE.md § Measurement Discipline records a retry
-    /// loop that wedged CoreDevice and destroyed its own error channel. One
-    /// request each, then one shared deadline.
+    /// ## The waiting policy, and why it is per-file
+    ///
+    /// **A single shared budget across the whole library was the defect**
+    /// (device, 2026-09-21): 238 recordings, 90 seconds, *"Saved 130. 108
+    /// couldn't be downloaded"* — on Wi-Fi, with iCloud working correctly and
+    /// still delivering. The budget expired mid-transfer and the export called
+    /// that a result. A shared deadline does not scale with the thing it is
+    /// bounding: the bigger the library, the less of it can possibly arrive,
+    /// and the failure grows with exactly the libraries most worth exporting.
+    ///
+    /// So: every pending file is **requested up front** — that part was right,
+    /// it lets iCloud queue the whole set and means most files are already
+    /// down by the time the copy loop reaches them — and then each file gets
+    /// **its own timeout**, with a large overall `ceiling` as the only global
+    /// bound. An export run once may take minutes; that is fine, and
+    /// `progress` exists so it can say so while it works.
+    ///
+    /// The retry-loop discipline that motivated the old shared budget still
+    /// holds and is still satisfied: one request per file, a bounded wait, and
+    /// a poll that sleeps rather than spins (CLAUDE.md § Measurement
+    /// Discipline — the loop that wedged CoreDevice). What changed is the
+    /// *size* of the bound, not its existence.
     static func write(_ snapshot: Snapshot,
                       into folder: URL,
-                      deadline: TimeInterval = 90,
-                      now: () -> Date = Date.init) throws -> Outcome {
+                      perFileTimeout: TimeInterval = 120,
+                      ceiling: TimeInterval = 1800,
+                      io: IO,
+                      progress: (Int, Int) -> Void = { _, _ in }) throws -> Outcome {
         let fm = FileManager.default
         let names = assignNames(snapshot.recordings)
         let audio = folder.appendingPathComponent("audio", isDirectory: true)
@@ -277,27 +331,31 @@ enum RecordingsExport {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
 
-        // One download request per absent file, up front.
-        let store = UbiquityStore.shared
-        let pending = snapshot.recordings.filter { store.downloadStatus(at: $0.sourceURL) != .downloaded }
-        for rec in pending { store.startDownload(at: rec.sourceURL) }
-
-        // One shared deadline for all of them.
-        if !pending.isEmpty {
-            let until = now().addingTimeInterval(deadline)
-            while now() < until {
-                if pending.allSatisfy({ store.downloadStatus(at: $0.sourceURL) == .downloaded }) { break }
-                Thread.sleep(forTimeInterval: 0.5)
-            }
+        // One download request per absent file, up front — this lets iCloud
+        // queue the whole set while the copy loop walks it, so by the time a
+        // later file is reached it has usually already arrived.
+        for rec in snapshot.recordings where io.status(rec.sourceURL) != .downloaded {
+            io.startDownload(rec.sourceURL)
         }
 
         var index: [IndexEntry] = []
         var saved = 0, unavailable = 0
+        let total = snapshot.recordings.count
+        let ceilingAt = io.now().addingTimeInterval(ceiling)
 
-        for rec in snapshot.recordings {
+        for (i, rec) in snapshot.recordings.enumerated() {
+            progress(i, total)
             guard let name = names[rec.id] else { continue }
             let destDir = rec.isPlaced ? audio : unplaced
-            let got = store.downloadStatus(at: rec.sourceURL) == .downloaded
+
+            // **This file's own timeout**, clamped by the overall ceiling.
+            if io.status(rec.sourceURL) != .downloaded {
+                let waitUntil = min(io.now().addingTimeInterval(perFileTimeout), ceilingAt)
+                while io.now() < waitUntil && io.status(rec.sourceURL) != .downloaded {
+                    io.sleep(0.5)
+                }
+            }
+            let got = io.status(rec.sourceURL) == .downloaded
             if got {
                 try? fm.removeItem(at: destDir.appendingPathComponent(name))
                 do {
@@ -351,6 +409,7 @@ enum RecordingsExport {
             try? data.write(to: folder.appendingPathComponent("index.json"), options: .atomic)
         }
 
+        progress(total, total)
         return Outcome(savedCount: saved, unavailableCount: unavailable, folderURL: folder)
     }
 
