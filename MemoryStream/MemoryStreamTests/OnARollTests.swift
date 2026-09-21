@@ -196,140 +196,31 @@ struct OnARollTests {
         #expect(controller.rollingEyebrowVisible == true)
     }
 
-    // MARK: - Inbox grouping precedence (PR 2)
-
-    private func clip(
-        captured: Date,
-        latitude: Double? = nil,
-        longitude: Double? = nil,
-        rollGroupId: UUID? = nil
-    ) -> InboxClip {
-        InboxClip(
-            clipId: UUID(),
-            capturedAt: captured,
-            duration: 10,
-            transcript: "",
-            latitude: latitude,
-            longitude: longitude,
-            source: "watch",
-            audioFilename: "x.caf",
-            transcriptionAttempted: true,
-            rollGroupId: rollGroupId
-        )
-    }
-
-    @Test func sameSession_sameRollGroupId_groups_regardlessOfTimeOrLocation() {
-        let rollId = UUID()
-        // Same rollId, very different times, very different locations
-        // (~5000m apart over 2 hours) — still one session.
-        let a = clip(captured: Date(timeIntervalSinceReferenceDate: 0),
-                     latitude: 33.0, longitude: -117.0, rollGroupId: rollId)
-        let b = clip(captured: Date(timeIntervalSinceReferenceDate: 7200),
-                     latitude: 33.05, longitude: -117.05, rollGroupId: rollId)
-
-        #expect(ClipSessionGrouper.sameSession(a, b) == true)
-    }
-
-    @Test func sameSession_differentRollGroupIds_withinIdleGap_group() {
-        // v3 revised (July 4 2026): different rollGroupIds within
-        // the idle-gap window ARE the same sitting. Two wrist-
-        // raises 1 s apart each carry their own auto-generated
-        // rollGroupId; they're obviously one sitting.
-        let a = clip(captured: Date(timeIntervalSinceReferenceDate: 0),
-                     latitude: 33.0, longitude: -117.0, rollGroupId: UUID())
-        let b = clip(captured: Date(timeIntervalSinceReferenceDate: 1),
-                     latitude: 33.0, longitude: -117.0, rollGroupId: UUID())
-
-        #expect(ClipSessionGrouper.sameSession(a, b) == true)
-    }
-
-    @Test func sameSession_differentRollGroupIds_outsideIdleGap_split() {
-        // Silence still closes the session — 11 min gap splits
-        // even when rollGroupIds are present.
-        let a = clip(captured: Date(timeIntervalSinceReferenceDate: 0),
-                     latitude: nil, longitude: nil, rollGroupId: UUID())
-        let b = clip(captured: Date(timeIntervalSinceReferenceDate: 11 * 60),
-                     latitude: nil, longitude: nil, rollGroupId: UUID())
-
-        #expect(ClipSessionGrouper.sameSession(a, b) == false)
-    }
-
-    @Test func sameSession_bothNilRollGroupIds_withinIdleGap_group() {
-        let near = Date(timeIntervalSinceReferenceDate: 0)
-        let later = near.addingTimeInterval(60)
-        // v3 idle-gap: silence < 10 min → same sitting. Location is
-        // not part of the base rule.
-        let a = clip(captured: near, latitude: 33.0, longitude: -117.0)
-        let b = clip(captured: later, latitude: 33.0, longitude: -117.0)
-
-        #expect(ClipSessionGrouper.sameSession(a, b) == true)
-    }
-
-    @Test func sameSession_bothNilRollGroupIds_outsideTimeWindow_doNotGroup() {
-        let near = Date(timeIntervalSinceReferenceDate: 0)
-        let muchLater = near.addingTimeInterval(60 * 60) // 1 hr
-        let a = clip(captured: near, latitude: 33.0, longitude: -117.0)
-        let b = clip(captured: muchLater, latitude: 33.0, longitude: -117.0)
-
-        #expect(ClipSessionGrouper.sameSession(a, b) == false)
-    }
-
-    /// Under the v3 idle-gap rule (July 4 2026, revised same day),
-    /// mixed nil/non-nil rollGroupIds within the 10-min window
-    /// belong to the same sitting. The spec's key reframe: "a
-    /// session is a sitting, not a wrist-raise." Each wrist-raise
-    /// gets its own auto-generated rollGroupId, but silence — not
-    /// the rollGroupId boundary — is what closes a session.
-    @Test func sameSession_mixedNilAndNonNilRollGroupIds_withinIdleGap_group() {
-        let near = Date(timeIntervalSinceReferenceDate: 0)
-        let later = near.addingTimeInterval(30)
-        let a = clip(captured: near, latitude: 33.0, longitude: -117.0, rollGroupId: UUID())
-        let b = clip(captured: later, latitude: 33.0, longitude: -117.0, rollGroupId: nil)
-
-        #expect(ClipSessionGrouper.sameSession(a, b) == true)
-    }
-
-    /// Mixed nil/non-nil at 11 min apart — outside the idle-gap
-    /// window — still splits. Silence closes the session
-    /// regardless of rollGroupId presence.
-    @Test func sameSession_mixedNilAndNonNilRollGroupIds_outsideIdleGap_split() {
-        let near = Date(timeIntervalSinceReferenceDate: 0)
-        let later = near.addingTimeInterval(11 * 60)
-        let a = clip(captured: near, latitude: nil, longitude: nil, rollGroupId: UUID())
-        let b = clip(captured: later, latitude: nil, longitude: nil, rollGroupId: nil)
-
-        #expect(ClipSessionGrouper.sameSession(a, b) == false)
-    }
-
-    /// **Money test for the July 4 v3 revision** — the CIA-dinner
-    /// dogfood pattern: five wrist-raises 4-9 min apart, each
-    /// carrying its own auto-generated rollGroupId (that's how
-    /// the modern watch works). Under the pre-revision rule they
-    /// split into five separate cards. Under v3 revised they merge
-    /// into one sitting because silence is the boundary and
-    /// different-rollGroupId no longer forces a split.
-    @Test func sameSession_wristRaises_withinIdleGap_group_perCIADinner() {
-        let firstStart = Date(timeIntervalSinceReferenceDate: 0)
-        // 5 min 29 s — well inside 10 min.
-        let secondStart = firstStart.addingTimeInterval(329)
-
-        let a = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: UUID())
-        let b = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: UUID())
-        #expect(ClipSessionGrouper.sameSession(a, b) == true,
-                "v3 revised: different rollGroupIds within idle-gap must merge — spec calls this the CIA-dinner pattern")
-
-        // Both-nil-rollGroupId at 5.5 min apart also merges.
-        let e = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: nil)
-        let f = clip(captured: secondStart, latitude: nil, longitude: nil, rollGroupId: nil)
-        #expect(ClipSessionGrouper.sameSession(e, f) == true)
-
-        // But at 11 min apart — outside the idle-gap — even two
-        // different-rollGroupId clips split. Silence closes it.
-        let elevenMinLater = firstStart.addingTimeInterval(11 * 60)
-        let g = clip(captured: firstStart, latitude: nil, longitude: nil, rollGroupId: UUID())
-        let h = clip(captured: elevenMinLater, latitude: nil, longitude: nil, rollGroupId: UUID())
-        #expect(ClipSessionGrouper.sameSession(g, h) == false)
-    }
+    // MARK: - Inbox grouping precedence — RETIRED 2026-09-21 with the bench
+    //
+    // Eleven `ClipSessionGrouper.sameSession` tests lived here. They pinned
+    // the grouper's precedence rule: a shared `rollGroupId` groups two clips
+    // regardless of time or place, and clips without one fall back to an
+    // idle-gap + location heuristic that decided what counted as "one
+    // sitting" on the bench.
+    //
+    // The grouper is deleted — the bench was its only consumer. The half of
+    // its rule that MATTERS is not gone, though, and that is why this note
+    // is longer than a deletion needs: **`rollGroupId` overriding time and
+    // place is now the arrival path itself**, not a heuristic feeding a list.
+    // `ArrivedClipMaterializer.memoryId(for:)` keys the memory on the roll,
+    // so a roll is one memory however far apart its taps are, and
+    // `WatchRollArrivesAsOneMemoryTests` guards exactly that — including that
+    // two different rolls in one drain stay two memories.
+    //
+    // What genuinely retired is the *sessions* heuristic: clips with no roll
+    // being gathered into a sitting by clock and coordinate. `On a roll ·
+    // spec.md` calls the roll key "a deterministic override of the time/place
+    // session heuristics"; the descoping removed the thing it was overriding,
+    // and the override became the whole rule.
+    //
+    // Everything else in this file is Watch-side and CURRENT: the debouncer,
+    // the Next controller, and the splitter offsets all still ship.
 
     // MARK: - VoiceClipSplitter offset math (PR 4)
 

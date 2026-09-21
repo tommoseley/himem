@@ -83,13 +83,6 @@ struct EntryExpandedView: View {
     /// P8 Let Go split disclosure, computed once on appear (nil → the static
     /// footnote shows until it's ready).
     @State private var letGoSplitFootnote: String? = nil
-    /// Non-nil while `PlaceClipSheet` is presented on top of this
-    /// memory. Carries the clip id being relocated so the sheet can
-    /// resolve the ref + wire "Remove from this memory" against this
-    /// memory's edge. Per `Memory Detail · unified editing model.md:66`
-    /// (July 5 2026): "Where does this belong?" from a clip's edit
-    /// state opens the placement sheet with three destinations.
-    @State private var relocatingClipId: UUID? = nil
     /// Slice 9 (Memory Detail Full stream convergence): the
     /// retired `PhotoDescriptionEditSheet` used to host the
     /// QuickLook viewer inside its own sheet. With inline
@@ -505,23 +498,6 @@ struct EntryExpandedView: View {
                 showManageMentions = false
             })
             .presentationDetents([.large])
-        }
-        .sheet(isPresented: Binding(
-            get: { relocatingClipId != nil },
-            set: { presented in if !presented { relocatingClipId = nil } }
-        )) {
-            if let id = relocatingClipId,
-               let ref = fetchRefForRelocate(id: id) {
-                PlaceClipSheet(
-                    ref: ref,
-                    sourceMemoryId: entry.id,
-                    onPlaced: {
-                        // A relocate action ran — regenerate the memory's
-                        // content since its clip set changed.
-                        lifecycle.regenerateContent(forEntryId: entry.id)
-                    }
-                )
-            }
         }
         // Memory Detail FAB · path 2 — add existing loose clips. The
         // sheet is pure selection; the attach runs here (host owns
@@ -1204,9 +1180,6 @@ struct EntryExpandedView: View {
                     removedMediaIds.insert(id)
                     applyEditsImmediately()
                 },
-                onRelocateClip: { id in
-                    relocatingClipId = id
-                },
                 onOpenVoice: { item in
                     // Play IN PLACE (2026-07-16 cycle 2/3): the row's ▶ toggles
                     // playback through the audio session — no sheet. The modal
@@ -1560,7 +1533,7 @@ struct EntryExpandedView: View {
     /// Fetches the MediaReference by id for the placement sheet.
     /// PlaceClipSheet needs a concrete ref (not just an id) so its
     /// title branches on `referencingMemoryCount`.
-    private func fetchRefForRelocate(id: UUID) -> MediaReference? {
+    private func fetchRef(id: UUID) -> MediaReference? {
         let ctx = StorageService.shared.viewContext
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
         req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
@@ -1573,7 +1546,7 @@ struct EntryExpandedView: View {
     /// (`.managed`); fetch the live `MediaReference` so the modal's Zone 2
     /// edges + delete branch on the real object.
     private func openClipEditor(id: UUID) {
-        guard let ref = fetchRefForRelocate(id: id) else { return }
+        guard let ref = fetchRef(id: id) else { return }
         editingClip = .managed(ref)
     }
 

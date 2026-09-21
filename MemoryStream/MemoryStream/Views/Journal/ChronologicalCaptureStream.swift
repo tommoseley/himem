@@ -29,7 +29,6 @@ struct ChronologicalCaptureStream: View {
     let onDeleteMedia: (UUID) -> Void
     /// Called when the user taps `Where does this belong?` on a
     /// clip's fate row. Parent presents `PlaceClipSheet`.
-    let onRelocateClip: (UUID) -> Void
     /// Opens the AudioPlayerSheet for a voice clip — fires when the
     /// user taps the quiet "Original recording · Play" footer in the
     /// transcript-first VoiceClipPanel.
@@ -115,7 +114,7 @@ struct ChronologicalCaptureStream: View {
                         onCommitVoiceTranscript(item.id, newText)
                     },
                     onDelete: { onDeleteVoice(item.id) },
-                    onRelocate: { onRelocateClip(item.id) },
+                    onRelocate: nil,
                     onEdit: { onEditClip(item.id) },
                     isPlaying: playingFilename == item.localIdentifier
                 )
@@ -130,7 +129,7 @@ struct ChronologicalCaptureStream: View {
                         onCommitNoteText(item.id, newText)
                     },
                     onDelete: { onDeleteNote(item.id) },
-                    onRelocate: { onRelocateClip(item.id) },
+                    onRelocate: nil,
                     onEdit: { onEditClip(item.id) }
                 )
                 .listRowSeparator(.hidden)
@@ -150,7 +149,7 @@ struct ChronologicalCaptureStream: View {
                         onCommitMediaDescription(item.id, newText)
                     },
                     onDelete: { onDeleteMedia(item.id) },
-                    onRelocate: { onRelocateClip(item.id) },
+                    onRelocate: nil,
                     onEdit: { onEditClip(item.id) }
                 )
                 .listRowSeparator(.hidden)
@@ -210,9 +209,8 @@ struct ChronologicalCaptureStream: View {
                 // tapping a media row opens the description editor,
                 // which carries its own bottom Delete clip button.
                 onDelete: { compactDeleteAction(item) },
-                onRelocate: item.mediaType == .voice || item.mediaType == .note
-                    ? { onRelocateClip(item.id) }
-                    : nil,
+                // Relocate retired 2026-09-21 — a part is placed where it is made.
+                onRelocate: nil,
                 onEdit: item.mediaType == .voice || item.mediaType == .note
                     ? { onEditClip(item.id) }
                     : nil,

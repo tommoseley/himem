@@ -186,11 +186,25 @@ enum RecordingsExport {
 
         var wantedMemoryIds: Set<UUID> = []
         for ref in refs {
+            // **`id` is read through KVC, not the `@NSManaged` accessor.**
+            // `MediaReference.id` is declared non-optional over an
+            // `optional="YES"` model cell — every attribute in this model is
+            // optional, because `NSPersistentCloudKitContainer` requires it —
+            // and `StorageService` sets `shouldDeleteInaccessibleFaults`,
+            // which nils every property of a row whose CloudKit record went
+            // away. Reading the typed accessor on such a row traps with
+            // `EXC_BREAKPOINT`; it has done so twice on device (2026-08-21).
+            //
+            // A nil-id row is unlikely to satisfy this fetch's predicate, so
+            // this is belt rather than the only guard — but an export is the
+            // one operation that must not die partway through, and skipping a
+            // row costs one line. Guarded by `NilIdWholeTableReadTests`.
+            guard let refId = ref.value(forKey: "id") as? UUID else { continue }
             let memoryIds = ((ref.edges as? Set<MemoryClipEdge>) ?? [])
                 .compactMap { $0.memory?.isRecycled == true ? nil : $0.memoryId }
             wantedMemoryIds.formUnion(memoryIds)
             snap.recordings.append(Recording(
-                id: ref.id,
+                id: refId,
                 sourceURL: UbiquityStore.shared.audioURL(for: ref.osIdentifier),
                 transcript: ref.transcript ?? "",
                 capturedAt: ref.createdAt ?? Date(timeIntervalSince1970: 0),
@@ -201,7 +215,7 @@ enum RecordingsExport {
 
         // The transient inbox. Unplaced by definition — these are exactly the
         // rows the I1 tab collapse left without a surface.
-        let known = Set(refs.map(\.id))
+        let known = Set(snap.recordings.map(\.id))
         for clip in manifestClips where !known.contains(clip.clipId) && !clip.audioFilename.isEmpty {
             snap.recordings.append(Recording(
                 id: clip.clipId,

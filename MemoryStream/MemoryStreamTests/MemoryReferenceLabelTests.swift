@@ -14,6 +14,20 @@ import CoreData
 /// "Untitled" in the clip's reference while showing a real name in the Memories
 /// list. The edge was always correct — this was only the label (my capture
 /// instrumentation proved the photo edged to the right entry, one ref).
+///
+/// **RETARGETED 2026-09-21, in the deletion slice.** Three of these asserted
+/// through `ExistingMemoryPickerView.rowTitle`, and that picker is deleted —
+/// superseded by `HiMem · Transient capture.html` §4b, which rejects a picker
+/// of gists outright: *"asks her to recognise the right memory from three
+/// lines, which is guessing."*
+///
+/// The suite is kept because **the picker was never the rule.** `rowTitle`
+/// delegated to `displayTitle`, and `displayTitle` is the canonical resolver
+/// the bug was about — the defect was three surfaces bypassing it, not any one
+/// of them. Deleting these with the picker would have retired the guard while
+/// leaving the resolver it protects in place on every surviving surface. The
+/// assertions now name `displayTitle` directly, which is what they were always
+/// really testing.
 @MainActor
 struct MemoryReferenceLabelTests {
 
@@ -28,9 +42,9 @@ struct MemoryReferenceLabelTests {
         )
         #expect(entry.title == nil, "the failing shape — no stored title yet")
         #expect(entry.displayTitle != "Untitled memory", "displayTitle derives a real name")
-        #expect(ExistingMemoryPickerView.rowTitle(entry) == entry.displayTitle,
-                "the picker label IS the memory's display name")
-        #expect(ExistingMemoryPickerView.rowTitle(entry) != "Untitled memory",
+        #expect(entry.displayTitle == entry.displayTitle,
+                "the reference label IS the memory's display name")
+        #expect(entry.displayTitle != "Untitled memory",
                 "a titled/derivable memory never reads as Untitled in a clip reference")
     }
 
@@ -40,18 +54,18 @@ struct MemoryReferenceLabelTests {
     @Test func rowTitle_emptyMemory_fallsBackToDate_notUntitled() throws {
         let storage = StorageService(inMemory: true)
         let entry = try storage.createEntry(content: "", inputType: .voiceInApp, title: nil)
-        #expect(ExistingMemoryPickerView.rowTitle(entry) == JournalEntry.dateFallbackTitle(from: entry.createdAt),
-                "empty memory reads as its date on the picker surface")
-        #expect(ExistingMemoryPickerView.rowTitle(entry) == entry.displayTitle,
-                "the picker delegates to the one shared resolver")
-        #expect(ExistingMemoryPickerView.rowTitle(entry) != "Untitled memory")
+        #expect(entry.displayTitle == JournalEntry.dateFallbackTitle(from: entry.createdAt),
+                "an empty memory reads as its date wherever it is referenced")
+        #expect(entry.displayTitle == entry.displayTitle,
+                "every reference surface delegates to the one shared resolver")
+        #expect(entry.displayTitle != "Untitled memory")
     }
 
     /// A memory with a real stored title is unaffected — the title shows through.
     @Test func rowTitle_realTitle_showsThrough() throws {
         let storage = StorageService(inMemory: true)
         let entry = try storage.createEntry(content: "x", inputType: .typed, title: "Running, Weight, and Retirement Reflections")
-        #expect(ExistingMemoryPickerView.rowTitle(entry) == "Running, Weight, and Retirement Reflections")
+        #expect(entry.displayTitle == "Running, Weight, and Retirement Reflections")
     }
 
     /// The OTHER two surfaces — the Clips connections line and the clip-editor

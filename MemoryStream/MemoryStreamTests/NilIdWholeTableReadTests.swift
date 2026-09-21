@@ -7,9 +7,19 @@ import CoreData
 /// on any row whose cell is nil — and `shouldDeleteInaccessibleFaults` is what
 /// makes such a row reachable.**
 ///
-/// `QAFixtureSeeder.clear` fetches EVERY `MediaReference` in the store — the
-/// user's real clips, not just the fixtures — and calls `isSeeded(ref.id)`.
-/// `isSeeded` takes a non-optional `UUID`, and `MediaReference.id` is declared
+/// **RETARGETED 2026-09-21.** This was written against `QAFixtureSeeder.clear`,
+/// which fetched every `MediaReference` and called `isSeeded(ref.id)`. That
+/// seeder is deleted with the bench — but **the defect class is not about the
+/// seeder**, it is about any fetch that reads a non-optional `@NSManaged`
+/// accessor on a row that may have nil cells, and there is a live one:
+/// `RecordingsExport.snapshot`, which fetches every voice `MediaReference` to
+/// copy her recordings out.
+///
+/// Retargeted rather than deleted because the reader moved, not the rule. The
+/// export is also the worst place for this to bite — it is the operation that
+/// must not die partway through, and it exists to protect two real libraries.
+///
+/// `MediaReference.id` is declared
 /// `@NSManaged public var id: UUID` over an `optional="YES"` model cell (every
 /// attribute in this model is optional, because `NSPersistentCloudKitContainer`
 /// requires it). One nil cell traps with `EXC_BREAKPOINT` → SIGTRAP → signal 5.
@@ -34,45 +44,49 @@ import CoreData
 /// it then guards is that `clear` survives a foreign row it cannot identify.
 @MainActor
 @Suite(.serialized)
-struct ClearNilIdTrapTests {
+struct NilIdWholeTableReadTests {
 
-    /// The money test: a row with a nil `id` must not stop `clear` from doing
-    /// its job, and must not be mistaken for a seeded row either.
-    @Test func clearSurvivesARowWhoseIdCellIsNil() throws {
+    /// The money test: a row with a nil `id` must not stop the export from
+    /// copying the rows that ARE readable.
+    @Test func exportSurvivesARowWhoseIdCellIsNil() throws {
         let storage = StorageService(inMemory: true)
         let ctx = storage.viewContext
 
-        // A foreign row — not seeded, and its id cell is nil. This is the shape
+        // A row whose id cell is nil — the shape
         // `shouldDeleteInaccessibleFaults` produces from a vanished record.
+        // Voice, so it is inside the export's fetch predicate and genuinely
+        // reaches the read under test; an `.image` row would be filtered out
+        // before the trap could happen and the test would pass by not looking.
         let foreign = MediaReference(context: ctx)
         foreign.id = UUID()
-        foreign.mediaType = MediaReference.MediaType.image.rawValue
-        foreign.osIdentifier = "foreign.jpg"
+        foreign.mediaType = MediaReference.MediaType.voice.rawValue
+        foreign.osIdentifier = "foreign.m4a"
         foreign.createdAt = Date()
         try storage.save(context: ctx)
         foreign.setValue(nil, forKey: "id")
         #expect(foreign.value(forKey: "id") == nil, "precondition: the cell really is nil")
 
-        // A genuinely seeded row, so we can prove clear still did its work.
+        // A readable row, so we can prove the export still did its work.
         let seeded = MediaReference(context: ctx)
         seeded.id = UUID(uuidString: "5EED0002-0000-0000-0000-000000000210")!
-        seeded.mediaType = MediaReference.MediaType.image.rawValue
-        seeded.osIdentifier = "5EED-qa-000000000210.jpg"
+        seeded.mediaType = MediaReference.MediaType.voice.rawValue
+        seeded.osIdentifier = "5EED-qa-000000000210.m4a"
         seeded.createdAt = Date()
         try storage.save(context: ctx)
 
-        // Against the unfixed code this line does not fail — it TRAPS.
-        QAFixtureSeeder.clear(in: ctx)
+        // Against a typed-accessor read this line does not fail — it TRAPS.
+        let snap = RecordingsExport.snapshot(context: ctx, manifestClips: [])
 
-        let remaining = try ctx.fetch(NSFetchRequest<MediaReference>(entityName: "MediaReference"))
-        let ids = remaining.compactMap { $0.value(forKey: "id") as? UUID }
+        // Surviving is necessary; still doing the work is the other half.
+        // A `return` on the first odd row would pass a trap test and export
+        // nothing, which is the failure this whole feature exists to prevent.
         #expect(
-            !ids.contains(where: { $0.uuidString.hasPrefix("5EED0002") }),
-            "clear must still remove seeded rows — surviving the nil row is not enough if it stopped working"
+            snap.recordings.contains { $0.id.uuidString.hasPrefix("5EED0002") },
+            "the readable recording must still be exported — surviving the nil row is not enough if it stopped working"
         )
         #expect(
-            remaining.count == 1,
-            "the foreign row is not seeded and must be left alone: clear owns 5EED- rows only"
+            snap.recordings.count == 1,
+            "exactly the readable row: the nil-id row is skipped, not counted and not exported"
         )
     }
 }

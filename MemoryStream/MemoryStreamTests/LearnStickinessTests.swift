@@ -28,11 +28,24 @@ import Foundation
 /// shell clears it on a tab change.**
 @Suite struct LearnStickinessTests {
 
-    /// Neither tab may own the flag again. A tab-local `@State` is the
-    /// defect, reintroduced.
+    /// No tab may own the flag again. A tab-local `@State` is the defect,
+    /// reintroduced.
+    ///
+    /// **The list lost `ClipsTabView.swift` on 2026-09-21** — the Clips tab is
+    /// deleted, and three tabs became two. Both survivors are `JournalView`
+    /// (`.memories` and `.projects` modes), so the guard now names one file
+    /// rather than two. The loop is kept deliberately: it is the shape that
+    /// makes adding a third tab to the check a one-line edit, and the original
+    /// defect was precisely a second tab owning its own copy.
+    ///
+    /// Worth noting how this surfaced. The deletion slice did not think to
+    /// look here, and `Self.source` **threw on the missing file** rather than
+    /// quietly skipping it — a source-scanning guard that cannot find its
+    /// subject must fail, never pass by matching nothing (CLAUDE.md § Guard
+    /// the Caller). It reported a real gap in the slice instead of going green
+    /// on an empty walk.
     @Test func noTabOwnsTheLearnFlag() throws {
-        for path in ["MemoryStream/Views/ClipsTabView.swift",
-                     "MemoryStream/Views/Journal/JournalView.swift"] {
+        for path in ["MemoryStream/Views/Journal/JournalView.swift"] {
             let src = try Self.source(path)
             #expect(src.contains("@Binding var learnPresented"),
                     "\(path) must take Learn presentation from the shell.")

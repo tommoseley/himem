@@ -74,7 +74,6 @@ struct ClipEditorModal: View {
     // Zone 2 — single-open edge accordion + inline annotation edit.
     @State private var openEdgeId: UUID? = nil
     @State private var annotationDraft: String? = nil
-    @State private var placing = false
 
     // Zone 1 photo/video hero — the thumbnail + full-screen consume.
     // Resolved the same way `MediaClipRow` does (ThumbnailService), and
@@ -158,7 +157,6 @@ struct ClipEditorModal: View {
             }
         }
         .onDisappear { if player.isPlaying { player.stop() } }
-        .sheet(isPresented: $placing) { placementSheet }
         // Full-screen consume (Q3 "tap to view full size"). Both viewers
         // carry a standard dismiss (tap · swipe-down · ✕).
         .fullScreenCover(item: $photoConsumeItem) { PhotoViewerSheet(item: $0) }
@@ -387,7 +385,6 @@ struct ClipEditorModal: View {
             ForEach(edges, id: \.id) { edge in
                 edgeRow(edge)
             }
-            addToMemoryButton
         }
         .padding(.top, 20)
     }
@@ -511,21 +508,6 @@ struct ClipEditorModal: View {
         }
     }
 
-    private var addToMemoryButton: some View {
-        Button { placing = true } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                Text("Add to a memory")
-            }
-            .font(.system(size: 14.5, weight: .semibold))
-            .foregroundStyle(Crucible.Color.accent)
-            .frame(maxWidth: .infinity, minHeight: 46)
-            .overlay(RoundedRectangle(cornerRadius: 13).stroke(Crucible.Color.accent, style: StrokeStyle(lineWidth: 1, dash: [5])))
-            .contentShape(Rectangle()) // edge-to-edge tap (dashed pill interior is transparent)
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: - Zone 3 · Delete this Clip
 
     private var deleteFooter: some View {
@@ -553,24 +535,7 @@ struct ClipEditorModal: View {
         .overlay(alignment: .top) { Rectangle().fill(Crucible.Color.divider).frame(height: 1) }
     }
 
-    // MARK: - Placement sheet
-
     @ViewBuilder
-    private var placementSheet: some View {
-        switch source {
-        case .managed(let ref):
-            PlaceClipSheet(ref: ref)
-        case .inbox(let clip):
-            // Promote-then-place (Tom, July 16; wired 2026-07-25): materialize
-            // the InboxClip → MediaReference + edge ON CONFIRM (see
-            // `PlaceInboxClipSheet` / `EntryLifecycleService.placeInboxClip`).
-            // Cancel leaves the bench clip untouched. On success the clip is
-            // promoted off the bench, so this editor (which was editing the
-            // now-gone inbox clip) dismisses.
-            PlaceInboxClipSheet(clip: clip, onPlaced: { dismiss() })
-        }
-    }
-
     // MARK: - Derived source properties
 
     private var media: ClipDisplayModel.Media {

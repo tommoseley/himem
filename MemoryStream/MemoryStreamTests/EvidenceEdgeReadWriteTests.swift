@@ -230,81 +230,17 @@ struct EvidenceEdgeReadWriteTests {
         #expect(arr.isEmpty, "The read path must walk edges — a ref with no edges must not appear in any memory")
     }
 
-    /// SortBatchCommit produces one draft Memory per cluster, each
-    /// with N edges linking to the cluster's clips in capturedAt order.
-    /// End-to-end coverage of the ontology's Sort→commit path.
-    @Test func sortBatchCommitCreatesEdgesForEachClipInCluster() throws {
-        let storage = StorageService(inMemory: true)
-        let vm = JournalViewModel(storage: storage, processingEngine: nil)
-
-        let clipTimes = (0..<4).map { Date(timeIntervalSinceNow: -Double($0 * 60)) }
-        let filenames = clipTimes.enumerated().map { i, _ in "sort-\(i)-\(UUID().uuidString).caf" }
-        defer {
-            for name in filenames {
-                try? FileManager.default.removeItem(at: SpeechService.audioURL(for: name))
-            }
-        }
-
-        for name in filenames {
-            let url = InboxManifest.audioURL(for: name)
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Data([0]).write(to: url)
-        }
-
-        let clips = zip(filenames, clipTimes).map { name, time in
-            InboxClip(
-                clipId: UUID(),
-                capturedAt: time,
-                duration: 5,
-                transcript: "clip at \(time)",
-                latitude: nil,
-                longitude: nil,
-                source: "watch",
-                audioFilename: name,
-                transcriptionAttempted: true,
-                rollGroupId: nil
-            )
-        }
-
-        let proposal = ClusterProposal(
-            clipIds: clips.map(\.clipId),
-            ruleTag: .timePlace,
-            whyText: "4 clips · same evening",
-            proposedName: "Sort test batch",
-            previewLines: []
-        )
-
-        let entryIds = SortBatchCommit.commit(
-            [(proposal: proposal, clips: clips)],
-            viewModel: vm,
-            storage: storage
-        )
-        #expect(entryIds.count == 1)
-
-        let entry = try #require(vm.currentEntry(id: entryIds[0]).flatMap { model in
-            try storage.viewContext.fetch({
-                let r = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
-                r.predicate = NSPredicate(format: "id == %@", model.id as CVarArg)
-                r.fetchLimit = 1
-                return r
-            }()).first
-        })
-
-        let edges = entry.edgesArray
-        #expect(edges.count == 4, "Cluster of 4 clips → 4 edges on the resulting memory")
-
-        // Each edge is bound to one of our clips' audio filenames.
-        let edgedFilenames = Set(edges.compactMap { $0.clip?.osIdentifier })
-        #expect(edgedFilenames == Set(filenames))
-
-        // And `ref.createdAt` on each equals the clip's capturedAt —
-        // the fixup pattern is truly retired.
-        for edge in edges {
-            let clipTime = try #require(clips.first(where: { $0.audioFilename == edge.clip?.osIdentifier })).capturedAt
-            let delta = abs((edge.clip?.createdAt ?? .distantPast).timeIntervalSince(clipTime))
-            #expect(delta < 1.0, "SortBatchCommit must stamp ref.createdAt = clip.capturedAt at creation time")
-        }
-    }
+    // A test of `SortBatchCommit.commit` — the Sort batch that turned a
+    // cluster proposal into a memory — was RETIRED here 2026-09-21 with the
+    // bench. It asserted one draft memory per cluster, N edges in capturedAt
+    // order, and `ref.createdAt` stamped at creation rather than fixed up.
+    //
+    // Not rehomed, and it is the same distinction that kept the other tests
+    // in this file: it guarded a CAPABILITY the descoping removes — AI
+    // clustering, "these five things might go together" — not a property of
+    // data that survives. There is no batch commit left to guard. The
+    // createdAt-at-creation rule it also touched is still asserted where a
+    // memory actually gets made, in `WatchRollArrivesAsOneMemoryTests`.
 
     /// `EntryLifecycleService.joinedContent` must walk edges and
     /// respect each memory's per-edge `orderInMemory` — not `ref.createdAt`.

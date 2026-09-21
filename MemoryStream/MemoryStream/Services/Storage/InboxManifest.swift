@@ -239,47 +239,6 @@ final class InboxManifest: ObservableObject {
     /// a snapshot via `loadRecycledClips()`; a restore republishes `clips`.
     private var recycledClips: [InboxClip] = []
 
-    /// User-dismissed cluster proposals per spec § "Sort is the
-    /// bench's resting state" + Tom's Q3 answer (July 4 2026).
-    /// Tapping *Not together* on a cluster stores it here so Sort
-    /// won't re-propose the same grouping. Persisted to a separate
-    /// JSON file (`dismissed-clusters.json`) alongside
-    /// `manifest.json` — no schema break on the inbox format.
-    ///
-    /// **Prune-on-write:** after any inbox mutation, entries whose
-    /// clipIds no longer all exist in the inbox are dropped. The
-    /// fingerprint referencing a missing clipId is dead anyway —
-    /// the proposer only ever produces fingerprints from current
-    /// clipIds, so a dismissed record with a placed clipId can
-    /// never match a future proposal.
-    ///
-    /// `@Published` so `SessionListView` (which observes
-    /// `InboxManifest.shared` as `@ObservedObject`) re-renders
-    /// when the user taps *Not together* on a cluster card. The
-    /// prior "not Published" reasoning ("a `@Published` clips
-    /// update already drives the refresh") was wrong: dismissing
-    /// a cluster does NOT touch `clips`, so no publish fires,
-    /// SwiftUI never re-runs the `proposals` computed property,
-    /// and the dismissed cluster stays on screen (field-observed
-    /// bug 2026-07-11).
-    ///
-    /// Money-tested by `InboxManifestDismissedClustersTests.dismissCluster_firesObjectWillChange_soSwiftUIRerenders`.
-    @Published private(set) var dismissedClusters: [DismissedCluster] = []
-
-    /// Voice clip ids the user has *Removed from session* via the
-    /// Clip Detail fate row (`Clip model · spec.md` § "Clip triage"
-    /// July 12 2026). A solo clip survives on the bench but the
-    /// grouper emits it as its own single-clip session — the user
-    /// declared it doesn't belong in the cluster the clock would
-    /// otherwise form. Persistent across launches via the
-    /// `solo-clip-ids.json` companion file.
-    ///
-    /// `@Published` for the same reason as `dismissedClusters`:
-    /// removing a clip from a session doesn't mutate `clips`, so
-    /// SwiftUI would never re-run the session grouper without an
-    /// explicit publish here.
-    @Published private(set) var soloClipIds: Set<UUID> = []
-
     /// Folders. Created lazily on first access. Marked `nonisolated` so the
     /// WatchSessionDelegate can resolve paths off the main actor — the
     /// delegate's `didReceive` callback runs on a background queue, and we
@@ -310,21 +269,6 @@ final class InboxManifest: ObservableObject {
         UbiquityStore.shared.inboxDirectory
     }
     nonisolated static var manifestURL: URL { inboxRoot.appendingPathComponent("manifest.json") }
-    /// Companion file to `manifestURL` holding the Sort dismissal
-    /// store (spec § "Sort is the bench's resting state"). Separate
-    /// file so the manifest's own JSON schema stays unchanged.
-    nonisolated static var dismissedClustersURL: URL {
-        inboxRoot.appendingPathComponent("dismissed-clusters.json")
-    }
-    /// Companion file to `manifestURL` holding the per-clip "keep
-    /// this loose, don't group into any session" flag set
-    /// (`Clip model · spec.md` § "Clip triage" July 12 2026:
-    /// *Remove from session* is a structural edit that survives
-    /// across app launches). Separate file so the manifest JSON
-    /// schema stays unchanged.
-    nonisolated static var soloClipIdsURL: URL {
-        inboxRoot.appendingPathComponent("solo-clip-ids.json")
-    }
     nonisolated static func audioURL(for filename: String) -> URL {
         UbiquityStore.shared.inboxURL(for: filename)
     }
@@ -756,15 +700,6 @@ final class InboxManifest: ObservableObject {
         let previousIds = Set(clips.map(\.clipId))
         let nextIds = Set(next.map(\.clipId))
         clips = next
-        // Prune-on-write hook: any dismissed-cluster record whose
-        // clipIds are no longer all in the inbox becomes dead
-        // weight (the fingerprint referencing a placed clipId
-        // can never match a future proposal since the proposer
-        // only produces fingerprints from current clipIds). Drop
-        // those records before persisting. Spec § "Sort is the
-        // bench's resting state" + Tom's Q3 answer.
-        pruneDeadDismissedClusters()
-        pruneDeadSoloClipIds()
         persist()
         // Home-screen numeric badge retired 2026-07-10 per `CLAUDE.md`
         // §Phone ("App-icon badge: none. iOS only supports a numeric
@@ -803,7 +738,6 @@ final class InboxManifest: ObservableObject {
             // so the in-memory array is known NOT to describe it. Writing here
             // would discard rows we can still see the bytes of (F23 T1.4).
             ErrorState.shared.report(.saveFailed("Inbox manifest not persisted: the existing file is unreadable and could not be moved aside; refusing to overwrite it."))
-            persistDismissedClusters()
             return
         }
         let url = Self.manifestURL
@@ -823,181 +757,6 @@ final class InboxManifest: ObservableObject {
             // correct, we'll retry on the next mutation. Log and move on.
             ErrorState.shared.report(.saveFailed("Inbox manifest persist failed: \(error.localizedDescription)"))
         }
-        // Also persist the dismissed-clusters companion file. Cheap
-        // even when empty — the set is bounded by the number of
-        // clusters the user has ever declined, and the JSON is a
-        // small array.
-        persistDismissedClusters()
-    }
-
-    /// Persists the dismissed-clusters companion file. Called from
-    /// the same `persist()` path as the manifest so a single
-    /// mutation writes both files.
-    private func persistDismissedClusters() {
-        let url = Self.dismissedClustersURL
-        let tmp = url.appendingPathExtension("tmp")
-        do {
-            let data = try JSONEncoder.iso8601.encode(dismissedClusters)
-            try data.write(to: tmp, options: .atomic)
-            _ = try? FileManager.default.replaceItemAt(url, withItemAt: tmp)
-        } catch {
-            ErrorState.shared.report(.saveFailed("Dismissed clusters persist failed: \(error.localizedDescription)"))
-        }
-    }
-
-    /// Loads the dismissed-clusters companion file. Called from
-    /// `load()`. Missing file → empty set (fresh install / never
-    /// used Sort). Corrupt file → empty set (rare; user re-earns
-    /// their dismissals).
-    private func loadDismissedClusters() {
-        let url = Self.dismissedClustersURL
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            dismissedClusters = []
-            return
-        }
-        do {
-            let data = try Data(contentsOf: url)
-            dismissedClusters = try JSONDecoder.iso8601.decode([DismissedCluster].self, from: data)
-        } catch {
-            dismissedClusters = []
-        }
-    }
-
-    /// Persists `soloClipIds` to its companion file. Called from
-    /// `markSolo` / `unmarkSolo` and from the prune path in
-    /// `replace(with:)` when stale ids get filtered out.
-    private func persistSoloClipIds() {
-        let url = Self.soloClipIdsURL
-        let tmp = url.appendingPathExtension("tmp")
-        do {
-            let data = try JSONEncoder.iso8601.encode(Array(soloClipIds))
-            try data.write(to: tmp, options: .atomic)
-            _ = try? FileManager.default.replaceItemAt(url, withItemAt: tmp)
-        } catch {
-            ErrorState.shared.report(.saveFailed("Solo clip ids persist failed: \(error.localizedDescription)"))
-        }
-    }
-
-    /// Loads the solo-clip-ids companion file. Called from
-    /// `load()`. Missing file → empty set (fresh install / user
-    /// never removed a clip from a session).
-    private func loadSoloClipIds() {
-        let url = Self.soloClipIdsURL
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            soloClipIds = []
-            return
-        }
-        do {
-            let data = try Data(contentsOf: url)
-            let array = try JSONDecoder.iso8601.decode([UUID].self, from: data)
-            soloClipIds = Set(array)
-        } catch {
-            soloClipIds = []
-        }
-    }
-
-    // MARK: - Sort dismissal (spec § "Sort is the bench's resting state")
-
-    /// Fingerprints the workbench's Sort proposer should suppress.
-    /// Computed from `dismissedClusters` — the persisted store keeps
-    /// the source clipIds + rule so prune-on-write can detect dead
-    /// records. The proposer only needs the fingerprint set.
-    var dismissedClusterFingerprints: Set<ClusterFingerprint> {
-        Set(dismissedClusters.map(\.fingerprint))
-    }
-
-    /// Records a user's *Not together* dismissal for a cluster.
-    /// Idempotent — the same proposal can't dismiss twice (dedup
-    /// on the derived fingerprint). Persists immediately.
-    func dismissCluster(_ proposal: ClusterProposal) {
-        let record = DismissedCluster(
-            clipIds: Set(proposal.clipIds),
-            ruleTag: proposal.ruleTag
-        )
-        let fp = record.fingerprint
-        // Idempotent — no-op if already dismissed.
-        guard !dismissedClusters.contains(where: { $0.fingerprint == fp }) else { return }
-        dismissedClusters.append(record)
-        persistDismissedClusters()
-    }
-
-    /// Prunes dismissed-cluster records whose member clipIds are
-    /// no longer all present in the current inbox. Called from
-    /// every mutation path via `replace(with:)`. A dismissed
-    /// fingerprint referencing a placed (missing) clipId is dead
-    /// weight — the proposer only ever produces fingerprints from
-    /// current clipIds, so the record can never match a future
-    /// proposal.
-    /// Bench clip ids that live as materialized `MediaReference`s rather
-    /// than manifest rows — the second store the bench composes from.
-    /// Overridable so the prune can be exercised without Core Data.
-    nonisolated(unsafe) static var materializedBenchClipIds: () -> Set<UUID> = {
-        let ctx = StorageService.shared.viewContext
-        let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
-        req.predicate = NSPredicate(
-            format: "edges.@count == 0 AND recycledAt == nil AND mediaType == %@",
-            MediaReference.MediaType.voice.rawValue
-        )
-        return Set(((try? ctx.fetch(req)) ?? []).map(\.id))
-    }
-
-    private func pruneDeadDismissedClusters() {
-        // **F41 · the prune must read the same set the PROPOSER reads.**
-        //
-        // The comment above ("the proposer only ever produces fingerprints
-        // from current clipIds") was true when the bench read one store. P0-3
-        // made the bench read TWO — `composeBenchClips(manifestClips:refs:)`
-        // unions manifest rows with materialized zero-edge voice refs — and
-        // the prune was never updated. So dismissing a cluster containing any
-        // ref-backed clip wrote the record and then deleted it on the very
-        // next manifest write, because that clipId is not in `clips`. The
-        // cluster re-proposed immediately: "Not together" did not stick.
-        //
-        // Pruning is an optimisation; a stale record is harmless dead weight,
-        // while a wrongly-pruned one destroys the user's stated intent. So
-        // the union is taken, and if the ref side is unavailable the prune
-        // keeps the record rather than guessing.
-        let liveIds = Set(clips.map(\.clipId)).union(Self.materializedBenchClipIds())
-        let filtered = dismissedClusters.filter { record in
-            record.clipIds.isSubset(of: liveIds)
-        }
-        guard filtered.count != dismissedClusters.count else { return }
-        dismissedClusters = filtered
-        persistDismissedClusters()
-    }
-
-    /// Records the user's *Remove from session* fate action for a
-    /// voice clip. Idempotent — marking an already-solo clip is a
-    /// no-op. The grouper (`ClipSessionGrouper.group`) reads the
-    /// set and emits solo clips as their own single-clip sessions.
-    /// Persists immediately so the state survives an app relaunch.
-    func markSolo(clipId: UUID) {
-        guard !soloClipIds.contains(clipId) else { return }
-        soloClipIds.insert(clipId)
-        persistSoloClipIds()
-    }
-
-    /// Inverse of `markSolo` — restores a clip to normal grouping.
-    /// Not currently wired to any UI (Chunk C only ships the
-    /// forward direction), but present so the state store is
-    /// symmetric and future "Undo Remove" can hook in without
-    /// growing the API.
-    func unmarkSolo(clipId: UUID) {
-        guard soloClipIds.contains(clipId) else { return }
-        soloClipIds.remove(clipId)
-        persistSoloClipIds()
-    }
-
-    /// Prunes solo-clip-id entries whose clipIds are no longer in
-    /// the current inbox (bundled, deleted, or promoted to a
-    /// memory). Called from `replace(with:)` alongside the
-    /// dismissed-clusters prune.
-    private func pruneDeadSoloClipIds() {
-        let liveIds = Set(clips.map(\.clipId))
-        let filtered = soloClipIds.intersection(liveIds)
-        guard filtered.count != soloClipIds.count else { return }
-        soloClipIds = filtered
-        persistSoloClipIds()
     }
 
     private func load() {
@@ -1025,12 +784,6 @@ final class InboxManifest: ObservableObject {
         defer {
             // Numeric badge retired 2026-07-10; force to zero on load.
             syncIconBadge(to: 0)
-            // Load the companion Sort-dismissals file. Missing file
-            // → empty set, safe on fresh install.
-            loadDismissedClusters()
-            // Load the companion solo-clip-ids file (Chunk C, Clip
-            // triage July 12 2026). Missing → empty set.
-            loadSoloClipIds()
         }
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
@@ -1289,68 +1042,7 @@ final class InboxManifest: ObservableObject {
         disposedClips = disposed
     }
 
-    /// Test seam for the Sort dismissal store — replaces
-    /// `dismissedClusters` in place, without going through disk.
-    /// Lets tests reset state between runs cleanly. Never call
-    /// from production code.
-    func debugReplaceDismissedForTesting(_ next: [DismissedCluster]) {
-        dismissedClusters = next
-    }
 
-    /// Fixed ids for the seeded Sort-repro cluster so
-    /// `debugClearTestCluster` removes exactly these and re-seeding is
-    /// idempotent.
-    static let debugTestClusterClipIds: [UUID] = [
-        UUID(uuidString: "5EED0000-0000-0000-0000-000000000001")!,
-        UUID(uuidString: "5EED0000-0000-0000-0000-000000000002")!,
-        UUID(uuidString: "5EED0000-0000-0000-0000-000000000003")!,
-    ]
-
-    /// Seeds three transcribed clips that flow through the **real** grouping
-    /// path (`ClipSessionGrouper` → `ClipClusterProposer`) to surface a
-    /// multi-clip Sort cluster on demand — so the cluster editor, and the
-    /// aggregate-arbiter check that needs a multi-clip context, are
-    /// reproducible without waiting on organic dogfood.
-    ///
-    /// Mechanics: spaced 15 min apart (> the 10-min idle gap → three separate
-    /// sessions) and sharing a distinctive **bigram** ("Kingfisher Wharf"),
-    /// which clusters via `proposeWordMatch` with no NLTagger dependency
-    /// (bigrams use plain tokenization — robust on sim *and* device) and no
-    /// time/location gate. The shared coordinate also feeds the time+place
-    /// rule as a bonus signal. Non-destructive + idempotent: existing bench
-    /// clips are preserved and a prior seed is replaced, not duplicated.
-    func debugSeedTestCluster() {
-        let now = Date()
-        let lat = 32.2371, lon = -80.8557   // Bluffton — the spec's example place
-        let lines = [
-            "Notes from Kingfisher Wharf about the afternoon harbor plan.",
-            "More from Kingfisher Wharf, watching the boats come in.",
-            "Last one from Kingfisher Wharf before heading home.",
-        ]
-        var next = clips.filter { !Self.debugTestClusterClipIds.contains($0.clipId) }
-        for (i, id) in Self.debugTestClusterClipIds.enumerated() {
-            next.append(InboxClip(
-                clipId: id,
-                capturedAt: now.addingTimeInterval(Double(-i) * 15 * 60),
-                duration: 5,
-                transcript: lines[i],
-                latitude: lat,
-                longitude: lon,
-                source: "phone",
-                audioFilename: "",            // no real audio — play is inert for the seed
-                transcriptionAttempted: true,
-                rollGroupId: nil,             // idle-gap applies → three sessions
-                status: .transcribed
-            ))
-        }
-        next.sort { $0.capturedAt > $1.capturedAt }
-        replace(with: next)
-    }
-
-    /// Removes the seeded Sort-repro clips, leaving the real bench intact.
-    func debugClearTestCluster() {
-        replace(with: clips.filter { !Self.debugTestClusterClipIds.contains($0.clipId) })
-    }
     #endif
 }
 
