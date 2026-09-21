@@ -37,9 +37,46 @@ Known traps, each of which has cost a session:
 
 **A gate number is only comparable to the last one if the thing that produced it has not moved.** Check, do not assume — and record the answer either way, because "nothing changed" is a claim that needs a comparison behind it.
 
-- **The active developer directory** — the gates run under an explicit `DEVELOPER_DIR` override precisely because the system-wide setting points somewhere else. **If a toolchain install repoints it, the failure mode inverts:** an invocation that forgets the override stops erroring and starts silently succeeding against a different toolchain. Confirm which state you are in, and say so if the loud guard is gone.
+- **The active developer directory.** The canonical invocation is:
+
+      DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+
+  This is the one place a path is named rather than a role, deliberately: every
+  session before 2026-09-20 names a beta path that **no longer exists**, so an
+  inherited command fails loudly — which is the right failure, but the doc
+  should teach the current path rather than leave the terminal to.
+
+  **THE LOUD GUARD IS RETIRED, AND IT WAS RETIRED ON PURPOSE (2026-09-20).**
+  This bullet used to say the gates run under an explicit override *because the
+  system-wide setting points somewhere else*, and warned that a toolchain
+  install would invert the failure mode — an invocation forgetting the override
+  would stop erroring and start silently succeeding against a different
+  toolchain.
+
+  That inversion has now happened: `xcode-select` points at Xcode and a bare
+  `xcodebuild` resolves. **It no longer matters, because the thing the guard
+  protected against was removed instead.** Its purpose was to stop a forgotten
+  override selecting a DIFFERENT toolchain; the betas were deleted at the GA
+  upgrade, so there is one Xcode on the machine and a forgotten override now
+  reaches the same compiler. Rule replaced by mechanism — the ambiguity is
+  gone by construction rather than watched for.
+
+  *Recorded here so a future reader finding no guard finds the reason beside
+  it, rather than concluding it lapsed.* If a second Xcode is ever installed,
+  the ambiguity returns and the guard does not come back with it — that is the
+  moment to re-read this paragraph.
 - **The OS build, the SDK builds, and the simulator runtimes** — against the values in the most recent log. The SDK build is what a store upload's acceptance was measured against; the runtime pin is what makes the deliberate-failure count mean the same thing as last time.
-- **Any of these moving makes the next gate a NEW BASELINE, not a confirmation.** Say that explicitly. Counts that coincide across a toolchain change are a coincidence, not continuity — that has happened here and was recorded as such.
+- **Any of these moving makes the next gate a NEW BASELINE, not a confirmation.** Say that explicitly. Counts that coincide across a toolchain change are normally a coincidence, not continuity — that has happened here and was recorded as such.
+
+  **The exception, and what it costs to earn:** a coincident count IS continuity
+  when nothing else moved *and you can prove it*. The 2026-09-20 GA upgrade is
+  the worked example — the tree was frozen (git tree hash, a content hash over
+  all 450 Swift sources, and `project.pbxproj` all re-checked after the
+  install), and the failing membership was **byte-compared** against a file
+  frozen before it, not eyeballed. Identical counts then mean no change rather
+  than two numbers that happen to match. Freeze before, compare after; a gate
+  that moves across a toolchain change only tells you something if nothing else
+  moved.
 
 Where a value must not drift, prefer erasing and recreating on the same version over switching to a different one. "Grab whatever is available" is how a pin is lost inside a routine step nobody thinks of as a decision.
 
