@@ -175,7 +175,10 @@ struct DeletionSemanticsTests {
         #expect(memB.mediaReferencesArray.isEmpty)
 
         // Purge: permanent — ref + edges gone, memories survive.
-        service.purgeClip(refId: ref.id)
+        // `sparingLiveReferences: false` — this test IS the locked
+        // "Delete this Clip" behaviour, where she chose this part having been
+        // told what it is attached to. Its assertions are unchanged.
+        service.purgeClip(refId: ref.id, sparingLiveReferences: false)
         #expect(try fetchRefs(in: storage).isEmpty)
         #expect(try fetchEdges(in: storage).isEmpty)
         #expect(try fetchMemories(in: storage).count == 2)

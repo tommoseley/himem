@@ -253,7 +253,9 @@ struct RecycleBinView: View {
                                 lifecycle.restoreClip(refId: clip.id)
                                 reload()
                             }, onDelete: {
-                                lifecycle.purgeClip(refId: clip.id)
+                                // She chose this one part. Locked "Delete this
+                                // Clip" behaviour — destroyed everywhere.
+                                lifecycle.purgeClip(refId: clip.id, sparingLiveReferences: false)
                                 reload()
                             })
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
@@ -300,7 +302,10 @@ struct RecycleBinView: View {
                 Button("Delete All Forever", role: .destructive) {
                     viewModel.emptyRecycleBin()
                     recycledProjects.forEach { projectVM.purgeProject(id: $0.id) }
-                    recycledClips.forEach { lifecycle.purgeClip(refId: $0.id) }
+                    // Bulk — no per-part count was shown, so a part a live
+                    // memory still references is spared. This loop destroyed
+                    // 184 recordings on 2026-09-22.
+                    recycledClips.forEach { lifecycle.purgeClip(refId: $0.id, sparingLiveReferences: true) }
                     recycledInboxClips.forEach { InboxManifest.shared.purgeRecycledClip(clipId: $0.id) }
                     reload()
                 }

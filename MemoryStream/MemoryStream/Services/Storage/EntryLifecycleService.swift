@@ -1158,9 +1158,34 @@ final class EntryLifecycleService {
     /// Recently Deleted's Delete Forever and the 30-day purge. Removes the
     /// cached thumbnail, the audio file (`.voice`), and the row (edges
     /// cascade). Irreversible.
-    func purgeClip(refId: UUID) {
+    /// **Permanent destruction of one part.**
+    ///
+    /// `sparingLiveReferences` has **no default**, because the two callers
+    /// want opposite things and neither can be inferred from stored state —
+    /// an explicitly-deleted part and one swept up by a bulk purge are
+    /// byte-identical in the store (`recycledAt` set, edges preserved). The
+    /// information that separates them exists only at the call site:
+    ///
+    /// - **`false` — the user chose THIS part**, having been told what it is
+    ///   attached to. The locked "Delete this Clip" behaviour: destroyed
+    ///   everywhere, with a warning that states the count. Consent is
+    ///   informed and specific, so it is honoured.
+    /// - **`true` — a bulk purge** (Empty Recently Deleted, the 30-day
+    ///   sweep). Nobody was shown a per-part count, so a part a live memory
+    ///   still references is spared. This is the 2026-09-22 loss: 184
+    ///   recordings destroyed by one *Delete All Forever*, at least 99 of
+    ///   them referenced by memories that still exist.
+    ///
+    /// The compiler forces the choice. A future bulk caller that forgets to
+    /// think about it cannot silently inherit the destructive answer.
+    func purgeClip(refId: UUID, sparingLiveReferences: Bool) {
         do {
             guard let ref = try fetchRef(refId) else { return }
+            if sparingLiveReferences, ref.referencingMemoryCount > 0 {
+                DeviceLog.blob("[HiMem][Blob] purge SPARED (still in use) "
+                    + "liveMemories=\(ref.referencingMemoryCount) reason=bulk-purge-of-a-reachable-part")
+                return
+            }
             if let cacheFile = ref.thumbnailCacheFilename {
                 ThumbnailService.shared.evictThumbnail(filename: cacheFile)
             }
@@ -1187,6 +1212,21 @@ final class EntryLifecycleService {
     /// Permanently removes a clip's backing blob from iCloud Files
     /// (NSFileCoordinator-wrapped, no-op if already gone). ONLY the
     /// permanent-purge paths call this; soft-recycle/restore never do.
+    ///
+    /// **REFUSES when a live memory still uses the part** (Tom, 2026-09-23).
+    /// On 2026-09-22 emptying Recently Deleted destroyed 184 recordings, at
+    /// least 99 of them referenced by memories that still exist. The purge
+    /// selected on age alone; nothing on the destruction path ever asked
+    /// whether anything still pointed at the file.
+    ///
+    /// The guard lives **here**, at the one place a blob dies, rather than at
+    /// each caller — the CLAUDE.md non-negotiable: where a rule can be
+    /// replaced by a mechanism, replace it. A future purge path cannot
+    /// reintroduce this defect by forgetting a check it never has to remember.
+    ///
+    /// `referencingMemoryCount` is the right predicate and already existed: it
+    /// counts memories that are not themselves recycled, which is exactly
+    /// *"is anything live still using this"*.
     static func deleteOwnedBlob(for ref: MediaReference) {
         guard let url = ownedBlobURL(for: ref) else { return }
         UbiquityStore.shared.removeFromStore(reason: "part-permanently-purged", at: url)
@@ -1206,19 +1246,39 @@ final class EntryLifecycleService {
     /// Purges recycled clips past the 30-day window — the clip-level sibling
     /// of `ProjectViewModel.purgeExpiredRecycledProjects`. Called on
     /// RecycleBin open.
+    ///
+    /// **A part a live memory still uses is spared, row and blob together**
+    /// (Tom, 2026-09-23). This swept 184 recordings on 2026-09-22 because it
+    /// selected on `recycledAt` age alone.
+    ///
+    /// The compound state it could not see: `recycleClip` sets `recycledAt`
+    /// and **keeps the edges** by design, so a part can be in the bin *and*
+    /// attached to a live memory — recycled once, then attached to another
+    /// memory afterwards, which many-to-many explicitly allows since F2
+    /// retired. Skipping the whole ref rather than just the blob matters:
+    /// deleting the row cascades its edges, so the memory would lose its
+    /// reference as well as its audio.
     func purgeExpiredRecycledClips(now: Date = Date()) {
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? now
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
         req.predicate = NSPredicate(format: "recycledAt != nil AND recycledAt < %@", cutoff as CVarArg)
         let expired = (try? storage.viewContext.fetch(req)) ?? []
         guard !expired.isEmpty else { return }
-        for ref in expired {
+        let reachable = expired.filter { $0.referencingMemoryCount > 0 }
+        let orphaned = expired.filter { $0.referencingMemoryCount == 0 }
+        if !reachable.isEmpty {
+            DeviceLog.blob("[HiMem][Blob] purge SPARED \(reachable.count) part(s) past the window "
+                + "— still reachable from a live memory")
+        }
+        for ref in orphaned {
             if let cacheFile = ref.thumbnailCacheFilename {
                 ThumbnailService.shared.evictThumbnail(filename: cacheFile)
             }
             Self.deleteOwnedBlob(for: ref) // RH-8: coordinated blob delete, all media types
             storage.viewContext.delete(ref)
         }
+        DeviceLog.blob("[HiMem][Blob] purge END expired=\(expired.count) "
+            + "purged=\(orphaned.count) spared=\(reachable.count)")
         try? storage.save(context: storage.viewContext)
     }
 
