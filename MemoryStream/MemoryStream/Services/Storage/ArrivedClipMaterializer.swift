@@ -276,7 +276,7 @@ enum ArrivedClipMaterializer {
         // is the guard that keeps this from ever reaching a foreign URL.
         for url in [InboxManifest.audioURL(for: filename), SpeechService.audioURL(for: filename)]
         where FileManager.default.fileExists(atPath: url.path) {
-            UbiquityStore.shared.removeFromStore(at: url)
+            UbiquityStore.shared.removeFromStore(reason: "watch-arrival-transcribed-audio-discarded", at: url)
         }
         return true
     }

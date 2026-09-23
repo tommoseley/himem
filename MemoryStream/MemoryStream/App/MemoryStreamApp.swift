@@ -165,6 +165,7 @@ enum DeviceLog {
     private static let inboxLogger = Logger(subsystem: "com.himem.app", category: "Inbox")
     private static let buildLogger  = Logger(subsystem: "com.himem.app", category: "Build")
     private static let launchLogger = Logger(subsystem: "com.himem.app", category: "Launch")
+    private static let blobLogger   = Logger(subsystem: "com.himem.app", category: "Blob")
 
     /// WatchConnectivity: reachability transitions, transfer/ack, dedup verdicts.
     static func wc(_ message: String) {
@@ -189,6 +190,24 @@ enum DeviceLog {
     static func launch(_ message: String) {
         launchLogger.notice("\(message, privacy: .public)")
         DeviceLogFile.append(category: "Launch", message)
+    }
+
+    /// **Every deletion of a user's file, and every pass that reads them all.**
+    ///
+    /// Added 2026-09-23, after ~190 audio files left the iCloud container and
+    /// the investigation could not name what removed them. `removeFromStore`
+    /// logged only its *refusal* and *coordination-failure* branches — a
+    /// successful delete emitted nothing — and the export logged nothing at
+    /// all. So the app's own tee contained zero lines about the one operation
+    /// that mattered, and its silence was not evidence of anything.
+    ///
+    /// The rule this category exists to enforce: **a user file may not be
+    /// deleted without a line saying which file and why.** The "why" is a
+    /// caller-supplied reason, not an inferred one, because the call site is
+    /// the only place that knows.
+    static func blob(_ message: String) {
+        blobLogger.notice("\(message, privacy: .public)")
+        DeviceLogFile.append(category: "Blob", message)
     }
 }
 

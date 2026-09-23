@@ -372,25 +372,44 @@ final class UbiquityStore: @unchecked Sendable {
     /// PhotoKit-referenced asset (the user's Photos library, never ours) can
     /// never be deleted through here. Only permanent purge calls this;
     /// soft-recycle/restore never touch blobs.
-    func removeFromStore(at url: URL) {
+    /// Permanently deletes a file from HiMem's own store.
+    ///
+    /// **`reason` has no default, and that is the mechanism.** On 2026-09-22
+    /// roughly 190 audio files left the ubiquity container and the
+    /// investigation could not name what removed them — because this function
+    /// logged only on its *refusal* and *coordination-failure* branches. The
+    /// successful delete, the one that actually destroys a user's file, was
+    /// silent, so the app's own log had nothing to say about the only
+    /// operation that mattered and its silence was evidence of nothing.
+    ///
+    /// Every outcome is now logged with the caller's stated reason, and the
+    /// compiler forces a caller to supply one: a delete nobody can explain is
+    /// exactly the delete that needs explaining six hours later.
+    func removeFromStore(reason: String, at url: URL) {
         // Only delete files under our OWN store root — the ubiquity container
         // OR the sandbox fallback when iCloud is unavailable. `isUnderContainer`
         // is ubiquity-only (returns false with no iCloud), which would wrongly
         // refuse deletes on a signed-out device; guard on `documentsRoot` so a
         // PhotoKit URL / anything foreign is still refused, but our own blobs
         // delete in both storage modes.
+        let name = url.lastPathComponent
+        let dir = url.deletingLastPathComponent().lastPathComponent
         guard url.path.hasPrefix(documentsRoot.path) else {
-            NSLog("[HiMem][Ubiquity] removeFromStore refused non-store url=\(url.lastPathComponent)")
+            DeviceLog.blob("[HiMem][Blob] delete REFUSED (outside store) name=\(name) reason=\(reason)")
             return
         }
+        let existed = FileManager.default.fileExists(atPath: url.path)
         let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinationError: NSError?
         coordinator.coordinate(writingItemAt: url, options: .forDeleting, error: &coordinationError) { writeURL in
             try? FileManager.default.removeItem(at: writeURL) // no-op if already gone
         }
         if let coordinationError {
-            NSLog("[HiMem][Ubiquity] removeFromStore coordination failed url=\(url.lastPathComponent): \(coordinationError.localizedDescription)")
+            DeviceLog.blob("[HiMem][Blob] delete FAILED dir=\(dir) name=\(name) reason=\(reason) err=\(coordinationError.localizedDescription)")
+            return
         }
+        let gone = !FileManager.default.fileExists(atPath: url.path)
+        DeviceLog.blob("[HiMem][Blob] delete \(gone ? "OK" : "INCOMPLETE") dir=\(dir) name=\(name) existed=\(existed) reason=\(reason)")
     }
 
     /// Writes raw `Data` into the store at `destinationURL` via
@@ -498,7 +517,7 @@ enum MediaBlobOrphanSweep {
     /// Coordinated-deletes each planned orphan. DESTRUCTIVE — call only after
     /// the plan has been reviewed.
     static func execute(plan: [URL]) {
-        for url in plan { UbiquityStore.shared.removeFromStore(at: url) }
+        for url in plan { UbiquityStore.shared.removeFromStore(reason: "orphan-sweep", at: url) }
         NSLog("[HiMem][Sweep] executed — deleted \(plan.count) orphaned blob(s)")
     }
 }

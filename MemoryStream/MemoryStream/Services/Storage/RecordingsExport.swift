@@ -331,6 +331,17 @@ enum RecordingsExport {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
 
+        // **This pass is logged from here on.** The 2026-09-22 investigation
+        // could not tell whether the export had touched the container,
+        // because it wrote no log lines at all — for an operation that reads
+        // and materializes a user's whole media library, that is the hole
+        // that made a six-hour investigation necessary.
+        let placedCount = snapshot.recordings.filter(\.isPlaced).count
+        DeviceLog.blob("[HiMem][Blob] export START recordings=\(snapshot.recordings.count) "
+            + "placed=\(placedCount) unplaced=\(snapshot.recordings.count - placedCount) "
+            + "memories=\(snapshot.memories.count) dest=\(folder.lastPathComponent) "
+            + "perFileTimeout=\(Int(perFileTimeout))s ceiling=\(Int(ceiling))s")
+
         // One download request per absent file, up front — this lets iCloud
         // queue the whole set while the copy loop walks it, so by the time a
         // later file is reached it has usually already arrived.
@@ -410,6 +421,9 @@ enum RecordingsExport {
         }
 
         progress(total, total)
+        DeviceLog.blob("[HiMem][Blob] export END saved=\(saved) unavailable=\(unavailable) "
+            + "of=\(total) dest=\(folder.lastPathComponent) "
+            + "— READ-ONLY on the store: this pass copies out and never deletes")
         return Outcome(savedCount: saved, unavailableCount: unavailable, folderURL: folder)
     }
 

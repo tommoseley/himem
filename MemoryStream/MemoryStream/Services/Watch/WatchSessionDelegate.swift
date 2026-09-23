@@ -770,7 +770,7 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                 referencedFilenames: manifest.referencedAudioFilenames
             )
             if reclaimable {
-                UbiquityStore.shared.removeFromStore(at: masterURL)
+                UbiquityStore.shared.removeFromStore(reason: "watch-transfer-master-cleanup", at: masterURL)
             }
             DeviceLog.wc("[HiMem][WC] phone — duplicate master ignored, clipId=\(metadata.clipId) already processed; master \(reclaimable ? "reclaimed (unreferenced)" : "kept (referenced by a manifest row)")")
             // Still ack so the watch can drop the pending row.

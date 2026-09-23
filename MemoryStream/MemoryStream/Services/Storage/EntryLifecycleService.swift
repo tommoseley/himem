@@ -1189,7 +1189,7 @@ final class EntryLifecycleService {
     /// permanent-purge paths call this; soft-recycle/restore never do.
     static func deleteOwnedBlob(for ref: MediaReference) {
         guard let url = ownedBlobURL(for: ref) else { return }
-        UbiquityStore.shared.removeFromStore(at: url)
+        UbiquityStore.shared.removeFromStore(reason: "part-permanently-purged", at: url)
     }
 
     /// Recently-Deleted clips (recycledAt != nil), newest-deleted first,

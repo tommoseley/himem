@@ -22,11 +22,11 @@ struct MediaBlobPurgeTests {
         try Data([0x00, 0x01]).write(to: url)
         #expect(FileManager.default.fileExists(atPath: url.path))
 
-        store.removeFromStore(at: url)
+        store.removeFromStore(reason: "test-coordinated-delete", at: url)
         #expect(!FileManager.default.fileExists(atPath: url.path), "coordinated delete must remove the blob")
 
         // Idempotent: a second delete (already gone) is a graceful no-op.
-        store.removeFromStore(at: url)
+        store.removeFromStore(reason: "test-idempotent-second-delete", at: url)
     }
 
     @Test func removeFromStore_refusesFileOutsideContainer() throws {
@@ -35,7 +35,7 @@ struct MediaBlobPurgeTests {
         try Data([0x00]).write(to: outside)
         defer { try? FileManager.default.removeItem(at: outside) }
 
-        UbiquityStore.shared.removeFromStore(at: outside)
+        UbiquityStore.shared.removeFromStore(reason: "test-outside-container-refusal", at: outside)
         #expect(FileManager.default.fileExists(atPath: outside.path),
                 "must refuse to coordinate-delete a file outside the ubiquity container (e.g. a PhotoKit URL)")
     }
