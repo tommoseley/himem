@@ -94,6 +94,69 @@ import Foundation
         #expect(RecordingsExport.assignNames(recs) == RecordingsExport.assignNames(recs.reversed()))
     }
 
+    // MARK: - The file-type filter and multi-dot names
+
+    /// **THE MONEY TEST for the 2026-09-21 device defect.** 384 transcoder
+    /// leftovers were exported as if they were recordings. The watch
+    /// transcoder writes `<name>.aac-tmp` beside the file it converts; an
+    /// `osIdentifier` pointing at one resolves to a real, readable, entirely
+    /// worthless file, and the export copied it without hesitating.
+    @Test("a transcoder leftover is never exported as a recording")
+    func transcoderLeftoversAreFiltered() {
+        let junk = URL(fileURLWithPath: "/x/7E3.m4a.1434979B-B45A-42A8-8FE6-AE67CD8E9993.caf.aac-tmp")
+        #expect(RecordingsExport.isExportableAudio(junk) == false)
+        #expect(RecordingsExport.isExportableAudio(URL(fileURLWithPath: "/x/a.caf")))
+        #expect(RecordingsExport.isExportableAudio(URL(fileURLWithPath: "/x/a.m4a")))
+        #expect(RecordingsExport.isExportableAudio(URL(fileURLWithPath: "/x/a.CAF")), "case must not decide it")
+    }
+
+    /// **Allow-list, not deny-list.** A new temp suffix appearing in the store
+    /// must be skipped by default rather than exported until someone notices.
+    @Test("unknown extensions are refused rather than assumed")
+    func unknownExtensionsAreRefused() {
+        for junk in ["/x/a.tmp", "/x/a.aac-tmp", "/x/a.download", "/x/a.icloud", "/x/a", "/x/a.jpg", "/x/a.mov"] {
+            #expect(RecordingsExport.isExportableAudio(URL(fileURLWithPath: junk)) == false,
+                    "\(junk) must not be treated as a recording")
+        }
+    }
+
+    /// **The generated stem can never contain a dot.** Appending one extension
+    /// to a stem that already ends in `.caf` is what produced
+    /// `… (2).m4a.<uuid>.caf.aac-tmp` — a filename claiming two formats that
+    /// opens as neither.
+    @Test("a generated filename carries exactly one extension")
+    func nameHasExactlyOneExtension() {
+        let name = RecordingsExport.exportName(
+            capturedAt: Self.at(2026, 7, 16, 18, 49),
+            transcript: "Last one from Kingfisher Wharf before heading home.",
+            sourceURL: URL(fileURLWithPath: "/x/7E3.caf"))
+        #expect(name.hasSuffix(".caf"))
+        #expect(name.filter { $0 == "." }.count == 1, "exactly one dot, the extension's: \(name)")
+        #expect(!name.contains(".m4a."))
+    }
+
+    /// A dot inside the transcript must not become a second extension.
+    @Test("dots in speech never become extensions")
+    func dotsInTranscriptAreStripped() {
+        let name = RecordingsExport.exportName(
+            capturedAt: Self.at(2026, 8, 14, 14, 32),
+            transcript: "Version 2.5 of the plan. Ready.",
+            sourceURL: URL(fileURLWithPath: "/x/a.m4a"))
+        #expect(name.filter { $0 == "." }.count == 1, "a dot in speech became a second extension: \(name)")
+        #expect(name.hasSuffix(".m4a"))
+    }
+
+    /// An unknown source extension falls back to `m4a` rather than being
+    /// carried through into the filename.
+    @Test("an unknown source extension does not leak into the name")
+    func unknownExtensionFallsBack() {
+        let name = RecordingsExport.exportName(
+            capturedAt: Self.at(2026, 8, 14, 14, 32), transcript: "hello",
+            sourceURL: URL(fileURLWithPath: "/x/a.weird"))
+        #expect(name.hasSuffix(".m4a"))
+        #expect(!name.contains("weird"))
+    }
+
     // MARK: - The completion state
 
     @Test("a clean run reports the count")

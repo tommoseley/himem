@@ -112,10 +112,41 @@ enum RecordingsExport {
         return String(joined.prefix(60)).trimmingCharacters(in: .whitespaces)
     }
 
+    /// Audio this export is willing to copy.
+    ///
+    /// **A file-type filter exists because 384 transcoder leftovers were
+    /// exported as if they were recordings** (device, 2026-09-21). The watch
+    /// transcoder writes `<name>.aac-tmp` beside the file it is converting;
+    /// a `MediaReference.osIdentifier` pointing at one of those resolves to a
+    /// real, readable, entirely worthless file, and the export copied it with
+    /// a straight face. Nothing downstream could tell it from a recording.
+    ///
+    /// Allow-list rather than deny-list: a new temp suffix appearing in the
+    /// store should be *skipped by default*, not exported until someone
+    /// notices. The cost of the wrong default here is a user's backup folder
+    /// full of junk with real recordings mixed in.
+    static let audioExtensions: Set<String> = ["caf", "m4a", "wav", "aac", "mp3", "aiff", "aif"]
+
+    /// True when this source looks like audio HiMem should preserve.
+    /// Case-insensitive, and judged on the FINAL extension only.
+    static func isExportableAudio(_ url: URL) -> Bool {
+        audioExtensions.contains(url.pathExtension.lowercased())
+    }
+
     /// `2026-08-14 1432 — the pears were really good.m4a`
+    ///
+    /// **The stem can never contain a dot.** `osIdentifier` values in the
+    /// store include multi-dot names like
+    /// `<uuid>.caf.aac-tmp`, and a name built by appending one extension to a
+    /// stem that already ends in `.caf` produces
+    /// `… (2).m4a.<uuid>.caf.aac-tmp` — an unopenable filename that claims two
+    /// formats. Dots are stripped from the words, and exactly one extension is
+    /// appended.
     static func exportName(capturedAt: Date, transcript: String, sourceURL: URL) -> String {
-        let ext = sourceURL.pathExtension.isEmpty ? "m4a" : sourceURL.pathExtension
-        let words = firstWords(transcript)
+        let raw = sourceURL.pathExtension.lowercased()
+        let ext = audioExtensions.contains(raw) ? raw : "m4a"
+        let words = firstWords(transcript).replacingOccurrences(of: ".", with: "")
+            .trimmingCharacters(in: .whitespaces)
         let base = stamp.string(from: capturedAt)
         return words.isEmpty ? "\(base).\(ext)" : "\(base) — \(words).\(ext)"
     }
@@ -195,6 +226,11 @@ enum RecordingsExport {
     static func snapshot(context: NSManagedObjectContext,
                          manifestClips: [InboxClip]) -> Snapshot {
         var snap = Snapshot()
+        // Sources the filter refused — logged rather than dropped in silence,
+        // because "the export quietly ignored some of your files" is the same
+        // class of defect as "the export quietly copied files that were not
+        // yours".
+        var skipped: [String] = []
 
         let req = NSFetchRequest<MediaReference>(entityName: "MediaReference")
         req.predicate = NSPredicate(format: "mediaType == %@ AND recycledAt == nil",
@@ -217,12 +253,17 @@ enum RecordingsExport {
             // one operation that must not die partway through, and skipping a
             // row costs one line. Guarded by `NilIdWholeTableReadTests`.
             guard let refId = ref.value(forKey: "id") as? UUID else { continue }
+            let url = UbiquityStore.shared.audioURL(for: ref.osIdentifier)
+            guard isExportableAudio(url) else {
+                skipped.append(ref.osIdentifier)
+                continue
+            }
             let memoryIds = ((ref.edges as? Set<MemoryClipEdge>) ?? [])
                 .compactMap { $0.memory?.isRecycled == true ? nil : $0.memoryId }
             wantedMemoryIds.formUnion(memoryIds)
             snap.recordings.append(Recording(
                 id: refId,
-                sourceURL: UbiquityStore.shared.audioURL(for: ref.osIdentifier),
+                sourceURL: url,
                 transcript: ref.transcript ?? "",
                 capturedAt: ref.createdAt ?? Date(timeIntervalSince1970: 0),
                 placeName: ref.placeName,
@@ -234,6 +275,10 @@ enum RecordingsExport {
         // rows the I1 tab collapse left without a surface.
         let known = Set(snap.recordings.map(\.id))
         for clip in manifestClips where !known.contains(clip.clipId) && !clip.audioFilename.isEmpty {
+            guard isExportableAudio(UbiquityStore.shared.inboxURL(for: clip.audioFilename)) else {
+                skipped.append(clip.audioFilename)
+                continue
+            }
             snap.recordings.append(Recording(
                 id: clip.clipId,
                 sourceURL: UbiquityStore.shared.inboxURL(for: clip.audioFilename),
@@ -244,6 +289,10 @@ enum RecordingsExport {
             ))
         }
 
+        if !skipped.isEmpty {
+            DeviceLog.blob("[HiMem][Blob] export SKIPPED \(skipped.count) non-audio source(s) "
+                + "— not exportable: \(Set(skipped.map { ($0 as NSString).pathExtension.lowercased() }).sorted().joined(separator: ","))")
+        }
         guard !wantedMemoryIds.isEmpty else { return snap }
         let mReq = NSFetchRequest<JournalEntry>(entityName: "JournalEntry")
         mReq.predicate = NSPredicate(format: "id IN %@ AND isRecycled == NO", wantedMemoryIds)
