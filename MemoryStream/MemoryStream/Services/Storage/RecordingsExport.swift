@@ -258,8 +258,26 @@ enum RecordingsExport {
                 skipped.append(ref.osIdentifier)
                 continue
             }
+            // **An edge whose memory row is GONE must not count as a memory.**
+            // This read `$0.memory?.isRecycled == true ? nil : $0.memoryId`,
+            // and when `memory` is nil — the row permanently deleted, or an
+            // edge that arrived from CloudKit ahead of its memory — the
+            // optional chain yields nil, `nil == true` is false, and the
+            // memoryId was **kept**. Every orphaned edge inflated the count,
+            // so `index.json` could report a recording as "in 2 memories"
+            // when both had been destroyed. Found 2026-09-23 while
+            // establishing whether the at-risk set was real user data; it was
+            // not load-bearing there, but the count is the number a recovery
+            // decision gets made on.
+            //
+            // Resolve through the memory itself rather than the denormalised
+            // `edge.memoryId`, so the id reported is one a live row actually
+            // has.
             let memoryIds = ((ref.edges as? Set<MemoryClipEdge>) ?? [])
-                .compactMap { $0.memory?.isRecycled == true ? nil : $0.memoryId }
+                .compactMap { edge -> UUID? in
+                    guard let memory = edge.memory, !memory.isRecycled else { return nil }
+                    return memory.id
+                }
             wantedMemoryIds.formUnion(memoryIds)
             snap.recordings.append(Recording(
                 id: refId,
