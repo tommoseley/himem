@@ -16,10 +16,17 @@ struct RecycledClipDisplay: Identifiable, Equatable {
     /// resolves fine for a recycled clip — no `recycledAt` gating is involved.
     let thumbnailOSIdentifier: String?
     let thumbnailMediaType: MediaReference.MediaType?
+    /// How many **live** memories still reference this part — the same
+    /// predicate `purgeClip(sparingLiveReferences: true)` uses to decline a
+    /// bulk destruction. Captured in the snapshot so the empty-bin sheet can
+    /// promise the spare without the view running a fetch, and so the promise
+    /// and the guard can never disagree about what "in use" means.
+    let liveMemoryCount: Int
 
     init(ref: MediaReference) {
         id = ref.id
         recycledAt = ref.recycledAt
+        liveMemoryCount = ref.referencingMemoryCount
         switch ref.mediaTypeEnum {
         case .voice: typeLabel = "Voice"
         case .image: typeLabel = "Photo"
@@ -44,6 +51,9 @@ struct RecycledClipDisplay: Identifiable, Equatable {
     init(inboxClip clip: InboxClip) {
         id = clip.clipId
         recycledAt = clip.recycledAt
+        // An unpromoted bench clip has no edges by construction — it has never
+        // been in a memory — so nothing live can be referencing it.
+        liveMemoryCount = 0
         typeLabel = "Voice"
         thumbnailOSIdentifier = nil
         thumbnailMediaType = nil
@@ -311,12 +321,58 @@ struct RecycleBinView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                let n = recycledEntries.count + recycledProjects.count
-                    + recycledClips.count + recycledInboxClips.count
-                Text("\(n) item\(n == 1 ? "" : "s") will be permanently deleted.")
+                Text(Self.emptyBinMessage(
+                    memories: recycledEntries.count,
+                    projects: recycledProjects.count,
+                    parts: recycledClips.count + recycledInboxClips.count,
+                    spared: sparedByEmptying))
             }
+
         }
         .onAppear { reload() }
+    }
+
+    /// Parts in the bin that a **live memory still references** — exactly what
+    /// `purgeClip(sparingLiveReferences: true)` will decline to destroy. The
+    /// sheet's second sentence is a promise about these, so it is computed
+    /// from the same predicate the guard enforces rather than estimated.
+    private var sparedByEmptying: Int {
+        recycledClips.filter { $0.liveMemoryCount > 0 }.count
+    }
+
+    /// **What emptying the bin destroys, and what it leaves alone.**
+    ///
+    /// Ruled by Tom 2026-09-23, after *Delete All Forever* destroyed 184
+    /// recordings on 2026-09-22 while the sheet said only *"N items will be
+    /// permanently deleted."* — a lumped count, in the passive, that named
+    /// neither what the items were nor what would survive.
+    ///
+    /// Two rules, and they are the Let Go rule applied at the bin:
+    ///
+    /// - **State the change, no metaphor.** "Permanently delete" — not
+    ///   "empty", not "clear", not "clean up". She is destroying things.
+    /// - **Leave no doubt about what survives.** The second sentence names
+    ///   the spare the guard now enforces, and appears **only when something
+    ///   is actually spared** — *"0 are shared"* is noise that teaches her to
+    ///   skip the sentence on the day it matters.
+    ///
+    /// Only counts are numbers; nothing else is quantified.
+    static func emptyBinMessage(memories: Int, projects: Int, parts: Int, spared: Int) -> String {
+        var pieces: [String] = []
+        if memories > 0 { pieces.append("\(memories) memor\(memories == 1 ? "y" : "ies")") }
+        if projects > 0 { pieces.append("\(projects) project\(projects == 1 ? "" : "s")") }
+        if parts > 0 { pieces.append("\(parts) part\(parts == 1 ? "" : "s")") }
+        guard !pieces.isEmpty else { return "There is nothing in Recently Deleted." }
+
+        let list: String
+        switch pieces.count {
+        case 1: list = pieces[0]
+        case 2: list = "\(pieces[0]) and \(pieces[1])"
+        default: list = pieces.dropLast().joined(separator: ", ") + ", and " + pieces[pieces.count - 1]
+        }
+        let destroy = "Permanently delete \(list)."
+        guard spared > 0 else { return destroy }
+        return destroy + " Photos and recordings used in other memories stay where they are."
     }
 
     private func reload() {
