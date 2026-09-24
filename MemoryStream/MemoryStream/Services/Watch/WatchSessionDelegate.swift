@@ -371,14 +371,33 @@ final class WatchSessionDelegate: NSObject, WCSessionDelegate {
                         clipId: clip.clipId,
                         transcript: InboxTranscriptionDispatcher.transcriptForMark(from: outcome)
                     )
-                    // P0-3: the clip is transcribed — promote it to a synced
-                    // zero-edge MediaReference NOW, bench-open-independent, so
-                    // a clip follows the person to every device the moment
-                    // it's ready (not only when the Clips tab next opens). The
-                    // manifest row is demoted to a tombstone inside materialize.
-                    if let transcribed = InboxManifest.shared.clips.first(where: { $0.clipId == clip.clipId }) {
-                        ArrivedClipMaterializer.materialize(transcribed, in: StorageService.shared.viewContext)
-                    }
+                    // **The transcript is recorded and the clip now WAITS.**
+                    //
+                    // This used to call `ArrivedClipMaterializer.materialize`
+                    // here, and its comment explained why in P0-3's terms:
+                    // *promote it to a synced zero-edge MediaReference NOW,
+                    // bench-open-independent, so a clip follows the person to
+                    // every device the moment it's ready.* That was true when
+                    // written.
+                    //
+                    // **§1 changed what `materialize` MEANS** — from minting a
+                    // `MediaReference` to creating a `JournalEntry` — and this
+                    // caller was never re-read. So a line whose job was "make
+                    // it syncable" silently became "make it a memory", and on
+                    // 2026-09-24 three Watch recordings became three memories
+                    // the moment they transcribed, one of them empty because
+                    // the transcript was empty (`textLen=0 cov=0s`).
+                    //
+                    // **P0-3's actual goal is unchanged and still met.** The
+                    // transcript survives and reaches every device — by living
+                    // in the manifest as a *waiting capture*, which is what
+                    // `recordTranscriptionAttempt` above just did. It becomes a
+                    // memory when she picks an exit on the card, and not
+                    // before.
+                    //
+                    // Guarded by `TransientCaptureSurfaceTests`, which now
+                    // walks the whole app target rather than a list of files —
+                    // the earlier version could not see this line at all.
                 } else {
                     DeviceLog.inbox("[HiMem][Inbox] transcribe deferred clip=\(clip.clipId.uuidString.prefix(8)) outcome=\(outcome)")
                 }

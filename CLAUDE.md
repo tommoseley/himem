@@ -282,6 +282,19 @@ This is the constructive twin of *Don't Go Looking for Zebras*: the recent chang
 
 *Origin: 2026-07-31, F23 Tier 2 — three instances in one pass, all the same failure. **T2.3**: `SessionListView` hand-rolled a second `AVAudioPlayer` while the correct `AudioPlayerService` sat unused. **T2.6**: deleting the `isTransferReady` guard from `enqueueReadyTransfer` left **all six** `WatchTransferAudioTranscoderTests` green — a suite CLAUDE.md names as the guard for "raw PCM never ships." **`:614`**: CC added `finishAppend`, tested it, and left the early `return` that bypassed it — reproducing the class one hour after closing it, with four green seam tests hiding it. Also that day: eight transcription legs silently skipped on the dev simulator, so every "1195 passed" gate that session contained zero end-to-end transcription coverage. A test style written against owners in isolation cannot see any of this.*
 
+### Changing What a Function MEANS Requires Re-Reading Its Callers (Mandatory)
+
+**When a function's contract changes, every caller silently inherits the new behaviour — including the ones whose comment still describes the old one.** Renaming is safe: the compiler finds every caller. Changing *meaning* while keeping the signature is the dangerous edit, because nothing breaks and nothing is reported.
+
+- **Enumerate the callers in the same commit that changes the meaning**, and say in the commit what each one now does. Not "grep it later" — later is a different session with a different model of the code.
+- **A caller's comment is evidence of the contract it was written against, not of the current one.** A comment explaining *why* a call is correct becomes a false statement the moment the callee changes, and it reads as reassurance to the next person. Treat a confident comment at a call site as a reason to check the callee, not a reason to skip it.
+- **The tell is a call site that still makes sense as a sentence.** *"Promote it to a synced ref"* is a perfectly sensible thing to want; it just stopped being what the line did. Nothing looks wrong at the call site — you have to read the callee to see it.
+- **A guard that lists the files it checks cannot catch this.** The caller that changed meaning is, by construction, one nobody was thinking about. Walk the whole target and throw on an empty walk (§ Guard the Caller).
+
+*Origin: 2026-09-24, and it reached a device.* `ArrivedClipMaterializer.materialize` was written to mint a zero-edge `MediaReference` — "make this clip syncable". **§1 rewrote it to create a `JournalEntry`** — "make this a memory" — for its own caller, and the other call sites were never re-read. `WatchSessionDelegate`'s transcription-complete path kept calling it with a five-line comment explaining P0-3's syncing rationale, which was accurate about a function that no longer existed.
+
+*Transient capture then removed the drain from launch and added a guard asserting that every materialize site is a user-chosen exit — and **that guard enumerated three view files by hand and never looked at `Services/`.*** Both the defect and the guard that should have caught it came from the same root: **nobody re-read the callers.** Three Watch recordings became three memories on arrival, one of them empty because its transcript was empty, and the first the code knew of it was a screenshot.
+
 ### Money Tests
 
 Bug fixes MUST include a "money test" that reproduces the exact root-cause scenario:

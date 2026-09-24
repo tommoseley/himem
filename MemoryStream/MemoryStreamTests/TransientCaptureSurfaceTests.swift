@@ -113,23 +113,43 @@ import Foundation
         #expect(hits.isEmpty, "the paperclip converts waiting captures: \(hits.joined(separator: " · "))")
     }
 
-    /// **Every materialize site is a user-chosen exit.**
+    /// **Every materialize site in the WHOLE APP TARGET is a user-chosen
+    /// exit.**
     ///
-    /// The rule is *nothing materializes behind her back* — not "only one
-    /// site". There are two keeps, so there are two sites: `startNewMemory`
-    /// and `place`. The first draft of this test asserted a count of one and
-    /// went red the moment the second exit was wired, which is the assertion
-    /// being narrower than the rule it stands for.
+    /// ## Why this walks everything
     ///
-    /// Asserting *which functions* rather than *how many* is what makes it
-    /// survive a third exit being added deliberately while still failing if
-    /// one appears in an `onAppear`.
-    @Test("every materialize site is a user-chosen exit")
+    /// The first version of this test listed three files by hand —
+    /// `JournalView`, `TransientCaptureCard`, `AddExistingClipsSheet` — and
+    /// never looked at `Services/`. It passed on 2026-09-24 while
+    /// `WatchSessionDelegate:380` materialized every Watch arrival the moment
+    /// transcription finished, which is the defect the device pass found: three
+    /// recordings became three memories, one of them empty.
+    ///
+    /// A guard that enumerates its own files **will always miss the file
+    /// nobody thought of** (Tom). It is a completeness claim drawn from a
+    /// partial walk — CLAUDE.md § Measurement Discipline, the same shape as a
+    /// `head`-bounded grep answering "there are none".
+    ///
+    /// So: walk the entire target, and **throw if the walk reaches no
+    /// source**, because "no unapproved callers" and "zero files scanned" must
+    /// never read the same.
+    @Test("every materialize site in the app target is a user-chosen exit")
     func everyMaterializeSiteIsAnExit() throws {
-        let src = try Self.source("Views/Journal/JournalView.swift")
-        let total = Self.codeLines(src).filter { $0.contains("ArrivedClipMaterializer.materialize") }
-        #expect(!total.isEmpty, "nothing materializes at all — the exits are dead")
+        let sites = try Self.materializeSites()
+        #expect(!sites.isEmpty, "nothing materializes anywhere — the exits are dead")
 
+        let approved = Set(["Views/Journal/JournalView.swift"])
+        let unapproved = sites.filter { !approved.contains($0.file) }
+        #expect(unapproved.isEmpty, """
+            A waiting capture is materialized outside the user-chosen exits. \
+            Every site must be something she picked — an automatic one turns \
+            arrivals into memories behind her back, which is exactly what \
+            `WatchSessionDelegate` did on 2026-09-24.
+            \(unapproved.map { "  • \($0.file): \($0.line)" }.joined(separator: "\n"))
+            """)
+
+        // …and inside the approved file, each site is an exit she chose.
+        let src = try Self.source("Views/Journal/JournalView.swift")
         var accounted = 0
         for exit in ["func startNewMemory(from", "func place(_ capture:"] {
             let body = try Self.functionBody(exit, in: src)
@@ -137,14 +157,80 @@ import Foundation
             #expect(hits.count == 1, "\(exit) must materialize exactly once: \(hits)")
             accounted += hits.count
         }
-        #expect(accounted == total.count, """
-            A materialize site exists outside the two user-chosen exits. \
-            Every one must be something she picked — an automatic drain is \
-            what emptied the inbox behind her before. Sites: \(total)
-            """)
+        #expect(accounted == sites.count,
+                "a materialize site in JournalView sits outside the two exits: \(sites.map(\.line))")
     }
 
+
     // MARK: - Scanner
+
+    /// Walks the **entire app target**. Throws if it reaches no source — a
+    /// completeness claim cannot rest on a walk that inspected nothing.
+    static func materializeSites() throws -> [(file: String, line: String)] {
+        guard let walker = FileManager.default.enumerator(at: appRoot, includingPropertiesForKeys: nil) else {
+            throw GateFailure.sourceNotFound(appRoot.path)
+        }
+        var sources: [String: String] = [:]
+        for case let url as URL in walker where url.pathExtension == "swift" {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            let rel = url.path.components(separatedBy: "/MemoryStream/MemoryStream/").last ?? url.path
+            sources[rel] = text
+        }
+        guard !sources.isEmpty else { throw GateFailure.noSourceWalked(appRoot.path) }
+        return sites(in: sources)
+    }
+
+    /// Membership only — no offsets, so there is no range to invert.
+    static func sites(in sources: [String: String]) -> [(file: String, line: String)] {
+        var out: [(String, String)] = []
+        for (path, text) in sources.sorted(by: { $0.key < $1.key }) {
+            for line in codeLines(text) where line.contains("ArrivedClipMaterializer.materialize") {
+                out.append((path, line))
+            }
+        }
+        return out
+    }
+
+    /// **The self-test is the real call site, verbatim.**
+    ///
+    /// Not a paraphrase: this is the line that shipped in
+    /// `WatchSessionDelegate` and produced three memories from three Watch
+    /// recordings. A matcher that cannot recognise the exact text of the
+    /// defect it was written for has not been shown to work.
+    @Test("the matcher recognises the call site that caused the defect")
+    func matcherCatchesTheRealOffender() {
+        let offender = [
+            "Services/Watch/WatchSessionDelegate.swift":
+                "                        ArrivedClipMaterializer.materialize(transcribed, in: StorageService.shared.viewContext)\n"
+        ]
+        let found = Self.sites(in: offender)
+        #expect(found.count == 1)
+        #expect(found.first?.file == "Services/Watch/WatchSessionDelegate.swift")
+    }
+
+    @Test("the matcher ignores the symbol in prose")
+    func matcherIgnoresProse() {
+        let src = ["a.swift": "// ArrivedClipMaterializer.materialize used to run here\n/// and here\nlet x = 1"]
+        #expect(Self.sites(in: src).isEmpty)
+    }
+
+    @Test("the matcher survives degenerate input")
+    func matcherSurvivesDegenerateInput() {
+        #expect(Self.sites(in: [:]).isEmpty)
+        #expect(Self.sites(in: ["a.swift": ""]).isEmpty)
+        #expect(Self.sites(in: ["a.swift": "ArrivedClipMaterializer.materializ"]).isEmpty)
+    }
+
+    /// The walk must fail loudly rather than pass on nothing.
+    @Test("a walk that reaches no source throws")
+    func emptyWalkThrows() {
+        #expect(throws: (any Error).self) {
+            guard FileManager.default.fileExists(atPath: "/nonexistent-root") else {
+                throw GateFailure.noSourceWalked("/nonexistent-root")
+            }
+        }
+    }
+
 
     static func functionBody(_ signature: String, in source: String) throws -> String {
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
