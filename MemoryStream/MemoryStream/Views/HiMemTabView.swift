@@ -432,9 +432,14 @@ struct HiMemTabView: View {
         // still be standing after a later recording that worked. That is
         // the frozen-snapshot class (F24 D2, F25) — a correct value
         // rendered after it stopped being true.
-        if case .voiceSession = item {
-            silentCaptureMessage = SilentCaptureDecision.bannerMessage(for: speechService.lastCaptureSilence)
-        }
+        // The silent-capture banner was set here for `.voiceSession`, the
+        // phone's on-a-roll output. §5.4 retired phone recording, so no
+        // capture arriving on this path can be silent — there is no longer a
+        // microphone behind it to hear nothing.
+        //
+        // The heard-nothing case itself is NOT gone: it moved to the Watch
+        // arrival path, where `§4`'s honest-absence copy states it inside the
+        // memory rather than as a banner over the tab.
 
         switch landing {
         case .dropOnBench:

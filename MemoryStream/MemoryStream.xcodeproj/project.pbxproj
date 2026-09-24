@@ -75,7 +75,6 @@
 		A100000206 /* AddMemoryToProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000206 /* AddMemoryToProjectSheet.swift */; };
 		A100000301 /* CaptureModality.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000301 /* CaptureModality.swift */; };
 		A100000302 /* AppendFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000302 /* AppendFAB.swift */; };
-		A100000303 /* VoiceCaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000303 /* VoiceCaptureScreen.swift */; };
 		A100000304 /* NoteCaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000304 /* NoteCaptureScreen.swift */; };
 		A100000305 /* CaptureFlowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000305 /* CaptureFlowHost.swift */; };
 		A100000310 /* ClipMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000310 /* ClipMetadata.swift */; };
@@ -112,14 +111,12 @@
 		A100000672 /* MinClipDebouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000670 /* MinClipDebouncer.swift */; };
 		A100000673 /* NextClipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000671 /* NextClipController.swift */; };
 		A100000680 /* VoiceClipSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000680 /* VoiceClipSplitter.swift */; };
-		A100000681 /* VoiceCaptureOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000681 /* VoiceCaptureOrchestrator.swift */; };
 		A100000700 /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000700 /* AudioCompressor.swift */; };
 		A100000730 /* BreathCaption.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000730 /* BreathCaption.swift */; };
 		A100000731 /* BreathCaption.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000730 /* BreathCaption.swift */; };
 		A100000732 /* TopicColorPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000732 /* TopicColorPicker.swift */; };
 		A100000733 /* TopicEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000733 /* TopicEditorSheet.swift */; };
 		A100000734 /* EntryQueryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000734 /* EntryQueryService.swift */; };
-		A100000735 /* VoiceRecordingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000735 /* VoiceRecordingController.swift */; };
 		A100000736 /* EntryAppendCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000736 /* EntryAppendCoordinator.swift */; };
 		A100000737 /* JournalErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000737 /* JournalErrorBanner.swift */; };
 		A100000740 /* JournalCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000740 /* JournalCaptureCoordinator.swift */; };
@@ -339,7 +336,6 @@
 		B100000206 /* AddMemoryToProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddMemoryToProjectSheet.swift; sourceTree = "<group>"; };
 		B100000301 /* CaptureModality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureModality.swift; sourceTree = "<group>"; };
 		B100000302 /* AppendFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppendFAB.swift; sourceTree = "<group>"; };
-		B100000303 /* VoiceCaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCaptureScreen.swift; sourceTree = "<group>"; };
 		B100000304 /* NoteCaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCaptureScreen.swift; sourceTree = "<group>"; };
 		B100000305 /* CaptureFlowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFlowHost.swift; sourceTree = "<group>"; };
 		B100000310 /* ClipMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipMetadata.swift; path = Shared/ClipMetadata.swift; sourceTree = "<group>"; };
@@ -372,13 +368,11 @@
 		B100000670 /* MinClipDebouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MinClipDebouncer.swift; path = Shared/MinClipDebouncer.swift; sourceTree = "<group>"; };
 		B100000671 /* NextClipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NextClipController.swift; path = Shared/NextClipController.swift; sourceTree = "<group>"; };
 		B100000680 /* VoiceClipSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClipSplitter.swift; sourceTree = "<group>"; };
-		B100000681 /* VoiceCaptureOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCaptureOrchestrator.swift; sourceTree = "<group>"; };
 		B100000700 /* AudioCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AudioCompressor.swift; path = Shared/AudioCompressor.swift; sourceTree = "<group>"; };
 		B100000730 /* BreathCaption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BreathCaption.swift; path = Shared/BreathCaption.swift; sourceTree = "<group>"; };
 		B100000732 /* TopicColorPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicColorPicker.swift; sourceTree = "<group>"; };
 		B100000733 /* TopicEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicEditorSheet.swift; sourceTree = "<group>"; };
 		B100000734 /* EntryQueryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryQueryService.swift; sourceTree = "<group>"; };
-		B100000735 /* VoiceRecordingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingController.swift; sourceTree = "<group>"; };
 		B100000736 /* EntryAppendCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryAppendCoordinator.swift; sourceTree = "<group>"; };
 		B100000737 /* JournalErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalErrorBanner.swift; sourceTree = "<group>"; };
 		B100000740 /* JournalCaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCaptureCoordinator.swift; sourceTree = "<group>"; };
@@ -688,8 +682,6 @@
 			children = (
 				B100000036 /* CameraPickerView.swift */,
 				B100000047 /* PhotoLibraryPicker.swift */,
-				B100000303 /* VoiceCaptureScreen.swift */,
-				B100000735 /* VoiceRecordingController.swift */,
 				B100000304 /* NoteCaptureScreen.swift */,
 			);
 			path = Input;
@@ -776,7 +768,6 @@
 				B100000093 /* VoiceSilenceWatcher.swift */,
 				B100000030 /* AudioPlayerService.swift */,
 				B100000680 /* VoiceClipSplitter.swift */,
-				B100000681 /* VoiceCaptureOrchestrator.swift */,
 				B100000034 /* CameraService.swift */,
 				B100000035 /* ThumbnailService.swift */,
 				B100000633 /* SummaryRenderer.swift */,
@@ -1295,7 +1286,6 @@
 				A100000732 /* TopicColorPicker.swift in Sources */,
 				A100000733 /* TopicEditorSheet.swift in Sources */,
 				A100000734 /* EntryQueryService.swift in Sources */,
-				A100000735 /* VoiceRecordingController.swift in Sources */,
 				A100000736 /* EntryAppendCoordinator.swift in Sources */,
 				A100000790 /* AddExistingClipsSheet.swift in Sources */,
 				A100000737 /* JournalErrorBanner.swift in Sources */,
@@ -1377,7 +1367,6 @@
 				A100000011 /* SearchEngine.swift in Sources */,
 				A100000012 /* SpeechService.swift in Sources */,
 				A100000680 /* VoiceClipSplitter.swift in Sources */,
-				A100000681 /* VoiceCaptureOrchestrator.swift in Sources */,
 				A100000013 /* ConnectivityMonitor.swift in Sources */,
 				A100000014 /* ProcessingEngine.swift in Sources */,
 				A900000001 /* Organizer.swift in Sources */,
@@ -1425,7 +1414,6 @@
 				A100000A01 /* SelectCircle.swift in Sources */,
 				A100000A04 /* ClipTimeString.swift in Sources */,
 				A100000047 /* PhotoLibraryPicker.swift in Sources */,
-				A100000303 /* VoiceCaptureScreen.swift in Sources */,
 				A100000304 /* NoteCaptureScreen.swift in Sources */,
 				A100000054 /* ErrorService.swift in Sources */,
 				A100000055 /* TopicSlugHelper.swift in Sources */,

@@ -94,44 +94,10 @@ struct JournalCaptureCoordinator {
             // "everything is .image" approximation.
             return viewModel.saveEntry(content: "", inputType: .camera, mediaCaptures: items)
 
-        case .voiceSession(let clips, _):
-            // "On a roll" — multi-clip phone voice session. First
-            // clip creates the Memory; subsequent clips append
-            // voice fragments to that same Memory so the whole
-            // roll lands as one entry. `rollGroupId` is
-            // informational; on phone the create-then-append path
-            // is already in one memory by construction, so we
-            // don't need to stamp it.
-            guard let first = clips.first else { return nil }
-            let newId = viewModel.saveEntry(
-                content: first.transcript,
-                inputType: .voiceInApp,
-                voiceFilename: first.audioFilename,
-                voiceCapturedAt: first.capturedAt
-            )
-            if let entryId = newId {
-                for clip in clips.dropFirst() {
-                    viewModel.appendToEntry(
-                        entryId: entryId,
-                        additionalContent: clip.transcript,
-                        voiceFilename: clip.audioFilename,
-                        voiceCapturedAt: clip.capturedAt
-                    )
-                }
-            }
-            // Stamp the session's location fix onto every fragment's
-            // MediaReference + kick off reverse-geocode for the
-            // clip-row header (Memory Detail v3). All clips in a
-            // phone roll share the one session-start fix.
-            for clip in clips {
-                ClipLocationResolver.stamp(
-                    osIdentifier: clip.audioFilename,
-                    latitude: clip.latitude,
-                    longitude: clip.longitude,
-                    in: StorageService.shared.viewContext
-                )
-            }
-            return newId
+        // `.voiceSession` retired in §5.4 (2026-09-24) with phone voice capture.
+        // It was the phone's on-a-roll output; the phone no longer records, so
+        // nothing produces it. A Watch roll never came through here — it arrives
+        // as InboxClips and `ArrivedClipMaterializer` joins it by `rollGroupId`.
         }
     }
 
@@ -190,33 +156,10 @@ struct JournalCaptureCoordinator {
         case .attach(let items):
             guard !items.isEmpty else { return nil }
             return lifecycle.save(content: "", inputType: .camera, mediaCaptures: items)
-        case .voiceSession(let clips, _):
-            guard let first = clips.first else { return nil }
-            let newId = lifecycle.save(
-                content: first.transcript,
-                inputType: .voiceInApp,
-                voiceFilename: first.audioFilename,
-                voiceCapturedAt: first.capturedAt
-            )
-            if let entryId = newId {
-                for clip in clips.dropFirst() {
-                    lifecycle.append(
-                        entryId: entryId,
-                        additionalContent: clip.transcript,
-                        voiceFilename: clip.audioFilename,
-                        voiceCapturedAt: clip.capturedAt
-                    )
-                }
-            }
-            for clip in clips {
-                ClipLocationResolver.stamp(
-                    osIdentifier: clip.audioFilename,
-                    latitude: clip.latitude,
-                    longitude: clip.longitude,
-                    in: StorageService.shared.viewContext
-                )
-            }
-            return newId
+        // `.voiceSession` retired in §5.4 (2026-09-24) with phone voice capture.
+        // It was the phone's on-a-roll output; the phone no longer records, so
+        // nothing produces it. A Watch roll never came through here — it arrives
+        // as InboxClips and `ArrivedClipMaterializer` joins it by `rollGroupId`.
         }
     }
 }

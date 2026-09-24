@@ -129,15 +129,8 @@ struct JournalCaptureCoordinatorTests {
 
     // MARK: - voiceSession (On a roll)
 
-    @Test func voiceSession_emptyClips_doesNotCreate() {
-        let (storage, vm, coord) = makeContext()
-        let before = memoryCount(in: storage)
-        let id = coord.createNewMemory(
-            from: .voiceSession(clips: [], rollGroupId: UUID()),
-            viewModel: vm,
-            seedNote: nil
-        )
-        #expect(id == nil)
-        #expect(memoryCount(in: storage) == before)
-    }
+    // `voiceSession_emptyClips_…` retired in §5.4 (2026-09-24). It
+    // guarded that an empty phone roll created nothing; the phone no
+    // longer records, and `.voiceSession` no longer exists. The
+    // empty-capture guards for the surviving cases are unchanged.
 }

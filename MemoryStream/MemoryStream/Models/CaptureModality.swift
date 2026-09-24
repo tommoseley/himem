@@ -34,7 +34,24 @@ enum CaptureModality: String, CaseIterable, Identifiable {
     /// cameras ahead of the microphone IS the demotion — an arrangement that
     /// left voice second would have moved it off the thumb while still
     /// teaching it first, which is half a change.
-    static let stackOrder: [CaptureModality] = [.attach, .voice, .video, .photo, .note]
+    /// **`.voice` left the stack in §5.4 (2026-09-24).** Phone voice capture
+    /// retired as a *part*: speech used to enter words is the system
+    /// keyboard's microphone, an input method the OS already provides, not a
+    /// kind of content HiMem models.
+    ///
+    /// The case itself is deliberately **kept** on the enum. The descoping is
+    /// explicit that HiMem's own microphone survives as *"record sound into
+    /// this memory"* — deliberate audio, where the sound is the thing being
+    /// kept — and that *"whether deliberate audio capture ships in 1.0 is a
+    /// scheduling question; it is not something to architecturally
+    /// foreclose."*
+    ///
+    /// So this is an array entry, one line to reverse, rather than a type
+    /// change. What it must NOT come back as is a surface rebuilt from the
+    /// file-writing half §5.4 retires — that would drag the retired half
+    /// forward to keep a tool alive. It returns as canvas work, built for
+    /// recording sound rather than for talking instead of typing.
+    static let stackOrder: [CaptureModality] = [.attach, .video, .photo, .note]
 
     var label: String {
         switch self {
@@ -100,40 +117,13 @@ enum CapturedItem {
     /// runs at extraction time, so images and videos can be mixed in
     /// one pick without falsely tagging videos as images.
     case attach(items: [(localIdentifier: String, mediaType: MediaReference.MediaType)])
-    /// Multi-clip voice session — produced by the "on a roll" Next
-    /// gesture on phone (`docs/design/on-a-roll-spec.md`). The
-    /// composer recorded one continuous master file, split it into
-    /// N per-clip files at the Next-tap offsets, and re-transcribed
-    /// each. All clips share the same `rollGroupId` so the host
-    /// attaches them to one Memory.
-    case voiceSession(clips: [VoiceClipFragment], rollGroupId: UUID)
+    // `case voiceSession(clips:rollGroupId:)` retired in §5.4 (2026-09-24).
+    // It carried the PHONE's on-a-roll output: one continuous master file,
+    // split at the Next-tap offsets and re-transcribed per clip. The phone no
+    // longer records, so nothing can produce it.
+    //
+    // The roll itself is untouched and CURRENT — `On a roll · spec.md` is
+    // Watch-only, and a Watch roll arrives as `InboxClip`s that
+    // `ArrivedClipMaterializer` joins into one memory by `rollGroupId`. It
+    // never travelled through this type.
 }
-
-/// One clip's worth of output from a phone voice session split.
-struct VoiceClipFragment: Equatable {
-    /// Filename in the SpeechService audio directory.
-    let audioFilename: String
-    /// Local transcript for this clip alone (re-transcribed
-    /// post-split — not a substring of the master transcript).
-    let transcript: String
-    /// Clip duration in seconds.
-    let duration: TimeInterval
-    /// Wall-clock time the clip *started* recording — the moment
-    /// the user tapped the big mic (clip 1) or the Next button
-    /// (subsequent clips). Computed in `VoiceCaptureOrchestrator`
-    /// as `recordingStartedAt + nextTapOffsetForThisClip` and
-    /// threaded all the way to `MediaReference.createdAt` so the
-    /// Memory Detail UI can show one accurate `HH:MM` per row of
-    /// a long roll. Before this field shipped (Tom 2026-06-09)
-    /// every roll clip inherited the save-time `Date()` and the
-    /// Compact transcript view rendered identical timestamps on
-    /// every row.
-    let capturedAt: Date
-    /// Latitude captured at recording-session start (one fix per
-    /// session, mirrored across every clip in the session). Nil
-    /// when the user denies / hasn't granted location, or the fix
-    /// timed out. Powers the Memory Detail v3 clip-row header.
-    var latitude: Double? = nil
-    var longitude: Double? = nil
-}
-

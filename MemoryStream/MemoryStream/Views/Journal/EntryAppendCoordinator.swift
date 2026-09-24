@@ -83,32 +83,10 @@ final class EntryAppendCoordinator: ObservableObject {
             // extraction time (see PhotoLibraryPicker.importToUbiquity).
             lifecycle.append(entryId: entryId, additionalContent: "", mediaCaptures: items)
 
-        case .voiceSession(let clips, _):
-            // "On a roll" — append every clip in the session as its
-            // own voice fragment on this Memory. `capturedAt` carries
-            // the orchestrator-computed per-clip wall-clock so each
-            // appended MediaReference lands with an honest createdAt
-            // instead of a save-time `Date()`.
-            for clip in clips {
-                lifecycle.append(
-                    entryId: entryId,
-                    additionalContent: clip.transcript,
-                    voiceFilename: clip.audioFilename,
-                    voiceCapturedAt: clip.capturedAt
-                )
-            }
-            // Stamp the session's location fix onto every appended
-            // fragment + kick off reverse-geocode for the clip-row
-            // header (Memory Detail v3). Mirrors the watch's
-            // location-stamp pattern.
-            for clip in clips {
-                ClipLocationResolver.stamp(
-                    osIdentifier: clip.audioFilename,
-                    latitude: clip.latitude,
-                    longitude: clip.longitude,
-                    in: context
-                )
-            }
+        // `.voiceSession` retired in §5.4 (2026-09-24) with phone voice capture.
+        // It was the phone's on-a-roll output; the phone no longer records, so
+        // nothing produces it. A Watch roll never came through here — it arrives
+        // as InboxClips and `ArrivedClipMaterializer` joins it by `rollGroupId`.
         }
     }
 }

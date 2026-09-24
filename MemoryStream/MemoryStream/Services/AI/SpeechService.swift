@@ -33,7 +33,6 @@ import AVFoundation
 final class SpeechService: ObservableObject {
     @Published var isRecording = false
     @Published var transcribedText = ""
-    @Published var lastRecordingPath: String?
     @Published var error: SpeechError?
     /// True once the SpeechTranscriber model is installed AND the analyzer is
     /// prepared.
@@ -87,7 +86,6 @@ final class SpeechService: ObservableObject {
 
     private var audioEngine: AVAudioEngine?
     private var audioFile: AVAudioFile?
-    private var currentRecordingURL: URL?
     private var audioConverter: AVAudioConverter?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private var analyzerStartTask: Task<Void, Error>?
@@ -290,25 +288,28 @@ final class SpeechService: ObservableObject {
 
     /// Start the microphone and the live transcriber.
     ///
-    /// **`retainingAudio` IS THE SEAM** (§5, 2026-09-18), and it has no default
-    /// ON PURPOSE. Two surfaces run this engine for opposite reasons:
+    /// **THE SEAM CLOSED, AS §5 SAID IT WOULD** (§5.4, 2026-09-24).
     ///
-    /// - **voice search** wants the WORDS. It reads `transcribedText` live and
-    ///   never touches the file — it has no business writing one, and never
-    ///   did.
-    /// - **the voice composer** wants the FILE. `lastRecordingPath` exists for
-    ///   it and has exactly three readers, all inside `VoiceCaptureScreen`.
+    /// `retainingAudio` existed for one pass. §5 (2026-09-18) split this
+    /// engine's two surfaces — voice search wanting the WORDS, the composer
+    /// wanting the FILE — and gave the parameter no default so a caller could
+    /// not inherit file-writing by saying nothing. That was the line §5.4 had
+    /// to cut along, drawn *before* the deletion rather than carved out during
+    /// it, and its own docstring predicted the ending:
     ///
-    /// Those are the two halves the phone-voice retirement cuts between, so the
-    /// line is drawn here BEFORE the deletion rather than carved out during it.
-    /// Omitting a default is the mechanism rather than the manners: a caller
-    /// cannot inherit file-writing by saying nothing, which is precisely how a
-    /// surface that only wanted words would end up leaving audio on disk.
+    /// > When §5.4 removes the composer this parameter becomes one-valued,
+    /// > and then — per the `CaptureSource` lesson — the parameter goes with
+    /// > it rather than sitting defaulted.
     ///
-    /// When §5.4 removes the composer this parameter becomes one-valued, and
-    /// then — per the `CaptureSource` lesson — the parameter goes with it
-    /// rather than sitting defaulted.
-    func startRecording(retainingAudio: Bool) {
+    /// The composer is gone, so it is one-valued, so it is gone. **This
+    /// service now only ever transcribes**; it writes no audio anywhere, and
+    /// there is no file for a caller to ask for.
+    ///
+    /// `SpeechServiceSeamTests` retired with it — its whole subject was
+    /// *"`lastRecordingPath` has exactly one consumer, and it is the file
+    /// being deleted"*, and that sentence has no referent now. The seam did
+    /// its job by making this an excision.
+    func startRecording() {
         NSLog("[HiMem][Speech] startRecording entered authorized=\(isAuthorized) modelReady=\(isModelReady)")
         guard isAuthorized else {
             NSLog("[HiMem][Speech] aborted: not authorized")
@@ -361,31 +362,18 @@ final class SpeechService: ObservableObject {
         // surfaces compose cleanly (none today, but cheap insurance).
         WakeLock.shared.acquire()
 
-        let fileURL: URL? = retainingAudio
-            ? Self.audioDirectory.appendingPathComponent(UUID().uuidString + ".caf")
-            : nil
-        currentRecordingURL = fileURL
-
         let engine = AVAudioEngine()
         audioEngine = engine
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         NSLog("[HiMem][Speech] engine input format: \(recordingFormat)")
 
-        if let fileURL {
-            do {
-                audioFile = try AVAudioFile(forWriting: fileURL, settings: recordingFormat.settings)
-                let existsAfterInit = FileManager.default.fileExists(atPath: fileURL.path)
-                NSLog("[HiMem][Speech][fileTrace] audio file init OK filename=\(fileURL.lastPathComponent) exists=\(existsAfterInit) path=\(fileURL.path)")
-            } catch {
-                NSLog("[HiMem][Speech][fileTrace] audio file init FAILED filename=\(fileURL.lastPathComponent) error=\(error.localizedDescription) path=\(fileURL.path)")
-                audioFile = nil
-            }
-        } else {
-            // Transcribe-only: no file is created, so there is nothing to
-            // clean up and nothing for `lastRecordingPath` to report.
-            audioFile = nil
-        }
+        // **No file is written.** The phone does not record: speech here is a
+        // way of entering words, and the words are what is kept. §5.4 removed
+        // the branch that opened an `AVAudioFile` for the composer, so the tap
+        // below feeds the transcriber and nothing else.
+        audioFile = nil
+
 
         // Cache the converter across recordings — re-create only if the
         // engine's format changed (rare; e.g. Bluetooth headset swap).
@@ -558,20 +546,6 @@ final class SpeechService: ObservableObject {
         // refcount guard treats release with count==0 as a no-op.
         WakeLock.shared.release()
 
-        if let url = currentRecordingURL {
-            let exists = FileManager.default.fileExists(atPath: url.path)
-            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
-            NSLog("[HiMem][Speech][fileTrace] stopRecording url=\(url.path) exists=\(exists) size=\(size)")
-            if exists {
-                lastRecordingPath = url.lastPathComponent
-            } else {
-                lastRecordingPath = nil
-            }
-        } else {
-            NSLog("[HiMem][Speech][fileTrace] stopRecording currentRecordingURL=nil")
-            lastRecordingPath = nil
-        }
-        currentRecordingURL = nil
 
         // **The capture gate's verdict** (ruled 2026-08-02). Read here,
         // beside `lastRecordingPath`, because this is where the session's

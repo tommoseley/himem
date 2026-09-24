@@ -109,18 +109,10 @@ struct EntryAppendCoordinatorTests {
 
     // MARK: - voiceSession (On a roll)
 
-    @Test func voiceSession_emptyClips_doesNotCrash_andDoesNotAppend() {
-        // Defensive: an empty session would mean the user finished
-        // the composer with nothing recorded. Don't pollute the
-        // memory; don't crash on the location-stamp loop.
-        let (storage, lifecycle, entry, coord) = makeContext()
-        let before = fragmentCount(for: entry, in: storage)
-        coord.apply(.voiceSession(clips: [], rollGroupId: UUID()),
-                    to: entry.id,
-                    using: lifecycle,
-                    context: storage.viewContext)
-        #expect(fragmentCount(for: entry, in: storage) == before)
-    }
+    // `voiceSession_emptyClips_…` retired in §5.4 (2026-09-24). It
+    // guarded that an empty phone roll created nothing; the phone no
+    // longer records, and `.voiceSession` no longer exists. The
+    // empty-capture guards for the surviving cases are unchanged.
 
     // MARK: - activeCaptureModality state
 

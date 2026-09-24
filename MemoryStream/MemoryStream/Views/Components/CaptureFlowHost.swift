@@ -48,17 +48,12 @@ struct CaptureFlowHost: ViewModifier {
                     break
                 }
             }
-            .sheet(isPresented: voiceBinding) {
-                VoiceCaptureScreen(
-                    onFinish: { clips, rollGroupId in
-                        guard !clips.isEmpty else { return }
-                        onCaptured(.voiceSession(clips: clips, rollGroupId: rollGroupId))
-                    },
-                    onCancel: {},
-                    speechService: speechService,
-                    appendingTo: appendingTo
-                )
-            }
+            // The voice sheet retired in §5.4 (2026-09-24) with
+            // `VoiceCaptureScreen`. `.voice` also left `stackOrder`, so the
+            // modality can no longer be selected — the binding went with the
+            // sheet rather than being left as a presenter for a surface that
+            // no longer exists.
+
             .sheet(isPresented: noteBinding) {
                 NoteCaptureScreen(
                     onFinish: { text in
@@ -164,12 +159,7 @@ struct CaptureFlowHost: ViewModifier {
 
     // MARK: - Per-modality bindings
 
-    private var voiceBinding: Binding<Bool> {
-        Binding(
-            get: { activeModality == .voice },
-            set: { presented in if !presented && activeModality == .voice { activeModality = nil } }
-        )
-    }
+
     private var noteBinding: Binding<Bool> {
         Binding(
             get: { activeModality == .note },

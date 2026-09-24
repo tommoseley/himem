@@ -79,35 +79,28 @@ import AVFoundation
                 "`stopRecording` measures and never publishes the outcome. Body:\n\(body)")
     }
 
-    /// **Every landing, not one.** The reference must sit outside the
-    /// `switch landing` — a silent recording that becomes a *memory* is the
-    /// more expensive loss, and the memory landings have no toast slot of
-    /// their own, so they are exactly the ones a bench-only fix would miss.
-    @Test func theShellConsultsTheGateOnEveryLanding() throws {
-        let src = try Self.shellSource()
-        let body = try Self.requireBlockBody(startingAtLineContaining: "private func handleCapturedItem(", in: src)
-        #expect(
-            Self.consultsTheGateOutsideTheSwitch(body: body),
-            """
-            `handleCapturedItem` does not consult the silent-capture gate for \
-            every landing. A reference that lives inside `switch landing` covers \
-            one path and silently drops the other two. Body was:
-            \(body)
-            """
-        )
-        // …and assigns from `bannerMessage`, which returns nil for a
-        // recording that was heard. A conditional set-only assignment
-        // leaves a banner standing after a later recording that worked.
-        #expect(
-            Self.codeOnly(body).contains("silentCaptureMessage = SilentCaptureDecision.bannerMessage("),
-            """
-            The shell does not assign the banner unconditionally from \
-            `bannerMessage`, so a message can outlive the recording it \
-            describes — the frozen-snapshot class (F24 D2, F25). Body was:
-            \(body)
-            """
-        )
-    }
+    // `theShellConsultsTheGateOnEveryLanding` RETIRED BY SUPERSESSION in §5.4
+    // (2026-09-24), and the SUBJECT went, not just the answer.
+    //
+    // It asserted that `HiMemTabView.handleCapturedItem` consults the silent-
+    // capture gate for every landing, so the banner could not cover one path
+    // and silently drop the others. That was a real hazard while a captured
+    // item could be a phone recording. It cannot now: §5.4 retired phone
+    // capture, `SpeechService` writes no file, and no `CapturedItem` arriving
+    // at the shell is a recording whose samples could be zero.
+    //
+    // **The gate itself is NOT retired.** `SilentCaptureDecision` still
+    // evaluates every capture session — voice search still runs the
+    // microphone — and still logs its verdict. The rest of this suite, which
+    // pins the pure decision, the exactly-zero rule, the always-keep rule and
+    // the debugger suppression, is unchanged and still passing.
+    //
+    // What has no owner any more is the BANNER: `silentCaptureMessage` is
+    // still declared and still rendered in `HiMemTabView`, and nothing sets
+    // it. Flagged for Tom rather than removed here — repointing it at voice
+    // search would be new design (the gate was ruled for the case where
+    // silence costs a *memory*, not a tap), and deleting a ruled safety
+    // surface is his call.
 
     /// `nil` means *show nothing*, never *leave what was there*. This is
     /// what makes the caller's unconditional assignment safe.
