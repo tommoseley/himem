@@ -238,7 +238,7 @@ private struct NewProjectSheet: View {
                     .tint(Crucible.Color.accent)
                     .focused($focused, equals: .name)
                     .padding(12)
-                    .background(Crucible.Color.paper)
+                    .background(Crucible.Color.card)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
@@ -259,7 +259,7 @@ private struct NewProjectSheet: View {
                         .focused($focused, equals: .goal)
                         .lineLimit(2...6)
                         .padding(12)
-                        .background(Crucible.Color.paper)
+                        .background(Crucible.Color.card)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
@@ -277,6 +277,13 @@ private struct NewProjectSheet: View {
                 Spacer()
             }
             .padding(24)
+            // **The sheet paints its own ground.** It had none, so it borrowed
+            // the system sheet colour in both modes while every field inside
+            // used Crucible tokens — the "judge a surface against its own
+            // column" miss from the token contract. `EditTextSheet` is the
+            // house shape: page `paper`, fields `card`.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Crucible.Color.paper.ignoresSafeArea())
             .navigationTitle("New project")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
