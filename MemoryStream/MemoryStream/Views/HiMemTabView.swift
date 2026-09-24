@@ -54,7 +54,6 @@ struct HiMemTabView: View {
     /// one path and nothing on the other two: the `.measurement`-on-the-
     /// watch / literal-on-the-phone shape, and the memory landings are the
     /// more expensive loss precisely because they have no slot of their own.
-    @State private var silentCaptureMessage: String? = nil
 
     /// **F28 · which tab, if any, currently has the Learn hub pushed.**
     ///
@@ -187,27 +186,13 @@ struct HiMemTabView: View {
                 }
             }
 
-            // The capture gate's message, drawn at the shell so it reaches
-            // whichever surface the capture landed on. Ruled placement:
-            // where the saved-clip confirmation would have been — the same
-            // bottom slot `CreationToast` occupies on the bench.
-            //
-            // 108pt is not a fresh guess: it is the clearance `ClipsTabView`
-            // already reserves for "the FAB + tab pill" on its own content,
-            // so this sits on the line the bench already treats as clear.
-            // DEVICE-UNVERIFIED — the same class of constant as F26's 88pt
-            // `bottomPinClearance`, and wrong either way is visible.
-            if let message = silentCaptureMessage {
-                SilentCaptureBanner(message: message) {
-                    silentCaptureMessage = nil
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 108)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            // The silent-capture banner was drawn here — at the shell, so it
+            // reached whichever surface the capture landed on. Deleted
+            // 2026-09-24: its only case was a phone recording whose every
+            // sample is zero, and §5.4 retired phone recording. Detection
+            // still runs for voice search and still logs; only the surface is
+            // gone.
         }
-        .animation(.easeOut(duration: 0.22), value: silentCaptureMessage)
     }
 
     /// The cross-tab event-bus routing observers (+ the cold-launch `onAppear`),

@@ -51,10 +51,24 @@ enum SilentCaptureOutcome: Equatable {
 /// audio stack so it can be exercised as a table.
 enum SilentCaptureDecision {
 
-    /// Ruled copy (Tom, 2026-08-02). Crucible voice: names the state, never
-    /// blames the user, offers the one useful action. The wording *is* the
-    /// promise here, so `SilentCaptureGateTests` pins the literal.
-    static let message = "We didn't hear anything. Check that HiMem can use the microphone, and try again."
+    // **The banner retired 2026-09-24, and with it the ruled copy,
+    // `showsBanner` and `bannerMessage`.**
+    //
+    // The gate was ruled on 2026-08-02 for one case: a phone recording whose
+    // every sample is zero — the silent-success class, in the one place where
+    // it costs a *memory* rather than a tap. §5.4 retired phone recording, so
+    // that case cannot occur. The microphone still runs for voice search,
+    // where silence costs a query she can repeat.
+    //
+    // Deleted rather than repointed at voice search. The ruling was about
+    // protecting a memory; aiming it at a search box would keep the machinery
+    // alive while quietly changing what it defends.
+    //
+    // **Detection and logging are untouched.** `evaluate` still runs on every
+    // capture session and `logLine` still speaks, so an all-zero capture stays
+    // visible in the log — which is where the 2026-08-02 investigation
+    // actually found it. The surface is gone, not the sense.
+
 
     static func evaluate(peak: Float, buffersMeasured: Int, debuggerAttached: Bool) -> SilentCaptureOutcome {
         guard buffersMeasured > 0 else { return .notMeasured }
@@ -62,23 +76,7 @@ enum SilentCaptureDecision {
         return debuggerAttached ? .silentDebuggerAttached : .silent
     }
 
-    /// Presentation, and *only* presentation, is what the debugger changes.
-    static func showsBanner(_ outcome: SilentCaptureOutcome) -> Bool {
-        outcome == .silent
-    }
 
-    /// What the banner should say about this outcome — **`nil` meaning "show
-    /// nothing", never "leave what was there".**
-    ///
-    /// The caller assigns this unconditionally, which is the point: a
-    /// message set on a silent capture and only ever cleared by hand would
-    /// still be standing after a later recording that worked, describing a
-    /// recording that is no longer the last one. Same class as the two
-    /// frozen-snapshot defects (F24 D2, F25) — a correct value, rendered
-    /// after it stopped being true.
-    static func bannerMessage(for outcome: SilentCaptureOutcome) -> String? {
-        showsBanner(outcome) ? message : nil
-    }
 
     /// **The suppression announces itself.** A `print`-and-return reports as
     /// PASSED, and a suppression nobody can see is that same shape one layer

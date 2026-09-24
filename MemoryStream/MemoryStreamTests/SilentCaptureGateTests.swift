@@ -51,6 +51,11 @@ import AVFoundation
     /// silent everywhere except one unsampled buffer would read as silent,
     /// and one silent only in the sampled windows would read as heard.
     /// The observer has to see the whole session.
+    /// **The gate must measure every buffer.** `[Amp]` samples buffers 1–3
+    /// and every 50th — that is an *instrument*, not a gate: a recording
+    /// silent everywhere except one unsampled buffer would read as silent,
+    /// and one silent only in the sampled windows would read as heard.
+    /// The observer has to see the whole session.
     @Test func theTapMeasuresEveryBuffer_notOnlyTheSampledOnes() throws {
         let src = try Self.speechSource()
         let closure = try Self.requireBlockBody(startingAtLineContaining: "inputNode.installTap(", in: src)
@@ -66,6 +71,10 @@ import AVFoundation
         )
     }
 
+    /// **The save path must consult what was measured.** The observer being
+    /// correct says nothing about whether anyone reads it — the whole point
+    /// of Guard-the-Caller. `stopRecording` is where the session's peak
+    /// becomes a fact, beside `lastRecordingPath`.
     /// **The save path must consult what was measured.** The observer being
     /// correct says nothing about whether anyone reads it — the whole point
     /// of Guard-the-Caller. `stopRecording` is where the session's peak
@@ -104,12 +113,6 @@ import AVFoundation
 
     /// `nil` means *show nothing*, never *leave what was there*. This is
     /// what makes the caller's unconditional assignment safe.
-    @Test func bannerMessageClearsItselfForEveryNonSilentOutcome() {
-        #expect(SilentCaptureDecision.bannerMessage(for: .silent) == SilentCaptureDecision.message)
-        #expect(SilentCaptureDecision.bannerMessage(for: .heard) == nil)
-        #expect(SilentCaptureDecision.bannerMessage(for: .notMeasured) == nil)
-        #expect(SilentCaptureDecision.bannerMessage(for: .silentDebuggerAttached) == nil)
-    }
 
     // MARK: - Self-tests (a guard that cannot fail is not a guard)
 
@@ -142,36 +145,7 @@ import AVFoundation
         #expect(Self.measuresOnlyInsideTheSampledWindow(tapClosure: fixed) == false)
     }
 
-    @Test func scanner_flagsAGateConsultedInsideOneLandingOnly() {
-        let offending = """
-        {
-            switch landing {
-            case .dropOnBench:
-                if SilentCaptureDecision.showsBanner(speechService.lastCaptureSilence) {
-                    silentCaptureMessage = SilentCaptureDecision.message
-                }
-            case .createMemory:
-                break
-            }
-        }
-        """
-        #expect(Self.consultsTheGateOutsideTheSwitch(body: offending) == false)
-    }
 
-    @Test func scanner_acceptsAGateConsultedBeforeTheSwitch() {
-        let fixed = """
-        {
-            if SilentCaptureDecision.showsBanner(speechService.lastCaptureSilence) {
-                silentCaptureMessage = SilentCaptureDecision.message
-            }
-            switch landing {
-            case .dropOnBench:
-                break
-            }
-        }
-        """
-        #expect(Self.consultsTheGateOutsideTheSwitch(body: fixed) == true)
-    }
 
     // MARK: - Suppression is presentation-only (contract)
 
@@ -179,32 +153,8 @@ import AVFoundation
     /// and the log line are not. A gate that stopped *detecting* when
     /// attached would be the silent skip this project forbids — and it
     /// would have hidden B10 rather than caught it.
-    @Test func theDebuggerSuppressesTheBannerAndNothingElse() throws {
-        let attached = SilentCaptureDecision.evaluate(peak: 0, buffersMeasured: 240, debuggerAttached: true)
-        let untethered = SilentCaptureDecision.evaluate(peak: 0, buffersMeasured: 240, debuggerAttached: false)
-        // Detection happens in BOTH cases — the outcomes differ only in
-        // whether they are shown.
-        #expect(attached == .silentDebuggerAttached)
-        #expect(untethered == .silent)
-        #expect(SilentCaptureDecision.showsBanner(attached) == false)
-        #expect(SilentCaptureDecision.showsBanner(untethered))
 
-        // Gated on P_TRACED, never on the build configuration: a TestFlight
-        // build is a release build, and Judi's is the case that matters.
-        //
-        // Read from CODE, not from the file's text. The first version of
-        // this assertion scanned the raw source and failed on the detector's
-        // own doc comment — which says "deliberately not `#if DEBUG`". A
-        // scanner that cannot tell prose from code measures the wrong thing;
-        // caught here rather than by someone later deleting a true sentence
-        // to make a test pass.
-        let code = Self.codeOnly(try Self.detectorSource())
-        #expect(code.contains("#if DEBUG") == false,
-                "The gate is gated on the build configuration. Ruled: P_TRACED, so an untethered TestFlight build still shows it.")
-        #expect(code.contains("P_TRACED"),
-                "Debugger detection no longer reads P_TRACED.")
-    }
-
+    /// Self-test: the configuration scanner sees a real `#if DEBUG`…
     /// Self-test: the configuration scanner sees a real `#if DEBUG`…
     @Test func scanner_flagsARealBuildConfigurationGate() {
         let offending = """
@@ -220,6 +170,7 @@ import AVFoundation
     }
 
     /// …and does not see one that is only being talked about.
+    /// …and does not see one that is only being talked about.
     @Test func scanner_ignoresABuildConfigurationMentionedInProse() {
         let fine = """
         /// P_TRACED, deliberately not `#if DEBUG` — a TestFlight build is a
@@ -230,6 +181,9 @@ import AVFoundation
         #expect(Self.codeOnly(fine).contains("P_TRACED"))
     }
 
+    /// The suppression announces itself. A `print`-and-return reports as
+    /// PASSED, and a suppression nobody can see is that same shape one
+    /// layer out — so the log line is part of the contract, not decoration.
     /// The suppression announces itself. A `print`-and-return reports as
     /// PASSED, and a suppression nobody can see is that same shape one
     /// layer out — so the log line is part of the contract, not decoration.
@@ -246,6 +200,9 @@ import AVFoundation
     /// Exactly zero and nothing else. `Float.leastNonzeroMagnitude` is
     /// signal — vanishingly quiet signal, but not the flat line a dead
     /// capture path produces, and we are not entitled to call it silence.
+    /// Exactly zero and nothing else. `Float.leastNonzeroMagnitude` is
+    /// signal — vanishingly quiet signal, but not the flat line a dead
+    /// capture path produces, and we are not entitled to call it silence.
     @Test func onlyExactZeroIsSilence() {
         #expect(SilentCaptureDecision.evaluate(peak: 0, buffersMeasured: 100, debuggerAttached: false) == .silent)
         #expect(SilentCaptureDecision.evaluate(peak: .leastNonzeroMagnitude, buffersMeasured: 100, debuggerAttached: false) == .heard)
@@ -259,36 +216,22 @@ import AVFoundation
     /// capture never ran, which is F18's *"We couldn't start recording."* —
     /// a different fact with a different message. Reporting it as silence
     /// would be a confident falsehood, the sin this gate exists to end.
-    @Test func nothingMeasuredIsNotSilence() {
-        let outcome = SilentCaptureDecision.evaluate(peak: 0, buffersMeasured: 0, debuggerAttached: false)
-        #expect(outcome == .notMeasured)
-        #expect(SilentCaptureDecision.showsBanner(outcome) == false)
-    }
 
     /// The wording IS the promise here (ruled copy, 2026-08-02), so the
     /// literal is pinned deliberately: a failure of this test means the
     /// promise moved, not that phrasing drifted. Crucible voice — names the
     /// state, never blames the user, offers the one useful action.
-    @Test func theMessageIsTheRuledString() {
-        #expect(SilentCaptureDecision.message
-                == "We didn't hear anything. Check that HiMem can use the microphone, and try again.")
-        #expect(SilentCaptureDecision.message.hasPrefix("You") == false)
-    }
 
     /// It must not share a string with the two neighbouring states. All
     /// three can be true of one clip and they answer different questions:
     /// this one at save, "No words in this recording." on opening the clip,
     /// "We couldn't start recording." when capture never began — F24 D4's
     /// rule, one state further out.
-    @Test func theMessageIsDistinctFromItsNeighbours() {
-        let neighbours = ["No words in this recording.", CaptureUnavailableView.audioMessage]
-        for other in neighbours {
-            #expect(SilentCaptureDecision.message != other)
-        }
-    }
 
     // MARK: - The observer (contract)
 
+    /// The B10 shape, reproduced from buffers: correct frame counts, a
+    /// plausible session length, every sample zero.
     /// The B10 shape, reproduced from buffers: correct frame counts, a
     /// plausible session length, every sample zero.
     @Test func observer_allZeroBuffers_readSilent() {
@@ -303,6 +246,10 @@ import AVFoundation
     /// ceiling on the assertion above** — a gate that only ever said
     /// "silent" would pass the previous test and be worthless (the
     /// `ratio >= 10.0` lesson: bound both sides).
+    /// One non-zero sample anywhere in the session is signal. **This is the
+    /// ceiling on the assertion above** — a gate that only ever said
+    /// "silent" would pass the previous test and be worthless (the
+    /// `ratio >= 10.0` lesson: bound both sides).
     @Test func observer_oneLiveBufferAmongZeros_readsHeard() {
         let observer = SilentCaptureObserver()
         for i in 0..<300 {
@@ -311,6 +258,7 @@ import AVFoundation
         #expect(observer.outcome(debuggerAttached: false) == .heard)
     }
 
+    /// A fresh session must not inherit the previous one's peak.
     /// A fresh session must not inherit the previous one's peak.
     @Test func observer_resetsBetweenRecordings() {
         let observer = SilentCaptureObserver()
@@ -323,12 +271,17 @@ import AVFoundation
     /// Every channel is read, not just channel 0. The watch's 3-channel
     /// input put the downlink reference on channel 0 and the mic elsewhere;
     /// a channel-0-only peak would call that recording dead.
+    /// Every channel is read, not just channel 0. The watch's 3-channel
+    /// input put the downlink reference on channel 0 and the mic elsewhere;
+    /// a channel-0-only peak would call that recording dead.
     @Test func observer_readsEveryChannel() {
         let observer = SilentCaptureObserver()
         observer.observe(Self.buffer(peak: 0.3, channels: 2, liveChannel: 1))
         #expect(observer.outcome(debuggerAttached: false) == .heard)
     }
 
+    /// Nothing observed yet is `.notMeasured`, not `.silent` — the same
+    /// distinction as the decision table, at the observer's own boundary.
     /// Nothing observed yet is `.notMeasured`, not `.silent` — the same
     /// distinction as the decision table, at the observer's own boundary.
     @Test func observer_beforeAnyBuffer_isNotMeasured() {
@@ -437,4 +390,18 @@ import AVFoundation
     }
 
     enum Failure: Error { case sourceNotFound(String), blockNotFound(String) }
+    // RETIRED 2026-09-24 with the banner, and the SUBJECT went with them:
+    //   bannerMessageClearsItselfForEveryNonSilentOutcome · scanner_flagsAGateConsultedInsideOneLandingOnly · scanner_acceptsAGateConsultedBeforeTheSwitch · theDebuggerSuppressesTheBannerAndNothingElse · nothingMeasuredIsNotSilence · theMessageIsTheRuledString · theMessageIsDistinctFromItsNeighbours
+    //
+    // Each asserted something about PRESENTATION — the ruled copy, when a
+    // banner shows, the shell's wiring. §5.4 retired phone recording, so the
+    // one case the gate was ruled for cannot occur, and the banner was
+    // deleted rather than repointed at voice search.
+    //
+    // What remains in this suite is the part that still has a subject: the
+    // pure `evaluate` table, the exactly-zero rule with no tolerance, the
+    // debugger distinction, and `logLine`. Detection still runs on every
+    // capture session, so an all-zero capture is still visible where the
+    // 2026-08-02 investigation actually found it — in the log.
+
 }
