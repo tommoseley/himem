@@ -82,6 +82,51 @@ struct JournalView: View {
     @State private var activeCaptureModality: CaptureModality? = nil
     @State private var pendingNoteForNewEntry: String? = nil
 
+    // MARK: - Transient capture (HiMem · Transient capture.html)
+
+    // `inbox` (InboxManifest.shared) is already observed above — the card
+    // reads the same publisher, so it appears the moment a Watch capture
+    // finishes transcribing and disappears the moment she handles it.
+    /// Non-nil while the scoped-search sheet is up for this capture.
+    @State private var placingCapture: TransientCapture? = nil
+
+    private var transientWaiting: [TransientCapture] {
+        TransientCaptureStack.waiting(from: inbox.clips)
+    }
+    /// The one being shown. Handling it reveals the next.
+    private var transientHead: TransientCapture? {
+        TransientCaptureStack.head(of: transientWaiting)
+    }
+
+    /// **This capture becomes the writing of a new memory.** The only place
+    /// `materializeAll`'s per-clip sibling runs from now — the drain stopped
+    /// being automatic, so nothing turns a waiting capture into a memory
+    /// except her choosing this.
+    private func startNewMemory(from capture: TransientCapture) {
+        guard let clip = inbox.clips.first(where: { $0.clipId == capture.clipId }) else { return }
+        ArrivedClipMaterializer.materialize(clip, in: StorageService.shared.viewContext)
+        viewModel.refresh()
+    }
+
+    /// **Add this capture to a memory that already exists.** Materializes it
+    /// and attaches it to the chosen memory in one step — the capture stops
+    /// waiting because she placed it, which is the only thing that ends the
+    /// wait besides discarding.
+    private func place(_ capture: TransientCapture, into memoryId: UUID) {
+        guard let clip = inbox.clips.first(where: { $0.clipId == capture.clipId }) else { return }
+        let ctx = StorageService.shared.viewContext
+        guard let refId = ArrivedClipMaterializer.materialize(clip, in: ctx) else { return }
+        _ = EntryLifecycleService().attachExistingClips(entryId: memoryId, clipIds: [refId])
+        viewModel.refresh()
+    }
+
+    /// **Discard is recoverable** — thirty days in Recently Deleted. *"We
+    /// never discard work the user walked away from"*, and a thing she spoke
+    /// and then dismissed in two taps is exactly the case that rule is for.
+    private func discard(_ capture: TransientCapture) {
+        inbox.recycleClip(clipId: capture.clipId)
+    }
+
     var body: some View {
         NavigationStack {
         ZStack(alignment: .bottomTrailing) {
@@ -155,6 +200,13 @@ struct JournalView: View {
                     activeCaptureModality = .note
                 }
             )
+        }
+        // "Add to a memory" — scoped search, no AI guess slot (§4b + Tom,
+        // 2026-09-24). Presented from the waiting card's ochre exit.
+        .sheet(item: $placingCapture) { capture in
+            PlaceCaptureSheet(capture: capture) { memoryId in
+                place(capture, into: memoryId)
+            }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
@@ -428,6 +480,32 @@ struct JournalView: View {
     /// destruction lives inside the opened memory.)
     private var memoriesList: some View {
         List {
+            // **The waiting card, at the top of Memories — where she already
+            // is.** There is no tab and no destination: transient capture is a
+            // state, not a place.
+            //
+            // When nothing waits, **nothing is built** — no empty section, no
+            // placeholder, no "nothing new." That absence is the whole
+            // difference between this and the bench we deleted, and it is
+            // structural here rather than promised: with an empty stack there
+            // is no head, so there is no row. Guarded by
+            // `TransientCaptureSurfaceTests`.
+            if viewMode == .memories, let waiting = transientHead {
+                Section {
+                    TransientCaptureCard(
+                        capture: waiting,
+                        moreAfterThis: TransientCaptureStack.moreAfterThis(
+                            totalWaiting: transientWaiting.count),
+                        onAddToMemory: { placingCapture = waiting },
+                        onStartNewMemory: { startNewMemory(from: waiting) },
+                        onDiscard: { discard(waiting) }
+                    )
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
+            }
+
             emptyMemoriesState
 
             if viewMode == .memories {

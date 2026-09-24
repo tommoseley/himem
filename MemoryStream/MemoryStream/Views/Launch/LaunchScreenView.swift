@@ -361,7 +361,18 @@ struct LaunchScreenView: View {
         // (`feedback_inboxmanifest_launch_gating`). Guarded by
         // `MaterializerDrainOwnerTests`, which fails if the only caller is
         // ever again inside the bench directory.
-        ArrivedClipMaterializer.materializeAll(in: StorageService.shared.viewContext)
+        // **The drain no longer runs at launch** (transient capture, 2026-09-24).
+        //
+        // It used to call `ArrivedClipMaterializer.materializeAll` here, turning
+        // every transcribed Watch capture into a memory unattended. That was
+        // §1's behaviour, and the descoping walked it back: *"Not every Watch
+        // capture becomes a memory… forcing the second moves a decision from
+        // the user to the software, which is the opposite of the principle
+        // driving all of this."*
+        //
+        // A transcribed capture now WAITS, as a card at the top of Memories,
+        // until she picks one of three exits. `materialize` runs from exactly
+        // one place: her choosing "Start a new memory".
         // Run both Core Data migrations on the same background context.
         // Each has its own UserDefaults-backed completion flag and is a
         // cheap no-op when its flag is set, so we don't need an outer

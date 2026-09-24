@@ -44,37 +44,26 @@ import Foundation
 
     // MARK: - The guard
 
-    @Test("materializeAll has a production owner outside the bench")
-    func theDrainIsNotOwnedOnlyByTheBench() throws {
-        let callers = try Self.productionCallers(of: Self.drainCall)
-
-        // Cannot pass by matching nothing: if the call has vanished entirely
-        // the drain is unreachable, which is the same defect one step further.
-        #expect(!callers.isEmpty, """
-            No production caller of `\(Self.drainCall)` was found at all.
-            The one-shot migration + catch-up drain is unreachable, so a
-            transcribed manifest clip can never become a MediaReference and is
-            invisible to both the paperclip and Search.
-            """)
-
-        let owners = callers.filter { !$0.contains(Self.benchDirectory) }
-        #expect(!owners.isEmpty, """
-            `\(Self.drainCall)` is called ONLY from the bench directory \
-            (\(Self.benchDirectory)), so the drain runs only because the bench \
-            renders and has no trigger of its own.
-
-            Found callers: \(callers.sorted().joined(separator: ", "))
-
-            The bench is deleted by the vocabulary retirement. Give the drain a \
-            bench-independent owner — the sanctioned post-CloudKit-settle hook \
-            is `LaunchScreenView.runMigration()`, which already hosts four \
-            sibling migrations — or every undrained `.transcribed` clip becomes \
-            permanently unreachable.
-
-            (CLAUDE.md § Quieting a Busy Path Reveals What Was Riding On It: \
-            fix the trigger, not the silence.)
-            """)
-    }
+    // `theDrainIsNotOwnedOnlyByTheBench` RETIRED BY SUPERSESSION, and the
+    // rule it enforced was INVERTED rather than dropped (2026-09-24).
+    //
+    // F1 asserted the drain must keep at least one production owner outside
+    // the bench, because an undrained `.transcribed` row never became a
+    // `MediaReference` and was therefore invisible to the paperclip and to
+    // Search — *"the user's own words become unreachable, which is the only
+    // irreversible failure in the retirement"*.
+    //
+    // Transient capture removes the premise. A waiting capture is no longer
+    // invisible: it is the card at the top of Memories and it is the
+    // paperclip's inventory. So it does not need draining to be reachable,
+    // and draining it automatically is the thing the descoping forbids —
+    // *"forcing the second moves a decision from the user to the software"*.
+    //
+    // The replacement is `TransientCaptureSurfaceTests.noLaunchPathDrains`,
+    // which asserts the opposite property: **no launch path may drain**, and
+    // exactly one site materializes — her choosing "Start a new memory".
+    // The concern F1 named is still guarded; what changed is which direction
+    // keeps her words reachable.
 
     // MARK: - Self-tests — the guard must be able to fail, and must survive junk
 

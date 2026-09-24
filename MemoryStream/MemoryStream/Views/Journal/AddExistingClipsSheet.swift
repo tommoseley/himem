@@ -66,21 +66,28 @@ struct AddExistingClipsSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Crucible.Color.paper)
             .onAppear {
-                // Refresh the thing that is about to be READ, rather than
-                // relying on whatever happened to be running (CLAUDE.md §
-                // Quieting a Busy Path). `looseClips` fetches zero-edge
-                // `MediaReference`s; a Watch recording only becomes one once
-                // the drain has run. The launch hook
-                // (`LaunchScreenView.runMigration`) owns the one-shot
-                // migration, but it runs once per launch and post-settle — so
-                // a recording that finishes transcribing mid-session, and
-                // whose on-arrival materialize did not land, would otherwise
-                // not appear here until the next cold start.
+                // **THE PAPERCLIP NO LONGER DRAINS.**
                 //
-                // Cheap and idempotent: only `.transcribed` rows are
-                // eligible and each is guarded by `refExists`.
-                ArrivedClipMaterializer.materializeAll(in: StorageService.shared.viewContext)
+                // This used to call `ArrivedClipMaterializer.materializeAll`
+                // here, so that waiting Watch captures would become zero-edge
+                // `MediaReference`s and therefore appear in `looseClips`. That
+                // was correct while the drain was automatic — but it means the
+                // paperclip *converted waiting captures into memories in order
+                // to have something to list*, which destroys the waiting state
+                // the whole transient surface depends on.
+                //
+                // `HiMem · Transient capture.html` §4b makes this the SECOND
+                // door into an existing memory, and says what it lists:
+                //
+                // > From the memory, the paperclip lists what is waiting,
+                // > where she can see what it already holds. **Waiting
+                // > captures are the paperclip's inventory.**
+                //
+                // So it reads the manifest directly and leaves the captures
+                // waiting. Nothing here materializes anything; placing one is
+                // what materializes it, and that is the user's choice.
             }
+
             .navigationTitle("Add existing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
