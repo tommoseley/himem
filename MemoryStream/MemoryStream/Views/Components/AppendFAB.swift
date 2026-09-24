@@ -173,15 +173,21 @@ struct AppendFAB: View {
 
     /// Pill enter timing (open): each pill animates 180ms with the spec's
     /// cubic-bezier easing, translating from +12pt Y + opacity 0 to settle.
-    /// Voice (closest to FAB, last in array) leads at 0ms; others stagger 30ms.
+    /// The pill closest to the FAB — last in `stackOrder` — leads at 0ms;
+    /// others stagger 30ms by distance from it. (That was voice until §6
+    /// reordered the stack; it is whatever sits last, and the code reads the
+    /// array rather than naming a modality.)
     /// Reduced-motion path: pills fade in together over 100ms with no Y
     /// translate.
     private func pill(for modality: CaptureModality, index: Int) -> some View {
-        let isPrimary = modality.isPrimary
-        let height: CGFloat = isPrimary ? 64 : 52
-        let labelFontSize: CGFloat = isPrimary ? 17 : 15
-        let glyphChipSize: CGFloat = isPrimary ? 44 : 36
-        // Voice (last) leads. Others stagger by distance from the FAB.
+        // Every pill is the same size. `isPrimary` was deleted with §6's
+        // demotion (2026-09-24) — the descoping's bar is five equal tools, and
+        // one of them rendering larger was voice's old status outliving the
+        // ruling that removed it.
+        let height: CGFloat = 52
+        let labelFontSize: CGFloat = 15
+        let glyphChipSize: CGFloat = 36
+        // The last pill leads. Others stagger by distance from the FAB.
         let stackDepth = CaptureModality.stackOrder.count - 1 - index
         let staggerMs = reduceMotion ? 0 : Double(stackDepth) * 30
 
@@ -205,22 +211,22 @@ struct AppendFAB: View {
                         .fill(modality.color.opacity(0.10))
                         .frame(width: glyphChipSize, height: glyphChipSize)
                     Image(systemName: modality.sfSymbol)
-                        .font(.system(size: isPrimary ? 22 : 18, weight: .regular))
+                        .font(.system(size: 18, weight: .regular))
                         .foregroundStyle(modality.color)
                 }
-                .padding(.trailing, isPrimary ? 8 : 6)
+                .padding(.trailing, 6)
             }
             .frame(maxWidth: .infinity)
             .frame(height: height)
             .background(Crucible.Color.card)
             .overlay(
                 Capsule()
-                    .stroke(isPrimary ? Crucible.Color.accent.opacity(0.10) : .clear, lineWidth: 2)
+                    .stroke(Color.clear, lineWidth: 2)
             )
             .clipShape(Capsule())
             .shadow(
-                color: Color(red: 40/255, green: 25/255, blue: 15/255).opacity(isPrimary ? 0.14 : 0.10),
-                radius: isPrimary ? 16 : 12, x: 0, y: isPrimary ? 12 : 8
+                color: Color(red: 40/255, green: 25/255, blue: 15/255).opacity(0.10),
+                radius: 12, x: 0, y: 8
             )
             .shadow(color: .black.opacity(0.06), radius: 1, x: 0, y: 1)
         }

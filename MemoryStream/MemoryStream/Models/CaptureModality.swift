@@ -67,7 +67,21 @@ enum CaptureModality: String, CaseIterable, Identifiable {
         }
     }
 
-    var isPrimary: Bool { self == .voice }
+    // `isPrimary` was deleted 2026-09-24. It read `self == .voice` and drove
+    // NINE visual properties in `AppendFAB` — pill height 64 vs 52, label 17
+    // vs 15, glyph chip 44 vs 36, glyph 22 vs 18, trailing pad, an accent
+    // ring, and three shadow values.
+    //
+    // §6 (2026-09-18) demoted voice by reordering `stackOrder`, moving it off
+    // the thumb and behind the cameras in the tour — but left this, so voice
+    // went on being *rendered* as the primary tool. Half a change, and the
+    // visible symptom was a taller voice pill, logged as a cosmetic during the
+    // device pass when it was actually the demotion not landing.
+    //
+    // It is deleted rather than repointed at another modality: the descoping
+    // specifies **five tools in a fixed bar, all visible**, verbs rather than
+    // content types. Nothing is primary, and naming a new favourite would be
+    // inventing a hierarchy no ruling asked for.
 }
 
 /// What a single-modality capture returns. The host view (JournalView for
